@@ -117,6 +117,19 @@ impl Parser {
                 };
                 Some(Stmt::Directive(Directive::Import { path, span }))
             }
+            TokenKind::DirTarget(_) => {
+                let (target, span) = match self.next() {
+                    Some(tok) => {
+                        if let TokenKind::DirTarget(t) = tok.kind.clone() {
+                            (t, tok.span)
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    None => return None,
+                };
+                Some(Stmt::Directive(Directive::Target { target, span }))
+            }
             TokenKind::DirUse(_) => {
                 let (path, span) = match self.next() {
                     Some(tok) => {
@@ -582,6 +595,7 @@ impl Parser {
         match stmt {
             Stmt::Directive(d) => match d {
                 Directive::Entry { name } => name.span,
+                Directive::Target { span, .. } => *span,
                 Directive::Import { span, .. } => *span,
                 Directive::Use { span, .. } => *span,
                 Directive::IfTarget { span, .. } => *span,
@@ -610,6 +624,7 @@ fn token_kind_eq(a: &TokenKind, b: &TokenKind) -> bool {
         (DirIndentWidth(x), DirIndentWidth(y)) => x == y,
         (DirInclude(_), DirInclude(_)) => true,
         (DirExtern { .. }, DirExtern { .. }) => true,
+        (DirTarget(_), DirTarget(_)) => true,
         _ => core::mem::discriminant(a) == core::mem::discriminant(b),
     }
 }

@@ -29,11 +29,23 @@ fn memory_grow <(i32)*>i32> (pages):
         local.get $pages
         memory.grow
 
-// Extremely simple bump allocator: allocate one new page per call and return its base address.
 fn alloc <(i32)*>i32> (size):
     #wasm:
-        // grow one page; ignore requested size for now
-        memory.grow 1
-        // result = old_pages * 65536 (page size)
+        ;; pages_needed = ceil(size / 65536)
+        local.get $size
+        i32.const 65535
+        i32.add
+        i32.const 65536
+        i32.div_s
+        local.tee $size       ;; reuse $size as pages_needed
+        memory.grow           ;; grow and push old_pages
+        local.tee $size       ;; reuse $size as old_pages
+        i32.const -1
+        i32.eq
+        if
+            i32.const -1
+            return
+        end
+        local.get $size
         i32.const 65536
         i32.mul

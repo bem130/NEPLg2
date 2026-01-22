@@ -5,10 +5,12 @@ use alloc::vec::Vec;
 
 use crate::ast;
 use crate::codegen_wasm;
+use crate::diagnostic::Diagnostic;
 use crate::error::CoreError;
 use crate::lexer;
 use crate::parser;
 use crate::span::FileId;
+use crate::span::Span;
 use crate::typecheck;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,13 +31,14 @@ impl CompileTarget {
 
 #[derive(Debug, Clone, Copy)]
 pub struct CompileOptions {
-    pub target: CompileTarget,
+    /// Explicit target override (e.g., CLI flag). If None, #target or default is used.
+    pub target: Option<CompileTarget>,
 }
 
 impl Default for CompileOptions {
     fn default() -> Self {
         Self {
-            target: CompileTarget::Wasm,
+            target: None,
         }
     }
 }
@@ -49,7 +52,8 @@ pub fn compile_module(
     module: ast::Module,
     options: CompileOptions,
 ) -> Result<CompilationArtifact, CoreError> {
-    let tc = typecheck::typecheck(&module, options.target);
+    let target = resolve_target(&module, options)?;
+    let tc = typecheck::typecheck(&module, target);
     if tc.module.is_none() {
         return Err(CoreError::from_diagnostics(tc.diagnostics));
     }
@@ -86,4 +90,38 @@ pub fn compile_wasm(
         }
         Err(e) => Err(e),
     }
+}
+
+fn resolve_target(module: &ast::Module, options: CompileOptions) -> Result<CompileTarget, CoreError> {
+    if let Some(t) = options.target {
+        return Ok(t);
+    }
+    let mut found: Option<(CompileTarget, Span)> = None;
+    let mut diags = Vec::new();
+    for d in &module.directives {
+        if let ast::Directive::Target { target, span } = d {
+            let parsed = match target.as_str() {
+                "wasm" => Some(CompileTarget::Wasm),
+                "wasi" => Some(CompileTarget::Wasi),
+                _ => None,
+            };
+            if let Some(t) = parsed {
+                if let Some((_, prev_span)) = found {
+                    diags.push(Diagnostic::error(
+                        "multiple #target directives are not allowed",
+                        *span,
+                    )
+                    .with_secondary_label(prev_span, Some("previous #target here".into())));
+                } else {
+                    found = Some((t, *span));
+                }
+            } else {
+                diags.push(Diagnostic::error("unknown target in #target", *span));
+            }
+        }
+    }
+    if !diags.is_empty() {
+        return Err(CoreError::from_diagnostics(diags));
+    }
+    Ok(found.map(|(t, _)| t).unwrap_or(CompileTarget::Wasm))
 }

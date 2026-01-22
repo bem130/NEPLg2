@@ -39,8 +39,8 @@ struct Cli {
     )]
     lib: bool,
 
-    #[arg(long, value_name = "TARGET", default_value = "wasm", value_parser = ["wasm", "wasi"], help = "Compilation target: wasm or wasi")]
-    target: String,
+    #[arg(long, value_name = "TARGET", value_parser = ["wasm", "wasi"], help = "Compilation target: wasm or wasi (overrides #target)")]
+    target: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -68,7 +68,7 @@ fn execute(cli: Cli) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?
         }
     };
-    // Auto-upgrade to WASI if stdio is imported and user did not explicitly pick wasi.
+    // Auto-upgrade to WASI if stdio is imported and user did not explicitly pick wasm/wasi.
     let has_stdio_import = load_result
         .module
         .directives
@@ -77,14 +77,26 @@ fn execute(cli: Cli) -> Result<()> {
     let module = load_result.module;
     let source_map = load_result.source_map;
 
-    let mut target = match cli.target.as_str() {
-        "wasi" => CompileTarget::Wasi,
-        _ => CompileTarget::Wasm,
-    };
-    if matches!(target, CompileTarget::Wasm) && has_stdio_import {
-        target = CompileTarget::Wasi;
-    }
-    let options = CompileOptions { target };
+    let cli_target = cli
+        .target
+        .as_deref()
+        .map(|t| if t == "wasi" { CompileTarget::Wasi } else { CompileTarget::Wasm });
+    let target_override = cli_target.or_else(|| if has_stdio_import { Some(CompileTarget::Wasi) } else { None });
+    let module_decl_target = module.directives.iter().find_map(|d| {
+        if let nepl_core::ast::Directive::Target { target, .. } = d {
+            match target.as_str() {
+                "wasi" => Some(CompileTarget::Wasi),
+                "wasm" => Some(CompileTarget::Wasm),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    });
+    let run_target = target_override
+        .or(module_decl_target)
+        .unwrap_or(CompileTarget::Wasm);
+    let options = CompileOptions { target: target_override };
 
     match cli.emit.as_str() {
         "wasm" => {
@@ -100,7 +112,7 @@ fn execute(cli: Cli) -> Result<()> {
                 write_output(out, &artifact.wasm)?;
             }
             if cli.run {
-                let result = run_wasm(&artifact, target)?;
+                let result = run_wasm(&artifact, run_target)?;
                 println!("Program exited with {result}");
             }
         }

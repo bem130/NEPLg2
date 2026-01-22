@@ -50,6 +50,7 @@ pub enum TokenKind {
 
     // directives
     DirEntry(String),
+    DirTarget(String),
     DirImport(String),
     DirUse(String),
     DirIfTarget(String),
@@ -303,6 +304,17 @@ impl<'a> LexState<'a> {
             );
             self.tokens.push(Token {
                 kind: TokenKind::DirImport(arg.to_string()),
+                span,
+            });
+        } else if body.starts_with("target") {
+            let arg = body.strip_prefix("target").unwrap().trim();
+            let span = Span::new(
+                self.file_id,
+                line_offset as u32,
+                (line_offset + body.len()) as u32,
+            );
+            self.tokens.push(Token {
+                kind: TokenKind::DirTarget(arg.to_string()),
                 span,
             });
         } else if body.starts_with("include") {

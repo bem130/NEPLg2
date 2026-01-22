@@ -1,26 +1,32 @@
 # 状況メモ (2026-01-22)
-- 言語に文字列リテラルを追加。型 `str` を追加し、文字列は線形メモリ上に `[len][bytes]` で配置するポインタ(i32)として扱う。WASM側でメモリを常時生成・エクスポートし、データセクションに文字列を配置。
-- `#extern` で外部関数を宣言可能にし、stdlib から `env.print_i32` / `env.print_str` を import する構成に統一。コード生成は extern を import として埋め込み、ビルトイン関数は完全撤廃。
-- CLI: `--target wasm|wasi` に対応（wasi は wasm を包含）、`--output` は任意、`--run` だけでも実行可能。埋め込みランナーは wasm だけを許可し、`print_str` 用にメモリを参照するホスト関数を登録。
-- stdlib: `std/stdio` に `print_str` を追加（`print_i32` と同様に import）。`std/math`/`std.nepl` は NEPLG2 用の最小構成のまま。examples（counter/fib）を文字列出力を含む形に更新。
-- README を最新仕様（ビルトインなし／std import 前提／print_str 追加）に更新。
-- `nepl-core` HIR に文字列リテラルと string table を追加。コード生成でメモリ・データセクションを生成し、全モジュールでメモリをエクスポート。型システムに `str` を追加し、型注釈/extern シグネチャ/型推論が対応。
-- テスト: `nepl-core/tests/neplg2.rs` に string_literal_compiles を追加。既存ターゲットゲートテストを wasi/wasi包含仕様に合わせて維持。
-- `:`ブロックと`;`の仕様に合わせて型検査を修正（Unitの暗黙破棄・`;`は値を捨てるだけで式本体は維持）。`while` のWASM生成を block+loop の2段構造にし、構造化制御のラベル深さを修正。examples の while 本体を `;`付きの行末とし、最後を `()` で閉じる形に整備。
-- Loader/SourceMap を導入し、ファイルごとに FileId を割り当てる形へ移行。`load_inline` でも import/include が解決されるよう統一し、`resolve_path` で拡張子補完を実施。
-- CLI で CoreError::Diagnostics を受け取った際に SourceMap を使ってファイル名・行・桁・キャレット付きで表示する簡易レンダラを追加。compile 失敗時に診断を出力して終了する挙動に変更。
-- パイプ演算子 `|>` を追加。スタックトップの値を次の呼び出しの第1引数として注入する仕様で、lexer/parser/typecheck/テストまで実装。
-- `std/std/mem.nepl` を追加し、`load_u8/store_u8/load_i32/store_i32/memory_grow/alloc` を #wasm で提供。#wasm 命令セットに i32.load/store・memory.grow 等を追加してスタック検査を拡張。
-- `std/std/math.nepl` を拡充（add/sub/mul/div_s/mod_s/lt/eq/le）。
-- `std/std/string.nepl` を Result ベースに改修（slice/to_i32/find は err コード付きの Result を返す）。eq/concat/len も整備済み。
-- `std/std/result.nepl` を実装（[tag,val] 表現で ok/err/is_ok/is_err/unwrap_or）。
-- `std/std/option.nepl` を追加（none/some/is_* / unwrap_or）。
-- `std/std/stdio.nepl` を wasi 専用に再構成し、`fd_write` import で print_str/print_i32 を実装。wasm では未提供。
-- `std/std/list.nepl` を追加（i32 専用の簡易 new/len/push/get。多相化は未対応）。
+## 直近の実装サマリ
+- 文字列リテラルと型 `str` を追加し、データセクションに `[len][bytes]` で配置して常時メモリをエクスポートする形に統一。
+- `#extern` で外部関数を宣言可能にし、stdlib から `env.print_i32` / `env.print_str` を import する構成に統一。ビルトイン関数は撤廃。
+- CLI: `--target wasm|wasi` に対応（wasi が wasm を包含）。`--run` だけでも実行可。コンパイル失敗時に SourceMap 付き診断を出力。
+- Loader/SourceMap を導入し、import/include で FileId/Span を保持したまま多ファイルを統合。
+- パイプ演算子 `|>` を追加。スタックトップを次の呼び出しの第1引数に注入する仕様で、lexer/parser/typecheck まで実装済み。
+- `:` ブロックと `;` の型検査を調整し、Unit 破棄や while の stack 深さ検証を改善。
+- stdlib: math/mem/string/result/option/list/stdio を追加・更新。mem は raw wasm、string/result/option はタグ付けポインタ表現、stdio は env.print_* import 前提。
+- `#target wasm|wasi` をディレクティブとして追加。CLI がターゲットを指定しない場合は #target をデフォルトに用い、複数 #target は診断エラーにした。wasi 含有ルールは従来通り。
+- stdlib/std/stdio を WASI `fd_write` 実装に置き換え、env 依存を排除。print_i32 は from_i32 → fd_write で出力。
+- 型注釈の「恒等関数」ショートカットを削除し、ascription のみで扱う前提に揃えた。`|>`+注釈の回りのテストを追加。
+- std/mem.alloc を要求サイズから算出したページ数で memory.grow する形にし、固定1ページ成長を解消（ただしページ境界アロケータのまま）。
+- CLI の target フラグを省略可能にし、#target / stdio 自動 wasi 昇格と整合するようにした。
+- テスト追加: #target wasi デフォルト動作、重複 #target エラー、pipe+型注釈の成功ケース。
 
-# これからの作業方針
-- list の多相化と Option/Result を型システムで正式サポートする（現在はポインタ表現のみ）。
-- import/use の厳密化（モジュール境界保持、衝突検出、値/型名前空間分離、hoisting 整理）。
-- string/list/mem/stdio の境界テストを追加（特に wasi で fd_write import があることを確認）。
-- wasm target で stdio を使った場合にコンパイル時に明確なエラーを出す仕組み。
-- Updated stdlib: stdio now uses env print_* for CLI runner; string simplified; math/mem adjustments.\n- Examples fib.nepl and counter.nepl now print via env host and run with --run.\n- Tests passing (cargo test --workspace --locked).
+## plan.md との乖離・注意点
+- `#target`: ディレクティブとしては実装済みだが、plan.md には未記載。エントリーファイル以外に書かれた場合の扱いなど仕様明記が必要。
+- 型注釈 `<T>`: 恒等関数ショートカットは削除したが、plan.md には「関数と見做す」とあるので記述を更新する必要あり。
+- stdlib/stdio: WASI `fd_write` 実装に置き換え済み。wasm で import した際の専用診断はまだ無いので、エラーメッセージ改善の余地あり。
+- stdlib/mem.alloc: サイズに応じたページ成長に修正したが、ページ境界アロケータのまま。細粒度管理や free は未対応。
+- Option/Result/list: enum/match が無いためタグ付きポインタの暫定実装。型システム統合や多相化は未着手。list は i32 固定で get の範囲外診断なし。
+
+## 追加で気付いたこと
+- Loader は FileId/Span を保持して diagnostics に活用できている。#include/#import は一度きりロードで循環検出あり。
+- コード生成は wasm のみ。CompileTarget::allows は wasi が wasm を包含する形で gate 判定を実装。
+
+## 今後の対応案（実装はまだしない）
+- `#target wasi|wasm` をディレクティブとして追加し、ファイル内のデフォルトターゲットを決定（CLI 指定があればそちらを優先）。`#if[target=...]` 評価にも使用。
+- 型注釈の古い恒等関数特例を撤去し、注釈は構文要素としてのみ扱う旨を仕様に明記。
+- stdio を WASI fd_write 実装に戻す／もしくは wasm target で import された場合にコンパイル時エラーを出す。
+- mem.alloc の size 対応とページ再利用、list の多相化・境界チェック強化、Option/Result を enum/match 連携へ移行。

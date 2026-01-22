@@ -112,6 +112,10 @@ pub enum Directive {
     Entry {
         name: Ident,
     },
+    Target {
+        target: String,
+        span: Span,
+    },
     Import {
         path: String,
         span: Span,

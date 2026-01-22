@@ -8,7 +8,7 @@ fn compile_ok(src: &str) {
         FileId(0),
         src,
         CompileOptions {
-            target: CompileTarget::Wasm,
+            target: Some(CompileTarget::Wasm),
         },
     );
     assert!(result.is_ok(), "expected success, got {:?}", result);
@@ -19,19 +19,31 @@ fn compile_err(src: &str) {
         FileId(0),
         src,
         CompileOptions {
-            target: CompileTarget::Wasm,
+            target: Some(CompileTarget::Wasm),
         },
     );
     assert!(result.is_err(), "expected error, got {:?}", result);
 }
 
 fn compile_ok_target(src: &str, target: CompileTarget) {
-    let result = compile_wasm(FileId(0), src, CompileOptions { target });
+    let result = compile_wasm(
+        FileId(0),
+        src,
+        CompileOptions {
+            target: Some(target),
+        },
+    );
     assert!(result.is_ok(), "expected success, got {:?}", result);
 }
 
 fn compile_err_target(src: &str, target: CompileTarget) {
-    let result = compile_wasm(FileId(0), src, CompileOptions { target });
+    let result = compile_wasm(
+        FileId(0),
+        src,
+        CompileOptions {
+            target: Some(target),
+        },
+    );
     assert!(result.is_err(), "expected error, got {:?}", result);
 }
 
@@ -212,6 +224,25 @@ fn main <()->i32> ():
 }
 
 #[test]
+fn pipe_with_type_annotation_is_ok() {
+    let src = r#"
+#entry main
+#indent 4
+
+#if[target=wasm]
+fn add <(i32,i32)->i32> (a,b):
+    #wasm:
+        local.get $a
+        local.get $b
+        i32.add
+
+fn main <()->i32> ():
+    1 |> <i32> add 4
+"#;
+    compile_ok(src);
+}
+
+#[test]
 fn wasm_cannot_use_stdio() {
     let src = r#"
 #entry main
@@ -238,4 +269,34 @@ fn main <()->i32> ():
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 12);
+}
+
+#[test]
+fn target_directive_sets_default_to_wasi() {
+    let src = r#"
+#target wasi
+#entry main
+#indent 4
+#import "std/stdio"
+#use std::stdio::*
+
+fn main <()->()> ():
+    print_str "ok"
+"#;
+    // No explicit CompileOptions target (None) should pick wasi from #target.
+    let result = compile_wasm(FileId(0), src, CompileOptions { target: None });
+    assert!(result.is_ok(), "expected success, got {:?}", result);
+}
+
+#[test]
+fn duplicate_target_directive_is_error() {
+    let src = r#"
+#target wasm
+#target wasi
+#entry main
+fn main <()->i32> ():
+    0
+"#;
+    let result = compile_wasm(FileId(0), src, CompileOptions { target: None });
+    assert!(result.is_err(), "expected error, got {:?}", result);
 }

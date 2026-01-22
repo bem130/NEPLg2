@@ -782,17 +782,6 @@ impl<'a> BlockChecker<'a> {
             return None;
         }
 
-        // Type annotation is represented as an identity function; drop the call and forward the value.
-        if matches!(func.expr.kind, HirExprKind::Unit) && params.len() == 1 {
-            if let Some(arg) = args.first() {
-                if self.ctx.unify(params[0], arg.ty).is_ok()
-                    && self.ctx.unify(result, arg.ty).is_ok()
-                {
-                    return Some(arg.clone());
-                }
-            }
-        }
-
         // Assignment operators
         if let Some(assign) = func.assign {
             if args.len() != 1 {

@@ -11,7 +11,7 @@ pub fn compile_src(src: &str) -> Vec<u8> {
     let artifact = compile_module(
         loaded.module,
         CompileOptions {
-            target: CompileTarget::Wasm,
+            target: Some(CompileTarget::Wasm),
         },
     )
     .expect("compile failure");
