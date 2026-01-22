@@ -3,6 +3,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+use crate::ast;
 use crate::codegen_wasm;
 use crate::error::CoreError;
 use crate::lexer;
@@ -44,6 +45,26 @@ pub struct CompilationArtifact {
     pub wasm: Vec<u8>,
 }
 
+pub fn compile_module(
+    module: ast::Module,
+    options: CompileOptions,
+) -> Result<CompilationArtifact, CoreError> {
+    let tc = typecheck::typecheck(&module, options.target);
+    if tc.module.is_none() {
+        return Err(CoreError::from_diagnostics(tc.diagnostics));
+    }
+    let hir_module = tc.module.unwrap();
+
+    let cg = codegen_wasm::generate_wasm(&tc.types, &hir_module);
+    let mut diagnostics = tc.diagnostics;
+    diagnostics.extend(cg.diagnostics);
+    if let Some(bytes) = cg.bytes {
+        Ok(CompilationArtifact { wasm: bytes })
+    } else {
+        Err(CoreError::from_diagnostics(diagnostics))
+    }
+}
+
 pub fn compile_wasm(
     file_id: FileId,
     source: &str,
@@ -56,21 +77,13 @@ pub fn compile_wasm(
         None => return Err(CoreError::from_diagnostics(parse.diagnostics)),
     };
 
-    let tc = typecheck::typecheck(&module, options.target);
-    if tc.module.is_none() {
-        let mut diags = parse.diagnostics;
-        diags.extend(tc.diagnostics);
-        return Err(CoreError::from_diagnostics(diags));
-    }
-    let hir_module = tc.module.unwrap();
-
-    let cg = codegen_wasm::generate_wasm(&tc.types, &hir_module);
-    let mut diagnostics = parse.diagnostics;
-    diagnostics.extend(tc.diagnostics);
-    diagnostics.extend(cg.diagnostics);
-    if let Some(bytes) = cg.bytes {
-        Ok(CompilationArtifact { wasm: bytes })
-    } else {
-        Err(CoreError::from_diagnostics(diagnostics))
+    match compile_module(module, options) {
+        Ok(artifact) => Ok(artifact),
+        Err(CoreError::Diagnostics(mut ds)) => {
+            let mut diags = parse.diagnostics;
+            diags.append(&mut ds);
+            Err(CoreError::from_diagnostics(diags))
+        }
+        Err(e) => Err(e),
     }
 }

@@ -7,6 +7,7 @@
 
 use core::fmt;
 
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -22,6 +23,9 @@ pub enum CoreError {
     /// One or more language-level errors with full diagnostic
     /// information (spans, labels, codes, etc.).
     Diagnostics(Vec<Diagnostic>),
+
+    /// I/O or environment-level error surfaced to the caller.
+    Io(alloc::string::String),
 
     /// An internal error indicating a bug in the compiler or an
     /// unexpected unreachable situation.
@@ -60,6 +64,7 @@ impl fmt::Display for CoreError {
                     write!(f, "diagnostic error (no messages)")
                 }
             }
+            CoreError::Io(msg) => write!(f, "io error: {msg}"),
             CoreError::Internal(msg) => write!(f, "internal compiler error: {msg}"),
         }
     }

@@ -21,9 +21,12 @@ pub mod codegen_wasm;
 pub mod compiler;
 pub mod hir;
 pub mod lexer;
+pub mod loader;
 pub mod parser;
 pub mod typecheck;
 pub mod types;
 
-pub use compiler::{compile_wasm, CompilationArtifact, CompileOptions, CompileTarget};
+pub use compiler::{
+    compile_module, compile_wasm, CompilationArtifact, CompileOptions, CompileTarget,
+};
 pub use error::CoreError;
