@@ -16,6 +16,8 @@ fn compiles_literal_main() {
     let src = r#"
 #entry main
 fn main <() -> i32> ():
+    #import "std/math"
+    #use std::math::*
     1
 "#;
     compile_ok(src);
@@ -35,6 +37,8 @@ fn add <(i32, i32) -> i32> (a, b):
         i32.add
 
 fn main <() -> i32> ():
+    #import "std/math"
+    #use std::math::*
     add 1:
         add 2 3
 "#;
@@ -59,6 +63,8 @@ fn pure_cannot_call_impure() {
 #indent 4
 
 fn imp <(i32) *> i32> (x):
+    #import "std/math"
+    #use std::math::*
     add x 1
 
 fn pure <(i32) -> i32> (x):
@@ -98,6 +104,8 @@ fn add_one <(i32)->i32> (a):
         i32.add
 
 fn main <() -> i32> ():
+    #import "std/math"
+    #use std::math::*
     add_one 1
 "#;
     compile_err(src);

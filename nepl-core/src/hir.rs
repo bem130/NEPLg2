@@ -13,6 +13,7 @@ use crate::types::TypeId;
 pub struct HirModule {
     pub functions: Vec<HirFunction>,
     pub entry: Option<String>,
+    pub externs: Vec<HirExtern>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +31,17 @@ pub struct HirParam {
     pub name: String,
     pub ty: TypeId,
     pub mutable: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct HirExtern {
+    pub module: String,
+    pub name: String,
+    pub local_name: String,
+    pub params: Vec<TypeId>,
+    pub result: TypeId,
+    pub effect: Effect,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]

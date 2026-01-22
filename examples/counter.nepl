@@ -1,6 +1,8 @@
 #entry main
 #indent 4
 
+#import "std/math"
+#use std::math::*
 #import "std/stdio"
 #use std::stdio::*
 

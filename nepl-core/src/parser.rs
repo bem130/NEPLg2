@@ -5,6 +5,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use crate::ast::*;
@@ -143,6 +144,17 @@ impl Parser {
             TokenKind::DirIndentWidth(width) => {
                 let span = self.next().unwrap().span;
                 Some(Stmt::Directive(Directive::IndentWidth { width, span }))
+            }
+            TokenKind::DirExtern { module, name, func, signature } => {
+                let span = self.next().unwrap().span;
+                let sig = parse_type_expr_str(&signature, span, &mut self.diagnostics)?;
+                Some(Stmt::Directive(Directive::Extern {
+                    module,
+                    name,
+                    func: Ident { name: func, span },
+                    signature: sig,
+                    span,
+                }))
             }
             TokenKind::DirWasm => {
                 let span = self.next().unwrap().span;
@@ -549,6 +561,7 @@ impl Parser {
                 Directive::Use { span, .. } => *span,
                 Directive::IfTarget { span, .. } => *span,
                 Directive::IndentWidth { span, .. } => *span,
+                Directive::Extern { span, .. } => *span,
             },
             Stmt::FnDef(f) => f.name.span,
             Stmt::Wasm(w) => w.span,
@@ -569,6 +582,57 @@ fn token_kind_eq(a: &TokenKind, b: &TokenKind) -> bool {
     match (a, b) {
         (Arrow(e1), Arrow(e2)) => e1 == e2,
         (DirIndentWidth(x), DirIndentWidth(y)) => x == y,
+        (DirExtern { .. }, DirExtern { .. }) => true,
         _ => core::mem::discriminant(a) == core::mem::discriminant(b),
+    }
+}
+
+fn parse_type_expr_str(s: &str, span: Span, diags: &mut Vec<Diagnostic>) -> Option<TypeExpr> {
+    // Very small parser for signatures like <(i32,i32)->i32>
+    let trimmed = s.trim();
+    if !trimmed.starts_with('<') || !trimmed.ends_with('>') {
+        diags.push(Diagnostic::error("invalid type signature in #extern", span));
+        return None;
+    }
+    let inner = &trimmed[1..trimmed.len() - 1];
+    // find -> or *>
+    let effect = if let Some(idx) = inner.find("*>") {
+        (Effect::Impure, idx)
+    } else if let Some(idx) = inner.find("->") {
+        (Effect::Pure, idx)
+    } else {
+        diags.push(Diagnostic::error("missing -> or *> in signature", span));
+        return None;
+    };
+    let (eff, split_idx) = effect;
+    let (params_part, ret_part) = inner.split_at(split_idx);
+    let ret_part = &ret_part[2..];
+    let params_clean = params_part.trim().trim_start_matches('(').trim_end_matches(')');
+    let mut params = Vec::new();
+    if !params_clean.is_empty() {
+        for p in params_clean.split(',') {
+            params.push(simple_type_atom(p.trim(), span, diags)?);
+        }
+    }
+    let result = simple_type_atom(ret_part.trim(), span, diags)?;
+    Some(TypeExpr::Function {
+        params,
+        result: Box::new(result),
+        effect: eff,
+    })
+}
+
+fn simple_type_atom(t: &str, span: Span, diags: &mut Vec<Diagnostic>) -> Option<TypeExpr> {
+    match t {
+        "i32" => Some(TypeExpr::I32),
+        "f32" => Some(TypeExpr::F32),
+        "bool" => Some(TypeExpr::Bool),
+        "()" => Some(TypeExpr::Unit),
+        _ if t.starts_with('.') => Some(TypeExpr::Label(Some(t.trim_start_matches('.').to_string()))),
+        _ if t.is_empty() => Some(TypeExpr::Label(None)),
+        _ => {
+            diags.push(Diagnostic::error("unknown type in signature", span));
+            None
+        }
     }
 }

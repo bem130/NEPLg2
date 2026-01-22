@@ -53,6 +53,12 @@ pub enum TokenKind {
     DirIfTarget(String),
     DirWasm,
     DirIndentWidth(usize),
+    DirExtern {
+        module: String,
+        name: String,
+        func: String,
+        signature: String,
+    },
 
     // wasm text line (inside #wasm: block)
     WasmText(String),
@@ -289,6 +295,30 @@ impl<'a> LexState<'a> {
                     kind: TokenKind::DirIfTarget(target.to_string()),
                     span,
                 });
+            }
+        } else if body.starts_with("extern") {
+            // format: extern "env" "sym" fn name <signature>
+            let span = Span::new(self.file_id, line_offset as u32, (line_offset + body.len()) as u32);
+            let parts: Vec<&str> = body.split_whitespace().collect();
+            if parts.len() >= 5 && parts[0] == "extern" && parts[2].starts_with('"') && parts[1].starts_with('"') && parts[3] == "fn" {
+                let module = parts[1].trim_matches('"').to_string();
+                let name = parts[2].trim_matches('"').to_string();
+                let func = parts[4].to_string();
+                let sig_start = body.find('<');
+                let sig = if let Some(idx) = sig_start {
+                    body[idx..].to_string()
+                } else {
+                    String::new()
+                };
+                self.tokens.push(Token {
+                    kind: TokenKind::DirExtern { module, name, func, signature: sig },
+                    span,
+                });
+            } else {
+                self.diagnostics.push(Diagnostic::error(
+                    "invalid #extern syntax",
+                    span,
+                ));
             }
         } else if body.starts_with("wasm") {
             // expect trailing colon

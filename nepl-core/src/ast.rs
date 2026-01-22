@@ -110,6 +110,13 @@ pub enum Directive {
     Use { path: String, span: Span },
     IfTarget { target: String, span: Span },
     IndentWidth { width: usize, span: Span },
+    Extern {
+        module: String,
+        name: String,
+        func: Ident,
+        signature: TypeExpr,
+        span: Span,
+    },
 }
 
 /// A single statement inside a block.

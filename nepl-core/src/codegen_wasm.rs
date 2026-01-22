@@ -14,11 +14,9 @@ use wasm_encoder::{
     Instruction, Module, TypeSection, ValType,
 };
 
-use crate::builtins::BuiltinKind;
 use crate::diagnostic::Diagnostic;
 use crate::hir::*;
 use crate::types::{TypeCtx, TypeId, TypeKind};
-use alloc::string::ToString;
 
 #[derive(Debug)]
 pub struct CodegenResult {
@@ -33,30 +31,23 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
     let mut imports: Vec<ImportLower> = Vec::new();
     let mut functions: Vec<FuncLower> = Vec::new();
 
-    // Builtins
-    functions.push(FuncLower::builtin(
-        "add",
-        BuiltinKind::AddI32,
-        vec![ValType::I32, ValType::I32],
-        Some(ValType::I32),
-    ));
-    functions.push(FuncLower::builtin(
-        "sub",
-        BuiltinKind::SubI32,
-        vec![ValType::I32, ValType::I32],
-        Some(ValType::I32),
-    ));
-    functions.push(FuncLower::builtin(
-        "lt",
-        BuiltinKind::LtI32,
-        vec![ValType::I32, ValType::I32],
-        Some(ValType::I32),
-    ));
-    imports.push(ImportLower::function(
-        "print_i32",
-        vec![ValType::I32],
-        Vec::new(),
-    ));
+    // Extern imports
+    for ext in &module.externs {
+        if let Some(sig) = wasm_sig_ids(ctx, ext.result, &ext.params) {
+            imports.push(ImportLower::function(
+                ext.module.clone(),
+                ext.name.clone(),
+                ext.local_name.clone(),
+                sig.0,
+                sig.1,
+            ));
+        } else {
+            diags.push(Diagnostic::error(
+                "unsupported extern signature for wasm",
+                ext.span,
+            ));
+        }
+    }
 
     // User functions
     for f in &module.functions {
@@ -105,7 +96,7 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
     for imp in &imports {
         let key = (imp.params.clone(), imp.results.clone());
         let type_idx = *sig_map.get(&key).unwrap();
-        import_section.import("env", &imp.name, EntityType::Function(type_idx));
+        import_section.import(&imp.module, &imp.field, EntityType::Function(type_idx));
     }
 
     let mut func_section = FunctionSection::new();
@@ -176,6 +167,8 @@ struct FuncLower {
 
 #[derive(Debug, Clone)]
 struct ImportLower {
+    module: String,
+    field: String,
     name: String,
     params: Vec<ValType>,
     results: Vec<ValType>,
@@ -183,20 +176,10 @@ struct ImportLower {
 
 #[derive(Debug, Clone)]
 enum FuncBodyLower {
-    Builtin(BuiltinKind),
     User(HirFunction),
 }
 
 impl FuncLower {
-    fn builtin(name: &str, kind: BuiltinKind, params: Vec<ValType>, result: Option<ValType>) -> Self {
-        Self {
-            name: name.to_string(),
-            params,
-            results: result.into_iter().collect(),
-            body: FuncBodyLower::Builtin(kind),
-        }
-    }
-
     fn user(func: HirFunction, sig: (Vec<ValType>, Vec<ValType>)) -> Self {
         Self {
             name: func.name.clone(),
@@ -208,9 +191,11 @@ impl FuncLower {
 }
 
 impl ImportLower {
-    fn function(name: &str, params: Vec<ValType>, results: Vec<ValType>) -> Self {
+    fn function(module: String, field: String, local_name: String, params: Vec<ValType>, results: Vec<ValType>) -> Self {
         Self {
-            name: name.to_string(),
+            module,
+            field,
+            name: local_name,
             params,
             results,
         }
@@ -221,6 +206,25 @@ fn wasm_sig(ctx: &TypeCtx, result: TypeId, params: &[HirParam]) -> Option<(Vec<V
     let mut param_types = Vec::new();
     for p in params {
         let vk = ctx.get(p.ty);
+        if let Some(v) = valtype(&vk) {
+            param_types.push(v);
+        } else {
+            return None;
+        }
+    }
+    let res_kind = ctx.get(result);
+    let res = if let Some(v) = valtype(&res_kind) {
+        vec![v]
+    } else {
+        Vec::new()
+    };
+    Some((param_types, res))
+}
+
+fn wasm_sig_ids(ctx: &TypeCtx, result: TypeId, params: &[TypeId]) -> Option<(Vec<ValType>, Vec<ValType>)> {
+    let mut param_types = Vec::new();
+    for p in params {
+        let vk = ctx.get(*p);
         if let Some(v) = valtype(&vk) {
             param_types.push(v);
         } else {
@@ -251,35 +255,8 @@ fn lower_body(
     name_map: &BTreeMap<String, u32>,
 ) -> Result<Function, Vec<Diagnostic>> {
     match &func.body {
-        FuncBodyLower::Builtin(kind) => Ok(lower_builtin(kind)),
         FuncBodyLower::User(f) => lower_user(ctx, f, name_map),
     }
-}
-
-fn lower_builtin(kind: &BuiltinKind) -> Function {
-    let mut func = Function::new(Vec::new());
-    match kind {
-        BuiltinKind::AddI32 => {
-            func.instruction(&Instruction::LocalGet(0));
-            func.instruction(&Instruction::LocalGet(1));
-            func.instruction(&Instruction::I32Add);
-        }
-        BuiltinKind::SubI32 => {
-            func.instruction(&Instruction::LocalGet(0));
-            func.instruction(&Instruction::LocalGet(1));
-            func.instruction(&Instruction::I32Sub);
-        }
-        BuiltinKind::LtI32 => {
-            func.instruction(&Instruction::LocalGet(0));
-            func.instruction(&Instruction::LocalGet(1));
-            func.instruction(&Instruction::I32LtS);
-        }
-        BuiltinKind::PrintI32 => {
-            // no-op
-        }
-    }
-    func.instruction(&Instruction::End);
-    func
 }
 
 // ---------------------------------------------------------------------

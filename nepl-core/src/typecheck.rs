@@ -8,7 +8,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::ast::*;
-use crate::builtins::{builtins, BuiltinKind};
+use crate::builtins::BuiltinKind;
 use crate::diagnostic::Diagnostic;
 use crate::hir::*;
 use crate::types::{TypeCtx, TypeId, TypeKind};
@@ -26,25 +26,40 @@ pub fn typecheck(module: &crate::ast::Module) -> TypeCheckResult {
     let mut env = Env::new();
     let mut diagnostics = Vec::new();
 
-    // Register builtins
-    for b in builtins(&mut ctx) {
-        env.insert_global(Binding {
-            name: b.name.to_string(),
-            ty: b.ty,
-            mutable: false,
-            defined: true,
-            kind: BindingKind::Func {
-                effect: b.effect,
-                arity: func_arity(&ctx, b.ty),
-                builtin: Some(b.kind),
-            },
-        });
-    }
-
     let mut entry = None;
+    let mut externs: Vec<HirExtern> = Vec::new();
     for d in &module.directives {
         if let Directive::Entry { name } = d {
             entry = Some(name.name.clone());
+        } else if let Directive::Extern { module: m, name: n, func, signature, span } = d {
+            let ty = type_from_expr(&mut ctx, &mut label_env, signature);
+            if let TypeKind::Function { params, result, effect } = ctx.get(ty) {
+                env.insert_global(Binding {
+                    name: func.name.clone(),
+                    ty,
+                    mutable: false,
+                    defined: true,
+                    kind: BindingKind::Func {
+                        effect,
+                        arity: params.len(),
+                        builtin: None,
+                    },
+                });
+                externs.push(HirExtern {
+                    module: m.clone(),
+                    name: n.clone(),
+                    local_name: func.name.clone(),
+                    params,
+                    result,
+                    effect,
+                    span: *span,
+                });
+            } else {
+                diagnostics.push(Diagnostic::error(
+                    "extern signature must be a function type",
+                    *span,
+                ));
+            }
         }
     }
 
@@ -105,7 +120,7 @@ pub fn typecheck(module: &crate::ast::Module) -> TypeCheckResult {
 
     let has_error = diagnostics.iter().any(|d| matches!(d.severity, crate::diagnostic::Severity::Error));
     TypeCheckResult {
-        module: if has_error { None } else { Some(HirModule { functions, entry }) },
+        module: if has_error { None } else { Some(HirModule { functions, entry, externs }) },
         diagnostics,
         types: ctx,
     }

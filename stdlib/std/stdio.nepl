@@ -1,4 +1,3 @@
 #indent 4
 
-// stdio primitives for NEPLG2
-// print_i32 is provided by the host (env::print_i32)
+#extern "env" "print_i32" fn print_i32 <(i32)*>()>
