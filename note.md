@@ -9,6 +9,7 @@
 - `:`ブロックと`;`の仕様に合わせて型検査を修正（Unitの暗黙破棄・`;`は値を捨てるだけで式本体は維持）。`while` のWASM生成を block+loop の2段構造にし、構造化制御のラベル深さを修正。examples の while 本体を `;`付きの行末とし、最後を `()` で閉じる形に整備。
 - Loader/SourceMap を導入し、ファイルごとに FileId を割り当てる形へ移行。`load_inline` でも import/include が解決されるよう統一し、`resolve_path` で拡張子補完を実施。
 - CLI で CoreError::Diagnostics を受け取った際に SourceMap を使ってファイル名・行・桁・キャレット付きで表示する簡易レンダラを追加。compile 失敗時に診断を出力して終了する挙動に変更。
+- パイプ演算子 `|>` を追加。スタックトップの値を次の呼び出しの第1引数として注入する仕様で、lexer/parser/typecheck/テストまで実装。
 
 # これからの作業方針
 - 文字列以外の型/命令（例: f32 演算や追加の wasm 命令）のスタック検査を拡充する場合は `parse_wasm_line`/`validate_wasm_stack` に命令効果を追加する。

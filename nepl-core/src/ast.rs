@@ -62,6 +62,7 @@ pub enum PrefixItem {
     Literal(Literal, Span),
     TypeAnnotation(TypeExpr, Span),
     Block(Block, Span),
+    Pipe(Span),
     Semi(Span),
 }
 

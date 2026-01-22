@@ -22,6 +22,7 @@ pub enum TokenKind {
     // punctuation / operators
     Colon,
     Semicolon,
+    Pipe,
     LParen,
     RParen,
     Comma,
@@ -429,6 +430,15 @@ impl<'a> LexState<'a> {
                 b';' => {
                     self.push_token(TokenKind::Semicolon, offset + i, offset + i + 1);
                     i += 1;
+                }
+                b'|' => {
+                    if i + 1 < bytes.len() && bytes[i + 1] == b'>' {
+                        self.push_token(TokenKind::Pipe, offset + i, offset + i + 2);
+                        i += 2;
+                    } else {
+                        self.unknown(offset + i, offset + i + 1);
+                        i += 1;
+                    }
                 }
                 b':' => {
                     if i + 1 < bytes.len() && bytes[i + 1] == b':' {

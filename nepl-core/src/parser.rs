@@ -292,6 +292,10 @@ impl Parser {
                     let span = self.next().unwrap().span;
                     items.push(PrefixItem::Semi(span));
                 }
+                TokenKind::Pipe => {
+                    let span = self.next().unwrap().span;
+                    items.push(PrefixItem::Pipe(span));
+                }
                 TokenKind::LAngle => {
                     let start = self.next().unwrap().span;
                     let ty = self.parse_type_expr()?;
@@ -569,6 +573,7 @@ impl Parser {
             PrefixItem::Symbol(Symbol::While(sp)) => *sp,
             PrefixItem::TypeAnnotation(_, sp) => *sp,
             PrefixItem::Block(_, sp) => *sp,
+            PrefixItem::Pipe(sp) => *sp,
             PrefixItem::Semi(sp) => *sp,
         }
     }

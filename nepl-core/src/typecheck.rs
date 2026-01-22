@@ -394,6 +394,7 @@ impl<'a> BlockChecker<'a> {
     ) -> Option<(HirExpr, bool)> {
         let mut dropped = false;
         let mut last_expr: Option<HirExpr> = None;
+        let mut pipe_pending: Option<StackEntry> = None;
         for item in &expr.items {
             match item {
                 PrefixItem::Literal(lit, span) => {
@@ -589,6 +590,24 @@ impl<'a> BlockChecker<'a> {
                         });
                     }
                 }
+                PrefixItem::Pipe(sp) => {
+                    if pipe_pending.is_some() {
+                        self.diagnostics.push(Diagnostic::error(
+                            "pipe already pending; consecutive |> not allowed",
+                            *sp,
+                        ));
+                        continue;
+                    }
+                    if stack.len() == base_depth {
+                        self.diagnostics.push(Diagnostic::error(
+                            "pipe requires a value on the stack",
+                            *sp,
+                        ));
+                        continue;
+                    }
+                    pipe_pending = stack.pop();
+                    last_expr = pipe_pending.as_ref().map(|se| se.expr.clone());
+                }
                 PrefixItem::Semi(sp) => {
                     if stack.len() == base_depth + 1 {
                         if let Some(se) = stack.pop() {
@@ -603,6 +622,29 @@ impl<'a> BlockChecker<'a> {
                     }
                 }
             }
+
+            if !matches!(item, PrefixItem::Pipe(_)) {
+                if let Some(val) = pipe_pending.take() {
+                    // The last pushed element should be a callable (function type)
+                    if let Some(top) = stack.last() {
+                        if matches!(self.ctx.get(top.ty), TypeKind::Function { .. }) {
+                            stack.push(val);
+                            last_expr = Some(stack.last().unwrap().expr.clone());
+                        } else {
+                            self.diagnostics.push(Diagnostic::error(
+                                "pipe target must be a callable expression",
+                                expr.span,
+                            ));
+                            stack.push(val);
+                        }
+                    } else {
+                        self.diagnostics
+                            .push(Diagnostic::error("pipe target missing", expr.span));
+                        stack.push(val);
+                    }
+                }
+            }
+
             self.reduce_calls(stack);
         }
 
@@ -617,6 +659,11 @@ impl<'a> BlockChecker<'a> {
                 span: expr.span,
             }
         };
+
+        if pipe_pending.is_some() {
+            self.diagnostics
+                .push(Diagnostic::error("pipe has no target", expr.span));
+        }
 
         // Validate final stack depth
         if stack.len() > base_depth + 1 {

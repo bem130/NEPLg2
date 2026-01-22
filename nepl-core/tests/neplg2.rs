@@ -177,3 +177,34 @@ fn main <()*> ()> ():
 "#;
     compile_ok(src);
 }
+
+#[test]
+fn pipe_injects_first_arg() {
+    let src = r#"
+#entry main
+#indent 4
+
+#if[target=wasm]
+fn add <(i32,i32)->i32> (a,b):
+    #wasm:
+        local.get $a
+        local.get $b
+        i32.add
+
+fn main <()->i32> ():
+    add 1 add 2 3 |> add 4
+"#;
+    compile_ok(src);
+}
+
+#[test]
+fn pipe_requires_callable_target() {
+    let src = r#"
+#entry main
+#indent 4
+
+fn main <()->i32> ():
+    1 |> 2
+"#;
+    compile_err(src);
+}
