@@ -12,7 +12,6 @@ fn compile_err(src: &str) {
 }
 
 #[test]
-#[ignore = "parser currently rejects angle signature spacing; pending fix"]
 fn compiles_literal_main() {
     let src = r#"
 #entry main
@@ -23,7 +22,6 @@ fn main <() -> i32> ():
 }
 
 #[test]
-#[ignore = "parser indentation handling for block arg pending fix"]
 fn compiles_add_block_expression() {
     let src = r#"
 #entry main
@@ -68,6 +66,39 @@ fn pure <(i32) -> i32> (x):
 
 fn main <() -> i32> ():
     pure 1
+"#;
+    compile_err(src);
+}
+
+#[test]
+fn iftarget_non_wasm_is_skipped() {
+    let src = r#"
+#entry main
+
+#if[target=other]
+fn bad <() -> i32> ():
+    unknown_symbol
+
+fn main <() -> i32> ():
+    1
+"#;
+    compile_ok(src);
+}
+
+#[test]
+fn wasm_stack_mismatch_is_error() {
+    let src = r#"
+#entry main
+
+#if[target=wasm]
+fn add_one <(i32)->i32> (a):
+    #wasm:
+        local.get $a
+        // missing value for add
+        i32.add
+
+fn main <() -> i32> ():
+    add_one 1
 "#;
     compile_err(src);
 }

@@ -1,3 +1,0 @@
-add
-    (wasi_print (len concat "NEPL" " I/O"))
-    (wasi_print (add (wasi_random) (get [10 20 30] 1)))

@@ -4,13 +4,14 @@
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
+use alloc::format;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
 use wasm_encoder::{
-    CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction, Module,
-    TypeSection, ValType,
+    CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, ImportSection,
+    Instruction, Module, TypeSection, ValType,
 };
 
 use crate::builtins::BuiltinKind;
@@ -28,7 +29,8 @@ pub struct CodegenResult {
 pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
     let mut diags = Vec::new();
 
-    // Build function list (builtins first)
+    // Build imports / function list (builtins first)
+    let mut imports: Vec<ImportLower> = Vec::new();
     let mut functions: Vec<FuncLower> = Vec::new();
 
     // Builtins
@@ -50,11 +52,10 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
         vec![ValType::I32, ValType::I32],
         Some(ValType::I32),
     ));
-    functions.push(FuncLower::builtin(
+    imports.push(ImportLower::function(
         "print_i32",
-        BuiltinKind::PrintI32,
         vec![ValType::I32],
-        None,
+        Vec::new(),
     ));
 
     // User functions
@@ -71,8 +72,13 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
 
     // Map names to indices
     let mut name_to_index = BTreeMap::new();
+    let mut next_index: u32 = 0;
+    for imp in &imports {
+        name_to_index.insert(imp.name.clone(), next_index);
+        next_index += 1;
+    }
     for (idx, f) in functions.iter().enumerate() {
-        name_to_index.insert(f.name.clone(), idx as u32);
+        name_to_index.insert(f.name.clone(), next_index + idx as u32);
     }
 
     // Type section dedup
@@ -85,6 +91,21 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
             type_section.ty().function(f.params.clone(), f.results.clone());
             sig_map.insert(key.clone(), idx);
         }
+    }
+    for imp in &imports {
+        let key = (imp.params.clone(), imp.results.clone());
+        if !sig_map.contains_key(&key) {
+            let idx = type_section.len();
+            type_section.ty().function(imp.params.clone(), imp.results.clone());
+            sig_map.insert(key.clone(), idx);
+        }
+    }
+
+    let mut import_section = ImportSection::new();
+    for imp in &imports {
+        let key = (imp.params.clone(), imp.results.clone());
+        let type_idx = *sig_map.get(&key).unwrap();
+        import_section.import("env", &imp.name, EntityType::Function(type_idx));
     }
 
     let mut func_section = FunctionSection::new();
@@ -110,7 +131,9 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
     if let Some(entry) = &module.entry {
         if let Some(idx) = name_to_index.get(entry) {
             export_section.export("main", ExportKind::Func, *idx);
-            export_section.export(entry, ExportKind::Func, *idx);
+            if entry != "main" {
+                export_section.export(entry, ExportKind::Func, *idx);
+            }
         }
     }
 
@@ -126,6 +149,9 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
 
     let mut module_bytes = Module::new();
     module_bytes.section(&type_section);
+    if !imports.is_empty() {
+        module_bytes.section(&import_section);
+    }
     module_bytes.section(&func_section);
     module_bytes.section(&export_section);
     module_bytes.section(&code_section);
@@ -146,6 +172,13 @@ struct FuncLower {
     params: Vec<ValType>,
     results: Vec<ValType>,
     body: FuncBodyLower,
+}
+
+#[derive(Debug, Clone)]
+struct ImportLower {
+    name: String,
+    params: Vec<ValType>,
+    results: Vec<ValType>,
 }
 
 #[derive(Debug, Clone)]
@@ -170,6 +203,16 @@ impl FuncLower {
             params: sig.0,
             results: sig.1,
             body: FuncBodyLower::User(func),
+        }
+    }
+}
+
+impl ImportLower {
+    fn function(name: &str, params: Vec<ValType>, results: Vec<ValType>) -> Self {
+        Self {
+            name: name.to_string(),
+            params,
+            results,
         }
     }
 }
@@ -269,8 +312,14 @@ fn lower_user(
         }
         HirBody::Wasm(wb) => {
             for line in &wb.lines {
-                for inst in parse_wasm_line(line, &locals) {
-                    insts.push(inst);
+                match parse_wasm_line(line, &locals) {
+                    Ok(mut v) => insts.append(&mut v),
+                    Err(msg) => diags.push(Diagnostic::error(msg, func.span)),
+                }
+            }
+            if diags.is_empty() {
+                if let Err(d) = validate_wasm_stack(ctx, func, &locals, &insts) {
+                    diags.push(d);
                 }
             }
         }
@@ -341,7 +390,7 @@ fn gen_expr(
                 insts.push(Instruction::Call(*fidx));
                 valtype(&ctx.get(expr.ty))
             } else {
-                diags.push(Diagnostic::error("unknown variable", expr.span));
+                diags.push(Diagnostic::error(format!("unknown variable {}", name), expr.span));
                 None
             }
         }
@@ -469,40 +518,53 @@ impl LocalMap {
     fn local_decls(&self) -> Vec<(u32, ValType)> {
         self.decls.iter().map(|v| (1u32, *v)).collect()
     }
+
+    fn valtype_of(&self, idx: u32, ctx: &TypeCtx) -> Option<ValType> {
+        self.locals
+            .iter()
+            .find(|l| l.idx == idx)
+            .and_then(|l| valtype(&ctx.get(l.ty)))
+    }
 }
 
 // ---------------------------------------------------------------------
 // Minimal wasm text parser for #wasm blocks
 // ---------------------------------------------------------------------
 
-fn parse_wasm_line(line: &str, locals: &LocalMap) -> Vec<Instruction<'static>> {
+fn parse_wasm_line(line: &str, locals: &LocalMap) -> Result<Vec<Instruction<'static>>, String> {
     let mut insts = Vec::new();
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.is_empty() {
-        return insts;
+        return Ok(insts);
     }
     match parts[0] {
         "local.get" if parts.len() == 2 => {
             if let Some(idx) = parse_local(parts[1], locals) {
                 insts.push(Instruction::LocalGet(idx));
+            } else {
+                return Err(format!("unknown local in #wasm: {}", parts[1]));
             }
         }
         "local.set" if parts.len() == 2 => {
             if let Some(idx) = parse_local(parts[1], locals) {
                 insts.push(Instruction::LocalSet(idx));
+            } else {
+                return Err(format!("unknown local in #wasm: {}", parts[1]));
             }
         }
         "i32.const" if parts.len() == 2 => {
             if let Ok(v) = parts[1].parse::<i32>() {
                 insts.push(Instruction::I32Const(v));
+            } else {
+                return Err(format!("invalid i32.const immediate: {}", parts[1]));
             }
         }
         "i32.add" => insts.push(Instruction::I32Add),
         "i32.sub" => insts.push(Instruction::I32Sub),
         "i32.lt_s" => insts.push(Instruction::I32LtS),
-        _ => {}
+        other => return Err(format!("unsupported wasm instruction: {}", other)),
     }
-    insts
+    Ok(insts)
 }
 
 fn parse_local(text: &str, locals: &LocalMap) -> Option<u32> {
@@ -514,5 +576,88 @@ fn parse_local(text: &str, locals: &LocalMap) -> Option<u32> {
         }
     } else {
         text.parse::<u32>().ok()
+    }
+}
+
+fn validate_wasm_stack(
+    ctx: &TypeCtx,
+    func: &HirFunction,
+    locals: &LocalMap,
+    insts: &[Instruction<'static>],
+) -> Result<(), Diagnostic> {
+    let mut stack: Vec<ValType> = Vec::new();
+    for inst in insts {
+        match inst {
+            Instruction::LocalGet(idx) => {
+                if let Some(vt) = locals.valtype_of(*idx, ctx) {
+                    stack.push(vt);
+                } else {
+                    return Err(Diagnostic::error("unknown local in #wasm", func.span));
+                }
+            }
+            Instruction::LocalSet(idx) => {
+                let expected = locals
+                    .valtype_of(*idx, ctx)
+                    .ok_or_else(|| Diagnostic::error("unknown local in #wasm", func.span))?;
+                match stack.pop() {
+                    Some(top) if top == expected => {}
+                    Some(_) => {
+                        return Err(Diagnostic::error(
+                            "type mismatch for local.set in #wasm",
+                            func.span,
+                        ));
+                    }
+                    None => {
+                        return Err(Diagnostic::error(
+                            "stack underflow in #wasm local.set",
+                            func.span,
+                        ));
+                    }
+                }
+            }
+            Instruction::I32Const(_) => stack.push(ValType::I32),
+            Instruction::I32Add | Instruction::I32Sub | Instruction::I32LtS => {
+                let a = stack.pop();
+                let b = stack.pop();
+                if a == Some(ValType::I32) && b == Some(ValType::I32) {
+                    stack.push(ValType::I32);
+                } else {
+                    return Err(Diagnostic::error(
+                        "i32 arithmetic expects two i32 values on stack",
+                        func.span,
+                    ));
+                }
+            }
+            other => {
+                return Err(Diagnostic::error(
+                    alloc::format!("unsupported wasm instruction in #wasm: {:?}", other),
+                    func.span,
+                ));
+            }
+        }
+    }
+
+    let expected = valtype(&ctx.get(func.result));
+    match expected {
+        Some(vt) => {
+            if stack.len() == 1 && stack[0] == vt {
+                Ok(())
+            } else {
+                Err(Diagnostic::error(
+                    "wasm body result does not match function signature",
+                    func.span,
+                ))
+            }
+        }
+        None => {
+            if stack.is_empty() {
+                Ok(())
+            } else {
+                Err(Diagnostic::error(
+                    "wasm body leaves values on stack for unit return",
+                    func.span,
+                ))
+            }
+        }
     }
 }

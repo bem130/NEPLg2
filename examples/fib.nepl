@@ -1,0 +1,20 @@
+#entry main
+#indent 4
+
+#import "std/stdio"
+#use std::stdio::*
+
+fn main <()*> ()> ():
+    let mut a <i32> 0;
+    let mut b <i32> 1;
+    let mut i <i32> 0;
+
+    while lt i 10:
+        print_i32 a;
+
+        let mut next <i32> add a b;
+        set a b;
+        set b next;
+        set i add i 1;
+
+    ()

@@ -292,6 +292,24 @@ impl Parser {
                     };
                     items.push(PrefixItem::Literal(lit, tok.span));
                 }
+                TokenKind::LParen => {
+                    let lp = self.next().unwrap().span;
+                    if self.consume_if(TokenKind::RParen) {
+                        let rp = self.peek_span().unwrap_or(lp);
+                        let span = lp.join(rp).unwrap_or(lp);
+                        items.push(PrefixItem::Literal(Literal::Unit, span));
+                    } else {
+                        let span = self.peek_span().unwrap_or(lp);
+                        self.diagnostics.push(Diagnostic::error(
+                            "parenthesized expressions are not supported; use prefix syntax",
+                            span,
+                        ));
+                        // attempt to recover by consuming until line end
+                        while !self.is_end(&TokenEnd::Line) {
+                            self.next();
+                        }
+                    }
+                }
                 TokenKind::KwLet => {
                     let _ = self.next();
                     let is_mut = self.consume_if(TokenKind::KwMut);
@@ -368,9 +386,26 @@ impl Parser {
                 }
             }
             TokenKind::LParen => {
-                self.next();
-                let mut params = Vec::new();
-                if !self.check(TokenKind::RParen) {
+                let lp_span = self.next().unwrap().span;
+                // Empty parens: could be unit type or zero-arg function params.
+                if self.check(TokenKind::RParen) {
+                    let rp_span = self.next().unwrap().span;
+                    if let Some(TokenKind::Arrow(eff)) = self.peek_kind() {
+                        // zero-arg function type
+                        let eff_copy = eff;
+                        self.next();
+                        let result = self.parse_type_expr()?;
+                        Some(TypeExpr::Function {
+                            params: Vec::new(),
+                            result: Box::new(result),
+                            effect: eff_copy,
+                        })
+                    } else {
+                        // treat as unit type
+                        Some(TypeExpr::Unit)
+                    }
+                } else {
+                    let mut params = Vec::new();
                     loop {
                         let ty = self.parse_type_expr()?;
                         params.push(ty);
@@ -379,29 +414,29 @@ impl Parser {
                         }
                         break;
                     }
+                    self.expect(TokenKind::RParen)?;
+                    let effect = match self.peek_kind() {
+                        Some(TokenKind::Arrow(eff)) => {
+                            let eff_copy = eff;
+                            self.next();
+                            eff_copy
+                        }
+                        _ => {
+                            let span = self.peek_span().unwrap_or_else(Span::dummy);
+                            self.diagnostics.push(Diagnostic::error(
+                                "expected -> or *> after parameter list",
+                                span,
+                            ));
+                            Effect::Pure
+                        }
+                    };
+                    let result = self.parse_type_expr()?;
+                    Some(TypeExpr::Function {
+                        params,
+                        result: Box::new(result),
+                        effect,
+                    })
                 }
-                self.expect(TokenKind::RParen)?;
-                let effect = match self.peek_kind() {
-                    Some(TokenKind::Arrow(eff)) => {
-                        let eff_copy = eff;
-                        self.next();
-                        eff_copy
-                    }
-                    _ => {
-                        let span = self.peek_span().unwrap_or_else(Span::dummy);
-                        self.diagnostics.push(Diagnostic::error(
-                            "expected -> or *> after parameter list",
-                            span,
-                        ));
-                        Effect::Pure
-                    }
-                };
-                let result = self.parse_type_expr()?;
-                Some(TypeExpr::Function {
-                    params,
-                    result: Box::new(result),
-                    effect,
-                })
             }
             _ => {
                 let span = self.peek_span().unwrap_or_else(Span::dummy);

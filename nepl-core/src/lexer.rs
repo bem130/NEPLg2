@@ -189,9 +189,8 @@ impl<'a> LexState<'a> {
             }
         }
 
-        if !in_wasm {
-            self.adjust_indent(effective_indent, line_start);
-        }
+        // Always emit INDENT/DEDENT to keep parser block structure even inside #wasm.
+        self.adjust_indent(effective_indent, line_start);
 
         let line_offset = line_start + (content.len() - rest.len());
 
@@ -321,13 +320,8 @@ impl<'a> LexState<'a> {
             }
             match c {
                 b'(' => {
-                    if i + 1 < bytes.len() && bytes[i + 1] == b')' {
-                        self.push_token(TokenKind::UnitLiteral, offset + i, offset + i + 2);
-                        i += 2;
-                    } else {
-                        self.push_token(TokenKind::LParen, offset + i, offset + i + 1);
-                        i += 1;
-                    }
+                    self.push_token(TokenKind::LParen, offset + i, offset + i + 1);
+                    i += 1;
                 }
                 b')' => {
                     self.push_token(TokenKind::RParen, offset + i, offset + i + 1);

@@ -20,9 +20,3 @@ fn lt <(i32,i32)->bool> (a,b):
         local.get $a
         local.get $b
         i32.lt_s
-
-#if[target=wasm]
-fn print_i32 <(i32)*>()> (x):
-    #wasm:
-        ;; placeholder: host import expected
-        local.get $x

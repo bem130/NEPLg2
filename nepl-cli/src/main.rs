@@ -1,6 +1,7 @@
+use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -42,8 +43,13 @@ fn main() -> Result<()> {
 
 fn execute(cli: Cli) -> Result<()> {
     let source = match cli.input {
-        Some(path) => fs::read_to_string(&path)
-            .with_context(|| format!("failed to read input file {path}"))?,
+        Some(path) => {
+            let root = Path::new(&path)
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| PathBuf::from("."));
+            read_with_imports(Path::new(&path), &root, &stdlib_root()?, &mut HashSet::new())?
+        }
         None => {
             let mut buffer = String::new();
             io::stdin().read_to_string(&mut buffer)?;
@@ -89,15 +95,70 @@ fn run_wasm(artifact: &CompilationArtifact) -> Result<i32> {
     let module = Module::new(&engine, artifact.wasm.as_slice())
         .context("failed to compile wasm artifact")?;
     let mut linker = Linker::new(&engine);
+    linker.func_wrap("env", "print_i32", |x: i32| {
+        println!("{x}");
+    })?;
     let mut store = Store::new(&engine, ());
     let instance_pre = linker
         .instantiate(&mut store, &module)
         .context("failed to instantiate module")?;
     let instance = instance_pre.start(&mut store).context("failed to start module")?;
-    let main = instance
-        .get_typed_func::<(), i32>(&store, "main")
-        .context("exported main function missing or has wrong type")?;
-    main.call(&mut store, ()).context("failed to execute main")
+    if let Ok(main) = instance.get_typed_func::<(), i32>(&store, "main") {
+        main.call(&mut store, ()).context("failed to execute main")
+    } else if let Ok(main_unit) = instance.get_typed_func::<(), ()>(&store, "main") {
+        main_unit
+            .call(&mut store, ())
+            .context("failed to execute main")?;
+        Ok(0)
+    } else {
+        Err(anyhow::anyhow!(
+            "exported main function missing or has wrong type"
+        ))
+    }
+}
+
+fn stdlib_root() -> Result<PathBuf> {
+    Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("stdlib"))
+}
+
+fn read_with_imports(path: &Path, base: &Path, stdlib_root: &Path, seen: &mut HashSet<PathBuf>) -> Result<String> {
+    let canon = fs::canonicalize(path).with_context(|| format!("canonicalize {:?}", path))?;
+    if !seen.insert(canon.clone()) {
+        return Err(anyhow::anyhow!("circular import detected: {:?}", path));
+    }
+    let content = fs::read_to_string(&canon).with_context(|| format!("failed to read {:?}", path))?;
+    let mut out = String::new();
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("#import") {
+            // format: #import "path"
+                if let Some(start) = trimmed.find('"') {
+                    if let Some(end) = trimmed[start + 1..].find('"') {
+                        let rel = &trimmed[start + 1..start + 1 + end];
+                        let mut import_path = if rel.starts_with("std/") {
+                            stdlib_root.join(rel)
+                        } else {
+                            base.join(rel)
+                        };
+                        if import_path.extension().is_none() {
+                            import_path = import_path.with_extension("nepl");
+                        }
+                        let imported = read_with_imports(&import_path, import_path.parent().unwrap_or(base), stdlib_root, seen)?;
+                        out.push_str(&imported);
+                        out.push('\n');
+                        continue;
+                    }
+            }
+            return Err(anyhow::anyhow!("invalid #import line: {}", line));
+        } else if trimmed.starts_with("#use") {
+            // inlined import makes #use unnecessary; skip line
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    seen.remove(&canon);
+    Ok(out)
 }
 
 #[cfg(test)]

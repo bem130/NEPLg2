@@ -2,6 +2,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -21,6 +22,7 @@ pub struct TypeCheckResult {
 
 pub fn typecheck(module: &crate::ast::Module) -> TypeCheckResult {
     let mut ctx = TypeCtx::new();
+    let mut label_env = LabelEnv::new();
     let mut env = Env::new();
     let mut diagnostics = Vec::new();
 
@@ -47,9 +49,19 @@ pub fn typecheck(module: &crate::ast::Module) -> TypeCheckResult {
     }
 
     // Collect top-level function signatures (hoist)
+    let mut pending_if: Option<bool> = None;
     for item in &module.root.items {
+        if let Stmt::Directive(Directive::IfTarget { target, .. }) = item {
+            pending_if = Some(target == "wasm");
+            continue;
+        }
+        let allowed = pending_if.unwrap_or(true);
+        pending_if = None;
+        if !allowed {
+            continue;
+        }
         if let Stmt::FnDef(f) = item {
-            let ty = type_from_expr(&mut ctx, &f.signature);
+            let ty = type_from_expr(&mut ctx, &mut label_env, &f.signature);
             if let TypeKind::Function { params, result, effect } = ctx.get(ty) {
                 env.insert_global(Binding {
                     name: f.name.name.clone(),
@@ -72,9 +84,19 @@ pub fn typecheck(module: &crate::ast::Module) -> TypeCheckResult {
     }
 
     let mut functions = Vec::new();
+    let mut pending_if = None;
     for item in &module.root.items {
+        if let Stmt::Directive(Directive::IfTarget { target, .. }) = item {
+            pending_if = Some(target == "wasm");
+            continue;
+        }
+        let allowed = pending_if.unwrap_or(true);
+        pending_if = None;
+        if !allowed {
+            continue;
+        }
         if let Stmt::FnDef(f) = item {
-            match check_function(f, &mut ctx, &mut env) {
+            match check_function(f, &mut ctx, &mut env, &mut label_env) {
                 Ok(func) => functions.push(func),
                 Err(mut diags) => diagnostics.append(&mut diags),
             }
@@ -97,9 +119,10 @@ fn check_function(
     f: &FnDef,
     ctx: &mut TypeCtx,
     env: &mut Env,
+    labels: &mut LabelEnv,
 ) -> Result<HirFunction, Vec<Diagnostic>> {
     let mut diags = Vec::new();
-    let sig_ty = type_from_expr(ctx, &f.signature);
+    let sig_ty = type_from_expr(ctx, labels, &f.signature);
     let (params_ty, result_ty, effect) = match ctx.get(sig_ty) {
         TypeKind::Function { params, result, effect } => (params, result, effect),
         _ => {
@@ -133,6 +156,7 @@ fn check_function(
         let mut checker = BlockChecker {
             ctx,
             env,
+            labels,
             diagnostics: Vec::new(),
             current_effect: effect,
         };
@@ -190,6 +214,7 @@ fn check_function(
 struct BlockChecker<'a> {
     ctx: &'a mut TypeCtx,
     env: &'a mut Env,
+    labels: &'a mut LabelEnv,
     diagnostics: Vec<Diagnostic>,
     current_effect: Effect,
 }
@@ -212,7 +237,7 @@ impl<'a> BlockChecker<'a> {
                     });
                 }
             } else if let Stmt::FnDef(f) = stmt {
-                let ty = type_from_expr(self.ctx, &f.signature);
+                let ty = type_from_expr(self.ctx, self.labels, &f.signature);
                 if let TypeKind::Function { params, effect, .. } = self.ctx.get(ty) {
                     let _ = self.env.insert_local(Binding {
                         name: f.name.name.clone(),
@@ -270,7 +295,8 @@ impl<'a> BlockChecker<'a> {
         }
 
         let (final_ty, value_ty) = if stack.len() == base_depth {
-            (self.ctx.unit(), None)
+            let u = self.ctx.unit();
+            (u, Some(u))
         } else if stack.len() == base_depth + 1 {
             let t = stack.last().unwrap().ty;
             (t, Some(t))
@@ -455,7 +481,7 @@ impl<'a> BlockChecker<'a> {
                     }
                 },
                 PrefixItem::TypeAnnotation(ty_expr, span) => {
-                    let ty = type_from_expr(self.ctx, ty_expr);
+                    let ty = type_from_expr(self.ctx, self.labels, ty_expr);
                     let func_ty = self.ctx.function(vec![ty], ty, Effect::Pure);
                     stack.push(StackEntry {
                         ty: func_ty,
@@ -491,9 +517,10 @@ impl<'a> BlockChecker<'a> {
                 }
                 PrefixItem::Semi(sp) => {
                     if stack.len() == base_depth + 1 {
-                        stack.pop();
+                        if let Some(se) = stack.pop() {
+                            last_expr = Some(se.expr);
+                        }
                         dropped = true;
-                        last_expr = None;
                     } else {
                         self.diagnostics.push(Diagnostic::error(
                             "semicolon requires exactly one value on the stack",
@@ -507,12 +534,6 @@ impl<'a> BlockChecker<'a> {
 
         let result_expr = if stack.len() == base_depth + 1 {
             stack.last().unwrap().expr.clone()
-        } else if dropped {
-            HirExpr {
-                ty: self.ctx.unit(),
-                kind: HirExprKind::Unit,
-                span: expr.span,
-            }
         } else if let Some(e) = last_expr {
             e
         } else {
@@ -548,15 +569,13 @@ impl<'a> BlockChecker<'a> {
                 TypeKind::Function { params, result, effect } => (params, result, effect),
                 _ => break,
             };
-            if stack.len() <= func_pos + params.len() {
+            if stack.len() < func_pos + 1 + params.len() {
                 break;
             }
             let mut args = Vec::new();
             for _ in 0..params.len() {
                 args.push(stack.remove(func_pos + 1));
             }
-            let args_rev = args.into_iter().collect::<Vec<_>>();
-            let args = args_rev.into_iter().rev().collect::<Vec<_>>();
 
             let applied = self.apply_function(stack.remove(func_pos), params, result, effect, args);
             if let Some(val) = applied {
@@ -582,6 +601,15 @@ impl<'a> BlockChecker<'a> {
                 func.expr.span,
             ));
             return None;
+        }
+
+        // Type annotation is represented as an identity function; drop the call and forward the value.
+        if matches!(func.expr.kind, HirExprKind::Unit) && params.len() == 1 {
+            if let Some(arg) = args.first() {
+                if self.ctx.unify(params[0], arg.ty).is_ok() && self.ctx.unify(result, arg.ty).is_ok() {
+                    return Some(arg.clone());
+                }
+            }
         }
 
         // Assignment operators
@@ -870,19 +898,33 @@ impl Env {
 // Helpers
 // ---------------------------------------------------------------------
 
-fn type_from_expr(ctx: &mut TypeCtx, t: &TypeExpr) -> TypeId {
+type LabelEnv = BTreeMap<String, TypeId>;
+
+fn type_from_expr(ctx: &mut TypeCtx, labels: &mut LabelEnv, t: &TypeExpr) -> TypeId {
     match t {
         TypeExpr::Unit => ctx.unit(),
         TypeExpr::I32 => ctx.i32(),
         TypeExpr::F32 => ctx.f32(),
         TypeExpr::Bool => ctx.bool(),
-        TypeExpr::Label(label) => ctx.fresh_var(label.clone()),
+        TypeExpr::Label(label) => {
+            if let Some(name) = label {
+                if let Some(existing) = labels.get(name) {
+                    *existing
+                } else {
+                    let id = ctx.fresh_var(Some(name.clone()));
+                    labels.insert(name.clone(), id);
+                    id
+                }
+            } else {
+                ctx.fresh_var(None)
+            }
+        }
         TypeExpr::Function { params, result, effect } => {
             let mut p = Vec::new();
             for ty in params {
-                p.push(type_from_expr(ctx, ty));
+                p.push(type_from_expr(ctx, labels, ty));
             }
-            let r = type_from_expr(ctx, result);
+            let r = type_from_expr(ctx, labels, result);
             ctx.function(p, r, *effect)
         }
     }
