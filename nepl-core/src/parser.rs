@@ -168,6 +168,10 @@ impl Parser {
                 let wasm = self.parse_wasm_block(span)?;
                 Some(Stmt::Wasm(wasm))
             }
+            TokenKind::DirInclude(path) => {
+                let span = self.next().unwrap().span;
+                Some(Stmt::Directive(Directive::Include { path, span }))
+            }
             TokenKind::KwFn => self.parse_fn(),
             _ => {
                 let expr = self.parse_prefix_expr()?;
@@ -393,6 +397,7 @@ impl Parser {
                     "i32" => Some(TypeExpr::I32),
                     "f32" => Some(TypeExpr::F32),
                     "bool" => Some(TypeExpr::Bool),
+                    "never" => Some(TypeExpr::Never),
                     "str" => Some(TypeExpr::Str),
                     _ => Some(TypeExpr::Label(Some(name.clone()))),
                 }
@@ -577,6 +582,7 @@ impl Parser {
                 Directive::IfTarget { span, .. } => *span,
                 Directive::IndentWidth { span, .. } => *span,
                 Directive::Extern { span, .. } => *span,
+                Directive::Include { span, .. } => *span,
             },
             Stmt::FnDef(f) => f.name.span,
             Stmt::Wasm(w) => w.span,
@@ -597,6 +603,7 @@ fn token_kind_eq(a: &TokenKind, b: &TokenKind) -> bool {
     match (a, b) {
         (Arrow(e1), Arrow(e2)) => e1 == e2,
         (DirIndentWidth(x), DirIndentWidth(y)) => x == y,
+        (DirInclude(_), DirInclude(_)) => true,
         (DirExtern { .. }, DirExtern { .. }) => true,
         _ => core::mem::discriminant(a) == core::mem::discriminant(b),
     }
@@ -645,6 +652,7 @@ fn simple_type_atom(t: &str, span: Span, diags: &mut Vec<Diagnostic>) -> Option<
         "i32" => Some(TypeExpr::I32),
         "f32" => Some(TypeExpr::F32),
         "bool" => Some(TypeExpr::Bool),
+        "never" => Some(TypeExpr::Never),
         "str" => Some(TypeExpr::Str),
         "()" => Some(TypeExpr::Unit),
         _ if t.starts_with('.') => {

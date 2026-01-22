@@ -54,6 +54,7 @@ pub enum TokenKind {
     DirIfTarget(String),
     DirWasm,
     DirIndentWidth(usize),
+    DirInclude(String),
     DirExtern {
         module: String,
         name: String,
@@ -301,6 +302,21 @@ impl<'a> LexState<'a> {
             );
             self.tokens.push(Token {
                 kind: TokenKind::DirImport(arg.to_string()),
+                span,
+            });
+        } else if body.starts_with("include") {
+            let arg = body
+                .strip_prefix("include")
+                .unwrap()
+                .trim()
+                .trim_matches('"');
+            let span = Span::new(
+                self.file_id,
+                line_offset as u32,
+                (line_offset + body.len()) as u32,
+            );
+            self.tokens.push(Token {
+                kind: TokenKind::DirInclude(arg.to_string()),
                 span,
             });
         } else if body.starts_with("use") {

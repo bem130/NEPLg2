@@ -21,6 +21,7 @@ pub enum TypeExpr {
     I32,
     F32,
     Bool,
+    Never,
     Str,
     Label(Option<String>), // . or .label
     Function {
@@ -131,6 +132,10 @@ pub enum Directive {
         name: String,
         func: Ident,
         signature: TypeExpr,
+        span: Span,
+    },
+    Include {
+        path: String,
         span: Span,
     },
 }

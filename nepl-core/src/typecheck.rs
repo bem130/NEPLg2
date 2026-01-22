@@ -1018,6 +1018,7 @@ fn type_from_expr(ctx: &mut TypeCtx, labels: &mut LabelEnv, t: &TypeExpr) -> Typ
         TypeExpr::F32 => ctx.f32(),
         TypeExpr::Bool => ctx.bool(),
         TypeExpr::Str => ctx.str(),
+        TypeExpr::Never => ctx.never(),
         TypeExpr::Label(label) => {
             if let Some(name) = label {
                 if let Some(existing) = labels.get(name) {

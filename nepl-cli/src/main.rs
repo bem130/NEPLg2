@@ -185,7 +185,7 @@ fn read_with_imports(
     let mut out = String::new();
     for line in content.lines() {
         let trimmed = line.trim_start();
-        if trimmed.starts_with("#import") {
+        if trimmed.starts_with("#import") || trimmed.starts_with("#include") {
             // format: #import "path"
             if let Some(start) = trimmed.find('"') {
                 if let Some(end) = trimmed[start + 1..].find('"') {
