@@ -5,7 +5,11 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::Parser;
 use nepl_core::{
-    compile_module, loader::Loader, CompilationArtifact, CompileOptions, CompileTarget,
+    compile_module,
+    diagnostic::{Diagnostic, Severity},
+    error::CoreError,
+    loader::{Loader, SourceMap},
+    CompilationArtifact, CompileOptions, CompileTarget,
 };
 use wasmi::{Caller, Engine, Linker, Module, Store};
 
@@ -48,7 +52,7 @@ fn execute(cli: Cli) -> Result<()> {
     if !cli.run && cli.output.is_none() {
         return Err(anyhow::anyhow!("Either --run or --output is required"));
     }
-    let (module, _sm) = match cli.input {
+    let load_result = match cli.input {
         Some(path) => {
             let loader = Loader::new(stdlib_root()?);
             loader
@@ -64,6 +68,8 @@ fn execute(cli: Cli) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("{e}"))?
         }
     };
+    let module = load_result.module;
+    let source_map = load_result.source_map;
 
     let target = match cli.target.as_str() {
         "wasi" => CompileTarget::Wasi,
@@ -73,7 +79,14 @@ fn execute(cli: Cli) -> Result<()> {
 
     match cli.emit.as_str() {
         "wasm" => {
-            let artifact = compile_module(module, options).map_err(|e| anyhow::anyhow!("{e:?}"))?;
+            let artifact = match compile_module(module, options) {
+                Ok(a) => a,
+                Err(CoreError::Diagnostics(diags)) => {
+                    render_diagnostics(&diags, &source_map);
+                    return Err(anyhow::anyhow!("compilation failed"));
+                }
+                Err(e) => return Err(anyhow::anyhow!(e.to_string())),
+            };
             if let Some(out) = &cli.output {
                 write_output(out, &artifact.wasm)?;
             }
@@ -162,6 +175,56 @@ fn stdlib_root() -> Result<PathBuf> {
     Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("stdlib"))
+}
+
+fn render_diagnostics(diags: &[Diagnostic], sm: &SourceMap) {
+    for d in diags {
+        let severity = match d.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        let code = d.code.unwrap_or("");
+        let primary = &d.primary;
+        let (line, col) = sm
+            .line_col(primary.span.file_id, primary.span.start)
+            .unwrap_or((0, 0));
+        let path = sm
+            .path(primary.span.file_id)
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "<unknown>".into());
+        let code_display = if code.is_empty() {
+            String::new()
+        } else {
+            format!("[{code}]")
+        };
+        eprintln!("{severity}{code_display}: {message}", message = d.message);
+        eprintln!(" --> {path}:{line}:{col}", line = line + 1, col = col + 1);
+        if let Some(line_str) = sm.line_str(primary.span.file_id, line) {
+            eprintln!("  {line_num:>4} | {text}", line_num = line + 1, text = line_str);
+            let caret_pos = col;
+            eprintln!(
+                "       | {spaces}{carets}",
+                spaces = " ".repeat(caret_pos),
+                carets = "^".repeat(primary.span.len().max(1) as usize)
+            );
+        }
+        for label in &d.secondary {
+            let (l, c) = sm
+                .line_col(label.span.file_id, label.span.start)
+                .unwrap_or((0, 0));
+            let p = sm
+                .path(label.span.file_id)
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "<unknown>".into());
+            let msg = label
+                .message
+                .as_ref()
+                .map(|m| m.as_str())
+                .unwrap_or("");
+            eprintln!(" note: {p}:{line}:{col}: {msg}", line = l + 1, col = c + 1);
+        }
+        eprintln!();
+    }
 }
 
 #[cfg(test)]

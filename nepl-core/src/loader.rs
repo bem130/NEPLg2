@@ -1,4 +1,4 @@
-use crate::ast::{self, Directive, Module, Stmt};
+use crate::ast::{Directive, Module, Stmt};
 use crate::diagnostic::Severity;
 use crate::error::CoreError;
 use crate::lexer;
@@ -7,9 +7,8 @@ use crate::span::FileId;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::String;
-use alloc::vec;
-use alloc::vec::Vec;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 use core::result::Result;
 use std::fs;
 use std::path::PathBuf;
@@ -35,6 +34,47 @@ impl SourceMap {
     pub fn get(&self, id: FileId) -> Option<&str> {
         self.files.get(id.0 as usize).map(|(_, s)| s.as_str())
     }
+
+    pub fn path(&self, id: FileId) -> Option<&PathBuf> {
+        self.files.get(id.0 as usize).map(|(p, _)| p)
+    }
+
+    /// Convert a byte offset to (line, column) 0-based.
+    pub fn line_col(&self, id: FileId, byte: u32) -> Option<(usize, usize)> {
+        let src = self.get(id)?;
+        let mut line = 0;
+        let mut col = 0;
+        let mut count = 0;
+        for ch in src.bytes() {
+            if count as u32 == byte {
+                return Some((line, col));
+            }
+            count += 1;
+            if ch == b'\n' {
+                line += 1;
+                col = 0;
+            } else {
+                col += 1;
+            }
+        }
+        if count as u32 == byte {
+            Some((line, col))
+        } else {
+            None
+        }
+    }
+
+    pub fn line_str(&self, id: FileId, line: usize) -> Option<&str> {
+        let src = self.get(id)?;
+        src.lines().nth(line)
+    }
+}
+
+/// Result of loading sources.
+#[derive(Debug, Clone)]
+pub struct LoadResult {
+    pub module: Module,
+    pub source_map: SourceMap,
 }
 
 /// Loader that builds a single merged module from an entry file,
@@ -51,35 +91,52 @@ impl Loader {
     }
 
     /// Load an already-provided source string as a pseudo file (for stdin use).
-    pub fn load_inline(
-        &self,
-        path: PathBuf,
-        src: String,
-    ) -> Result<(Module, SourceMap), CoreError> {
+    pub fn load_inline(&self, path: PathBuf, src: String) -> Result<LoadResult, CoreError> {
         let mut sm = SourceMap::new();
         let mut cache: BTreeMap<PathBuf, Module> = BTreeMap::new();
         let mut processing: BTreeSet<PathBuf> = BTreeSet::new();
         let mut imported: BTreeSet<PathBuf> = BTreeSet::new();
-        let file_id = sm.add(path.clone(), src.clone());
-        let module = self.parse_module(
-            path,
-            file_id,
-            src,
-            &mut sm,
-            &mut cache,
-            &mut processing,
-            &mut imported,
-        )?;
-        Ok((module, sm))
+        let module = self.load_from_contents(path, src, &mut sm, &mut cache, &mut processing, &mut imported)?;
+        Ok(LoadResult { module, source_map: sm })
     }
 
-    pub fn load(&self, entry: &PathBuf) -> Result<(Module, SourceMap), CoreError> {
+    pub fn load(&self, entry: &PathBuf) -> Result<LoadResult, CoreError> {
         let mut sm = SourceMap::new();
         let mut cache: BTreeMap<PathBuf, Module> = BTreeMap::new();
         let mut processing: BTreeSet<PathBuf> = BTreeSet::new();
         let mut imported: BTreeSet<PathBuf> = BTreeSet::new();
         let module = self.load_file(entry, &mut sm, &mut cache, &mut processing, &mut imported)?;
-        Ok((module, sm))
+        Ok(LoadResult { module, source_map: sm })
+    }
+
+    fn load_from_contents(
+        &self,
+        path: PathBuf,
+        src: String,
+        sm: &mut SourceMap,
+        cache: &mut BTreeMap<PathBuf, Module>,
+        processing: &mut BTreeSet<PathBuf>,
+        imported_once: &mut BTreeSet<PathBuf>,
+    ) -> Result<Module, CoreError> {
+        // For pseudo files (stdin) canonicalize may fail; fall back to provided path.
+        let canon = path
+            .canonicalize()
+            .unwrap_or(path.clone());
+        if let Some(m) = cache.get(&canon) {
+            return Ok(m.clone());
+        }
+        if !processing.insert(canon.clone()) {
+            return Err(CoreError::Io(format!(
+                "circular import/include detected at {:?}",
+                canon
+            )));
+        }
+        let file_id = sm.add(canon.clone(), src.clone());
+        let module = self.parse_module(file_id, src)?;
+        let module = self.process_directives(canon.clone(), module, sm, cache, processing, imported_once)?;
+        processing.remove(&canon);
+        cache.insert(canon.clone(), module.clone());
+        Ok(module)
     }
 
     fn load_file(
@@ -104,22 +161,28 @@ impl Loader {
         }
         let src = fs::read_to_string(&canon).map_err(|e| CoreError::Io(e.to_string()))?;
         let file_id = sm.add(canon.clone(), src.clone());
-        let mut module = self.parse_module(
-            canon.clone(),
-            file_id,
-            src,
-            sm,
-            cache,
-            processing,
-            imported_once,
-        )?;
-        // process includes/imports
+        let module = self.parse_module(file_id, src)?;
+        let module = self.process_directives(canon.clone(), module, sm, cache, processing, imported_once)?;
+        processing.remove(&canon);
+        cache.insert(canon.clone(), module.clone());
+        Ok(module)
+    }
+
+    fn process_directives(
+        &self,
+        base: PathBuf,
+        module: Module,
+        sm: &mut SourceMap,
+        cache: &mut BTreeMap<PathBuf, Module>,
+        processing: &mut BTreeSet<PathBuf>,
+        imported_once: &mut BTreeSet<PathBuf>,
+    ) -> Result<Module, CoreError> {
         let mut directives = module.directives.clone();
         let mut items = Vec::new();
         for stmt in module.root.items.clone() {
             match &stmt {
                 Stmt::Directive(Directive::Import { path, .. }) => {
-                    let target = self.resolve_path(&canon, path);
+                    let target = self.resolve_path(&base, path);
                     if imported_once.insert(target.clone()) {
                         let imp_mod =
                             self.load_file(&target, sm, cache, processing, imported_once)?;
@@ -128,7 +191,7 @@ impl Loader {
                     }
                 }
                 Stmt::Directive(Directive::Include { path, .. }) => {
-                    let target = self.resolve_path(&canon, path);
+                    let target = self.resolve_path(&base, path);
                     let inc_mod = self.load_file(&target, sm, cache, processing, imported_once)?;
                     directives.extend(inc_mod.directives.clone());
                     items.extend(inc_mod.root.items.clone());
@@ -136,23 +199,13 @@ impl Loader {
                 _ => items.push(stmt),
             }
         }
+        let mut module = module.clone();
         module.directives = directives;
         module.root.items = items;
-        processing.remove(&canon);
-        cache.insert(canon.clone(), module.clone());
         Ok(module)
     }
 
-    fn parse_module(
-        &self,
-        _path: PathBuf,
-        file_id: FileId,
-        src: String,
-        _sm: &mut SourceMap,
-        _cache: &mut BTreeMap<PathBuf, Module>,
-        _processing: &mut BTreeSet<PathBuf>,
-        _imported_once: &mut BTreeSet<PathBuf>,
-    ) -> Result<Module, CoreError> {
+    fn parse_module(&self, file_id: FileId, src: String) -> Result<Module, CoreError> {
         let lex = lexer::lex(file_id, &src);
         if lex
             .diagnostics
