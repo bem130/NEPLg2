@@ -552,18 +552,48 @@ impl<'a> BlockChecker<'a> {
             }
         }
 
-        let (final_ty, value_ty) = if stack.len() == base_depth {
+        // Handle final stack depth. Prefer to be forgiving: if there are
+        // extra values on the stack, drop them with a warning rather than
+        // failing hard. This keeps `:`-blocks and `if` branch combinations
+        // usable while preserving diagnostics for surprising code.
+        let mut final_ty: TypeId;
+        let mut value_ty: Option<TypeId>;
+        if stack.len() == base_depth {
             let u = self.ctx.unit();
-            (u, Some(u))
+            final_ty = u;
+            value_ty = Some(u);
         } else if stack.len() == base_depth + 1 {
             let t = stack.last().unwrap().ty;
-            (t, Some(t))
+            final_ty = t;
+            value_ty = Some(t);
+        } else if stack.len() > base_depth + 1 {
+            // Too many values: pop extras and emit a warning.
+            let extras = stack.len() - (base_depth + 1);
+            for _ in 0..extras {
+                // Pop and ignore the extra value(s).
+                stack.pop();
+            }
+            self.diagnostics.push(Diagnostic::warning(
+                "block left extra values on the stack; dropping them",
+                block.span,
+            ));
+            if stack.len() == base_depth {
+                let u = self.ctx.unit();
+                final_ty = u;
+                value_ty = Some(u);
+            } else {
+                let t = stack.last().unwrap().ty;
+                final_ty = t;
+                value_ty = Some(t);
+            }
         } else {
+            // Fewer than expected: this is a hard error.
             self.diagnostics.push(Diagnostic::error(
                 "block leaves inconsistent stack state",
                 block.span,
             ));
-            (self.ctx.unit(), None)
+            final_ty = self.ctx.unit();
+            value_ty = None;
         };
 
         if new_scope {
@@ -864,17 +894,29 @@ impl<'a> BlockChecker<'a> {
                     last_expr = pipe_pending.as_ref().map(|se| se.expr.clone());
                 }
                 PrefixItem::Semi(sp) => {
-                    if stack.len() == base_depth + 1 {
-                        if let Some(se) = stack.pop() {
-                            last_expr = Some(se.expr);
+                        if stack.len() >= base_depth + 1 {
+                            // If there are extra values, drop them with a warning,
+                            // then pop the single value that semicolon returns.
+                            let extras = stack.len() - (base_depth + 1);
+                            if extras > 0 {
+                                for _ in 0..extras {
+                                    stack.pop();
+                                }
+                                self.diagnostics.push(Diagnostic::warning(
+                                    "semicolon encountered with extra values; dropping them",
+                                    *sp,
+                                ));
+                            }
+                            if let Some(se) = stack.pop() {
+                                last_expr = Some(se.expr);
+                            }
+                            dropped = true;
+                        } else {
+                            self.diagnostics.push(Diagnostic::error(
+                                "semicolon requires exactly one value on the stack",
+                                *sp,
+                            ));
                         }
-                        dropped = true;
-                    } else {
-                        self.diagnostics.push(Diagnostic::error(
-                            "semicolon requires exactly one value on the stack",
-                            *sp,
-                        ));
-                    }
                 }
             }
 
@@ -931,10 +973,15 @@ impl<'a> BlockChecker<'a> {
                 .push(Diagnostic::error("pipe has no target", expr.span));
         }
 
-        // Validate final stack depth
+        // Validate final stack depth. Be forgiving: if there are extra
+        // values, pop them and emit a warning rather than a hard error.
         if stack.len() > base_depth + 1 {
-            self.diagnostics.push(Diagnostic::error(
-                "expression leaves too many values on stack",
+            let extras = stack.len() - (base_depth + 1);
+            for _ in 0..extras {
+                stack.pop();
+            }
+            self.diagnostics.push(Diagnostic::warning(
+                "expression leaves extra values on the stack; dropping them",
                 expr.span,
             ));
         }

@@ -45,9 +45,9 @@ fn main <()*>()> ():
     print_i32:
         <i32> if:
             lt x 80
-        :
+        then:
             sub x 20
-        :
+        else:
             add 20 x
 
 #if[target=wasm]
@@ -88,6 +88,7 @@ fn sub <(i32,i32)->i32> (a,b):
 ## 制御構造とか
 `if`や`while`なども式を成します  
 例えば`if`の型は`(bool,.x,.x)->.x`となる  
+`if`では任意に`then`や`else`を挿入できる (不正な位置への挿入は不可 然るべき位置に挿入できる)  
 `while`の型は`(bool,())->()`
 制御構造ではないもの  
 `let name`や`let mut name`や`set name`は`(.x)->()` (`let`ではなく`let name`までで一塊であり、`let name`が`(.x)->()`)  
@@ -157,3 +158,75 @@ entryに指定された関数は、`.label`を含まない、完全に具体的�
 `f32`は小数点を含む数字です`1.0` `1.3`など
 関数定義は`(args) expr`です
 型注釈は`<T>`です
+
+
+
+## 書き方臭
+
+ベースが`if true 0 1`,`if true 0 if true 1 2`だとして
+これに
+「`:`つけたら改行してもいいよ」と
+「`if`には`then`と`else`つけてもいいよ」
+を追加したらこうなりました
+
+```neplg2
+
+// 1行 if
+if true 0 1
+
+// 1行 if then else
+if true then 0 else 1
+
+// 複数行 if then else
+if true:
+    then 0
+    else 1
+
+// 複数行 if then else
+if true:
+    then:
+        0
+    else:
+        1
+
+// 複数行 if then else
+if true then:
+    0
+else:
+    1
+
+// 複数行 if else
+if true:
+    0
+else:
+    1
+
+// 複数行 if else
+if true:
+    0
+else:
+    1
+
+// 1行 if 組み合わせ
+if true 0 if true 1 2
+if true 0 else if true 1 else 2
+if true then 0 else if true then 1 else 2
+
+// 複数行 if else 組み合わせ
+
+if true:
+    0
+else:
+    if true:
+        1
+    else:
+        2
+
+if true:
+    0
+else if true:
+    1
+else:
+    2
+
+```

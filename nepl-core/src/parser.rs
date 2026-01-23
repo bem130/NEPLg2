@@ -492,6 +492,11 @@ impl Parser {
             }
         }
 
+        // Normalize 'then'/'else' markers so forms like
+        // `if cond then A else B` and `if cond: then: ... else: ...`
+        // are reduced to the basic `if cond A B` shape expected by later passes.
+        self.normalize_then_else(&mut items);
+
         let end_span = items
             .last()
             .map(|i| self.item_span(i))
@@ -604,6 +609,9 @@ impl Parser {
                 }
             }
         }
+        // Normalize 'then'/'else' markers inside scrutinee/prefix until colon.
+        self.normalize_then_else(&mut items);
+
         let end_span = items
             .last()
             .map(|i| self.item_span(i))
@@ -612,6 +620,16 @@ impl Parser {
             items,
             span: start_span.join(end_span).unwrap_or(start_span),
         })
+    }
+
+    fn normalize_then_else(&mut self, items: &mut Vec<PrefixItem>) {
+        items.retain(|it| match it {
+            PrefixItem::Symbol(crate::ast::Symbol::Ident(ident)) => {
+                let n = ident.name.as_str();
+                !(n == "then" || n == "else")
+            }
+            _ => true,
+        });
     }
 
     fn parse_match_arms(&mut self) -> Option<Vec<MatchArm>> {
