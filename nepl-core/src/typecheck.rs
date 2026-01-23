@@ -86,6 +86,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     ty,
                     mutable: false,
                     defined: true,
+                    moved: false,
                     kind: BindingKind::Func {
                         effect,
                         arity: params.len(),
@@ -118,6 +119,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
             ty: b.ty,
             mutable: false,
             defined: true,
+            moved: false,
             kind: BindingKind::Func {
                 effect: b.effect,
                 arity: func_arity(&ctx, b.ty),
@@ -254,6 +256,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                 ty: func_ty,
                 mutable: false,
                 defined: true,
+                moved: false,
                 kind: BindingKind::Func {
                     effect: Effect::Pure,
                     arity: params.len(),
@@ -269,6 +272,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
             ty: func_ty,
             mutable: false,
             defined: true,
+            moved: false,
             kind: BindingKind::Func {
                 effect: Effect::Pure,
                 arity: info.fields.len(),
@@ -315,6 +319,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     ty,
                     mutable: false,
                     defined: true,
+                    moved: false,
                     kind: BindingKind::Func {
                         effect,
                         arity: params.len(),
@@ -421,6 +426,7 @@ fn check_function(
             ty: *ty,
             mutable: false,
             defined: true,
+            moved: false,
             kind: BindingKind::Var,
         });
     }
@@ -521,6 +527,7 @@ impl<'a> BlockChecker<'a> {
                         ty,
                         mutable: false,
                         defined: false,
+                        moved: false,
                         kind: BindingKind::Var,
                     });
                 }
@@ -532,6 +539,7 @@ impl<'a> BlockChecker<'a> {
                         ty,
                         mutable: false,
                         defined: true,
+                        moved: false,
                         kind: BindingKind::Func {
                             effect,
                             arity: params.len(),
@@ -755,6 +763,7 @@ impl<'a> BlockChecker<'a> {
                                 ty: t,
                                 mutable: *mutable,
                                 defined: false,
+                                moved: false,
                                 kind: BindingKind::Var,
                             });
                             t
@@ -1119,6 +1128,7 @@ impl<'a> BlockChecker<'a> {
                             ty: pty,
                             mutable: false,
                             defined: true,
+                            moved: false,
                             kind: BindingKind::Var,
                         });
                     } else {
@@ -1491,6 +1501,7 @@ struct Binding {
     ty: TypeId,
     mutable: bool,
     defined: bool,
+    moved: bool,
     kind: BindingKind,
 }
 

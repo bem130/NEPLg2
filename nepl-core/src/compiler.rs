@@ -60,6 +60,14 @@ pub fn compile_module(
     }
     let mut hir_module = tc.module.unwrap();
 
+    // Move Check
+    let move_errors = passes::move_check::run(&hir_module, &tc.types);
+    if !move_errors.is_empty() {
+        let mut diags = tc.diagnostics;
+        diags.extend(move_errors);
+        return Err(CoreError::from_diagnostics(diags));
+    }
+
     // Insert drop calls for automatic cleanup
     passes::insert_drops(&mut hir_module);
 
