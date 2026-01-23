@@ -159,6 +159,30 @@ impl TypeCtx {
         id
     }
 
+    pub fn is_copy(&self, id: TypeId) -> bool {
+        match self.get_ref(id) {
+            TypeKind::Unit | TypeKind::I32 | TypeKind::F32 | TypeKind::Bool | TypeKind::Str | TypeKind::Never => true,
+            TypeKind::Reference(_, _) => true,
+            TypeKind::Box(_) => false,
+            TypeKind::Enum { .. } => false,
+            TypeKind::Struct { .. } => false,
+            TypeKind::Apply { .. } => false,
+            TypeKind::Function { .. } => false,
+            TypeKind::Var(v) => {
+                if let Some(b) = v.binding {
+                    self.is_copy(b)
+                } else {
+                    false
+                }
+            }
+            TypeKind::Named(_) => false,
+        }
+    }
+
+    pub fn get_ref(&self, id: TypeId) -> &TypeKind {
+        &self.arena[id.0]
+    }
+
     pub fn get(&self, id: TypeId) -> TypeKind {
         match &self.arena[id.0] {
             TypeKind::Var(tv) => {

@@ -10,8 +10,16 @@ fn compile_move_test(source: &str) -> Result<Vec<u8>, Vec<Diagnostic>> {
         target: Some(CompileTarget::Wasi),
     }) {
         Ok(artifact) => Ok(artifact.wasm),
-        Err(nepl_core::error::CoreError::Diagnostics(ds)) => Err(ds),
-        Err(_) => Err(Vec::new()),
+        Err(nepl_core::error::CoreError::Diagnostics(ds)) => {
+            for d in &ds {
+                eprintln!("DIAG: {}", d.message);
+            }
+            Err(ds)
+        }
+        Err(e) => {
+            eprintln!("OTHER ERR: {:?}", e);
+            Err(Vec::new())
+        }
     }
 }
 
@@ -60,14 +68,15 @@ enum Wrapper:
 
 fn main <()*>()>():
     let x Wrapper::Val 1;
-    if 1:
-        let y <Wrapper> x; // x moved
+    let cond <i32> 1;
+    if cond:
+        let y <Wrapper> x; // conditionally moved
     else:
         ()
-    let z <Wrapper> x; // error: x moved in 'then' branch, so it's potentially moved
+    let z <Wrapper> x; // error: potentially moved
 "#;
     let errs = compile_move_test(source).unwrap_err();
-    assert!(errs.iter().any(|d| d.message.contains("use of moved value")));
+    assert!(errs.iter().any(|d| d.message.contains("potentially moved")));
 }
 
 #[test]
@@ -81,15 +90,34 @@ enum Wrapper:
 
 fn main <()*>()>():
     let x Wrapper::Val 1;
-    while 1:
-        let y <Wrapper> x; // moved in first iteration
+    let cond <i32> 1;
+    while cond:
+        let y <Wrapper> x; // moved in first iteration, error in next
 "#;
     let errs = compile_move_test(source).unwrap_err();
-    assert!(errs.iter().any(|d| d.message.contains("use of moved value")));
+    assert!(errs.iter().any(|d| d.message.contains("potentially moved")));
 }
 
 #[test]
-fn move_reassign() {
+fn move_reassign_non_copy() {
+    let source = r#"
+#target wasi
+#indent 4
+
+enum Wrapper:
+    Val <i32>
+
+fn main <()*>()>():
+    let mut x Wrapper::Val 1;
+    let y <Wrapper> x;      // moved
+    set x = Wrapper::Val 2; // re-init 
+    let z <Wrapper> x;      // OK
+"#;
+    compile_move_test(source).expect("re-init should be valid");
+}
+
+#[test]
+fn move_reassign_copy() {
     let source = r#"
 #target wasi
 #indent 4
@@ -100,5 +128,5 @@ fn main <()*>()>():
     set x = 2;     // still valid
     let z <i32> x; // ok
 "#;
-    compile_move_test(source).expect("should succeed");
+    compile_move_test(source).expect("copy types should not move");
 }
