@@ -26,10 +26,3 @@ fn is_none <(OptionI32)->bool> (o):
             false
         None:
             true
-
-fn unwrap_or <(OptionI32,i32)->i32> (o, default):
-    match o:
-        Some v:
-            v
-        None:
-            default

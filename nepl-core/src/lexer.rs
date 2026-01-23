@@ -473,25 +473,37 @@ impl<'a> LexState<'a> {
                     i += 1;
                 }
                 b'-' => {
-                    if i + 1 < bytes.len() && bytes[i + 1] == b'>' {
-                        self.push_token(TokenKind::Arrow(Effect::Pure), offset + i, offset + i + 2);
-                        i += 2;
-                    } else {
-                        self.unknown(offset + i, offset + i + 1);
+                    // allow optional whitespace between '-' and '>'
+                    let start = i;
+                    i += 1;
+                    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
                         i += 1;
+                    }
+                    if i < bytes.len() && bytes[i] == b'>' {
+                        self.push_token(TokenKind::Arrow(Effect::Pure), offset + start, offset + i + 1);
+                        i += 1;
+                    } else {
+                        // treat solitary '-' as unknown token
+                        self.unknown(offset + start, offset + start + 1);
                     }
                 }
                 b'*' => {
-                    if i + 1 < bytes.len() && bytes[i + 1] == b'>' {
+                    // allow optional whitespace between '*' and '>'
+                    let start = i;
+                    i += 1;
+                    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    if i < bytes.len() && bytes[i] == b'>' {
                         self.push_token(
                             TokenKind::Arrow(Effect::Impure),
-                            offset + i,
-                            offset + i + 2,
+                            offset + start,
+                            offset + i + 1,
                         );
-                        i += 2;
-                    } else {
-                        self.unknown(offset + i, offset + i + 1);
                         i += 1;
+                    } else {
+                        // treat solitary '*' as unknown token
+                        self.unknown(offset + start, offset + start + 1);
                     }
                 }
                 b'"' => {

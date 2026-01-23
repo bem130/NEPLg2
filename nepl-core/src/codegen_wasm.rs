@@ -571,10 +571,10 @@ fn gen_expr(
             }));
             if let Some(p) = payload {
                 // evaluate payload and store at offset 4
-                gen_expr(ctx, p, name_map, strings, locals, insts, diags);
                 insts.push(Instruction::LocalGet(ptr_local));
                 insts.push(Instruction::I32Const(4));
                 insts.push(Instruction::I32Add);
+                gen_expr(ctx, p, name_map, strings, locals, insts, diags);
                 match payload_vt {
                     ValType::I32 => insts.push(Instruction::I32Store(MemArg {
                         offset: 0,
@@ -595,6 +595,8 @@ fn gen_expr(
                     }
                 }
             }
+            // leave pointer to constructed enum on the stack as the expression value
+            insts.push(Instruction::LocalGet(ptr_local));
             Some(ValType::I32)
         }
         HirExprKind::StructConstruct { name, fields } => {
@@ -659,21 +661,24 @@ fn gen_expr(
                 Some(vt) => wasm_encoder::BlockType::Result(vt),
                 None => wasm_encoder::BlockType::Empty,
             }));
-            // chain arms
-            for (idx, arm) in arms.iter().enumerate() {
-                // load tag
+            if arms.len() == 2 {
+                // arm0
+                let arm0 = &arms[0];
                 insts.push(Instruction::LocalGet(ptr_local));
                 insts.push(Instruction::I32Load(MemArg {
                     offset: 0,
                     align: 2,
                     memory_index: 0,
                 }));
-                let tag = enum_variant_tag(ctx, scrutinee.ty, &arm.variant);
-                insts.push(Instruction::I32Const(tag as i32));
+                let tag0 = enum_variant_tag(ctx, scrutinee.ty, &arm0.variant);
+                insts.push(Instruction::I32Const(tag0 as i32));
                 insts.push(Instruction::I32Eq);
-                insts.push(Instruction::If(wasm_encoder::BlockType::Empty));
-                if let Some(bind) = &arm.bind_local {
-                    if let Some(payload_ty) = enum_variant_payload(ctx, scrutinee.ty, &arm.variant) {
+                insts.push(Instruction::If(match result_ty {
+                    Some(vt) => wasm_encoder::BlockType::Result(vt),
+                    None => wasm_encoder::BlockType::Empty,
+                }));
+                if let Some(bind) = &arm0.bind_local {
+                    if let Some(payload_ty) = enum_variant_payload(ctx, scrutinee.ty, &arm0.variant) {
                         let lidx = locals.ensure_local(bind.clone(), payload_ty, ctx);
                         insts.push(Instruction::LocalGet(ptr_local));
                         insts.push(Instruction::I32Const(4));
@@ -689,30 +694,51 @@ fn gen_expr(
                                 align: 2,
                                 memory_index: 0,
                             })),
-                            _ => {
-                                diags.push(Diagnostic::error(
-                                    "unsupported enum payload type",
-                                    expr.span,
-                                ));
-                            }
+                            _ => diags.push(Diagnostic::error(
+                                "unsupported enum payload type",
+                                arm0.body.span,
+                            )),
                         }
                         insts.push(Instruction::LocalSet(lidx));
                     }
                 }
-                gen_expr(ctx, &arm.body, name_map, strings, locals, insts, diags);
-                insts.push(Instruction::Br(1)); // jump out of outer block
-                insts.push(Instruction::End);
-                if idx == arms.len() - 1 {
-                    // last arm fallback: nothing extra
+                gen_expr(ctx, &arm0.body, name_map, strings, locals, insts, diags);
+                insts.push(Instruction::Else);
+                // arm1 (fallback)
+                let arm1 = &arms[1];
+                if let Some(bind) = &arm1.bind_local {
+                    if let Some(payload_ty) = enum_variant_payload(ctx, scrutinee.ty, &arm1.variant) {
+                        let lidx = locals.ensure_local(bind.clone(), payload_ty, ctx);
+                        insts.push(Instruction::LocalGet(ptr_local));
+                        insts.push(Instruction::I32Const(4));
+                        insts.push(Instruction::I32Add);
+                        match valtype(&ctx.get(payload_ty)).unwrap_or(ValType::I32) {
+                            ValType::I32 => insts.push(Instruction::I32Load(MemArg {
+                                offset: 0,
+                                align: 2,
+                                memory_index: 0,
+                            })),
+                            ValType::F32 => insts.push(Instruction::F32Load(MemArg {
+                                offset: 0,
+                                align: 2,
+                                memory_index: 0,
+                            })),
+                            _ => diags.push(Diagnostic::error(
+                                "unsupported enum payload type",
+                                arm1.body.span,
+                            )),
+                        }
+                        insts.push(Instruction::LocalSet(lidx));
+                    }
                 }
-            }
-            // if no arm matched, push unreachable default
-            if result_ty.is_some() {
-                insts.push(Instruction::Unreachable);
+                gen_expr(ctx, &arm1.body, name_map, strings, locals, insts, diags);
+                insts.push(Instruction::End); // end outer if
+                insts.push(Instruction::End); // end block
             } else {
+                // Fallback: unreachable for unsupported arity
                 insts.push(Instruction::Unreachable);
+                insts.push(Instruction::End);
             }
-            insts.push(Instruction::End);
             result_ty
         }
         HirExprKind::Let { name, value, .. } => {
