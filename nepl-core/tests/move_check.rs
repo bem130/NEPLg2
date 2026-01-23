@@ -21,9 +21,12 @@ fn move_simple_ok() {
 #target wasi
 #indent 4
 
+enum Wrapper:
+    Val <i32>
+
 fn main <()*>()>():
-    let x <i32> 1;
-    let y <i32> x; // x moved to y
+    let x Wrapper::Val 1;
+    let y <Wrapper> x; // x moved to y
     ()
 "#;
     compile_move_test(source).expect("should succeed");
@@ -35,10 +38,13 @@ fn move_use_after_move() {
 #target wasi
 #indent 4
 
+enum Wrapper:
+    Val <i32>
+
 fn main <()*>()>():
-    let x <i32> 1;
-    let y <i32> x; // x moved to y
-    let z <i32> x; // error: use of moved value x
+    let x Wrapper::Val 1;
+    let y <Wrapper> x; // x moved to y
+    let z <Wrapper> x; // error: use of moved value x
     ()
 "#;
     let errs = compile_move_test(source).unwrap_err();
@@ -51,14 +57,17 @@ fn move_in_branch() {
 #target wasi
 #indent 4
 
+enum Wrapper:
+    Val <i32>
+
 fn main <()*>()>():
-    let x <i32> 1;
+    let x Wrapper::Val 1;
     if 1:
-        let y <i32> x; // x moved
+        let y <Wrapper> x; // x moved
         ()
     else:
         ()
-    let z <i32> x; // error: x moved in 'then' branch, so it's potentially moved
+    let z <Wrapper> x; // error: x moved in 'then' branch, so it's potentially moved
     ()
 "#;
     let errs = compile_move_test(source).unwrap_err();
@@ -67,22 +76,20 @@ fn main <()*>()>():
 
 #[test]
 fn move_in_loop() {
-    // Loop moves variable from outer scope -> invalid after first iteration
     let source = r#"
 #target wasi
 #indent 4
 
+enum Wrapper:
+    Val <i32>
+
 fn main <()*>()>():
-    let x <i32> 1;
+    let x Wrapper::Val 1;
     while 1:
-        let y <i32> x; // moved in first iteration
+        let y <Wrapper> x; // moved in first iteration
         ()
     ()
 "#;
-    // This should fail because in the 2nd iteration (if it existed), x is moved.
-    // Or if the loop runs once, checks pass.
-    // But our analysis is: loop body runs, moves x.
-    // Loop re-entry check: x is moved. ERROR "use of moved value" (in hypothetical 2nd iter).
     let errs = compile_move_test(source).unwrap_err();
     assert!(errs.iter().any(|d| d.message.contains("use of moved value")));
 }
@@ -95,8 +102,8 @@ fn move_reassign() {
 
 fn main <()*>()>():
     let x <i32> 1;
-    let y <i32> x; // moved
-    set x = 2;     // valid again
+    let y <i32> x; // i32 is Copy, so x is NOT moved
+    set x = 2;     // still valid
     let z <i32> x; // ok
     ()
 "#;

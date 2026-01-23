@@ -31,6 +31,7 @@ pub enum TokenKind {
     Arrow(Effect), // -> (Pure) or *> (Impure)
     PathSep,       // ::
     Dot,
+    Ampersand,     // &
 
     // literals / identifiers
     Ident(String),
@@ -50,6 +51,9 @@ pub enum TokenKind {
     KwStruct,
     KwEnum,
     KwMatch,
+    KwTrait,
+    KwImpl,
+    KwFor,
 
     // directives
     DirEntry(String),
@@ -561,6 +565,10 @@ impl<'a> LexState<'a> {
                     self.push_token(TokenKind::Dot, offset + i, offset + i + 1);
                     i += 1;
                 }
+                b'&' => {
+                    self.push_token(TokenKind::Ampersand, offset + i, offset + i + 1);
+                    i += 1;
+                }
                 b'0'..=b'9' => {
                     let start = i;
                     let mut has_dot = false;
@@ -609,6 +617,9 @@ impl<'a> LexState<'a> {
                             "struct" => self.push_token(TokenKind::KwStruct, span_start, span_end),
                             "enum" => self.push_token(TokenKind::KwEnum, span_start, span_end),
                             "match" => self.push_token(TokenKind::KwMatch, span_start, span_end),
+                            "trait" => self.push_token(TokenKind::KwTrait, span_start, span_end),
+                            "impl" => self.push_token(TokenKind::KwImpl, span_start, span_end),
+                            "for" => self.push_token(TokenKind::KwFor, span_start, span_end),
                             "true" => {
                                 self.push_token(TokenKind::BoolLiteral(true), span_start, span_end)
                             }

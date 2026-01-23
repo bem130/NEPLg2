@@ -25,6 +25,10 @@ pub enum TypeExpr {
     Str,
     Label(Option<String>), // . or .label
     Named(String),
+    Apply(Box<TypeExpr>, Vec<TypeExpr>),
+    Boxed(Box<TypeExpr>),
+    Reference(Box<TypeExpr>, bool), // (inner, is_mut)
+}
     Function {
         params: Vec<TypeExpr>,
         result: Box<TypeExpr>,
@@ -89,9 +93,27 @@ pub struct Block {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
     pub name: Ident,
+    pub type_params: Vec<Ident>,
     pub signature: TypeExpr,
     pub params: Vec<Ident>,
     pub body: FnBody,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitDef {
+    pub name: Ident,
+    pub type_params: Vec<Ident>,
+    pub methods: Vec<FnDef>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImplDef {
+    pub type_params: Vec<Ident>,
+    pub trait_name: Option<Ident>, // None for inherent impl
+    pub target_ty: TypeExpr,
+    pub methods: Vec<FnDef>,
+    pub span: Span,
 }
 
 /// Function body kind.
@@ -155,6 +177,8 @@ pub enum Stmt {
     StructDef(StructDef),
     EnumDef(EnumDef),
     Wasm(WasmBlock),
+    Trait(TraitDef),
+    Impl(ImplDef),
     Expr(PrefixExpr),
 }
 
@@ -170,6 +194,7 @@ pub struct Module {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructDef {
     pub name: Ident,
+    pub type_params: Vec<Ident>,
     pub fields: Vec<(Ident, TypeExpr)>,
 }
 
@@ -183,6 +208,7 @@ pub struct EnumVariant {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDef {
     pub name: Ident,
+    pub type_params: Vec<Ident>,
     pub variants: Vec<EnumVariant>,
 }
 

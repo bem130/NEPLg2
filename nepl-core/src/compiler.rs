@@ -8,6 +8,7 @@ use crate::codegen_wasm;
 use crate::diagnostic::Diagnostic;
 use crate::error::CoreError;
 use crate::lexer;
+use crate::monomorphize;
 use crate::parser;
 use crate::passes;
 use crate::span::FileId;
@@ -58,10 +59,11 @@ pub fn compile_module(
     if tc.module.is_none() {
         return Err(CoreError::from_diagnostics(tc.diagnostics));
     }
-    let mut hir_module = tc.module.unwrap();
+    let mut types = tc.types;
+    let mut hir_module = monomorphize::monomorphize(&mut types, tc.module.unwrap());
 
     // Move Check
-    let move_errors = passes::move_check::run(&hir_module, &tc.types);
+    let move_errors = passes::move_check::run(&hir_module, &types);
     if !move_errors.is_empty() {
         let mut diags = tc.diagnostics;
         diags.extend(move_errors);
@@ -71,7 +73,7 @@ pub fn compile_module(
     // Insert drop calls for automatic cleanup
     passes::insert_drops(&mut hir_module);
 
-    let cg = codegen_wasm::generate_wasm(&tc.types, &hir_module);
+    let cg = codegen_wasm::generate_wasm(&types, &hir_module);
     let mut diagnostics = tc.diagnostics;
     diagnostics.extend(cg.diagnostics);
     if let Some(bytes) = cg.bytes {

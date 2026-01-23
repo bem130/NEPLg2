@@ -188,6 +188,8 @@ impl Parser {
             TokenKind::KwStruct => self.parse_struct(),
             TokenKind::KwEnum => self.parse_enum(),
             TokenKind::KwFn => self.parse_fn(),
+            TokenKind::KwTrait => self.parse_trait(),
+            TokenKind::KwImpl => self.parse_impl(),
             _ => {
                 let expr = self.parse_prefix_expr()?;
                 Some(Stmt::Expr(expr))
@@ -198,6 +200,7 @@ impl Parser {
     fn parse_struct(&mut self) -> Option<Stmt> {
         let kw_span = self.next()?.span;
         let (name, nspan) = self.expect_ident()?;
+        let type_params = self.parse_generic_params();
         self.expect(TokenKind::Colon)?;
         let mut fields = Vec::new();
         if !self.consume_if(TokenKind::Newline) {
@@ -229,6 +232,7 @@ impl Parser {
                 name,
                 span: nspan,
             },
+            type_params,
             fields,
         }))
     }
@@ -236,6 +240,7 @@ impl Parser {
     fn parse_enum(&mut self) -> Option<Stmt> {
         let kw_span = self.next()?.span;
         let (name, nspan) = self.expect_ident()?;
+        let type_params = self.parse_generic_params();
         self.expect(TokenKind::Colon)?;
         if !self.consume_if(TokenKind::Newline) {
             let span = self.peek_span().unwrap_or_else(Span::dummy);
@@ -271,6 +276,7 @@ impl Parser {
                 name,
                 span: nspan,
             },
+            type_params,
             variants,
         }))
     }
@@ -282,6 +288,29 @@ impl Parser {
             name: name_tok.0,
             span: name_tok.1,
         };
+
+        // If next is LAngle, it could be generics OR signature.
+        let mut type_params = Vec::new();
+        if self.check(TokenKind::LAngle) {
+            // Peek further if needed? 
+            // In NEPL, if there are two < > blocks, the first is always generics.
+            // If only one, it's signature.
+            // This is a bit tricky to look ahead with the current parser.
+            // Let's assume if it looks like generics (idents only), it is generics.
+            // NO, let's just try to parse generics first, and if what follows is ALSO an LAngle,
+            // then we were correct.
+            let saved_pos = self.pos;
+            let saved_diags_len = self.diagnostics.len();
+            let tentative_params = self.parse_generic_params();
+            if self.check(TokenKind::LAngle) {
+                // Success, we had generics.
+                type_params = tentative_params;
+            } else {
+                // Not generics, backtrack.
+                self.pos = saved_pos;
+                self.diagnostics.truncate(saved_diags_len);
+            }
+        }
 
         self.expect(TokenKind::LAngle)?;
         let signature = self.parse_type_expr()?;
@@ -314,6 +343,7 @@ impl Parser {
 
         Some(Stmt::FnDef(FnDef {
             name,
+            type_params,
             signature,
             params,
             body: fn_body,
@@ -367,6 +397,79 @@ impl Parser {
         let block = self.parse_block_until(TokenEnd::Dedent)?;
         self.expect(TokenKind::Dedent)?;
         Some(block)
+    }
+
+    fn parse_trait(&mut self) -> Option<Stmt> {
+        let kw_span = self.next()?.span;
+        let (name, nspan) = self.expect_ident()?;
+        let type_params = self.parse_generic_params();
+        self.expect(TokenKind::Colon)?;
+        self.consume_if(TokenKind::Newline);
+        self.expect(TokenKind::Indent)?;
+        let mut methods = Vec::new();
+        while !self.check(TokenKind::Dedent) && !self.is_eof() {
+            if self.consume_if(TokenKind::Newline) {
+                continue;
+            }
+            if let Some(Stmt::FnDef(f)) = self.parse_fn() {
+                methods.push(f);
+            } else {
+                self.next();
+            }
+        }
+        self.expect(TokenKind::Dedent)?;
+        let end_span = self.peek_span().unwrap_or(nspan);
+        Some(Stmt::Trait(TraitDef {
+            name: Ident { name, span: nspan },
+            type_params,
+            methods,
+            span: kw_span.join(end_span).unwrap_or(kw_span),
+        }))
+    }
+
+    fn parse_impl(&mut self) -> Option<Stmt> {
+        let kw_span = self.next()?.span;
+        let type_params = self.parse_generic_params();
+        
+        let first_ty = self.parse_type_expr()?;
+        
+        let (trait_name, target_ty) = if self.consume_if(TokenKind::KwFor) {
+             let target = self.parse_type_expr()?;
+             let trait_ident = match first_ty {
+                 TypeExpr::Named(n) => Some(Ident { name: n, span: kw_span }), // Approximation
+                 _ => {
+                     self.diagnostics.push(Diagnostic::error("expected trait name before 'for'", kw_span));
+                     None
+                 }
+             };
+             (trait_ident, target)
+        } else {
+             (None, first_ty)
+        };
+
+        self.expect(TokenKind::Colon)?;
+        self.consume_if(TokenKind::Newline);
+        self.expect(TokenKind::Indent)?;
+        let mut methods = Vec::new();
+        while !self.check(TokenKind::Dedent) && !self.is_eof() {
+            if self.consume_if(TokenKind::Newline) {
+                continue;
+            }
+            if let Some(Stmt::FnDef(f)) = self.parse_fn() {
+                methods.push(f);
+            } else {
+                self.next();
+            }
+        }
+        self.expect(TokenKind::Dedent)?;
+        let end_span = self.peek_span().unwrap_or(kw_span);
+        Some(Stmt::Impl(ImplDef {
+            type_params,
+            trait_name,
+            target_ty,
+            methods,
+            span: kw_span.join(end_span).unwrap_or(kw_span),
+        }))
     }
 
     fn parse_prefix_expr(&mut self) -> Option<PrefixExpr> {
@@ -670,6 +773,24 @@ impl Parser {
         Some(arms)
     }
 
+    fn parse_generic_params(&mut self) -> Vec<Ident> {
+        let mut params = Vec::new();
+        if self.consume_if(TokenKind::LAngle) {
+            loop {
+                if let Some((name, span)) = self.expect_ident() {
+                    params.push(Ident { name, span });
+                } else {
+                    break;
+                }
+                if !self.consume_if(TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.expect(TokenKind::RAngle);
+        }
+        params
+    }
+
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {
         match self.peek_kind()? {
             TokenKind::UnitLiteral => {
@@ -677,15 +798,35 @@ impl Parser {
                 Some(TypeExpr::Unit)
             }
             TokenKind::Ident(name) => {
-                let tok = self.next().unwrap();
-                match name.as_str() {
-                    "i32" => Some(TypeExpr::I32),
-                    "f32" => Some(TypeExpr::F32),
-                    "bool" => Some(TypeExpr::Bool),
-                    "never" => Some(TypeExpr::Never),
-                    "str" => Some(TypeExpr::Str),
-                    _ => Some(TypeExpr::Named(name.clone())),
+                let _ = self.next();
+                let mut ty = match name.as_str() {
+                    "i32" => TypeExpr::I32,
+                    "f32" => TypeExpr::F32,
+                    "bool" => TypeExpr::Bool,
+                    "never" => TypeExpr::Never,
+                    "str" => TypeExpr::Str,
+                    "Box" => {
+                        self.expect(TokenKind::LAngle)?;
+                        let inner = self.parse_type_expr()?;
+                        self.expect(TokenKind::RAngle)?;
+                        return Some(TypeExpr::Boxed(Box::new(inner)));
+                    }
+                    _ => TypeExpr::Named(name.clone()),
+                };
+
+                if self.consume_if(TokenKind::LAngle) {
+                    let mut args = Vec::new();
+                    loop {
+                        args.push(self.parse_type_expr()?);
+                        if self.consume_if(TokenKind::Comma) {
+                            continue;
+                        }
+                        break;
+                    }
+                    self.expect(TokenKind::RAngle)?;
+                    ty = TypeExpr::Apply(Box::new(ty), args);
                 }
+                Some(ty)
             }
             TokenKind::Dot => {
                 let dot_span = self.next().unwrap().span;
@@ -748,6 +889,12 @@ impl Parser {
                         effect,
                     })
                 }
+            }
+            TokenKind::Ampersand => {
+                let _ = self.next();
+                let is_mut = self.consume_if(TokenKind::KwMut);
+                let inner = self.parse_type_expr()?;
+                Some(TypeExpr::Reference(Box::new(inner), is_mut))
             }
             _ => {
                 let span = self.peek_span().unwrap_or_else(Span::dummy);

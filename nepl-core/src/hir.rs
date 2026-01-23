@@ -20,6 +20,7 @@ pub struct HirModule {
 #[derive(Debug, Clone)]
 pub struct HirFunction {
     pub name: String,
+    pub func_ty: TypeId, // new
     pub params: Vec<HirParam>,
     pub result: TypeId,
     pub effect: Effect,
@@ -99,10 +100,12 @@ pub enum HirExprKind {
     EnumConstruct {
         name: String,
         variant: String,
+        type_args: Vec<TypeId>,
         payload: Option<Box<HirExpr>>,
     },
     StructConstruct {
         name: String,
+        type_args: Vec<TypeId>,
         fields: Vec<HirExpr>,
     },
     Block(HirBlock),
@@ -123,7 +126,7 @@ pub enum HirExprKind {
 #[derive(Debug, Clone)]
 pub enum FuncRef {
     Builtin(String),
-    User(String),
+    User(String, Vec<TypeId>), // new: added type_args
 }
 
 #[derive(Debug, Clone)]

@@ -26,13 +26,29 @@ pub struct TypeCheckResult {
 #[derive(Debug, Clone)]
 struct EnumInfo {
     ty: TypeId,
+    type_params: Vec<TypeId>,
     variants: Vec<EnumVariantInfo>,
 }
 
 #[derive(Debug, Clone)]
 struct StructInfo {
     ty: TypeId,
+    type_params: Vec<TypeId>,
     fields: Vec<TypeId>,
+}
+
+#[derive(Debug, Clone)]
+struct TraitInfo {
+    name: String,
+    type_params: Vec<TypeId>,
+    methods: BTreeMap<String, TypeId>,
+}
+
+#[derive(Debug, Clone)]
+struct ImplInfo {
+    trait_name: Option<String>,
+    target_ty: TypeId,
+    methods: BTreeMap<String, (String, TypeId)>, // name -> (mangled_name, type)
 }
 
 pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeCheckResult {
@@ -43,9 +59,12 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
     let mut strings = StringTable::new();
     let mut enums: BTreeMap<String, EnumInfo> = BTreeMap::new();
     let mut structs: BTreeMap<String, StructInfo> = BTreeMap::new();
+    let mut traits: BTreeMap<String, TraitInfo> = BTreeMap::new();
+    let mut impls: Vec<ImplInfo> = Vec::new();
 
     let mut entry = None;
     let mut externs: Vec<HirExtern> = Vec::new();
+    let mut instantiations: BTreeMap<String, Vec<Vec<TypeId>>> = BTreeMap::new();
     let mut pending_if: Option<bool> = None;
     for d in &module.directives {
         if let Directive::IfTarget { target: gate, .. } = d {
@@ -177,12 +196,19 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     ));
                     continue;
                 }
+                let mut e_labels = LabelEnv::new();
+                let mut tps = Vec::new();
+                for p in &e.type_params {
+                    let id = ctx.fresh_var(Some(p.name.clone()));
+                    e_labels.insert(p.name.clone(), id);
+                    tps.push(id);
+                }
                 let mut vars = Vec::new();
                 for v in &e.variants {
                     let payload_ty = v
                         .payload
                         .as_ref()
-                        .map(|p| type_from_expr(&mut ctx, &mut label_env, p));
+                        .map(|p| type_from_expr(&mut ctx, &mut e_labels, p));
                     vars.push(EnumVariantInfo {
                         name: v.name.name.clone(),
                         payload: payload_ty,
@@ -192,6 +218,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     e.name.name.clone(),
                     TypeKind::Enum {
                         name: e.name.name.clone(),
+                        type_params: tps.clone(),
                         variants: vars.clone(),
                     },
                 );
@@ -199,6 +226,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     e.name.name.clone(),
                     EnumInfo {
                         ty,
+                        type_params: tps,
                         variants: vars,
                     },
                 );
@@ -218,14 +246,22 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     ));
                     continue;
                 }
+                let mut s_labels = LabelEnv::new();
+                let mut tps = Vec::new();
+                for p in &s.type_params {
+                    let id = ctx.fresh_var(Some(p.name.clone()));
+                    s_labels.insert(p.name.clone(), id);
+                    tps.push(id);
+                }
                 let mut fs = Vec::new();
                 for (_, ty_expr) in &s.fields {
-                    fs.push(type_from_expr(&mut ctx, &mut label_env, ty_expr));
+                    fs.push(type_from_expr(&mut ctx, &mut s_labels, ty_expr));
                 }
                 let ty = ctx.register_named(
                     s.name.name.clone(),
                     TypeKind::Struct {
                         name: s.name.name.clone(),
+                        type_params: tps.clone(),
                         fields: fs.clone(),
                     },
                 );
@@ -233,6 +269,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     s.name.name.clone(),
                     StructInfo {
                         ty,
+                        type_params: tps,
                         fields: fs,
                     },
                 );
@@ -249,7 +286,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                 .iter()
                 .copied()
                 .collect::<Vec<TypeId>>();
-            let func_ty = ctx.function(params.clone(), info.ty, Effect::Pure);
+            let func_ty = ctx.function(info.type_params.clone(), params.clone(), info.ty, Effect::Pure);
             let vname = format!("{}::{}", name, var.name);
             env.insert_global(Binding {
                 name: vname.clone(),
@@ -263,10 +300,65 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     builtin: None,
                 },
             });
+        } else if let Stmt::Trait(t) = item {
+            let mut f_labels = LabelEnv::new();
+            let mut tps = Vec::new();
+            for p in &t.type_params {
+                let id = ctx.fresh_var(Some(p.name.clone()));
+                f_labels.insert(p.name.clone(), id);
+                tps.push(id);
+            }
+            let mut methods = BTreeMap::new();
+            for m in &t.methods {
+                 let sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
+                 methods.insert(m.name.name.clone(), sig);
+            }
+            traits.insert(t.name.name.clone(), TraitInfo {
+                name: t.name.name.clone(),
+                type_params: tps,
+                methods,
+            });
+        }
+    }
+
+    // Process Impls separately or in the same loop?
+    // Doing it here simplifies pending_if logic.
+    pending_if = None;
+    for item in &module.root.items {
+        if let Stmt::Directive(Directive::IfTarget { target: gate, .. }) = item {
+            pending_if = Some(target_allows(gate.as_str(), target));
+            continue;
+        }
+        let allowed = pending_if.unwrap_or(true);
+        pending_if = None;
+        if !allowed {
+            continue;
+        }
+        if let Stmt::Impl(i) = item {
+            let mut f_labels = LabelEnv::new();
+            let mut tps = Vec::new();
+            for p in &i.type_params {
+                let id = ctx.fresh_var(Some(p.name.clone()));
+                f_labels.insert(p.name.clone(), id);
+                tps.push(id);
+            }
+            let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
+            let trait_name = i.trait_name.as_ref().map(|tn| tn.name.clone());
+            
+            let mut methods = BTreeMap::new();
+            for m in &i.methods {
+                 let sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
+                 methods.insert(m.name.name.clone(), (m.name.name.clone(), sig));
+            }
+            impls.push(ImplInfo {
+                trait_name,
+                target_ty,
+                methods,
+            });
         }
     }
     for (name, info) in structs.iter() {
-        let func_ty = ctx.function(info.fields.clone(), info.ty, Effect::Pure);
+        let func_ty = ctx.function(info.type_params.clone(), info.fields.clone(), info.ty, Effect::Pure);
         env.insert_global(Binding {
             name: name.clone(),
             ty: func_ty,
@@ -293,8 +385,24 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
             continue;
         }
         if let Stmt::FnDef(f) = item {
-            let ty = type_from_expr(&mut ctx, &mut label_env, &f.signature);
+            let mut f_labels = LabelEnv::new();
+            let mut tps = Vec::new();
+            for p in &f.type_params {
+                let id = ctx.fresh_var(Some(p.name.clone()));
+                f_labels.insert(p.name.clone(), id);
+                tps.push(id);
+            }
+
+            let mut ty = type_from_expr(&mut ctx, &mut f_labels, &f.signature);
+            // If it's a function type, we need to inject the type parameters
+            if !tps.is_empty() {
+                if let TypeKind::Function { params, result, effect, .. } = ctx.get(ty) {
+                    ty = ctx.function(tps.clone(), params, result, effect);
+                }
+            }
+
             if let TypeKind::Function {
+                type_params,
                 params,
                 result,
                 effect,
@@ -348,14 +456,17 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
             continue;
         }
         if let Stmt::FnDef(f) = item {
+            let f_ty = env.lookup(&f.name.name).unwrap().ty;
             match check_function(
                 f,
+                f_ty,
                 &mut ctx,
                 &mut env,
                 &mut label_env,
                 &mut strings,
                 &enums,
                 &structs,
+                &mut instantiations,
             ) {
                 Ok(func) => functions.push(func),
                 Err(mut diags) => diagnostics.append(&mut diags),
@@ -388,20 +499,22 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
 
 fn check_function(
     f: &FnDef,
+    func_ty: TypeId,
     ctx: &mut TypeCtx,
     env: &mut Env,
     labels: &mut LabelEnv,
     strings: &mut StringTable,
     enums: &BTreeMap<String, EnumInfo>,
     structs: &BTreeMap<String, StructInfo>,
+    instantiations: &mut BTreeMap<String, Vec<Vec<TypeId>>>,
 ) -> Result<HirFunction, Vec<Diagnostic>> {
     let mut diags = Vec::new();
-    let sig_ty = type_from_expr(ctx, labels, &f.signature);
-    let (params_ty, result_ty, effect) = match ctx.get(sig_ty) {
+    let (params_ty, result_ty, effect) = match ctx.get(func_ty) {
         TypeKind::Function {
             params,
             result,
             effect,
+            ..
         } => (params, result, effect),
         _ => {
             diags.push(Diagnostic::error(
@@ -441,6 +554,7 @@ fn check_function(
             current_effect: effect,
             enums,
             structs,
+            instantiations,
         };
 
         let body_res = match &f.body {
@@ -467,6 +581,7 @@ fn check_function(
     if diag_out.is_empty() {
         Ok(HirFunction {
             name: f.name.name.clone(),
+            func_ty, // assigned here
             params: f
                 .params
                 .iter()
@@ -500,6 +615,7 @@ struct BlockChecker<'a> {
     current_effect: Effect,
     enums: &'a BTreeMap<String, EnumInfo>,
     structs: &'a BTreeMap<String, StructInfo>,
+    instantiations: &'a mut BTreeMap<String, Vec<Vec<TypeId>>>, // new
 }
 
 impl<'a> BlockChecker<'a> {
@@ -1055,12 +1171,15 @@ impl<'a> BlockChecker<'a> {
                 Some(p) => p,
                 None => break,
             };
-            let func_ty = self.ctx.get(stack[func_pos].ty);
+
+            let (inst_ty, fresh_args) = self.ctx.instantiate(stack[func_pos].ty);
+            let func_ty = self.ctx.get(inst_ty);
             let (params, result, effect) = match func_ty {
                 TypeKind::Function {
                     params,
                     result,
                     effect,
+                    ..
                 } => (params, result, effect),
                 _ => break,
             };
@@ -1072,7 +1191,10 @@ impl<'a> BlockChecker<'a> {
                 args.push(stack.remove(func_pos + 1));
             }
 
-            let applied = self.apply_function(stack.remove(func_pos), params, result, effect, args);
+            let mut func_entry = stack.remove(func_pos);
+            func_entry.ty = inst_ty;
+            func_entry.expr.ty = inst_ty;
+            let applied = self.apply_function(func_entry, params, result, effect, args, fresh_args);
             if let Some(val) = applied {
                 stack.insert(func_pos, val);
             } else {
@@ -1086,17 +1208,17 @@ impl<'a> BlockChecker<'a> {
         let mut tmp_stack = Vec::new();
         if let Some((scrut_expr, _)) = self.check_prefix(&m.scrutinee, 0, &mut tmp_stack) {
             let scrut_ty = scrut_expr.ty;
-            let enum_info = match self.ctx.get(scrut_ty) {
-                TypeKind::Enum { name, .. } => self.enums.get(&name),
-                TypeKind::Named(name) => self.enums.get(&name),
+            let resolved_ty = self.ctx.resolve(scrut_ty);
+            let variants = match self.ctx.get(resolved_ty) {
+                TypeKind::Enum { variants, .. } => Some(variants),
                 _ => None,
             };
-            if enum_info.is_none() {
+            if variants.is_none() {
                 self.diagnostics
                     .push(Diagnostic::error("match scrutinee must be an enum", m.span));
                 return None;
             }
-            let enum_info = enum_info.unwrap();
+            let variants = variants.unwrap();
             let mut seen = alloc::collections::BTreeSet::new();
             let mut arms_hir = Vec::new();
             let mut result_ty: Option<TypeId> = None;
@@ -1108,8 +1230,7 @@ impl<'a> BlockChecker<'a> {
                     ));
                     continue;
                 }
-                let var_info = enum_info
-                    .variants
+                let var_info = variants
                     .iter()
                     .find(|v| v.name == arm.variant.name);
                 if var_info.is_none() {
@@ -1162,7 +1283,7 @@ impl<'a> BlockChecker<'a> {
                 });
             }
             // exhaustiveness
-            for v in &enum_info.variants {
+            for v in variants {
                 if !seen.contains(&v.name) {
                     self.diagnostics.push(Diagnostic::error(
                         "non-exhaustive match",
@@ -1194,6 +1315,7 @@ impl<'a> BlockChecker<'a> {
         result: TypeId,
         effect: Effect,
         args: Vec<StackEntry>,
+        type_args: Vec<TypeId>,
     ) -> Option<StackEntry> {
         // Effect check
         if matches!(self.current_effect, Effect::Pure) && matches!(effect, Effect::Impure) {
@@ -1405,6 +1527,7 @@ impl<'a> BlockChecker<'a> {
                                             kind: HirExprKind::EnumConstruct {
                                                 name: enm.to_string(),
                                                 variant: var.to_string(),
+                                                type_args: type_args.clone(),
                                                 payload: payload_expr,
                                             },
                                             span: func.expr.span,
@@ -1437,6 +1560,7 @@ impl<'a> BlockChecker<'a> {
                                     ty: s.ty,
                                     kind: HirExprKind::StructConstruct {
                                         name: name.clone(),
+                                        type_args: type_args.clone(),
                                         fields: args.into_iter().map(|a| a.expr).collect(),
                                     },
                                     span: func.expr.span,
@@ -1456,7 +1580,13 @@ impl<'a> BlockChecker<'a> {
                         let callee = if builtin.is_some() {
                             FuncRef::Builtin(name.clone())
                         } else {
-                            FuncRef::User(name.clone())
+                            // Register instantiation for monomorphization
+                            if !type_args.is_empty() {
+                                self.instantiations.entry(name.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(type_args.clone());
+                            }
+                            FuncRef::User(name.clone(), type_args.clone())
                         };
                         return Some(StackEntry {
                             ty: result,
@@ -1481,7 +1611,7 @@ impl<'a> BlockChecker<'a> {
             expr: HirExpr {
                 ty: result,
                 kind: HirExprKind::Call {
-                    callee: FuncRef::User(String::from("_unknown")),
+                    callee: FuncRef::User(String::from("_unknown"), Vec::new()),
                     args: args.into_iter().map(|a| a.expr).collect(),
                 },
                 span: func.expr.span,
@@ -1621,6 +1751,14 @@ fn type_from_expr(ctx: &mut TypeCtx, labels: &mut LabelEnv, t: &TypeExpr) -> Typ
                 ctx.register_named(name.clone(), TypeKind::Named(name.clone()))
             }
         }
+        TypeExpr::Apply(base, args) => {
+            let b = type_from_expr(ctx, labels, base);
+            let mut arg_tys = Vec::new();
+            for a in args {
+                arg_tys.push(type_from_expr(ctx, labels, a));
+            }
+            ctx.apply(b, arg_tys)
+        }
         TypeExpr::Label(label) => {
             if let Some(name) = label {
                 if let Some(existing) = labels.get(name) {
@@ -1644,7 +1782,15 @@ fn type_from_expr(ctx: &mut TypeCtx, labels: &mut LabelEnv, t: &TypeExpr) -> Typ
                 p.push(type_from_expr(ctx, labels, ty));
             }
             let r = type_from_expr(ctx, labels, result);
-            ctx.function(p, r, *effect)
+            ctx.function(Vec::new(), p, r, *effect)
+        }
+        TypeExpr::Boxed(inner) => {
+            let i = type_from_expr(ctx, labels, inner);
+            ctx.box_ty(i)
+        }
+        TypeExpr::Reference(inner, is_mut) => {
+            let i = type_from_expr(ctx, labels, inner);
+            ctx.reference(i, *is_mut)
         }
     }
 }
