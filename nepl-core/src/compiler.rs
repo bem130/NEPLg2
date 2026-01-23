@@ -9,6 +9,7 @@ use crate::diagnostic::Diagnostic;
 use crate::error::CoreError;
 use crate::lexer;
 use crate::parser;
+use crate::passes;
 use crate::span::FileId;
 use crate::span::Span;
 use crate::typecheck;
@@ -57,7 +58,10 @@ pub fn compile_module(
     if tc.module.is_none() {
         return Err(CoreError::from_diagnostics(tc.diagnostics));
     }
-    let hir_module = tc.module.unwrap();
+    let mut hir_module = tc.module.unwrap();
+
+    // Insert drop calls for automatic cleanup
+    passes::insert_drops(&mut hir_module);
 
     let cg = codegen_wasm::generate_wasm(&tc.types, &hir_module);
     let mut diagnostics = tc.diagnostics;

@@ -1,0 +1,16 @@
+#entry main
+#indent 4
+#import "std/list"
+#use std::list::*
+#import "std/result"
+#use std::result::*
+
+fn main <()* >i32> ():
+    let lst new;
+    push lst 1;
+    let r get lst 10;
+    match r:
+        Ok v:
+            v
+        Err e:
+            0

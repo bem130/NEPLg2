@@ -115,6 +115,9 @@ pub enum HirExprKind {
         name: String,
         value: Box<HirExpr>,
     },
+    Drop {
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone)]

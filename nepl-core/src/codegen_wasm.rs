@@ -766,6 +766,13 @@ fn gen_expr(
             }
             None
         }
+        HirExprKind::Drop { name } => {
+            // For now, Drop is a no-op at the wasm level.
+            // In the future, this will call the allocator's dealloc function
+            // for heap-owned types (Box, Vec, String, etc.).
+            // Currently, we just discard the value.
+            None
+        }
     }
 }
 

@@ -23,6 +23,7 @@ pub mod hir;
 pub mod lexer;
 pub mod loader;
 pub mod parser;
+pub mod passes;
 pub mod typecheck;
 pub mod types;
 
