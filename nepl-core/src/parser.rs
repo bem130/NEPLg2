@@ -1024,6 +1024,8 @@ impl Parser {
             Stmt::EnumDef(e) => e.name.span,
             Stmt::Wasm(w) => w.span,
             Stmt::Expr(e) => e.span,
+            Stmt::Trait(t) => t.span,
+            Stmt::Impl(i) => i.span,
         }
     }
 }

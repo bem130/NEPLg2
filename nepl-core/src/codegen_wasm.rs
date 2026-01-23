@@ -500,7 +500,7 @@ fn gen_expr(
                 gen_expr(ctx, arg, name_map, strings, locals, insts, diags);
             }
             if let Some(idx) = match callee {
-                FuncRef::Builtin(n) | FuncRef::User(n) => name_map.get(n),
+                FuncRef::Builtin(n) | FuncRef::User(n, _) => name_map.get(n),
             } {
                 insts.push(Instruction::Call(*idx));
             } else {
@@ -551,9 +551,10 @@ fn gen_expr(
             gen_block(ctx, b, name_map, strings, locals, insts, diags).flatten()
         }
         HirExprKind::EnumConstruct {
-            name,
+            name: _,
             variant,
             payload,
+            type_args: _,
         } => {
             let payload_vt = payload
                 .as_ref()
@@ -609,7 +610,7 @@ fn gen_expr(
             insts.push(Instruction::LocalGet(ptr_local));
             Some(ValType::I32)
         }
-        HirExprKind::StructConstruct { name, fields } => {
+        HirExprKind::StructConstruct { name: _, fields, type_args: _ } => {
             let size = (fields.len() as i32) * 4;
             insts.push(Instruction::I32Const(size));
             if let Some(idx) = name_map.get("alloc") {
@@ -766,7 +767,7 @@ fn gen_expr(
             }
             None
         }
-        HirExprKind::Drop { name } => {
+        HirExprKind::Drop { name: _ } => {
             // For now, Drop is a no-op at the wasm level.
             // In the future, this will call the allocator's dealloc function
             // for heap-owned types (Box, Vec, String, etc.).

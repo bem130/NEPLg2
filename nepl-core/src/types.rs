@@ -2,12 +2,12 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 
 use crate::ast::Effect;
 
 /// Identifier for a type stored in the arena.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TypeId(pub usize);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -177,7 +177,7 @@ impl TypeCtx {
         let bk = self.get(b);
 
         match (ak, bk) {
-            (TypeKind::Var(mut va), TypeKind::Var(mut vb)) => {
+            (TypeKind::Var(va), TypeKind::Var(vb)) => {
                 if let (Some(la), Some(lb)) = (&va.label, &vb.label) {
                     if la != lb {
                         return Err(UnifyError::Mismatch);
@@ -225,10 +225,12 @@ impl TypeCtx {
             (
                 TypeKind::Enum {
                     name: na,
+                    type_params: _,
                     variants: va,
                 },
                 TypeKind::Enum {
                     name: nb,
+                    type_params: _,
                     variants: vb,
                 },
             ) => {
@@ -248,8 +250,8 @@ impl TypeCtx {
                 Ok(a)
             }
             (
-                TypeKind::Struct { name: na, fields: fa },
-                TypeKind::Struct { name: nb, fields: fb },
+                TypeKind::Struct { name: na, fields: fa, type_params: _ },
+                TypeKind::Struct { name: nb, fields: fb, type_params: _ },
             ) => {
                 if na != nb || fa.len() != fb.len() {
                     return Err(UnifyError::Mismatch);
@@ -372,7 +374,8 @@ impl TypeCtx {
             TypeKind::Apply { base, args } => {
                 let mut new_args = Vec::new();
                 for a in args { new_args.push(self.substitute(a, mapping)); }
-                self.apply(self.substitute(base, mapping), new_args)
+                let new_base = self.substitute(base, mapping);
+                self.apply(new_base, new_args)
             }
             TypeKind::Box(inner) => {
                 let ni = self.substitute(inner, mapping);
@@ -456,17 +459,17 @@ impl TypeCtx {
 
     pub fn type_to_string(&self, ty: TypeId) -> String {
         match self.get(ty) {
-            TypeKind::Unit => "unit".to_string(),
-            TypeKind::I32 => "i32".to_string(),
-            TypeKind::F32 => "f32".to_string(),
-            TypeKind::Bool => "bool".to_string(),
-            TypeKind::Str => "str".to_string(),
-            TypeKind::Never => "never".to_string(),
-            TypeKind::Named(name) => name,
-            TypeKind::Enum { name, .. } => name,
-            TypeKind::Struct { name, .. } => name,
-            TypeKind::Function { .. } => "func".to_string(),
-            TypeKind::Var(_) => "var".to_string(),
+            TypeKind::Unit => String::from("unit"),
+            TypeKind::I32 => String::from("i32"),
+            TypeKind::F32 => String::from("f32"),
+            TypeKind::Bool => String::from("bool"),
+            TypeKind::Str => String::from("str"),
+            TypeKind::Never => String::from("never"),
+            TypeKind::Named(name) => name.clone(),
+            TypeKind::Enum { name, .. } => name.clone(),
+            TypeKind::Struct { name, .. } => name.clone(),
+            TypeKind::Function { .. } => String::from("func"),
+            TypeKind::Var(_) => String::from("var"),
             TypeKind::Apply { base, args } => {
                 let mut s = self.type_to_string(base);
                 s.push('_');
@@ -477,12 +480,12 @@ impl TypeCtx {
                 s
             }
             TypeKind::Box(inner) => {
-                let mut s = "box_".to_string();
+                let mut s = String::from("box_");
                 s.push_str(&self.type_to_string(inner));
                 s
             }
             TypeKind::Reference(inner, is_mut) => {
-                let mut s = if is_mut { "refmut_".to_string() } else { "ref_".to_string() };
+                let mut s = if is_mut { String::from("refmut_") } else { String::from("ref_") };
                 s.push_str(&self.type_to_string(inner));
                 s
             }

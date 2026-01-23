@@ -28,7 +28,6 @@ pub enum TypeExpr {
     Apply(Box<TypeExpr>, Vec<TypeExpr>),
     Boxed(Box<TypeExpr>),
     Reference(Box<TypeExpr>, bool), // (inner, is_mut)
-}
     Function {
         params: Vec<TypeExpr>,
         result: Box<TypeExpr>,

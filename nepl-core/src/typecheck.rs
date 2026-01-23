@@ -98,6 +98,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                 params,
                 result,
                 effect,
+                type_params: _,
             } = ctx.get(ty)
             {
                 env.insert_global(Binding {
@@ -147,7 +148,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
         });
 
         // add to externs so codegen imports them from the runtime module
-        if let TypeKind::Function { params, result, effect } = ctx.get(b.ty) {
+        if let TypeKind::Function { params, result, effect, type_params: _ } = ctx.get(b.ty) {
             externs.push(HirExtern {
                 module: "nepl_alloc".to_string(),
                 name: match b.name {
@@ -274,6 +275,26 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     },
                 );
             }
+            Stmt::Trait(t) => {
+                let mut f_labels = LabelEnv::new();
+                let mut tps = Vec::new();
+                for p in &t.type_params {
+                    let id = ctx.fresh_var(Some(p.name.clone()));
+                    f_labels.insert(p.name.clone(), id);
+                    tps.push(id);
+                }
+                let mut methods = BTreeMap::new();
+                for m in &t.methods {
+                     let sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
+                     methods.insert(m.name.name.clone(), sig);
+                }
+                traits.insert(t.name.name.clone(), TraitInfo {
+                    name: t.name.name.clone(),
+                    type_params: tps,
+                    methods,
+                });
+            }
+            Stmt::Impl(_) => {} // handled in later pass
             _ => {}
         }
     }
@@ -286,6 +307,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                 .iter()
                 .copied()
                 .collect::<Vec<TypeId>>();
+            // 4 arguments: type_params, params, result, effect
             let func_ty = ctx.function(info.type_params.clone(), params.clone(), info.ty, Effect::Pure);
             let vname = format!("{}::{}", name, var.name);
             env.insert_global(Binding {
@@ -299,24 +321,6 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     arity: params.len(),
                     builtin: None,
                 },
-            });
-        } else if let Stmt::Trait(t) = item {
-            let mut f_labels = LabelEnv::new();
-            let mut tps = Vec::new();
-            for p in &t.type_params {
-                let id = ctx.fresh_var(Some(p.name.clone()));
-                f_labels.insert(p.name.clone(), id);
-                tps.push(id);
-            }
-            let mut methods = BTreeMap::new();
-            for m in &t.methods {
-                 let sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
-                 methods.insert(m.name.name.clone(), sig);
-            }
-            traits.insert(t.name.name.clone(), TraitInfo {
-                name: t.name.name.clone(),
-                type_params: tps,
-                methods,
             });
         }
     }
@@ -397,7 +401,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
             // If it's a function type, we need to inject the type parameters
             if !tps.is_empty() {
                 if let TypeKind::Function { params, result, effect, .. } = ctx.get(ty) {
-                    ty = ctx.function(tps.clone(), params, result, effect);
+                    ty = ctx.function(tps, params, result, effect);
                 }
             }
 
@@ -709,6 +713,7 @@ impl<'a> BlockChecker<'a> {
                         block.span,
                     ));
                 }
+                Stmt::Trait(_) | Stmt::Impl(_) => {}
             }
         }
 
@@ -884,7 +889,7 @@ impl<'a> BlockChecker<'a> {
                             });
                             t
                         };
-                        let func_ty = self.ctx.function(vec![ty], self.ctx.unit(), Effect::Pure);
+                        let func_ty = self.ctx.function(Vec::new(), vec![ty], self.ctx.unit(), Effect::Pure);
                         stack.push(StackEntry {
                             ty: func_ty,
                             expr: HirExpr {
@@ -912,6 +917,7 @@ impl<'a> BlockChecker<'a> {
                                 ));
                             }
                             let func_ty = self.ctx.function(
+                                Vec::new(),
                                 vec![binding.ty],
                                 self.ctx.unit(),
                                 Effect::Impure,
@@ -942,6 +948,7 @@ impl<'a> BlockChecker<'a> {
                         let t_cond = self.ctx.bool();
                         let t_branch = self.ctx.fresh_var(None);
                         let func_ty = self.ctx.function(
+                            Vec::new(),
                             vec![t_cond, t_branch, t_branch],
                             t_branch,
                             Effect::Pure,
@@ -967,6 +974,7 @@ impl<'a> BlockChecker<'a> {
                     Symbol::While(sp) => {
                         let t_cond = self.ctx.bool();
                         let func_ty = self.ctx.function(
+                            Vec::new(),
                             vec![t_cond, self.ctx.unit()],
                             self.ctx.unit(),
                             Effect::Pure,

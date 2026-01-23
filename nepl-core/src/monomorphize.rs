@@ -172,7 +172,7 @@ impl<'a> Monomorphizer<'a> {
                     self.substitute_expr(&mut arm.body, mapping);
                 }
             }
-            HirExprKind::EnumConstruct { variant, type_args, payload, .. } => {
+            HirExprKind::EnumConstruct { variant: _, type_args, payload, .. } => {
                 for arg in type_args.iter_mut() {
                     *arg = self.ctx.substitute(*arg, mapping);
                 }
