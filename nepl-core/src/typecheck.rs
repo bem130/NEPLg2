@@ -462,7 +462,14 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
             continue;
         }
         if let Stmt::FnDef(f) = item {
-            let f_ty = env.lookup(&f.name.name).unwrap().ty;
+            let f_ty = match env.lookup(&f.name.name) {
+                Some(b) => b.ty,
+                None => {
+                    // The function was not hoisted (due to a prior error such as
+                    // duplicate name). Skip type-checking its body to avoid panics.
+                    continue;
+                }
+            };
             match check_function(
                 f,
                 f_ty,

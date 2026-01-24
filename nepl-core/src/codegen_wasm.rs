@@ -437,7 +437,10 @@ fn gen_block(
             if val.is_some() {
                 insts.push(Instruction::Drop);
             }
-            last_val = None;
+            // Do not clear `last_val` here. A drop on a line should
+            // not erase the block's previously-known return value;
+            // only non-drop lines update the `last_val` to the
+            // expression's produced value.
         } else {
             last_val = val;
         }
