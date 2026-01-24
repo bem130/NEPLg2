@@ -52,7 +52,7 @@ fn drop_if_branch() {
 #indent 4
 
 fn main <()*>()>():
-    let con <i32> 1;
+    let con <bool> true;
     let result <i32> if:
         cond:
             con

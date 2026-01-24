@@ -200,7 +200,17 @@ impl Parser {
             TokenKind::KwImpl => self.parse_impl(),
             _ => {
                 let expr = self.parse_prefix_expr()?;
-                Some(Stmt::Expr(expr))
+                // If a semicolon follows at statement-level, consume it here
+                let semi_span = if self.check(TokenKind::Semicolon) {
+                    Some(self.next().unwrap().span)
+                } else {
+                    None
+                };
+                if semi_span.is_some() {
+                    Some(Stmt::ExprSemi(expr, semi_span))
+                } else {
+                    Some(Stmt::Expr(expr))
+                }
             }
         }
     }
@@ -516,10 +526,8 @@ impl Parser {
                     }
                     break;
                 }
-                TokenKind::Semicolon => {
-                    let span = self.next().unwrap().span;
-                    items.push(PrefixItem::Semi(span));
-                }
+                // Semicolons are handled at statement level (parse_stmt),
+                // do not include them inside PrefixExpr items.
                 TokenKind::Pipe => {
                     let span = self.next().unwrap().span;
                     items.push(PrefixItem::Pipe(span));
@@ -677,10 +685,8 @@ impl Parser {
                     let span = self.next().unwrap().span;
                     items.push(PrefixItem::Pipe(span));
                 }
-                TokenKind::Semicolon => {
-                    let span = self.next().unwrap().span;
-                    items.push(PrefixItem::Semi(span));
-                }
+                // Semicolons are handled at statement level (parse_stmt),
+                // do not include them inside PrefixExpr items.
                 TokenKind::LAngle => {
                     let start = self.next().unwrap().span;
                     let ty = self.parse_type_expr()?;
@@ -1187,6 +1193,7 @@ impl Parser {
             Stmt::EnumDef(e) => e.name.span,
             Stmt::Wasm(w) => w.span,
             Stmt::Expr(e) => e.span,
+            Stmt::ExprSemi(e, _) => e.span,
             Stmt::Trait(t) => t.span,
             Stmt::Impl(i) => i.span,
         }

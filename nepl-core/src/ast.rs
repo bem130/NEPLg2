@@ -185,6 +185,7 @@ pub enum Stmt {
     Trait(TraitDef),
     Impl(ImplDef),
     Expr(PrefixExpr),
+    ExprSemi(PrefixExpr, Option<Span>),
 }
 
 /// Parsed module.

@@ -712,7 +712,7 @@ impl<'a> BlockChecker<'a> {
 
         // Hoist let (non-mut) and nested fn signatures
         for stmt in &block.items {
-            if let Stmt::Expr(PrefixExpr { items, .. }) = stmt {
+            if let Stmt::Expr(PrefixExpr { items, .. }) | Stmt::ExprSemi(PrefixExpr { items, .. }, _) = stmt {
                 if let Some(PrefixItem::Symbol(Symbol::Let {
                     name,
                     mutable: false,
@@ -770,11 +770,31 @@ impl<'a> BlockChecker<'a> {
             }
             match stmt {
                 Stmt::Expr(expr) => match self.check_prefix(expr, base_depth, &mut stack) {
-                    Some((typed, dropped)) => {
-                        lines.push(HirLine {
-                            expr: typed,
-                            drop_result: dropped,
-                        });
+                    Some((typed, dropped_from_prefix)) => {
+                        // Preserve prefix-level drop result when no statement-level semicolon
+                        lines.push(HirLine { expr: typed, drop_result: dropped_from_prefix });
+                    }
+                    None => {}
+                },
+                Stmt::ExprSemi(expr, semi_span) => match self.check_prefix(expr, base_depth, &mut stack) {
+                    Some((typed, _dropped_from_prefix)) => {
+                        // Enforce semicolon semantics at statement level: require exactly one value on the stack
+                        if stack.len() == base_depth + 1 {
+                            // Pop the value and mark as dropped
+                            let _se = stack.pop().unwrap();
+                            lines.push(HirLine { expr: typed, drop_result: true });
+                        } else {
+                            let sp = semi_span.unwrap_or(typed.span);
+                            self.diagnostics.push(Diagnostic::error(
+                                "semicolon requires exactly one value on the stack",
+                                sp,
+                            ));
+                            // Recovery: reset to base_depth
+                            while stack.len() > base_depth {
+                                stack.pop();
+                            }
+                            lines.push(HirLine { expr: typed, drop_result: true });
+                        }
                     }
                     None => {}
                 },

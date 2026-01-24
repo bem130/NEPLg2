@@ -68,11 +68,12 @@ enum Wrapper:
 
 fn main <()*>()>():
     let x Wrapper::Val 1;
-    let cond <i32> 1;
-    if cond:
-        let y <Wrapper> x; // conditionally moved
-    else:
-        ()
+    let cnd <bool> true;
+    if cnd:
+        then:
+            let y <Wrapper> x; // conditionally moved
+        else:
+            ()
     let z <Wrapper> x; // error: potentially moved
 "#;
     let errs = compile_move_test(source).unwrap_err();
@@ -90,8 +91,8 @@ enum Wrapper:
 
 fn main <()*>()>():
     let x Wrapper::Val 1;
-    let cond <i32> 1;
-    while cond:
+    let cnd <bool> true;
+    while cnd:
         let y <Wrapper> x; // moved in first iteration, error in next
 "#;
     let errs = compile_move_test(source).unwrap_err();

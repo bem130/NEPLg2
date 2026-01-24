@@ -172,6 +172,10 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
                             let end_state = ctx.get_state(&name).unwrap_or(start_state);
                             if end_state != start_state && start_state == VarState::Valid {
                                 ctx.set_state(&name, VarState::PossiblyMoved);
+                                ctx.diagnostics.push(Diagnostic::error(
+                                    alloc::format!("potentially moved value: `{}`", name),
+                                    args[1].span,
+                                ));
                             }
                         }
                         visit_expr(&args[0], ctx, tctx);
@@ -214,6 +218,10 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
                 let end_state = ctx.get_state(&name).unwrap_or(start_state);
                 if end_state != start_state && start_state == VarState::Valid {
                     ctx.set_state(&name, VarState::PossiblyMoved);
+                    ctx.diagnostics.push(Diagnostic::error(
+                        alloc::format!("potentially moved value: `{}`", name),
+                        expr.span,
+                    ));
                 }
             }
             visit_expr(cond, ctx, tctx);

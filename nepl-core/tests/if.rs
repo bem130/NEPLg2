@@ -4,32 +4,32 @@ use nepl_core::loader::Loader;
 fn compile_various_if_forms() {
     let src = r#"
 #target wasi
-#import "std/stdio"
-#use std::stdio::*
+#entry main
+#indent 4
 #entry main
 #indent 4
 
 fn main <()*>()> ():
     // 1-line if
-    print_i32 if true 0 1;
+    let _ <i32> if true 0 1;
 
     // 1-line with then/else
-    print_i32 if true then 0 else 1;
+    let _ <i32> if true then 0 else 1;
 
     // multi-line with markers
-    print_i32 if true:
+    let _ <i32> if true:
         then 0
         else 1
 
     // multi-line with labeled blocks
-    print_i32 if true:
+    let _ <i32> if true:
         then:
             0
         else:
             1
 
     // nested/combined
-    print_i32 if true 0 if true 1 2;
+    let _ <i32> if true 0 if true 1 2;
 "#;
 
     let loader = Loader::new(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("stdlib"));
