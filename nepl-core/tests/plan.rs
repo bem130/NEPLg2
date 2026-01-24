@@ -26,17 +26,6 @@ fn compile_err(src: &str) {
     assert!(result.is_err(), "expected error, got {:?}", result);
 }
 
-fn compile_ok(src: &str) {
-    let result = compile_wasm(
-        FileId(0),
-        src,
-        CompileOptions {
-            target: Some(CompileTarget::Wasm),
-        },
-    );
-    assert!(result.is_ok(), "expected success, got {:?}", result);
-}
-
 #[test]
 fn plan_block_returns_last_statement_value() {
     // plan.md: block value/type comes from the last statement
@@ -307,7 +296,7 @@ fn plan_while_is_unit_and_works_as_statement() {
 #import "std/math"
 #use std::math::*
 
-fn main <()->i32> ():
+fn main <()*>i32> ():
     let mut x <i32> 0;
 
     while lt x 10:
@@ -338,7 +327,7 @@ fn plan_nested_colon_blocks_in_set_expression() {
 #import "std/math"
 #use std::math::*
 
-fn main <()->i32> ():
+fn main <()*>i32> ():
     let mut x <i32> 0;
 
     while lt x 10:
@@ -430,5 +419,6 @@ fn main <()->i32> ():
     add add add add a b c d e
 "#;
 
-    compile_ok(src);
+    let v = run_main_i32(src);
+    assert_eq!(v, 5);
 }
