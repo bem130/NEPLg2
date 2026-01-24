@@ -809,14 +809,14 @@ impl<'a> BlockChecker<'a> {
             final_ty = t;
             value_ty = Some(t);
         } else if stack.len() > base_depth + 1 {
-            // Too many values: pop extras and emit a warning.
+            // Too many values: report an error and pop extras for recovery.
             let extras = stack.len() - (base_depth + 1);
             for _ in 0..extras {
                 // Pop and ignore the extra value(s).
                 stack.pop();
             }
-            self.diagnostics.push(Diagnostic::warning(
-                "block left extra values on the stack; dropping them",
+            self.diagnostics.push(Diagnostic::error(
+                "block left extra values on the stack",
                 block.span,
             ));
             if stack.len() == base_depth {
@@ -1075,69 +1075,9 @@ impl<'a> BlockChecker<'a> {
                     }
                 }
                 PrefixItem::Block(b, sp) => {
-                    // Special-case: if this block is a block-form for a preceding `if`,
-                    // split it into then/else blocks so the `if` callable gets two args.
-                    if let Some(prev) = stack.last() {
-                        if matches!(self.ctx.get(prev.ty), TypeKind::Function { .. }) {
-                            if let HirExprKind::Var(name) = &prev.expr.kind {
-                                if name == "if" {
-                                    if let Some((then_block, else_block)) = Self::split_if_then_else_block_ast(b) {
-                                        // check then
-                                        let (then_blk_hir, then_val) = self.check_block(&then_block, stack.len(), true)?;
-                                        if let Some(then_ty) = then_val {
-                                            stack.push(StackEntry {
-                                                ty: then_ty,
-                                                expr: HirExpr {
-                                                    ty: then_ty,
-                                                    kind: HirExprKind::Block(then_blk_hir),
-                                                    span: *sp,
-                                                },
-                                                assign: None,
-                                            });
-                                        } else {
-                                            // then branch has no value
-                                            stack.push(StackEntry {
-                                                ty: self.ctx.unit(),
-                                                expr: HirExpr {
-                                                    ty: self.ctx.unit(),
-                                                    kind: HirExprKind::Block(then_blk_hir),
-                                                    span: *sp,
-                                                },
-                                                assign: None,
-                                            });
-                                        }
-                                        // check else
-                                        let (else_blk_hir, else_val) = self.check_block(&else_block, stack.len(), true)?;
-                                        if let Some(else_ty) = else_val {
-                                            stack.push(StackEntry {
-                                                ty: else_ty,
-                                                expr: HirExpr {
-                                                    ty: else_ty,
-                                                    kind: HirExprKind::Block(else_blk_hir),
-                                                    span: *sp,
-                                                },
-                                                assign: None,
-                                            });
-                                        } else {
-                                            stack.push(StackEntry {
-                                                ty: self.ctx.unit(),
-                                                expr: HirExpr {
-                                                    ty: self.ctx.unit(),
-                                                    kind: HirExprKind::Block(else_blk_hir),
-                                                    span: *sp,
-                                                },
-                                                assign: None,
-                                            });
-                                        }
-                                        // ascription will be handled later
-                                        last_expr = Some(stack.last().unwrap().expr.clone());
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
+                    // Treat blocks uniformly; parser now desugars `if:`/`if <cond>:`
+                    // layout forms into ordinary prefix items, so the checker
+                    // should not special-case `if` here.
                     let (blk, val_ty) = self.check_block(b, stack.len(), true)?;
                     if let Some(ty) = val_ty {
                         stack.push(StackEntry {
@@ -1178,29 +1118,22 @@ impl<'a> BlockChecker<'a> {
                     last_expr = pipe_pending.as_ref().map(|se| se.expr.clone());
                 }
                 PrefixItem::Semi(sp) => {
-                        if stack.len() >= base_depth + 1 {
-                            // If there are extra values, drop them with a warning,
-                            // then pop the single value that semicolon returns.
-                            let extras = stack.len() - (base_depth + 1);
-                            if extras > 0 {
-                                for _ in 0..extras {
-                                    stack.pop();
-                                }
-                                self.diagnostics.push(Diagnostic::warning(
-                                    "semicolon encountered with extra values; dropping them",
-                                    *sp,
-                                ));
-                            }
-                            if let Some(se) = stack.pop() {
-                                last_expr = Some(se.expr);
-                            }
-                            dropped = true;
-                        } else {
-                            self.diagnostics.push(Diagnostic::error(
-                                "semicolon requires exactly one value on the stack",
-                                *sp,
-                            ));
+                    if stack.len() == base_depth + 1 {
+                        if let Some(se) = stack.pop() {
+                            last_expr = Some(se.expr);
                         }
+                        dropped = true;
+                    } else {
+                        self.diagnostics.push(Diagnostic::error(
+                            "semicolon requires exactly one value on the stack",
+                            *sp,
+                        ));
+                        // Recovery: reset to base_depth to avoid cascaded errors
+                        while stack.len() > base_depth {
+                            stack.pop();
+                        }
+                        dropped = true;
+                    }
                 }
             }
 
@@ -1252,15 +1185,15 @@ impl<'a> BlockChecker<'a> {
                 .push(Diagnostic::error("pipe has no target", expr.span));
         }
 
-        // Validate final stack depth. Be forgiving: if there are extra
-        // values, pop them and emit a warning rather than a hard error.
+        // Validate final stack depth. If there are extra values, report an error
+        // and recover by dropping extras so later checks can proceed.
         if stack.len() > base_depth + 1 {
             let extras = stack.len() - (base_depth + 1);
             for _ in 0..extras {
                 stack.pop();
             }
-            self.diagnostics.push(Diagnostic::warning(
-                "expression leaves extra values on the stack; dropping them",
+            self.diagnostics.push(Diagnostic::error(
+                "expression leaves extra values on the stack",
                 expr.span,
             ));
         }

@@ -7,11 +7,19 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
+use alloc::vec;
 
 use crate::ast::*;
 use crate::diagnostic::Diagnostic;
 use crate::lexer::{LexResult, Token, TokenKind};
 use crate::span::{FileId, Span};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IfRole {
+    Cond,
+    Then,
+    Else,
+}
 
 #[derive(Debug)]
 pub struct ParseResult {
@@ -486,11 +494,22 @@ impl Parser {
                     // If this prefix line contains an `if`, try to split the following
                     // block into then/else branch blocks when top-level `else:` markers exist.
                     if items.iter().any(|it| matches!(it, PrefixItem::Symbol(Symbol::If(_)))) {
-                        if let Some((then_block, else_block)) = self.split_if_then_else_block(&block) {
-                            items.push(PrefixItem::Block(then_block, span));
-                            items.push(PrefixItem::Block(else_block, span));
-                        } else {
-                            items.push(PrefixItem::Block(block, span));
+                        // Handle `if:` / `if <cond>:` layout forms by extracting
+                        // 2 or 3 expressions from the indented block and splicing
+                        // their items into this prefix expression. This desugars
+                        // the layout into normal prefix arguments so later passes
+                        // don't need a special-case split.
+                        let expected = if Self::if_layout_needs_cond(&items) { 3 } else { 2 };
+                        match self.extract_if_layout_exprs(block.clone(), expected, colon_span) {
+                            Ok(mut args) => {
+                                for a in args.drain(..) {
+                                    items.extend(a.items);
+                                }
+                            }
+                            Err(diag) => {
+                                self.diagnostics.push(diag);
+                                items.push(PrefixItem::Block(block, span));
+                            }
                         }
                     } else {
                         items.push(PrefixItem::Block(block, span));
@@ -608,9 +627,9 @@ impl Parser {
             }
         }
 
-        // Normalize 'then'/'else' markers so forms like
-        // `if cond then A else B` and `if cond: then: ... else: ...`
-        // are reduced to the basic `if cond A B` shape expected by later passes.
+        // Normalize `cond`/`then`/`else` markers so forms like
+        // `if cond then A else B` and the layout `if:` forms are reduced
+        // to the basic `if cond A B` shape expected by later passes.
         self.normalize_then_else(&mut items);
 
         let end_span = items
@@ -739,15 +758,15 @@ impl Parser {
     }
 
     fn normalize_then_else(&mut self, items: &mut Vec<PrefixItem>) {
-        // Remove inline `then`/`else` tokens, but preserve a leading
-        // `then`/`else` when it is the first item on the line (marker form).
+        // Remove inline `cond`/`then`/`else` tokens, but preserve a leading
+        // marker when it is the first item on the line (marker form).
         let mut i = 0;
         while i < items.len() {
             let remove = match &items[i] {
                 PrefixItem::Symbol(crate::ast::Symbol::Ident(ident)) => {
                     let n = ident.name.as_str();
                     // remove only if not the first item (i != 0)
-                    (n == "then" || n == "else") && i != 0
+                    (n == "then" || n == "else" || n == "cond") && i != 0
                 }
                 _ => false,
             };
@@ -759,99 +778,124 @@ impl Parser {
         }
     }
 
-    // Helpers for splitting an `if:` block that contains top-level `else:`/`then:` markers.
-    fn is_marker_expr(expr: &PrefixExpr, name: &str) -> bool {
+    
+
+    fn take_role_from_expr(expr: &mut PrefixExpr) -> Option<IfRole> {
         match expr.items.first() {
-            Some(PrefixItem::Symbol(Symbol::Ident(id))) => id.name == name,
+            Some(PrefixItem::Symbol(Symbol::Ident(id))) if id.name == "cond" => {
+                expr.items.remove(0);
+                Some(IfRole::Cond)
+            }
+            Some(PrefixItem::Symbol(Symbol::Ident(id))) if id.name == "then" => {
+                expr.items.remove(0);
+                Some(IfRole::Then)
+            }
+            Some(PrefixItem::Symbol(Symbol::Ident(id))) if id.name == "else" => {
+                expr.items.remove(0);
+                Some(IfRole::Else)
+            }
+            _ => None,
+        }
+    }
+
+    fn if_layout_needs_cond(items: &[PrefixItem]) -> bool {
+        // Detect `... if:` or `... if cond:` (no real cond-expr yet)
+        // Ignore trailing type annotations for detection.
+        let mut tail: Vec<&PrefixItem> = items.iter().collect();
+        while let Some(PrefixItem::TypeAnnotation(_, _)) = tail.last().copied() {
+            tail.pop();
+        }
+        match tail.as_slice() {
+            [.., PrefixItem::Symbol(Symbol::If(_))] => true,
+            [.., PrefixItem::Symbol(Symbol::If(_)), PrefixItem::Symbol(Symbol::Ident(id))]
+                if id.name == "cond" => true,
             _ => false,
         }
     }
 
-    fn marker_payload_as_block(&mut self, expr: PrefixExpr) -> Block {
-        // Drop leading marker and convert the remaining items into a Block.
-        let mut items = expr.items;
-        if !items.is_empty() {
-            items.remove(0);
-        }
-        // If payload was a single Block item, unwrap it.
-        if items.len() == 1 {
-            if let PrefixItem::Block(b, _) = items.remove(0) {
-                return b;
-            }
-        }
-        // Otherwise, wrap remaining items into a one-line block.
-        Block {
-            items: alloc::vec![Stmt::Expr(PrefixExpr { items, span: expr.span })],
-            span: expr.span,
-        }
-    }
-
-    fn split_if_then_else_block(&mut self, block: &Block) -> Option<(Block, Block)> {
-        // Debug: record the top-level items for diagnosis (temporary)
-        let mut parts = alloc::vec![];
-        for stmt in block.items.iter() {
+    fn extract_if_layout_exprs(
+        &mut self,
+        block: Block,
+        expected: usize,
+        header_span: Span,
+    ) -> Result<Vec<PrefixExpr>, Diagnostic> {
+        // Collect only expression statements
+        let mut exprs = Vec::new();
+        for stmt in block.items {
             match stmt {
-                Stmt::Expr(e) => {
-                    if let Some(first) = e.items.first() {
-                        match first {
-                            PrefixItem::Symbol(Symbol::Ident(id)) => parts.push(id.name.clone()),
-                            PrefixItem::Block(_, _) => parts.push("block".to_string()),
-                            PrefixItem::Literal(_, _) => parts.push("lit".to_string()),
-                            PrefixItem::TypeAnnotation(_, _) => parts.push("ty".to_string()),
-                            _ => parts.push("other".to_string()),
-                        }
-                    } else {
-                        parts.push("empty".to_string());
+                Stmt::Expr(e) => exprs.push(e),
+                _ => {
+                    return Err(Diagnostic::error(
+                        "if-layout block may contain only expressions",
+                        header_span,
+                    ));
+                }
+            }
+        }
+
+        // Assign by role labels if present, otherwise by order.
+        let mut slots: Vec<Option<PrefixExpr>> = vec![None; expected];
+
+        let role_to_index = |role: IfRole| -> Option<usize> {
+            match (expected, role) {
+                (3, IfRole::Cond) => Some(0),
+                (3, IfRole::Then) => Some(1),
+                (3, IfRole::Else) => Some(2),
+                (2, IfRole::Then) => Some(0),
+                (2, IfRole::Else) => Some(1),
+                _ => None,
+            }
+        };
+
+        let mut next_unfilled = 0usize;
+        for mut e in exprs {
+            let role = Self::take_role_from_expr(&mut e);
+            if let Some(r) = role {
+                let idx = match role_to_index(r) {
+                    Some(i) => i,
+                    None => {
+                        return Err(Diagnostic::error(
+                            "invalid marker in this if-layout form",
+                            e.span,
+                        ));
                     }
+                };
+                if slots[idx].is_some() {
+                    return Err(Diagnostic::error(
+                        "duplicate marker in if-layout block",
+                        e.span,
+                    ));
                 }
-                _ => parts.push("non-expr".to_string()),
-            }
-        }
-        self.diagnostics.push(Diagnostic::warning(
-            alloc::format!("split_if_then_else_block items: {:?}", parts),
-            block.span,
-        ));
-        // Find a top-level `else` marker line in the block items.
-        let mut else_idx: Option<usize> = None;
-        for (i, stmt) in block.items.iter().enumerate() {
-            if let Stmt::Expr(e) = stmt {
-                if Self::is_marker_expr(e, "else") {
-                    else_idx = Some(i);
-                    break;
+                // If the payload is a single Block item and the marker was present,
+                // unwrap it so the downstream typechecker sees a Block when needed.
+                if let Some(PrefixItem::Block(_, _)) = e.items.first() {
+                    // leave as-is; marker removal already happened
                 }
-            }
-        }
-        let else_idx = else_idx?;
-
-        // Require else marker to be the last top-level line inside the if: block.
-        if else_idx + 1 != block.items.len() {
-            return None;
-        }
-
-        let mut then_items = block.items[..else_idx].to_vec();
-        let else_stmt = block.items[else_idx].clone();
-
-        // Convert then_items into a Block
-        let then_block = if then_items.len() == 1 {
-            if let Stmt::Expr(e) = then_items.remove(0) {
-                if Self::is_marker_expr(&e, "then") {
-                    self.marker_payload_as_block(e)
-                } else {
-                    Block { items: alloc::vec![Stmt::Expr(e)], span: block.span }
-                }
+                slots[idx] = Some(e);
             } else {
-                Block { items: then_items, span: block.span }
+                // positional fill
+                while next_unfilled < expected && slots[next_unfilled].is_some() {
+                    next_unfilled += 1;
+                }
+                if next_unfilled >= expected {
+                    return Err(Diagnostic::error(
+                        "too many expressions in if-layout block",
+                        e.span,
+                    ));
+                }
+                slots[next_unfilled] = Some(e);
+                next_unfilled += 1;
             }
-        } else {
-            Block { items: then_items, span: block.span }
-        };
+        }
 
-        let else_block = match else_stmt {
-            Stmt::Expr(e) => self.marker_payload_as_block(e),
-            _ => return None,
-        };
+        if slots.iter().any(|s| s.is_none()) {
+            return Err(Diagnostic::error(
+                "missing expression(s) in if-layout block",
+                header_span,
+            ));
+        }
 
-        Some((then_block, else_block))
+        Ok(slots.into_iter().map(|s| s.unwrap()).collect())
     }
 
     fn parse_match_arms(&mut self) -> Option<Vec<MatchArm>> {
