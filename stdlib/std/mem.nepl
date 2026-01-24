@@ -19,3 +19,15 @@ fn store_i32 <(i32,i32)*>()> (p, v):
         local.get $p
         local.get $v
         i32.store
+
+// byte load/store for strings
+fn load_u8 <(i32)->i32> (p):
+    #wasm:
+        local.get $p
+        i32.load8_u
+
+fn store_u8 <(i32,i32)*>()> (p, v):
+    #wasm:
+        local.get $p
+        local.get $v
+        i32.store8

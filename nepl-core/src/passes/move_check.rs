@@ -81,15 +81,15 @@ impl MoveCheckContext {
     }
 
     fn check_use(&mut self, name: &str, span: Span, is_copy: bool) {
-        // Ignore builtins
-        if matches!(name, "if" | "while" | "let" | "set" | "print_i32" | "print_str") {
+        // NOTE: reserved words should not be treated as variables
+        if matches!(name, "if" | "while" | "let" | "set") {
             return;
         }
 
         match self.get_state(name) {
             Some(VarState::Valid) => {
                 if !is_copy {
-                    self.diagnostics.push(Diagnostic::warning(alloc::format!("DEBUG: {} moved", name), span));
+                    // Moving a non-Copy value is OK: just mark it as moved.
                     self.set_state(name, VarState::Moved);
                 }
             }
@@ -247,13 +247,20 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
             }
         }
         HirExprKind::Block(b) => visit_block(b, ctx, tctx),
-        HirExprKind::Let { name, value, .. } => {
-            visit_expr(value, ctx, tctx);
-            ctx.declare_var(name.clone());
-        }
+        // HirExprKind::Let { name, value, .. } => {
+        //     visit_expr(value, ctx, tctx);
+        //     ctx.declare_var(name.clone());
+        // }
         HirExprKind::Set { value, name } => {
              visit_expr(value, ctx, tctx);
              ctx.set_state(name, VarState::Valid);
+        }
+        HirExprKind::Let { name, value, .. } => {
+            visit_expr(value, ctx, tctx);
+
+            // A new binding starts as Valid.
+            ctx.declare_var(name.clone());
+            ctx.set_state(name, VarState::Valid);
         }
         HirExprKind::StructConstruct { fields, .. } => {
             for f in fields { visit_expr(f, ctx, tctx); }

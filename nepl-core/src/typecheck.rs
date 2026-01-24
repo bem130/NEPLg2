@@ -865,7 +865,27 @@ impl<'a> BlockChecker<'a> {
         let mut dropped = false;
         let mut last_expr: Option<HirExpr> = None;
         let mut pipe_pending: Option<StackEntry> = None;
-        let mut pending_ascription: Option<TypeId> = None;
+        // (target_type, stack_depth_when_annotation_appeared)
+        let mut pending_ascription: Option<(TypeId, usize)> = None;
+
+        // Try to apply a pending ascription when the next expression is complete.
+        fn try_apply_pending_ascription(
+            this: &mut BlockChecker,
+            stack: &mut Vec<StackEntry>,
+            pending: &mut Option<(TypeId, usize)>,
+        ) {
+            let Some((target_ty, base_len)) = *pending else { return };
+            // The next expression is complete exactly when the stack returns to base_len + 1
+            if stack.len() == base_len + 1 {
+                let top = stack.last().unwrap();
+                // Do not apply to functions
+                if !matches!(this.ctx.get(top.ty), TypeKind::Function { .. }) {
+                    let sp = top.expr.span;
+                    this.apply_ascription(stack.as_mut_slice(), target_ty, sp);
+                    *pending = None;
+                }
+            }
+        }
         for item in &expr.items {
             match item {
                 PrefixItem::Literal(lit, span) => {
@@ -894,9 +914,6 @@ impl<'a> BlockChecker<'a> {
                         },
                         assign: None,
                     });
-                    if let Some(t) = pending_ascription.take() {
-                        self.apply_ascription(stack, t, *span);
-                    }
                     last_expr = Some(stack.last().unwrap().expr.clone());
                 }
                 PrefixItem::Symbol(sym) => match sym {
@@ -917,13 +934,7 @@ impl<'a> BlockChecker<'a> {
                                 },
                                 assign: None,
                             });
-                            if let Some(t) = pending_ascription.take() {
-                                if !matches!(self.ctx.get(binding.ty), TypeKind::Function { .. }) {
-                                    self.apply_ascription(stack, t, id.span);
-                                } else {
-                                    pending_ascription = Some(t);
-                                }
-                            }
+                            // defer applying ascription until the expression is complete
                             last_expr = Some(stack.last().unwrap().expr.clone());
                         }
                         BindingKind::Var => {
@@ -936,13 +947,7 @@ impl<'a> BlockChecker<'a> {
                                 },
                                 assign: None,
                             });
-                            if let Some(t) = pending_ascription.take() {
-                                if !matches!(self.ctx.get(binding.ty), TypeKind::Function { .. }) {
-                                    self.apply_ascription(stack, t, id.span);
-                                } else {
-                                    pending_ascription = Some(t);
-                                }
-                            }
+                            // defer applying ascription until the expression is complete
                             last_expr = Some(stack.last().unwrap().expr.clone());
                         }
                             }
@@ -976,13 +981,7 @@ impl<'a> BlockChecker<'a> {
                             },
                             assign: Some(AssignKind::Let),
                         });
-                        if let Some(t) = pending_ascription.take() {
-                            if !matches!(self.ctx.get(func_ty), TypeKind::Function { .. }) {
-                                self.apply_ascription(stack, t, name.span);
-                            } else {
-                                pending_ascription = Some(t);
-                            }
-                        }
+                        // defer applying ascription until the expression is complete
                         last_expr = Some(stack.last().unwrap().expr.clone());
                     }
                     Symbol::Set { name } => {
@@ -1008,13 +1007,7 @@ impl<'a> BlockChecker<'a> {
                                 },
                                 assign: Some(AssignKind::Set),
                             });
-                            if let Some(t) = pending_ascription.take() {
-                                if !matches!(self.ctx.get(func_ty), TypeKind::Function { .. }) {
-                                    self.apply_ascription(stack, t, name.span);
-                                } else {
-                                    pending_ascription = Some(t);
-                                }
-                            }
+                            // defer applying ascription until the expression is complete
                             last_expr = Some(stack.last().unwrap().expr.clone());
                         } else {
                             self.diagnostics
@@ -1039,13 +1032,7 @@ impl<'a> BlockChecker<'a> {
                             },
                             assign: None,
                         });
-                        if let Some(t) = pending_ascription.take() {
-                            if !matches!(self.ctx.get(func_ty), TypeKind::Function { .. }) {
-                                self.apply_ascription(stack, t, *sp);
-                            } else {
-                                pending_ascription = Some(t);
-                            }
-                        }
+                        // defer applying ascription until the expression is complete
                         last_expr = Some(stack.last().unwrap().expr.clone());
                     }
                     Symbol::While(sp) => {
@@ -1065,24 +1052,14 @@ impl<'a> BlockChecker<'a> {
                             },
                             assign: None,
                         });
-                        if let Some(t) = pending_ascription.take() {
-                            if !matches!(self.ctx.get(func_ty), TypeKind::Function { .. }) {
-                                self.apply_ascription(stack, t, *sp);
-                            } else {
-                                pending_ascription = Some(t);
-                            }
-                        }
+                        // defer applying ascription until the expression is complete
                         last_expr = Some(stack.last().unwrap().expr.clone());
                     }
                 },
-                PrefixItem::TypeAnnotation(ty_expr, span) => {
+                PrefixItem::TypeAnnotation(ty_expr, _span) => {
                     let ty = type_from_expr(self.ctx, self.labels, ty_expr);
-                    pending_ascription = Some(ty);
-                    last_expr = Some(HirExpr {
-                        ty,
-                        kind: HirExprKind::Unit,
-                        span: *span,
-                    });
+                    // record target type and current stack depth; do NOT treat as an expression
+                    pending_ascription = Some((ty, stack.len()));
                 }
                 PrefixItem::Match(mexpr, sp) => {
                     if let Some((hexpr, ty)) = self.check_match_expr(mexpr) {
@@ -1091,9 +1068,6 @@ impl<'a> BlockChecker<'a> {
                             expr: hexpr,
                             assign: None,
                         });
-                        if let Some(t) = pending_ascription.take() {
-                            self.apply_ascription(stack, t, *sp);
-                        }
                         last_expr = Some(stack.last().unwrap().expr.clone());
                     }
                 }
@@ -1109,9 +1083,7 @@ impl<'a> BlockChecker<'a> {
                             },
                             assign: None,
                         });
-                        if let Some(t) = pending_ascription.take() {
-                            self.apply_ascription(stack, t, *sp);
-                        }
+                        // defer applying ascription until the expression is complete
                         last_expr = Some(stack.last().unwrap().expr.clone());
                     } else {
                         last_expr = Some(HirExpr {
@@ -1188,18 +1160,13 @@ impl<'a> BlockChecker<'a> {
                 }
             }
 
+            // Try applying pending ascription before call reduction
+            try_apply_pending_ascription(self, stack, &mut pending_ascription);
+
             self.reduce_calls(stack);
 
-            if let Some(t) = pending_ascription {
-                if stack.len() > base_depth {
-                    if let Some(top) = stack.last() {
-                        if !matches!(self.ctx.get(top.ty), TypeKind::Function { .. }) {
-                            self.apply_ascription(stack, t, expr.span);
-                            pending_ascription = None;
-                        }
-                    }
-                }
-            }
+            // Try applying pending ascription after call reduction
+            try_apply_pending_ascription(self, stack, &mut pending_ascription);
         }
 
         let result_expr = if stack.len() == base_depth + 1 {

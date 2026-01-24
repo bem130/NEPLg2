@@ -54,4 +54,4 @@ fn le <(i32,i32)->bool> (a,b):
     #wasm:
         local.get $a
         local.get $b
-        i32.le_u
+        i32.le_s
