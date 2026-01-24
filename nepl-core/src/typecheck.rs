@@ -957,7 +957,9 @@ impl<'a> BlockChecker<'a> {
                         }
                     }
                     Symbol::Let { name, mutable } => {
-                        let ty = if let Some(b) = self.env.lookup(&name.name) {
+                        // Use current-scope lookup so `let` always creates a local binding
+                        // (shadowing outer bindings) rather than reusing an outer binding.
+                        let ty = if let Some(b) = self.env.lookup_current(&name.name) {
                             b.ty
                         } else {
                             let t = self.ctx.fresh_var(None);
@@ -985,7 +987,8 @@ impl<'a> BlockChecker<'a> {
                         last_expr = Some(stack.last().unwrap().expr.clone());
                     }
                     Symbol::Set { name } => {
-                        if let Some(binding) = self.env.lookup(&name.name) {
+                        // Resolve set against current scope first, then outer scopes.
+                        if let Some(binding) = self.env.lookup_current(&name.name).or_else(|| self.env.lookup(&name.name)) {
                             if !binding.mutable {
                                 self.diagnostics.push(Diagnostic::error(
                                     "cannot set immutable variable",
@@ -1072,6 +1075,69 @@ impl<'a> BlockChecker<'a> {
                     }
                 }
                 PrefixItem::Block(b, sp) => {
+                    // Special-case: if this block is a block-form for a preceding `if`,
+                    // split it into then/else blocks so the `if` callable gets two args.
+                    if let Some(prev) = stack.last() {
+                        if matches!(self.ctx.get(prev.ty), TypeKind::Function { .. }) {
+                            if let HirExprKind::Var(name) = &prev.expr.kind {
+                                if name == "if" {
+                                    if let Some((then_block, else_block)) = Self::split_if_then_else_block_ast(b) {
+                                        // check then
+                                        let (then_blk_hir, then_val) = self.check_block(&then_block, stack.len(), true)?;
+                                        if let Some(then_ty) = then_val {
+                                            stack.push(StackEntry {
+                                                ty: then_ty,
+                                                expr: HirExpr {
+                                                    ty: then_ty,
+                                                    kind: HirExprKind::Block(then_blk_hir),
+                                                    span: *sp,
+                                                },
+                                                assign: None,
+                                            });
+                                        } else {
+                                            // then branch has no value
+                                            stack.push(StackEntry {
+                                                ty: self.ctx.unit(),
+                                                expr: HirExpr {
+                                                    ty: self.ctx.unit(),
+                                                    kind: HirExprKind::Block(then_blk_hir),
+                                                    span: *sp,
+                                                },
+                                                assign: None,
+                                            });
+                                        }
+                                        // check else
+                                        let (else_blk_hir, else_val) = self.check_block(&else_block, stack.len(), true)?;
+                                        if let Some(else_ty) = else_val {
+                                            stack.push(StackEntry {
+                                                ty: else_ty,
+                                                expr: HirExpr {
+                                                    ty: else_ty,
+                                                    kind: HirExprKind::Block(else_blk_hir),
+                                                    span: *sp,
+                                                },
+                                                assign: None,
+                                            });
+                                        } else {
+                                            stack.push(StackEntry {
+                                                ty: self.ctx.unit(),
+                                                expr: HirExpr {
+                                                    ty: self.ctx.unit(),
+                                                    kind: HirExprKind::Block(else_blk_hir),
+                                                    span: *sp,
+                                                },
+                                                assign: None,
+                                            });
+                                        }
+                                        // ascription will be handled later
+                                        last_expr = Some(stack.last().unwrap().expr.clone());
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     let (blk, val_ty) = self.check_block(b, stack.len(), true)?;
                     if let Some(ty) = val_ty {
                         stack.push(StackEntry {
@@ -1358,6 +1424,77 @@ impl<'a> BlockChecker<'a> {
             ));
         }
         None
+    }
+
+    fn split_if_then_else_block_ast(b: &Block) -> Option<(Block, Block)> {
+        // Find top-level `else` marker line inside the block
+        let mut else_idx: Option<usize> = None;
+        for (i, stmt) in b.items.iter().enumerate() {
+            if let Stmt::Expr(e) = stmt {
+                if let Some(PrefixItem::Symbol(Symbol::Ident(id))) = e.items.first() {
+                    if id.name == "else" {
+                        else_idx = Some(i);
+                        break;
+                    }
+                }
+            }
+        }
+        let else_idx = else_idx?;
+
+        if else_idx + 1 != b.items.len() {
+            return None;
+        }
+
+        let mut then_items = b.items[..else_idx].to_vec();
+        let else_stmt = b.items[else_idx].clone();
+
+        let then_block = if then_items.len() == 1 {
+            if let Stmt::Expr(e) = then_items.remove(0) {
+                if let Some(PrefixItem::Symbol(Symbol::Ident(id))) = e.items.first() {
+                    if id.name == "then" {
+                        // drop leading marker and convert remaining items into block
+                        let mut items = e.items;
+                        if !items.is_empty() { items.remove(0); }
+                        if items.len() == 1 {
+                            if let PrefixItem::Block(bb, _) = items.remove(0) {
+                                bb
+                            } else {
+                                Block { items: alloc::vec![Stmt::Expr(PrefixExpr { items, span: e.span })], span: e.span }
+                            }
+                        } else {
+                            Block { items: alloc::vec![Stmt::Expr(PrefixExpr { items, span: e.span })], span: e.span }
+                        }
+                    } else {
+                        Block { items: alloc::vec![Stmt::Expr(e)], span: b.span }
+                    }
+                } else {
+                    Block { items: alloc::vec![Stmt::Expr(e)], span: b.span }
+                }
+            } else {
+                Block { items: then_items, span: b.span }
+            }
+        } else {
+            Block { items: then_items, span: b.span }
+        };
+
+        let else_block = match else_stmt {
+            Stmt::Expr(e) => {
+                let mut items = e.items;
+                if !items.is_empty() { items.remove(0); }
+                if items.len() == 1 {
+                    if let PrefixItem::Block(bb, _) = items.remove(0) {
+                        bb
+                    } else {
+                        Block { items: alloc::vec![Stmt::Expr(PrefixExpr { items, span: e.span })], span: e.span }
+                    }
+                } else {
+                    Block { items: alloc::vec![Stmt::Expr(PrefixExpr { items, span: e.span })], span: e.span }
+                }
+            }
+            _ => return None,
+        };
+
+        Some((then_block, else_block))
     }
 
     fn apply_function(
@@ -1731,6 +1868,18 @@ impl Env {
             scope.push(binding);
         }
         Ok(())
+    }
+
+    fn lookup_current(&self, name: &str) -> Option<&Binding> {
+        self.scopes
+            .last()
+            .and_then(|scope| scope.iter().rev().find(|b| b.name == name))
+    }
+
+    fn lookup_current_mut(&mut self, name: &str) -> Option<&mut Binding> {
+        self.scopes
+            .last_mut()
+            .and_then(|scope| scope.iter_mut().rev().find(|b| b.name == name))
     }
 
     fn lookup(&self, name: &str) -> Option<&Binding> {

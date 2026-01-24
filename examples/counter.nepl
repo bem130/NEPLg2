@@ -13,4 +13,3 @@ fn main <()*> ()> ():
         print_str "count = ";
         print_i32 x;
         set x add x 1;
-        ()

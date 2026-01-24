@@ -483,7 +483,18 @@ impl Parser {
                     let colon_span = self.next().unwrap().span;
                     let block = self.parse_block_after_colon()?;
                     let span = colon_span.join(block.span).unwrap_or(colon_span);
-                    items.push(PrefixItem::Block(block, span));
+                    // If this prefix line contains an `if`, try to split the following
+                    // block into then/else branch blocks when top-level `else:` markers exist.
+                    if items.iter().any(|it| matches!(it, PrefixItem::Symbol(Symbol::If(_)))) {
+                        if let Some((then_block, else_block)) = self.split_if_then_else_block(&block) {
+                            items.push(PrefixItem::Block(then_block, span));
+                            items.push(PrefixItem::Block(else_block, span));
+                        } else {
+                            items.push(PrefixItem::Block(block, span));
+                        }
+                    } else {
+                        items.push(PrefixItem::Block(block, span));
+                    }
                     break;
                 }
                 TokenKind::Semicolon => {
@@ -728,13 +739,119 @@ impl Parser {
     }
 
     fn normalize_then_else(&mut self, items: &mut Vec<PrefixItem>) {
-        items.retain(|it| match it {
-            PrefixItem::Symbol(crate::ast::Symbol::Ident(ident)) => {
-                let n = ident.name.as_str();
-                !(n == "then" || n == "else")
+        // Remove inline `then`/`else` tokens, but preserve a leading
+        // `then`/`else` when it is the first item on the line (marker form).
+        let mut i = 0;
+        while i < items.len() {
+            let remove = match &items[i] {
+                PrefixItem::Symbol(crate::ast::Symbol::Ident(ident)) => {
+                    let n = ident.name.as_str();
+                    // remove only if not the first item (i != 0)
+                    (n == "then" || n == "else") && i != 0
+                }
+                _ => false,
+            };
+            if remove {
+                items.remove(i);
+            } else {
+                i += 1;
             }
-            _ => true,
-        });
+        }
+    }
+
+    // Helpers for splitting an `if:` block that contains top-level `else:`/`then:` markers.
+    fn is_marker_expr(expr: &PrefixExpr, name: &str) -> bool {
+        match expr.items.first() {
+            Some(PrefixItem::Symbol(Symbol::Ident(id))) => id.name == name,
+            _ => false,
+        }
+    }
+
+    fn marker_payload_as_block(&mut self, expr: PrefixExpr) -> Block {
+        // Drop leading marker and convert the remaining items into a Block.
+        let mut items = expr.items;
+        if !items.is_empty() {
+            items.remove(0);
+        }
+        // If payload was a single Block item, unwrap it.
+        if items.len() == 1 {
+            if let PrefixItem::Block(b, _) = items.remove(0) {
+                return b;
+            }
+        }
+        // Otherwise, wrap remaining items into a one-line block.
+        Block {
+            items: alloc::vec![Stmt::Expr(PrefixExpr { items, span: expr.span })],
+            span: expr.span,
+        }
+    }
+
+    fn split_if_then_else_block(&mut self, block: &Block) -> Option<(Block, Block)> {
+        // Debug: record the top-level items for diagnosis (temporary)
+        let mut parts = alloc::vec![];
+        for stmt in block.items.iter() {
+            match stmt {
+                Stmt::Expr(e) => {
+                    if let Some(first) = e.items.first() {
+                        match first {
+                            PrefixItem::Symbol(Symbol::Ident(id)) => parts.push(id.name.clone()),
+                            PrefixItem::Block(_, _) => parts.push("block".to_string()),
+                            PrefixItem::Literal(_, _) => parts.push("lit".to_string()),
+                            PrefixItem::TypeAnnotation(_, _) => parts.push("ty".to_string()),
+                            _ => parts.push("other".to_string()),
+                        }
+                    } else {
+                        parts.push("empty".to_string());
+                    }
+                }
+                _ => parts.push("non-expr".to_string()),
+            }
+        }
+        self.diagnostics.push(Diagnostic::warning(
+            alloc::format!("split_if_then_else_block items: {:?}", parts),
+            block.span,
+        ));
+        // Find a top-level `else` marker line in the block items.
+        let mut else_idx: Option<usize> = None;
+        for (i, stmt) in block.items.iter().enumerate() {
+            if let Stmt::Expr(e) = stmt {
+                if Self::is_marker_expr(e, "else") {
+                    else_idx = Some(i);
+                    break;
+                }
+            }
+        }
+        let else_idx = else_idx?;
+
+        // Require else marker to be the last top-level line inside the if: block.
+        if else_idx + 1 != block.items.len() {
+            return None;
+        }
+
+        let mut then_items = block.items[..else_idx].to_vec();
+        let else_stmt = block.items[else_idx].clone();
+
+        // Convert then_items into a Block
+        let then_block = if then_items.len() == 1 {
+            if let Stmt::Expr(e) = then_items.remove(0) {
+                if Self::is_marker_expr(&e, "then") {
+                    self.marker_payload_as_block(e)
+                } else {
+                    Block { items: alloc::vec![Stmt::Expr(e)], span: block.span }
+                }
+            } else {
+                Block { items: then_items, span: block.span }
+            }
+        } else {
+            Block { items: then_items, span: block.span }
+        };
+
+        let else_block = match else_stmt {
+            Stmt::Expr(e) => self.marker_payload_as_block(e),
+            _ => return None,
+        };
+
+        Some((then_block, else_block))
     }
 
     fn parse_match_arms(&mut self) -> Option<Vec<MatchArm>> {

@@ -18,4 +18,3 @@ fn main <()*> ()> ():
         set a b;
         set b next;
         set i add i 1;
-        ()

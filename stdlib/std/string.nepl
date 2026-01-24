@@ -16,64 +16,61 @@ fn len <(str)->i32> (s):
 fn from_i32 <(i32)*>str> (x):
     // temp buffer for digits (reversed), enough for i32
     let tmp <i32> alloc 16;
-
+    
     let mut n <i32> x;
     let mut neg <bool> lt n 0;
-
+    
     if neg:
-        set n sub 0 n;
-        ()
-    else:
-        ()
-
+        then:
+            set n sub 0 n;
+        else:
+            ()
+    
     let mut idx <i32> 0;
-
+    
     // handle 0
     if eq n 0:
-        store_u8 tmp 48;   // '0'
-        set idx 1;
-        ()
-    else:
-        while lt 0 n:
-            let d <i32> mod_s n 10;
-            store_u8 add tmp idx add d 48;
-            set idx add idx 1;
-            set n div_s n 10;
-            ()
-
+        then:
+            store_u8 tmp 48;   // '0'
+            set idx 1;
+        else:
+            while lt 0 n:
+                let d <i32> mod_s n 10;
+                store_u8 add tmp idx add d 48;
+                set idx add idx 1;
+                set n div_s n 10;
+    
     // total length = digits + (neg ? 1 : 0)
     let mut sign_len <i32> 0;
     if neg:
         set sign_len 1;
-        ()
-    else:
-        ()
+        else:
+            ()
     let out_len <i32> add idx sign_len;
-
+    
     // allocate [len:u32][bytes...]
     let out <i32> alloc add 4 out_len;
     store_i32 out out_len;
-
+    
     // write '-' if negative
     if neg:
-        store_u8 add out 4 45;  // '-'
-        ()
-    else:
-        ()
-
+        then:
+            store_u8 add out 4 45;  // '-'
+        else:
+            ()
+    
     // copy digits from tmp (reversed -> forward)
     let mut i <i32> 0;
     while lt i idx:
         // src = idx - 1 - i
         let src <i32> sub sub idx 1 i;
         let ch <i32> load_u8 add tmp src;
-
+        
         // dst = out + 4 + sign_len + i
         store_u8 add add add out 4 sign_len i ch;
-
+        
         set i add i 1;
-        ()
-
+    
     out
 
 fn to_i32 <(str)*>ResultI32> (_s):

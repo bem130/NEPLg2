@@ -176,6 +176,11 @@ entryに指定された関数は、`.label`を含まない、完全に具体的�
 「`if`には`then`と`else`つけてもいいよ」
 を追加したらこうなりました
 
+`"if" <cond_expr> "then"? <then_expr> "else"? <else_expr>`  
+"then"キーワードと"else"キーワードは省略可能 (というよりは追加可能) であるが、 then_exprとelse_exprは省略不可能  
+それぞれで`:`による改行が適用可能になる  
+
+
 ```neplg2
 
 // 1行 if
@@ -197,22 +202,18 @@ if true:
         1
 
 // 複数行 if then else
-if true then:
-    0
-else:
-    1
+if:
+    true
+    then:
+        0
+    else:
+        1
 
-// 複数行 if else
-if true:
-    0
-else:
-    1
-
-// 複数行 if else
-if true:
-    0
-else:
-    1
+// 複数行 if then else
+if:
+    true
+    then 0
+    else 1
 
 // 1行 if 組み合わせ
 if true 0 if true 1 2
@@ -221,19 +222,27 @@ if true then 0 else if true then 1 else 2
 
 // 複数行 if else 組み合わせ
 
-if true:
-    0
-else:
-    if true:
-        1
+if:
+    true
+    then:
+        0
     else:
-        2
+        if:
+            true
+            then:
+                1
+            else:
+                2
 
-if true:
-    0
-else if true:
-    1
-else:
-    2
+if:
+    true
+    then:
+        0
+    else if:
+        true
+        then:
+            1
+        else:
+            2
 
 ```
