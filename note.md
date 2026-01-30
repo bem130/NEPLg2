@@ -98,3 +98,13 @@
 - type_to_string は enum/struct の type_params を含めるようにして単相化マングルの衝突を避けた。
 - codegen で Apply を参照型として扱い、enum の variant 解決を Apply にも対応。
 - Rust テスト `nepl-core/tests/generics.rs` を追加し、fn/enum/struct のジェネリクスとエラーケースを検証。
+
+# 2026-01-30 作業メモ (ジェネリクス修正の追加)
+- parser のエラー診断が出ている場合は compile_wasm を失敗させるようにし、<T> を実際にエラー扱いにした。
+- Apply の型引数数不一致は unify で失敗させ、型注釈の不一致として診断されるようにした。
+- 型引数は typecheck と monomorphize で resolve_id により実体型へ正規化し、単相化後に Var が残らないようにした。
+- wasm 生成後に wasmparser で検証し、無効 wasm を診断として返すようにした。
+
+# 2026-01-30 作業メモ (ジェネリクス修正の追加2)
+- 型注釈が未適用のまま let が先に簡約されるケースがあったため、pending_ascription がある間はその手前の関数を簡約しないよう guarded reduce を追加。
+- type_args の resolve を引数 unify 後に行うようにし、単相化に Var が残らないように修正。

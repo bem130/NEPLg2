@@ -14,6 +14,7 @@ use crate::passes;
 use crate::span::FileId;
 use crate::span::Span;
 use crate::typecheck;
+use wasmparser::Validator;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompileTarget {
@@ -75,6 +76,14 @@ pub fn compile_module(
     let mut diagnostics = tc.diagnostics;
     diagnostics.extend(cg.diagnostics);
     if let Some(bytes) = cg.bytes {
+        let mut validator = Validator::new();
+        if let Err(err) = validator.validate_all(&bytes) {
+            diagnostics.push(Diagnostic::error(
+                alloc::format!("invalid wasm generated: {}", err),
+                Span::dummy(),
+            ));
+            return Err(CoreError::from_diagnostics(diagnostics));
+        }
         Ok(CompilationArtifact { wasm: bytes })
     } else {
         Err(CoreError::from_diagnostics(diagnostics))
@@ -92,6 +101,13 @@ pub fn compile_wasm(
         Some(m) => m,
         None => return Err(CoreError::from_diagnostics(parse.diagnostics)),
     };
+    if parse
+        .diagnostics
+        .iter()
+        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
+    {
+        return Err(CoreError::from_diagnostics(parse.diagnostics));
+    }
 
     match compile_module(module, options) {
         Ok(artifact) => Ok(artifact),

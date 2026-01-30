@@ -1222,10 +1222,19 @@ impl<'a> BlockChecker<'a> {
             // Try applying pending ascription before call reduction
             try_apply_pending_ascription(self, stack, &mut pending_ascription);
 
-            self.reduce_calls(stack);
+            let pending_base = pending_ascription.map(|(_, base)| base);
+            if let Some(base_len) = pending_base {
+                self.reduce_calls_guarded(stack, base_len);
+            } else {
+                self.reduce_calls(stack);
+            }
 
             // Try applying pending ascription after call reduction
             try_apply_pending_ascription(self, stack, &mut pending_ascription);
+
+            if pending_base.is_some() && pending_ascription.is_none() {
+                self.reduce_calls(stack);
+            }
         }
 
         let result_expr = if stack.len() == base_depth + 1 {
@@ -1279,6 +1288,50 @@ impl<'a> BlockChecker<'a> {
                 TypeKind::Function { .. } => true,
                 _ => false,
             }) {
+                Some(p) => p,
+                None => break,
+            };
+
+            let (inst_ty, fresh_args) = self.ctx.instantiate(stack[func_pos].ty);
+            let func_ty = self.ctx.get(inst_ty);
+            let (params, result, effect) = match func_ty {
+                TypeKind::Function {
+                    params,
+                    result,
+                    effect,
+                    ..
+                } => (params, result, effect),
+                _ => break,
+            };
+            if stack.len() < func_pos + 1 + params.len() {
+                break;
+            }
+            let mut args = Vec::new();
+            for _ in 0..params.len() {
+                args.push(stack.remove(func_pos + 1));
+            }
+
+            let mut func_entry = stack.remove(func_pos);
+            func_entry.ty = inst_ty;
+            func_entry.expr.ty = inst_ty;
+            let applied = self.apply_function(func_entry, params, result, effect, args, fresh_args);
+            if let Some(val) = applied {
+                stack.insert(func_pos, val);
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn reduce_calls_guarded(&mut self, stack: &mut Vec<StackEntry>, min_func_pos: usize) {
+        loop {
+            let func_pos = match stack
+                .iter()
+                .enumerate()
+                .rposition(|(i, e)| {
+                    i >= min_func_pos
+                        && matches!(self.ctx.get(e.ty), TypeKind::Function { .. })
+                }) {
                 Some(p) => p,
                 None => break,
             };
@@ -1743,6 +1796,10 @@ impl<'a> BlockChecker<'a> {
                                     } else {
                                         None
                                     };
+                                    let mut resolved_args = Vec::new();
+                                    for arg in &type_args {
+                                        resolved_args.push(self.ctx.resolve_id(*arg));
+                                    }
                                     return Some(StackEntry {
                                         ty: result,
                                         expr: HirExpr {
@@ -1750,7 +1807,7 @@ impl<'a> BlockChecker<'a> {
                                             kind: HirExprKind::EnumConstruct {
                                                 name: enm.to_string(),
                                                 variant: var.to_string(),
-                                                type_args: type_args.clone(),
+                                                type_args: resolved_args.clone(),
                                                 payload: payload_expr,
                                             },
                                             span: func.expr.span,
@@ -1776,13 +1833,17 @@ impl<'a> BlockChecker<'a> {
                                     ));
                                 }
                             }
+                            let mut resolved_args = Vec::new();
+                            for arg in &type_args {
+                                resolved_args.push(self.ctx.resolve_id(*arg));
+                            }
                             return Some(StackEntry {
                                 ty: result,
                                 expr: HirExpr {
                                     ty: result,
                                     kind: HirExprKind::StructConstruct {
                                         name: name.clone(),
-                                        type_args: type_args.clone(),
+                                        type_args: resolved_args.clone(),
                                         fields: args.into_iter().map(|a| a.expr).collect(),
                                     },
                                     span: func.expr.span,
@@ -1802,14 +1863,18 @@ impl<'a> BlockChecker<'a> {
                         let callee = if builtin.is_some() {
                             FuncRef::Builtin(name.clone())
                         } else {
+                            let mut resolved_args = Vec::new();
+                            for arg in &type_args {
+                                resolved_args.push(self.ctx.resolve_id(*arg));
+                            }
                             // Register instantiation for monomorphization
-                            if !type_args.is_empty() {
+                            if !resolved_args.is_empty() {
                                 self.instantiations
                                     .entry(name.clone())
                                     .or_insert_with(Vec::new)
-                                    .push(type_args.clone());
+                                    .push(resolved_args.clone());
                             }
-                            FuncRef::User(name.clone(), type_args.clone())
+                            FuncRef::User(name.clone(), resolved_args.clone())
                         };
                         return Some(StackEntry {
                             ty: result,

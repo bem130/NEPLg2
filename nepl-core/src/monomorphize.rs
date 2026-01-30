@@ -66,6 +66,11 @@ struct Monomorphizer<'a> {
 
 impl<'a> Monomorphizer<'a> {
     fn request_instantiation(&mut self, name: String, args: Vec<TypeId>) -> String {
+        let mut resolved_args = Vec::new();
+        for arg in &args {
+            resolved_args.push(self.ctx.resolve_id(*arg));
+        }
+        let args = resolved_args;
         let mangled = if args.is_empty() {
             name.clone()
         } else {
@@ -89,6 +94,11 @@ impl<'a> Monomorphizer<'a> {
     }
 
     fn process_instantiation(&mut self, orig_name: String, args: Vec<TypeId>) {
+        let mut resolved_args = Vec::new();
+        for arg in &args {
+            resolved_args.push(self.ctx.resolve_id(*arg));
+        }
+        let args = resolved_args;
         let mangled = if args.is_empty() {
             orig_name.clone()
         } else {

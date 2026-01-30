@@ -213,6 +213,9 @@ impl TypeCtx {
         if ra != a || rb != b {
             return self.unify(ra, rb);
         }
+        if self.apply_arity_mismatch(a) || self.apply_arity_mismatch(b) {
+            return Err(UnifyError::Mismatch);
+        }
         let ak = self.get(a);
         let bk = self.get(b);
 
@@ -560,6 +563,19 @@ impl TypeCtx {
         }
     }
 
+    pub fn resolve_id(&self, ty: TypeId) -> TypeId {
+        match &self.arena[ty.0] {
+            TypeKind::Var(tv) => {
+                if let Some(b) = tv.binding {
+                    self.resolve_id(b)
+                } else {
+                    ty
+                }
+            }
+            _ => ty,
+        }
+    }
+
     pub fn instantiate(&mut self, ty: TypeId) -> (TypeId, Vec<TypeId>) {
         if let TypeKind::Function {
             type_params,
@@ -670,6 +686,18 @@ impl TypeCtx {
         let id = TypeId(self.arena.len());
         self.arena.push(kind);
         id
+    }
+
+    fn apply_arity_mismatch(&self, ty: TypeId) -> bool {
+        match self.get(ty) {
+            TypeKind::Apply { base, args } => match self.get(base) {
+                TypeKind::Enum { type_params, .. }
+                | TypeKind::Struct { type_params, .. }
+                | TypeKind::Function { type_params, .. } => type_params.len() != args.len(),
+                _ => false,
+            },
+            _ => false,
+        }
     }
 }
 
