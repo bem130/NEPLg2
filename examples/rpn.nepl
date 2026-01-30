@@ -1,0 +1,57 @@
+#entry main
+#indent 4
+#target wasi
+
+#import "std/mem"
+#use std::mem::*
+#import "std/math"
+#use std::math::*
+#import "std/stdio"
+#use std::stdio::*
+
+fn main <()*> ()> ():
+    // Reverse Polish: 3 4 + 2 * 7 -
+    // Manual stack: fixed-size i32 buffer with a separate stack pointer.
+    let stack <i32> alloc mul 16 4;
+    let mut sp <i32> 0;
+    let mut a <i32> 0;
+    let mut b <i32> 0;
+
+    store_i32 add stack mul sp 4 3;
+    set sp add sp 1;
+    store_i32 add stack mul sp 4 4;
+    set sp add sp 1;
+
+    set sp sub sp 1;
+    set b load_i32 add stack mul sp 4;
+    set sp sub sp 1;
+    set a load_i32 add stack mul sp 4;
+    store_i32 add stack mul sp 4 add a b;
+    set sp add sp 1;
+
+    store_i32 add stack mul sp 4 2;
+    set sp add sp 1;
+
+    set sp sub sp 1;
+    set b load_i32 add stack mul sp 4;
+    set sp sub sp 1;
+    set a load_i32 add stack mul sp 4;
+    store_i32 add stack mul sp 4 mul a b;
+    set sp add sp 1;
+
+    store_i32 add stack mul sp 4 7;
+    set sp add sp 1;
+
+    set sp sub sp 1;
+    set b load_i32 add stack mul sp 4;
+    set sp sub sp 1;
+    set a load_i32 add stack mul sp 4;
+    store_i32 add stack mul sp 4 sub a b;
+    set sp add sp 1;
+
+    set sp sub sp 1;
+    set a load_i32 add stack mul sp 4;
+
+    print "rpn result = ";
+    println_i32 a;
+    ()

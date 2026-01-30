@@ -4,8 +4,8 @@
 
 #import "std/mem"
 #use std::mem::*
-#import "std/string"
-#use std::string::*
+#import "std/math"
+#use std::math::*
 
 fn print <(str)*>()> (s):
     // iovec = { buf: i32, buf_len: i32 }
@@ -14,8 +14,8 @@ fn print <(str)*>()> (s):
     // buf = s + 4  (skip the 4-byte length header)
     store_i32 iov add s 4;
 
-    // buf_len = string.len(s)
-    store_i32 add iov 4 len s;
+    // buf_len = string length header
+    store_i32 add iov 4 load_i32 s;
 
     // nwritten out-param (unused, but required by ABI)
     let nwritten <i32> alloc 4;
@@ -33,7 +33,47 @@ fn println <(str)*>()> (s):
     ()
 
 fn print_i32 <(i32)*>()> (v):
-    let s <i32> from_i32 v;
+    // Convert i32 to UTF-8 string with layout: [len:i32][bytes...]
+    let s <i32> :
+        if:
+            eq v 0
+            then:
+                let out0 <i32> alloc 5;
+                store_i32 out0 1;
+                store_u8 add out0 4 48;
+                out0
+            else:
+                // For incremental safety: only handle positives first.
+                if:
+                    cond:
+                        lt v 0
+                    then:
+                        let outn <i32> alloc 5;
+                        store_i32 outn 1;
+                        store_u8 add outn 4 48;
+                        outn
+                    else:
+                        let scratch <i32> alloc 16;
+                        let mut idx <i32> 0;
+                        let mut n <i32> v;
+
+                        while lt 0 n:
+                            let rem <i32> mod_s n 10;
+                            store_u8 add scratch idx add 48 rem;
+                            set idx add idx 1;
+                            set n div_s n 10;
+
+                        let out <i32> alloc add 4 idx;
+                        store_i32 out idx;
+
+                        let mut i <i32> 0;
+                        while lt i idx:
+                            let rev <i32> sub idx add i 1;
+                            let b <i32> load_u8 add scratch rev;
+                            store_u8 add out add 4 i b;
+                            set i add i 1;
+
+                        out
     print s;
     ()
 
