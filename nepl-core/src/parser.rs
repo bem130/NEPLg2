@@ -1013,7 +1013,17 @@ impl Parser {
         let mut params = Vec::new();
         if self.consume_if(TokenKind::LAngle) {
             loop {
+                let mut has_dot = false;
+                if self.consume_if(TokenKind::Dot) {
+                    has_dot = true;
+                }
                 if let Some((name, span)) = self.expect_ident() {
+                    if !has_dot {
+                        self.diagnostics.push(Diagnostic::error(
+                            "type parameter must be written as .T",
+                            span,
+                        ));
+                    }
                     params.push(Ident { name, span });
                 } else {
                     break;

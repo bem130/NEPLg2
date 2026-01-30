@@ -339,6 +339,7 @@ fn valtype(kind: &TypeKind) -> Option<ValType> {
         TypeKind::I32 | TypeKind::Bool | TypeKind::Str => Some(ValType::I32),
         TypeKind::F32 => Some(ValType::F32),
         TypeKind::Enum { .. } | TypeKind::Struct { .. } | TypeKind::Named(_) => Some(ValType::I32),
+        TypeKind::Apply { .. } => Some(ValType::I32),
         _ => None,
     }
 }
@@ -998,6 +999,7 @@ fn enum_variant_tag(ctx: &TypeCtx, enum_ty: TypeId, variant: &str) -> u32 {
             .position(|v| v.name == variant)
             .map(|i| i as u32)
             .unwrap_or(0),
+        TypeKind::Apply { base, .. } => enum_variant_tag(ctx, base, variant),
         _ => 0,
     }
 }
@@ -1008,6 +1010,27 @@ fn enum_variant_payload(ctx: &TypeCtx, enum_ty: TypeId, variant: &str) -> Option
             .iter()
             .find(|v| v.name == variant)
             .and_then(|v| v.payload),
+        TypeKind::Apply { base, args } => match ctx.get(base) {
+            TypeKind::Enum {
+                variants,
+                type_params,
+                ..
+            } => {
+                let payload = variants
+                    .iter()
+                    .find(|v| v.name == variant)
+                    .and_then(|v| v.payload);
+                payload.map(|pty| {
+                    if let Some(pos) = type_params.iter().position(|tp| *tp == pty) {
+                        if let Some(arg) = args.get(pos) {
+                            return *arg;
+                        }
+                    }
+                    pty
+                })
+            }
+            _ => None,
+        },
         _ => None,
     }
 }

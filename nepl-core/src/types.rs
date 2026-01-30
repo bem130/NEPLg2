@@ -208,6 +208,11 @@ impl TypeCtx {
     }
 
     pub fn unify(&mut self, a: TypeId, b: TypeId) -> Result<TypeId, UnifyError> {
+        let ra = self.resolve(a);
+        let rb = self.resolve(b);
+        if ra != a || rb != b {
+            return self.unify(ra, rb);
+        }
         let ak = self.get(a);
         let bk = self.get(b);
 
@@ -491,7 +496,11 @@ impl TypeCtx {
                         // Actually, substitute into the base KIND but without the type_params becoming empty.
                         // Or better: create a version where type_params are substituted.
                         match self.get(base_ty) {
-                            TypeKind::Enum { name, variants, .. } => {
+                            TypeKind::Enum {
+                                name,
+                                variants,
+                                type_params,
+                            } => {
                                 let mut new_vars = Vec::new();
                                 for v in variants {
                                     new_vars.push(EnumVariantInfo {
@@ -499,20 +508,32 @@ impl TypeCtx {
                                         payload: v.payload.map(|p| self.substitute(p, &mapping)),
                                     });
                                 }
+                                let mut new_tps = Vec::new();
+                                for tp in type_params {
+                                    new_tps.push(self.substitute(tp, &mapping));
+                                }
                                 self.store(TypeKind::Enum {
                                     name,
-                                    type_params: Vec::new(),
+                                    type_params: new_tps,
                                     variants: new_vars,
                                 })
                             }
-                            TypeKind::Struct { name, fields, .. } => {
+                            TypeKind::Struct {
+                                name,
+                                fields,
+                                type_params,
+                            } => {
                                 let mut new_fs = Vec::new();
                                 for f in fields {
                                     new_fs.push(self.substitute(f, &mapping));
                                 }
+                                let mut new_tps = Vec::new();
+                                for tp in type_params {
+                                    new_tps.push(self.substitute(tp, &mapping));
+                                }
                                 self.store(TypeKind::Struct {
                                     name,
-                                    type_params: Vec::new(),
+                                    type_params: new_tps,
                                     fields: new_fs,
                                 })
                             }
@@ -580,12 +601,45 @@ impl TypeCtx {
             TypeKind::Str => String::from("str"),
             TypeKind::Never => String::from("never"),
             TypeKind::Named(name) => name.clone(),
-            TypeKind::Enum { name, .. } => name.clone(),
-            TypeKind::Struct { name, .. } => name.clone(),
+            TypeKind::Enum { name, type_params, .. } => {
+                if type_params.is_empty() {
+                    name.clone()
+                } else {
+                    let mut s = name.clone();
+                    s.push('_');
+                    for (i, tp) in type_params.iter().enumerate() {
+                        if i > 0 {
+                            s.push('_');
+                        }
+                        s.push_str(&self.type_to_string(*tp));
+                    }
+                    s
+                }
+            }
+            TypeKind::Struct { name, type_params, .. } => {
+                if type_params.is_empty() {
+                    name.clone()
+                } else {
+                    let mut s = name.clone();
+                    s.push('_');
+                    for (i, tp) in type_params.iter().enumerate() {
+                        if i > 0 {
+                            s.push('_');
+                        }
+                        s.push_str(&self.type_to_string(*tp));
+                    }
+                    s
+                }
+            }
             TypeKind::Function { .. } => String::from("func"),
             TypeKind::Var(_) => String::from("var"),
             TypeKind::Apply { base, args } => {
-                let mut s = self.type_to_string(base);
+                let mut s = match self.get(base) {
+                    TypeKind::Enum { name, .. }
+                    | TypeKind::Struct { name, .. }
+                    | TypeKind::Named(name) => name.clone(),
+                    _ => self.type_to_string(base),
+                };
                 s.push('_');
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {

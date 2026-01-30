@@ -1711,25 +1711,26 @@ impl<'a> BlockChecker<'a> {
                         // Enum/struct constructors
                         if let Some((enm, var)) = parse_variant_name(name) {
                             if let Some(info) = self.enums.get(enm) {
-                                if let Some(vinfo) = info.variants.iter().find(|v| v.name == var) {
+                                if let Some(_vinfo) = info.variants.iter().find(|v| v.name == var)
+                                {
                                     // arity check
-                                    if vinfo.payload.is_some() && args.len() != 1 {
+                                    if params.len() == 1 && args.len() != 1 {
                                         self.diagnostics.push(Diagnostic::error(
                                             "constructor expects one argument",
                                             func.expr.span,
                                         ));
                                         return None;
                                     }
-                                    if vinfo.payload.is_none() && !args.is_empty() {
+                                    if params.is_empty() && !args.is_empty() {
                                         self.diagnostics.push(Diagnostic::error(
                                             "constructor takes no arguments",
                                             func.expr.span,
                                         ));
                                         return None;
                                     }
-                                    let payload_expr = if let Some(pty) = vinfo.payload {
+                                    let payload_expr = if params.len() == 1 {
                                         if let Some(a0) = args.first() {
-                                            if let Err(_) = self.ctx.unify(a0.ty, pty) {
+                                            if let Err(_) = self.ctx.unify(a0.ty, params[0]) {
                                                 self.diagnostics.push(Diagnostic::error(
                                                     "constructor payload type mismatch",
                                                     func.expr.span,
@@ -1743,9 +1744,9 @@ impl<'a> BlockChecker<'a> {
                                         None
                                     };
                                     return Some(StackEntry {
-                                        ty: info.ty,
+                                        ty: result,
                                         expr: HirExpr {
-                                            ty: info.ty,
+                                            ty: result,
                                             kind: HirExprKind::EnumConstruct {
                                                 name: enm.to_string(),
                                                 variant: var.to_string(),
@@ -1760,16 +1761,15 @@ impl<'a> BlockChecker<'a> {
                             }
                         }
                         if self.structs.contains_key(name) {
-                            let s = self.structs.get(name).unwrap();
-                            if args.len() != s.fields.len() {
+                            if args.len() != params.len() {
                                 self.diagnostics.push(Diagnostic::error(
                                     "struct constructor arity mismatch",
                                     func.expr.span,
                                 ));
                                 return None;
                             }
-                            for (arg, fty) in args.iter().zip(s.fields.iter()) {
-                                if let Err(_) = self.ctx.unify(arg.ty, *fty) {
+                            for (arg, pty) in args.iter().zip(params.iter()) {
+                                if let Err(_) = self.ctx.unify(arg.ty, *pty) {
                                     self.diagnostics.push(Diagnostic::error(
                                         "struct field type mismatch",
                                         arg.expr.span,
@@ -1777,9 +1777,9 @@ impl<'a> BlockChecker<'a> {
                                 }
                             }
                             return Some(StackEntry {
-                                ty: s.ty,
+                                ty: result,
                                 expr: HirExpr {
-                                    ty: s.ty,
+                                    ty: result,
                                     kind: HirExprKind::StructConstruct {
                                         name: name.clone(),
                                         type_args: type_args.clone(),

@@ -79,6 +79,22 @@
 - `cargo run -p nepl-cli -- -i examples/counter.nepl --run --target wasi` と `... fib.nepl ...`、`printf '14 5 6 + -\n' | ... rpn.nepl ...` を実行し、出力が正常であることを確認。
 - `cargo test` を再実行し、全テストが通過することを確認。
 
+# 2026-01-30 作業メモ (多相/単相化の現状)
+- パーサは fn/enum/struct/trait/impl の型パラメータ宣言と型適用 `TypeName<...>` を受理し、TypeCtx には TypeKind::{Function,Enum,Struct} の type_params と TypeKind::Apply がある。
+- 関数呼び出しでは typecheck が type_params を fresh var に instantiate し、呼び出し側に type_args を残す。monomorphize は FuncRef の type_args をもとに関数だけ単相化してマングル名を生成する。
+- TypeKind::Apply は unify が扱わず、resolve も match 以外で使われていないため、型注釈やシグネチャで `Foo<...>` を使うと実質的に整合しない。
+- enum/struct のコンストラクタは定義側の型情報を直接使っており、instantiate された params/result を反映しないため型変数がグローバルに束縛されやすく、ジェネリック enum/struct が実用になっていない。
+- stdlib の list/option/result は i32 固定で、ジェネリクスは未導入。
+
 ## plan.md との差分メモ (追加)
 - plan.md にはテスト実行コマンドや `std/test`/`nepl test` の仕様が未記載。テスト設計の章立てを追加する必要がある。
 - plan2.md と doc/starting_detail.md は引き続きリポジトリ内に存在しないため参照不可。
+- plan.md では「定義での多相は扱わない」としているが、実装には type_params と monomorphize が存在する。仕様整合の追記が必要。
+
+# 2026-01-30 作業メモ (ジェネリクス修正)
+- 型パラメータは .T 形式のみ許可するように parser を更新し、<T> はエラーにした。
+- Apply を unify で resolve して enum/struct の具体型と統合できるようにし、resolve の結果は型引数を type_params に保持するよう変更。
+- enum/struct コンストラクタは instantiate 後の params/result を使うようにし、型変数のグローバル束縛を避ける形に修正。
+- type_to_string は enum/struct の type_params を含めるようにして単相化マングルの衝突を避けた。
+- codegen で Apply を参照型として扱い、enum の variant 解決を Apply にも対応。
+- Rust テスト `nepl-core/tests/generics.rs` を追加し、fn/enum/struct のジェネリクスとエラーケースを検証。
