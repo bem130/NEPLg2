@@ -5,6 +5,7 @@ extern crate std;
 use alloc::collections::BTreeSet;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::ast::Effect;
 
@@ -72,6 +73,15 @@ pub struct TypeCtx {
     str_ty: TypeId,
     never_ty: TypeId,
     named: alloc::collections::BTreeMap<alloc::string::String, TypeId>,
+}
+
+static GLOBAL_UNIFY_DEPTH: AtomicUsize = AtomicUsize::new(0);
+
+struct UnifyDepthGuard;
+impl Drop for UnifyDepthGuard {
+    fn drop(&mut self) {
+        GLOBAL_UNIFY_DEPTH.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 impl TypeCtx {
@@ -224,6 +234,13 @@ impl TypeCtx {
     }
 
     pub fn unify(&mut self, a: TypeId, b: TypeId) -> Result<TypeId, UnifyError> {
+        // recursion guard to avoid native stack overflow in pathological cases
+        let depth = GLOBAL_UNIFY_DEPTH.fetch_add(1, Ordering::SeqCst) + 1;
+        let _guard = UnifyDepthGuard;
+        if depth > 5000 {
+            return Err(UnifyError::Mismatch);
+        }
+
         let ra = self.resolve_id(a);
         let rb = self.resolve_id(b);
         if ra != a || rb != b {
@@ -236,6 +253,9 @@ impl TypeCtx {
         let rb = self.resolve(rb);
         if ra != a || rb != b {
             return self.unify(ra, rb);
+        }
+        if ra == rb {
+            return Ok(ra);
         }
         if self.apply_arity_mismatch(a) || self.apply_arity_mismatch(b) {
             return Err(UnifyError::Mismatch);
@@ -438,7 +458,20 @@ impl TypeCtx {
                 if ta.len() != ab.len() {
                     return Err(UnifyError::Mismatch);
                 }
-                self.unify(a, bb)?;
+                let resolved_base = self.resolve(bb);
+                match self.get(resolved_base) {
+                    TypeKind::Enum { name: nb, .. } => {
+                        if na != nb {
+                            return Err(UnifyError::Mismatch);
+                        }
+                    }
+                    TypeKind::Named(nb) => {
+                        if na != nb {
+                            return Err(UnifyError::Mismatch);
+                        }
+                    }
+                    _ => return Err(UnifyError::Mismatch),
+                }
                 for (xa, xb) in ta.iter().zip(ab.iter()) {
                     self.unify(*xa, *xb)?;
                 }
@@ -448,7 +481,20 @@ impl TypeCtx {
                 if aa.len() != tb.len() {
                     return Err(UnifyError::Mismatch);
                 }
-                self.unify(ba, b)?;
+                let resolved_base = self.resolve(ba);
+                match self.get(resolved_base) {
+                    TypeKind::Enum { name: na, .. } => {
+                        if na != nb {
+                            return Err(UnifyError::Mismatch);
+                        }
+                    }
+                    TypeKind::Named(na) => {
+                        if na != nb {
+                            return Err(UnifyError::Mismatch);
+                        }
+                    }
+                    _ => return Err(UnifyError::Mismatch),
+                }
                 for (xa, xb) in aa.iter().zip(tb.iter()) {
                     self.unify(*xa, *xb)?;
                 }
@@ -458,7 +504,20 @@ impl TypeCtx {
                 if ta.len() != ab.len() {
                     return Err(UnifyError::Mismatch);
                 }
-                self.unify(a, bb)?;
+                let resolved_base = self.resolve(bb);
+                match self.get(resolved_base) {
+                    TypeKind::Struct { name: nb, .. } => {
+                        if na != nb {
+                            return Err(UnifyError::Mismatch);
+                        }
+                    }
+                    TypeKind::Named(nb) => {
+                        if na != nb {
+                            return Err(UnifyError::Mismatch);
+                        }
+                    }
+                    _ => return Err(UnifyError::Mismatch),
+                }
                 for (xa, xb) in ta.iter().zip(ab.iter()) {
                     self.unify(*xa, *xb)?;
                 }
@@ -468,7 +527,20 @@ impl TypeCtx {
                 if aa.len() != tb.len() {
                     return Err(UnifyError::Mismatch);
                 }
-                self.unify(ba, b)?;
+                let resolved_base = self.resolve(ba);
+                match self.get(resolved_base) {
+                    TypeKind::Struct { name: na, .. } => {
+                        if na != nb {
+                            return Err(UnifyError::Mismatch);
+                        }
+                    }
+                    TypeKind::Named(na) => {
+                        if na != nb {
+                            return Err(UnifyError::Mismatch);
+                        }
+                    }
+                    _ => return Err(UnifyError::Mismatch),
+                }
                 for (xa, xb) in aa.iter().zip(tb.iter()) {
                     self.unify(*xa, *xb)?;
                 }
@@ -555,22 +627,33 @@ impl TypeCtx {
                 variants,
             } => {
                 let mut new_tps = Vec::new();
-                for tp in type_params {
-                    let nt = self.substitute_inner(tp, mapping, seen);
+                let mut changed = false;
+                for tp in &type_params {
+                    let nt = self.substitute_inner(*tp, mapping, seen);
+                    if nt != *tp { changed = true; }
                     new_tps.push(nt);
                 }
                 let mut new_vars = Vec::new();
-                for v in variants {
+                for v in &variants {
+                    let new_payload = v.payload.map(|p| {
+                        let np = self.substitute_inner(p, mapping, seen);
+                        if np != p { changed = true; }
+                        np
+                    });
                     new_vars.push(EnumVariantInfo {
                         name: v.name.clone(),
-                        payload: v.payload.map(|p| self.substitute_inner(p, mapping, seen)),
+                        payload: new_payload,
                     });
                 }
-                self.store(TypeKind::Enum {
-                    name,
-                    type_params: new_tps,
-                    variants: new_vars,
-                })
+                if changed {
+                    self.store(TypeKind::Enum {
+                        name,
+                        type_params: new_tps,
+                        variants: new_vars,
+                    })
+                } else {
+                    ty
+                }
             }
             TypeKind::Struct {
                 name,
@@ -578,28 +661,43 @@ impl TypeCtx {
                 fields,
             } => {
                 let mut new_tps = Vec::new();
-                for tp in type_params {
-                    let nt = self.substitute_inner(tp, mapping, seen);
-                    if nt == self.resolve_id(tp) {
-                        new_tps.push(nt);
-                    }
+                let mut changed = false;
+                for tp in &type_params {
+                    let nt = self.substitute_inner(*tp, mapping, seen);
+                    // Resolve original to check for trivial "change" (e.g. var -> self resolved)?
+                    // Actually simple equality check is enough if substitute returns resolved.
+                    if nt != *tp { changed = true; }
+                    new_tps.push(nt);
                 }
                 let mut new_fs = Vec::new();
-                for f in fields {
-                    new_fs.push(self.substitute_inner(f, mapping, seen));
+                for f in &fields {
+                    let nf = self.substitute_inner(*f, mapping, seen);
+                    if nf != *f { changed = true; }
+                    new_fs.push(nf);
                 }
-                self.store(TypeKind::Struct {
-                    name,
-                    type_params: new_tps,
-                    fields: new_fs,
-                })
+                if changed {
+                    self.store(TypeKind::Struct {
+                        name,
+                        type_params: new_tps,
+                        fields: new_fs,
+                    })
+                } else {
+                    ty
+                }
             }
             TypeKind::Tuple { items } => {
                 let mut new_items = Vec::new();
-                for item in items {
-                    new_items.push(self.substitute_inner(item, mapping, seen));
+                let mut changed = false;
+                for item in &items {
+                    let ni = self.substitute_inner(*item, mapping, seen);
+                    if ni != *item { changed = true; }
+                    new_items.push(ni);
                 }
-                self.store(TypeKind::Tuple { items: new_items })
+                if changed {
+                    self.store(TypeKind::Tuple { items: new_items })
+                } else {
+                    ty
+                }
             }
             TypeKind::Function {
                 type_params,
@@ -608,34 +706,59 @@ impl TypeCtx {
                 effect,
             } => {
                 let mut new_tps = Vec::new();
-                for tp in type_params {
-                    let nt = self.substitute_inner(tp, mapping, seen);
-                    if nt == self.resolve_id(tp) {
-                        new_tps.push(nt);
-                    }
+                let mut changed = false;
+                for tp in &type_params {
+                    let nt = self.substitute_inner(*tp, mapping, seen);
+                    if nt != *tp { changed = true; }
+                    new_tps.push(nt);
                 }
                 let mut new_ps = Vec::new();
-                for p in params {
-                    new_ps.push(self.substitute_inner(p, mapping, seen));
+                for p in &params {
+                    let np = self.substitute_inner(*p, mapping, seen);
+                    if np != *p { changed = true; }
+                    new_ps.push(np);
                 }
                 let new_r = self.substitute_inner(result, mapping, seen);
-                self.function(new_tps, new_ps, new_r, effect)
+                if new_r != result { changed = true; }
+                
+                if changed {
+                    self.function(new_tps, new_ps, new_r, effect)
+                } else {
+                    ty
+                }
             }
             TypeKind::Apply { base, args } => {
                 let mut new_args = Vec::new();
-                for a in args {
-                    new_args.push(self.substitute_inner(a, mapping, seen));
+                let mut changed = false;
+                for a in &args {
+                    let na = self.substitute_inner(*a, mapping, seen);
+                    if na != *a { changed = true; }
+                    new_args.push(na);
                 }
                 let new_base = self.substitute_inner(base, mapping, seen);
-                self.apply(new_base, new_args)
+                if new_base != base { changed = true; }
+                
+                if changed {
+                    self.apply(new_base, new_args)
+                } else {
+                    ty
+                }
             }
             TypeKind::Box(inner) => {
                 let ni = self.substitute_inner(inner, mapping, seen);
-                self.box_ty(ni)
+                if ni != inner {
+                    self.box_ty(ni)
+                } else {
+                    ty
+                }
             }
             TypeKind::Reference(inner, is_mut) => {
                 let ni = self.substitute_inner(inner, mapping, seen);
-                self.reference(ni, is_mut)
+                if ni != inner {
+                    self.reference(ni, is_mut)
+                } else {
+                    ty
+                }
             }
         }
     }
@@ -650,84 +773,6 @@ impl TypeCtx {
                     return self.resolve(actual);
                 }
                 ty
-            }
-            TypeKind::Apply { base, args } => {
-                let base_ty = self.resolve(base);
-                match self.get(base_ty) {
-                    TypeKind::Enum { type_params, .. }
-                    | TypeKind::Struct { type_params, .. }
-                    | TypeKind::Function { type_params, .. } => {
-                        if type_params.len() != args.len() {
-                            // This should be a diagnostic, but here we just return ty
-                            return ty;
-                        }
-                        let mut mapping = alloc::collections::BTreeMap::new();
-                        for (tp, arg) in type_params.iter().zip(args.iter()) {
-                            mapping.insert(*tp, *arg);
-                        }
-                        // We want to substitute into the base, but we need to avoid infinite recursion if base is Apply again (unlikely)
-                        // Actually, substitute into the base KIND but without the type_params becoming empty.
-                        // Or better: create a version where type_params are substituted.
-                        match self.get(base_ty) {
-                            TypeKind::Enum {
-                                name,
-                                variants,
-                                type_params,
-                            } => {
-                                let mut new_vars = Vec::new();
-                                for v in variants {
-                                    new_vars.push(EnumVariantInfo {
-                                        name: v.name.clone(),
-                                        payload: v.payload.map(|p| self.substitute(p, &mapping)),
-                                    });
-                                }
-                                let mut new_tps = Vec::new();
-                                for tp in type_params {
-                                    new_tps.push(self.substitute(tp, &mapping));
-                                }
-                                self.store(TypeKind::Enum {
-                                    name,
-                                    type_params: new_tps,
-                                    variants: new_vars,
-                                })
-                            }
-                            TypeKind::Struct {
-                                name,
-                                fields,
-                                type_params,
-                            } => {
-                                let mut new_fs = Vec::new();
-                                for f in fields {
-                                    new_fs.push(self.substitute(f, &mapping));
-                                }
-                                let mut new_tps = Vec::new();
-                                for tp in type_params {
-                                    new_tps.push(self.substitute(tp, &mapping));
-                                }
-                                self.store(TypeKind::Struct {
-                                    name,
-                                    type_params: new_tps,
-                                    fields: new_fs,
-                                })
-                            }
-                            TypeKind::Function {
-                                params,
-                                result,
-                                effect,
-                                ..
-                            } => {
-                                let mut new_ps = Vec::new();
-                                for p in params {
-                                    new_ps.push(self.substitute(p, &mapping));
-                                }
-                                let new_r = self.substitute(result, &mapping);
-                                self.function(Vec::new(), new_ps, new_r, effect)
-                            }
-                            _ => ty,
-                        }
-                    }
-                    _ => ty,
-                }
             }
             _ => ty,
         }

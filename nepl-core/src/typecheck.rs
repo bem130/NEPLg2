@@ -742,7 +742,7 @@ impl<'a> BlockChecker<'a> {
         }
 
         // Hoist let (non-mut) and nested fn signatures
-        for stmt in &block.items {
+        for (i, stmt) in block.items.iter().enumerate() {
             if let Stmt::Expr(PrefixExpr { items, .. })
             | Stmt::ExprSemi(PrefixExpr { items, .. }, _) = stmt
             {
@@ -1573,6 +1573,30 @@ impl<'a> BlockChecker<'a> {
                     EnumVariantInfo { name: "true".to_string(), payload: None },
                     EnumVariantInfo { name: "false".to_string(), payload: None },
                 ]),
+                TypeKind::Apply { base, args } => {
+                    let base_ty = self.ctx.resolve(base);
+                    match self.ctx.get(base_ty) {
+                        TypeKind::Enum { type_params, variants, .. } => {
+                            if type_params.len() == args.len() {
+                                let mut mapping = alloc::collections::BTreeMap::new();
+                                for (tp, arg) in type_params.iter().zip(args.iter()) {
+                                    mapping.insert(*tp, *arg);
+                                }
+                                let mut new_vars = Vec::new();
+                                for v in variants {
+                                    new_vars.push(EnumVariantInfo {
+                                        name: v.name.clone(),
+                                        payload: v.payload.map(|p| self.ctx.substitute(p, &mapping)),
+                                    });
+                                }
+                                Some(new_vars)
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    }
+                }
                 _ => None,
             };
             if variants.is_none() {

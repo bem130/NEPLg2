@@ -24,47 +24,22 @@ NEPLG1では様々な機能の共存を図ったが、一度これを廃し、�
 #indent 4
 #target wasi
 
-fn main <()*>()> ():
-    #import "std/stdio"
-    #use std::stdio::*
-    
-    let mut x <i32> 0;
-    
-    while lt x 100:
-        set x add x x;
-        set x:
-            sub x:
-                x
-    
-    <()> print_i32 x;
-    
-    set x sub x 10;
-    print_i32 x;
-    
-    <()> print_i32 if lt x 80 sub x 20 add 20 x;
-    print_i32:
-        <i32> if:
-            cond:
-                lt x 80
-            then:
-                sub x 20
-            else:
-                add 20 x
+#import "std/math"
+#use std::math::*
+#import "std/stdio"
+#use std::stdio::*
 
-#if[target=wasm]
-fn add <(i32,i32)->i32> (a,b):
-    #wasm:
-        local.get $a
-        local.get $b
-        i32.add
-
-#if[target=wasm]
-fn sub <(i32,i32)->i32> (a,b):
-    #wasm:
-        local.get $a
-        local.get $b
-        i32.sub
-
+fn main <()*> ()> ():
+    let mut a <i32> 0;
+    let mut b <i32> 1;
+    let mut i <i32> 0;
+    while lt i 10:
+        print "fib = ";
+        println_i32 a;
+        let mut next add a b;
+        set a b;
+        set b next;
+        set i add i 1;
 ```
 
 

@@ -221,6 +221,7 @@ fn run_tests(args: TestArgs, verbose: bool) -> Result<()> {
 
 fn run_test_file(path: &Path, std_root: &Path, verbose: bool) -> Result<()> {
     let loader = Loader::new(std_root.to_path_buf());
+    println!("[nepl-cli] run_test_file: loading {}", path.display());
     let loaded = match loader.load(&path.to_path_buf()) {
         Ok(l) => l,
         Err(CoreError::Diagnostics(diags)) => {
@@ -239,6 +240,7 @@ fn run_test_file(path: &Path, std_root: &Path, verbose: bool) -> Result<()> {
         }
         Err(e) => return Err(anyhow::anyhow!(e.to_string())),
     };
+    println!("[nepl-cli] compile_module for {}", path.display());
     let artifact = match compile_module(
         loaded.module,
         CompileOptions {
