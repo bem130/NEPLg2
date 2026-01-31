@@ -847,19 +847,6 @@ impl<'a> BlockChecker<'a> {
                 Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => {
                     match self.check_prefix(expr, base_depth, &mut stack) {
                         Some((typed, _dropped_from_prefix)) => {
-                            // Fallback: some layout variants can prevent the usual
-                            // `AssignKind::Let` reduction from marking hoisted
-                            // bindings as defined. If this statement started with
-                            // a `let` symbol, mark the hoisted binding as defined
-                            // now so later uses resolve correctly.
-                            if let Some(PrefixItem::Symbol(Symbol::Let { name, .. })) = expr.items.first() {
-                                if let Some(b) = self.env.lookup_mut(&name.name) {
-                                    std::eprintln!("typecheck: fallback marking defined {}", name.name);
-                                    b.defined = true;
-                                } else {
-                                    std::eprintln!("typecheck: fallback could not find hoisted binding {}", name.name);
-                                }
-                            }
                             let is_last_expr = Some(idx) == last_expr_idx;
                             let mut drop_result = !is_last_expr;
 
@@ -887,33 +874,7 @@ impl<'a> BlockChecker<'a> {
                                 }
                             }
 
-                            // If this statement started with a `let` but reduction
-                            // did not produce a `Let` HIR node, wrap the typed
-                            // expression in a `Let` so the variable is bound in
-                            // the resulting HIR block and codegen can find it.
-                            if let Some(PrefixItem::Symbol(Symbol::Let { name, mutable })) = expr.items.first() {
-                                if !matches!(typed.kind, HirExprKind::Let { .. }) {
-                                    // Update hoisted binding type and mark defined
-                                    if let Some(b) = self.env.lookup_mut(&name.name) {
-                                        b.defined = true;
-                                        b.ty = typed.ty;
-                                    }
-                                    let let_expr = HirExpr {
-                                        ty: self.ctx.unit(),
-                                        kind: HirExprKind::Let {
-                                            name: name.name.clone(),
-                                            mutable: *mutable,
-                                            value: Box::new(typed.clone()),
-                                        },
-                                        span: typed.span,
-                                    };
-                                    lines.push(HirLine {
-                                        expr: let_expr,
-                                        drop_result,
-                                    });
-                                    continue;
-                                }
-                            }
+                            // Previously a fallback was here; lower-let is handled in `check_prefix`
 
                             lines.push(HirLine {
                                 expr: typed,
@@ -1760,10 +1721,10 @@ impl<'a> BlockChecker<'a> {
             }
         }
 
-        let result_expr = if stack.len() == base_depth + 1 {
+        let mut result_expr = if stack.len() == base_depth + 1 {
             stack.last().unwrap().expr.clone()
-        } else if let Some(e) = last_expr {
-            e
+        } else if let Some(ref e) = last_expr {
+            e.clone()
         } else {
             HirExpr {
                 ty: self.ctx.unit(),
@@ -1771,6 +1732,40 @@ impl<'a> BlockChecker<'a> {
                 span: expr.span,
             }
         };
+
+        // If this prefix began with a `let` symbol but reduction did not
+        // produce a `Let` HIR node (e.g. for layout/colon forms), lower it
+        // here: update the hoisted binding, mark it defined, and return a
+        // `Let` expression so downstream codegen sees a stable binding.
+        if let Some(PrefixItem::Symbol(Symbol::Let { name, mutable })) = expr.items.first() {
+            if !matches!(result_expr.kind, HirExprKind::Let { .. }) {
+                // If reduction left only the placeholder `Var(name)` (self-reference),
+                // prefer the last parsed expression as the real RHS. This fixes cases
+                // where layout forms (colon blocks) produce a block/value but the
+                // initial `let` placeholder remains on the stack.
+                let value_expr = match &result_expr.kind {
+                    HirExprKind::Var(n) if n == &name.name => {
+                        if let Some(le) = last_expr.clone() { le } else { result_expr.clone() }
+                    }
+                    _ => result_expr.clone(),
+                };
+
+                if let Some(b) = self.env.lookup_mut(&name.name) {
+                    b.defined = true;
+                    b.ty = value_expr.ty;
+                }
+                let let_expr = HirExpr {
+                    ty: self.ctx.unit(),
+                    kind: HirExprKind::Let {
+                        name: name.name.clone(),
+                        mutable: *mutable,
+                        value: Box::new(value_expr),
+                    },
+                    span: expr.span,
+                };
+                return Some((let_expr, dropped));
+            }
+        }
 
         Some((result_expr, dropped))
     }
@@ -2239,9 +2234,13 @@ impl<'a> BlockChecker<'a> {
                 HirExprKind::Var(n) => n.clone(),
                 _ => "_".to_string(),
             };
-            if let Some(binding_vals) = self.env.lookup(&name).map(|b| (b.ty, b.mutable, b.defined))
-            {
-                let (b_ty, b_mut, b_defined) = binding_vals;
+            // For assignments we must find hoisted (possibly undefined)
+            // bindings as well, so use a mutable lookup that returns
+            // bindings regardless of `defined` state.
+            if let Some(b) = self.env.lookup_mut(&name) {
+                let b_ty = b.ty;
+                let b_mut = b.mutable;
+                let b_defined = b.defined;
                 if let Err(_) = self.ctx.unify(b_ty, args[0].ty) {
                     self.diagnostics.push(Diagnostic::error(
                         "type mismatch in assignment",
@@ -2250,11 +2249,9 @@ impl<'a> BlockChecker<'a> {
                 }
                 match assign {
                     AssignKind::Let => {
-                        if let Some(b) = self.env.lookup_mut(&name) {
-                            b.defined = true;
-                            b.ty = b_ty;
-                            std::eprintln!("typecheck: marking binding defined {}", name);
-                        }
+                        b.defined = true;
+                        b.ty = b_ty;
+                        std::eprintln!("typecheck: marking binding defined {}", name);
                         return Some(StackEntry {
                             ty: self.ctx.unit(),
                             expr: HirExpr {
@@ -2636,8 +2633,11 @@ impl Env {
     }
 
     fn lookup(&self, name: &str) -> Option<&Binding> {
+        // When resolving identifiers for reading, skip hoisted bindings
+        // that are not yet defined. This prevents the RHS of a hoisted
+        // `let` from accidentally seeing the placeholder binding.
         for scope in self.scopes.iter().rev() {
-            if let Some(b) = scope.iter().rev().find(|b| b.name == name) {
+            if let Some(b) = scope.iter().rev().find(|b| b.name == name && b.defined) {
                 return Some(b);
             }
         }
