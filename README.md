@@ -6,19 +6,19 @@ Prefix + off-side rule language targeting WebAssembly. Everything is prefix; blo
 ```neplg2
 #entry main
 #indent 4
+#target wasi
 
 #import "std/math"
 #use std::math::*
 #import "std/stdio"
 #use std::stdio::*
 
-fn main <()*>()> ():
+fn main <()*> ()> ():
     let mut x <i32> 0;
     while lt x 5:
         print "count = ";
-        print_i32 x;
+        println_i32 x;
         set x add x 1;
-    ()
 ```
 
 ## CLI
