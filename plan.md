@@ -200,10 +200,6 @@ if:
     <cond_expr>
     <then_expr>
     <else_expr>
-// 改行 `if <cond_expr>:`では続くcond then elseをインデント付きで改行して記述可能
-if <cond_expr>:
-    <then_expr>
-    <else_expr>
 // cond_expr then_expr else_expr にはそれぞれキーワードを付与可能
 if:
     cond <cond_expr>
@@ -216,14 +212,14 @@ if cond <cond_expr>
     then <then_expr>
     else <else_expr>
 // cond then else に対する `:` は通常の`:`ブロック
-if:
+if: // cond,then,else exprが複数行のときの推奨の書き方
     cond:
         <cond_expr>
     then:
         <then_expr>
     else:
         <else_expr>
-if:
+if: // cond,then,else exprが1行のときの推奨の書き方
     cond <cond_expr>
     then <then_expr>
     else <else_expr>

@@ -48,6 +48,18 @@ fn assert_eq_i32 <(i32,i32)->()> (expected, actual):
         else:
             trap
 
+fn assert_ne <(bool,bool)->()> (a, b):
+    if:
+        cond a
+        then if:
+            cond b
+            then trap
+            else ()
+        else if:
+            cond b
+            then ()
+            else trap
+
 fn assert_str_eq <(str,str)->()> (expected, actual):
     if test_str_eq expected actual:
         ()
