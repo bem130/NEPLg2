@@ -101,3 +101,115 @@ fn main <()->i32> ():
     let v = run_main_i32(src);
     assert_eq!(v, 0);
 }
+
+#[test]
+fn if_c_variant_lt_condition() {
+    let src = r#"
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        lt 1 2
+        10
+        20
+    v
+"#;
+    let v = run_main_i32(src);
+    assert_eq!(v, 10);
+}
+
+#[test]
+fn if_c_variant_block_values() {
+    let src = r#"
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        true
+        add 1 2
+        add 3 4
+    v
+"#;
+    let v = run_main_i32(src);
+    assert_eq!(v, 3);
+}
+
+#[test]
+fn if_c_variant_cond_keyword() {
+    let src = r#"
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        cond lt 2 3
+        7
+        8
+    v
+"#;
+    let v = run_main_i32(src);
+    assert_eq!(v, 7);
+}
+
+#[test]
+fn if_mixed_cond_then_block_else_block() {
+    let src = r#"
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        cond true
+        then:
+            11
+        else:
+            12
+    v
+"#;
+    let v = run_main_i32(src);
+    assert_eq!(v, 11);
+}
+
+#[test]
+fn if_mixed_layout_then_inline_else() {
+    let src = r#"
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        true
+        then:
+            21
+        else 22
+    v
+"#;
+    let v = run_main_i32(src);
+    assert_eq!(v, 21);
+}
+
+#[test]
+fn if_mixed_cond_inline_then_block_else_inline() {
+    let src = r#"
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        cond lt 1 2
+        then:
+            31
+        else 32
+    v
+"#;
+    let v = run_main_i32(src);
+    assert_eq!(v, 31);
+}
