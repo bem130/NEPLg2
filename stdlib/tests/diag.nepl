@@ -10,7 +10,7 @@
 #use std::test::*
 
 fn main <()*> ()> ():
-    # Test kind_str for various error kinds
+    // Test kind_str for various error kinds
     assert str_eq "Failure" kind_str ErrorKind::Failure;
     assert str_eq "OutOfMemory" kind_str ErrorKind::OutOfMemory;
     assert str_eq "IndexOutOfBounds" kind_str ErrorKind::IndexOutOfBounds;

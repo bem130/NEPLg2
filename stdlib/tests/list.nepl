@@ -10,11 +10,11 @@
 #use std::test::*
 
 fn main <()*> ()> ():
-    # Test list_nil
+    // Test list_nil
     let l0 <i32> list_nil<i32>;
     assert_eq_i32 0 list_len<i32> l0;
 
-    # Test list_cons and list_len
+    // Test list_cons and list_len
     let l1 <i32> list_cons<i32> 10 l0;
     assert_eq_i32 1 list_len<i32> l1;
 
@@ -24,7 +24,7 @@ fn main <()*> ()> ():
     let l3 <i32> list_cons<i32> 30 l2;
     assert_eq_i32 3 list_len<i32> l3;
 
-    # Test list_get on valid indices
+    // Test list_get on valid indices
     match list_get<i32> l3 0:
         Option::Some x:
             assert_eq_i32 30 x
@@ -43,14 +43,14 @@ fn main <()*> ()> ():
         Option::None:
             trap;
 
-    # Test list_get on out of bounds
+    // Test list_get on out of bounds
     assert is_none<i32> list_get<i32> l3 3;
     assert is_none<i32> list_get<i32> l3 100;
 
-    # Test list_get on negative index
+    // Test list_get on negative index
     assert is_none<i32> list_get<i32> l3 -1;
 
-    # Test list_head and list_tail
+    // Test list_head and list_tail
     match list_head<i32> l3:
         Option::Some x:
             assert_eq_i32 30 x
@@ -64,7 +64,7 @@ fn main <()*> ()> ():
         Option::None:
             trap;
 
-    # Test list_reverse
+    // Test list_reverse
     let l_rev <i32> list_reverse<i32> l3;
     match list_get<i32> l_rev 0:
         Option::Some x:

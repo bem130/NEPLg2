@@ -8,20 +8,20 @@
 #use std::test::*
 
 fn main <()*> ()> ():
-    # Test error_new
+    // Test error_new
     let e1 error_new ErrorKind::Failure "test failure";
-    # We can only validate by not crashing
+    // We can only validate by not crashing
 
-    # Test error_new with OutOfMemory
+    // Test error_new with OutOfMemory
     let e2 error_new ErrorKind::OutOfMemory "ran out of memory";
-    # Basic smoke test to ensure it doesn't trap
+    // Basic smoke test to ensure it doesn't trap
 
-    # Test error_new with other kinds
+    // Test error_new with other kinds
     let e3 error_new ErrorKind::ParseError "parse error";
     let e4 error_new ErrorKind::IoError "io failed";
     let e5 error_new ErrorKind::IndexOutOfBounds "index out of range";
 
-    # Just ensure we can create errors without crashing
+    // Just ensure we can create errors without crashing
     assert true;
 
     ()

@@ -12,11 +12,11 @@
 #use std::test::*
 
 fn main <()*> ()> ():
-    # Test stack_new
+    // Test stack_new
     let s stack_new<.i32>;
     assert_eq_i32 0 stack_len<.i32> s;
 
-    # Test stack_push and stack_len
+    // Test stack_push and stack_len
     stack_push<.i32> s 100;
     assert_eq_i32 1 stack_len<.i32> s;
 
@@ -26,17 +26,17 @@ fn main <()*> ()> ():
     stack_push<.i32> s 300;
     assert_eq_i32 3 stack_len<.i32> s;
 
-    # Test stack_peek (top element without removing)
+    // Test stack_peek (top element without removing)
     match stack_peek<.i32> s:
         Option::Some x:
             assert_eq_i32 300 x
         Option::None:
             trap;
 
-    # stack_len should still be 3 after peek
+    // stack_len should still be 3 after peek
     assert_eq_i32 3 stack_len<.i32> s;
 
-    # Test stack_pop (remove top element)
+    // Test stack_pop (remove top element)
     match stack_pop<.i32> s:
         Option::Some x:
             assert_eq_i32 300 x
@@ -45,14 +45,14 @@ fn main <()*> ()> ():
 
     assert_eq_i32 2 stack_len<.i32> s;
 
-    # Test stack_pop again
+    // Test stack_pop again
     match stack_pop<.i32> s:
         Option::Some x:
             assert_eq_i32 200 x
         Option::None:
             trap;
 
-    # Test stack_pop on empty should return None
+    // Test stack_pop on empty should return None
     match stack_pop<.i32> s:
         Option::Some x:
             assert_eq_i32 100 x
