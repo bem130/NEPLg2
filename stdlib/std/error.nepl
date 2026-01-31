@@ -1,0 +1,55 @@
+#indent 4
+
+#import "std/mem"
+#use std::mem::*
+#import "std/option"
+#use std::option::*
+#import "std/result"
+#use std::result::*
+
+enum ErrorKind:
+    Failure
+    OutOfMemory
+    IndexOutOfBounds
+    KeyNotFound
+    InvalidUtf8
+    ParseError
+    IoError
+    Other
+
+struct Span:
+    file_id <i32>
+    start <i32>
+    end <i32>
+
+struct Error:
+    kind <ErrorKind>
+    msg <str>
+    span <Option<Span>>
+    source <Option<Error>>
+
+fn callsite_span <()->Span> ():
+    #intrinsic "callsite_span" <Span> ()
+
+fn error_new <(ErrorKind,str)->Error> (kind, msg):
+    Error kind msg none<Span> none<Error>
+
+fn error_with_span <(Error,Span)->Error> (e, sp):
+    Error e.kind e.msg some<Span> sp e.source
+
+fn error_with_source <(Error,Error)->Error> (outer, inner):
+    Error outer.kind outer.msg outer.span some<Error> inner
+
+fn fail <(str)->Error> (msg):
+    error_with_span (error_new ErrorKind::Failure msg) (callsite_span())
+
+fn context <(Error,str)->Error> (cause, msg):
+    let outer <Error> error_with_span (error_new ErrorKind::Other msg) (callsite_span())
+    error_with_source outer cause
+
+fn result_context <.T> <(Result<.T, Error>, str)->Result<.T, Error>> (r, msg):
+    match r:
+        Result::Ok v:
+            ok<.T, Error> v
+        Result::Err e:
+            err<.T, Error> context e msg

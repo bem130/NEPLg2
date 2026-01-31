@@ -1210,6 +1210,14 @@ impl<'a> BlockChecker<'a> {
                         }
                     } else if intrin.name == "store" {
                          self.ctx.unit()
+                    } else if intrin.name == "callsite_span" {
+                        if type_args.len() == 1 {
+                            type_args[0]
+                        } else {
+                            self.diagnostics
+                                .push(Diagnostic::error("callsite_span expects 1 type arg", *sp));
+                            self.ctx.unit()
+                        }
                     } else if intrin.name == "unreachable" {
                          self.ctx.never()
                     } else {

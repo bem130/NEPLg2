@@ -157,3 +157,38 @@
 # 2026-01-31 作業メモ (テスト側の std/mem 明示)
 - enum/struct/tuple を使うテストソースに `std/mem` の import を追加し、`alloc` が解決される前提を明確化した。
 - `move_check` テストは Loader 経由で compile するように変更し、`#import` を解決できるようにした。
+
+# 2026-01-31 作業メモ (標準エラー/診断の追加)
+- `std/error` と `std/diag` を追加し、`ErrorKind`/`Error`/`Span` と簡易レポート生成を用意した。
+- `callsite_span` の intrinsic を追加し、エラーに呼び出し位置を付与できるようにした。
+- `std/string` に `concat`/`concat3` を追加し、診断文字列生成の最低限を実装した。
+
+# 2026-01-31 作業メモ (WASI エントリポイント対応)
+- codegen_wasm で entry 関数が指定されている場合、その関数を `_start` という名前でも export するようにした。
+- これにより `wasmer run a.wasm` / `wasmtime run a.wasm` で WASI コンプライアンスに従い直接実行可能に。
+- README.md に外部 WASI ランタイム（wasmtime/wasmer）での実行方法を追加。
+
+# 2026-01-31 作業メモ (数値演算の完全化)
+- stdlib/std/math.nepl を全面拡張し、i32/i64/f32/f64 のすべての演算機能を提供。
+- **算術演算**：add/sub/mul/div_s/div_u/rem_s/rem_u（すべての型で符号別に提供）
+- **ビット演算**：and/or/xor/shl/shr_s/shr_u/rotl/rotr/clz/ctz/popcnt（整数型のみ）
+- **浮動小数点特有**：sqrt/abs/neg/ceil/floor/trunc/nearest/min/max/copysign（f32/f64）
+- **型変換**：i32/i64 <-> f32/f64、符号付き/符号なし対応、飽和変換（trunc_sat）
+- **ビット再解釈**：reinterpret_i32/f32/i64/f64
+- 後方互換性のため、i32 のみの alias 関数（add/sub/mul/div_s/lt/eq など）を提供。
+
+# 2026-01-31 作業メモ (stdlib テストの充実化)
+- stdlib/tests に新規テストファイルを追加：option.nepl/cast.nepl/vec.nepl/stack.nepl/error.nepl/diag.nepl
+- 既存テストを拡張：math/string/result/list の各テストカバレッジを大幅増加。
+- テスト対象：
+  - **option**: is_some/is_none/unwrap/unwrap_or
+  - **cast**: bool↔i32 変換
+  - **vec**: vec_new/push/get/capacity/is_empty
+  - **stack**: stack_new/push/pop/peek/len
+  - **error**: error_new/各種 ErrorKind
+  - **diag**: kind_str（ErrorKind → 文字列）
+  - **math**: i32/i64 の全演算+ビット演算、浮動小数点操作
+  - **string**: len/concat/str_eq/from_i32 の拡張テスト
+  - **result**: ok/err/is_ok/is_err/unwrap_or
+  - **list**: cons/nil/get/head/tail/reverse/len
+

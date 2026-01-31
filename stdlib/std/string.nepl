@@ -13,6 +13,28 @@
 fn len <(str)->i32> (s):
     load_i32 s
 
+fn concat <(str,str)*>str> (a,b):
+    let la <i32> load_i32 a;
+    let lb <i32> load_i32 b;
+    let total <i32> add la lb;
+    let out <i32> alloc add 4 total;
+    store_i32 out total;
+    let mut i <i32> 0;
+    while lt i la:
+        let ch <i32> load_u8 add a add 4 i;
+        store_u8 add out add 4 i ch;
+        set i add i 1;
+    let mut j <i32> 0;
+    while lt j lb:
+        let ch <i32> load_u8 add b add 4 j;
+        store_u8 add out add 4 add la j ch;
+        set j add j 1;
+    out
+
+fn concat3 <(str,str,str)*>str> (a,b,c):
+    let ab <str> concat a b;
+    concat ab c
+
 fn str_eq <(str,str)->bool> (a,b):
     let la <i32> load_i32 a;
     let lb <i32> load_i32 b;

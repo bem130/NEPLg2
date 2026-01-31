@@ -8,10 +8,41 @@
 #use std::test::*
 
 fn main <()*> ()> ():
-    let s "abc";
-    assert_eq_i32 3 len s;
-    let t from_i32 1234;
-    assert_eq_i32 4 len t;
-    assert str_eq "hi" "hi";
+    # Test len with literals
+    assert_eq_i32 3 len "abc";
+    assert_eq_i32 0 len "";
+    assert_eq_i32 5 len "hello";
+
+    # Test str_eq with same strings
+    assert str_eq "hello" "hello";
     assert str_eq "" "";
+    assert str_eq "a" "a";
+
+    # Test str_eq with different strings
+    assert_ne true str_eq "hello" "world";
+    assert_ne true str_eq "a" "b";
+    assert_ne true str_eq "abc" "ab";
+
+    # Test from_i32
+    let s0 from_i32 0;
+    assert_eq_i32 1 len s0;
+
+    let s1234 from_i32 1234;
+    assert_eq_i32 4 len s1234;
+
+    let s42 from_i32 42;
+    assert_eq_i32 2 len s42;
+
+    # Test concat (basic strings)
+    let hello "hello";
+    let world "world";
+    let greeting concat hello world;
+    assert_eq_i32 10 len greeting;
+
+    # Test concat with empty strings
+    let empty "";
+    let test concat empty "test";
+    assert_eq_i32 4 len test;
+
     ()
+

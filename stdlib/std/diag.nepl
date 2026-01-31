@@ -1,0 +1,75 @@
+#indent 4
+
+#import "std/error"
+#use std::error::*
+#import "std/option"
+#use std::option::*
+#import "std/string"
+#use std::string::*
+
+fn kind_str <(ErrorKind)->str> (k):
+    match k:
+        ErrorKind::Failure:
+            "Failure"
+        ErrorKind::OutOfMemory:
+            "OutOfMemory"
+        ErrorKind::IndexOutOfBounds:
+            "IndexOutOfBounds"
+        ErrorKind::KeyNotFound:
+            "KeyNotFound"
+        ErrorKind::InvalidUtf8:
+            "InvalidUtf8"
+        ErrorKind::ParseError:
+            "ParseError"
+        ErrorKind::IoError:
+            "IoError"
+        ErrorKind::Other:
+            "Other"
+
+fn span_to_string <(Span)*>str> (sp):
+    let fid <str> from_i32 sp.file_id;
+    let s <str> from_i32 sp.start;
+    let e <str> from_i32 sp.end;
+    let t0 <str> concat fid ":";
+    let t1 <str> concat t0 s;
+    let t2 <str> concat t1 "-";
+    concat t2 e
+
+fn diag_to_string <(Error)*>str> (e):
+    let k <str> kind_str e.kind;
+    let h0 <str> concat "error[" k;
+    let h1 <str> concat h0 "]: ";
+    let h2 <str> concat h1 e.msg;
+    let mut out <str> concat h2 "\n";
+
+    match e.span:
+        Option::Some sp:
+            let loc <str> span_to_string sp;
+            let l0 <str> concat "at " loc;
+            let l1 <str> concat l0 "\n";
+            set out concat out l1;
+        Option::None:
+            ()
+
+    match e.source:
+        Option::Some src:
+            let src_str <str> diag_to_string src;
+            let p0 <str> concat "caused by: " src_str;
+            set out concat out p0;
+        Option::None:
+            ()
+    out
+
+#if[target=wasi]
+#import "std/stdio"
+#use std::stdio::*
+
+#if[target=wasi]
+fn diag_print <(Error)*>()> (e):
+    let s <str> diag_to_string e;
+    print s
+
+#if[target=wasi]
+fn diag_println <(Error)*>()> (e):
+    let s <str> diag_to_string e;
+    println s

@@ -702,6 +702,52 @@ fn gen_expr(
                     }
                     _ => None,
                 }
+            } else if name == "callsite_span" {
+                let size = 12;
+                insts.push(Instruction::I32Const(size));
+                if let Some(idx) = name_map.get("alloc") {
+                    insts.push(Instruction::Call(*idx));
+                } else {
+                    diags.push(Diagnostic::error(
+                        "alloc function not found (import std/mem)",
+                        expr.span,
+                    ));
+                    return None;
+                }
+                let ptr_local = locals.alloc_temp(ValType::I32);
+                insts.push(Instruction::LocalTee(ptr_local));
+
+                // file_id
+                insts.push(Instruction::LocalGet(ptr_local));
+                insts.push(Instruction::I32Const(expr.span.file_id.0 as i32));
+                insts.push(Instruction::I32Store(MemArg {
+                    offset: 0,
+                    align: 2,
+                    memory_index: 0,
+                }));
+                // start
+                insts.push(Instruction::LocalGet(ptr_local));
+                insts.push(Instruction::I32Const(4));
+                insts.push(Instruction::I32Add);
+                insts.push(Instruction::I32Const(expr.span.start as i32));
+                insts.push(Instruction::I32Store(MemArg {
+                    offset: 0,
+                    align: 2,
+                    memory_index: 0,
+                }));
+                // end
+                insts.push(Instruction::LocalGet(ptr_local));
+                insts.push(Instruction::I32Const(8));
+                insts.push(Instruction::I32Add);
+                insts.push(Instruction::I32Const(expr.span.end as i32));
+                insts.push(Instruction::I32Store(MemArg {
+                    offset: 0,
+                    align: 2,
+                    memory_index: 0,
+                }));
+
+                insts.push(Instruction::LocalGet(ptr_local));
+                Some(ValType::I32)
             } else if name == "unreachable" {
                 insts.push(Instruction::Unreachable);
                 None

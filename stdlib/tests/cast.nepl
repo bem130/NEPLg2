@@ -1,0 +1,20 @@
+#entry main
+#indent 4
+#target wasi
+
+#import "std/cast"
+#use std::cast::*
+#import "std/test"
+#use std::test::*
+
+fn main <()*> ()> ():
+    # Test bool to i32 conversion
+    assert_eq_i32 1 cast_bool_to_i32 true;
+    assert_eq_i32 0 cast_bool_to_i32 false;
+
+    # Test i32 to bool conversion
+    assert cast_i32_to_bool 1;
+    assert cast_i32_to_bool 42;
+    assert_ne true cast_i32_to_bool 0;
+
+    ()

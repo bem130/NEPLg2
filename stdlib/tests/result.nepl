@@ -8,13 +8,32 @@
 #use std::test::*
 
 fn main <() -> ()> ():
+    # Test ok and is_ok
     let r1 <Result<i32,i32>> ok<i32,i32> 5;
-    assert_ok_i32 r1;
-    let r2 <Result<i32,i32>> ok<i32,i32> 5;
-    assert_eq_i32 5 unwrap_or<i32,i32> r2 0;
+    assert is_ok<i32,i32> r1;
+    assert_ne true is_err<i32,i32> r1;
 
+    # Test ok with unwrap_or
+    let r2 <Result<i32,i32>> ok<i32,i32> 10;
+    assert_eq_i32 10 unwrap_or<i32,i32> r2 0;
+
+    # Test multiple ok values
+    let r3 <Result<i32,i32>> ok<i32,i32> 42;
+    assert is_ok<i32,i32> r3;
+
+    # Test err and is_err
     let e1 <Result<i32,i32>> err<i32,i32> 7;
-    assert_err_i32 e1;
-    let e2 <Result<i32,i32>> err<i32,i32> 7;
+    assert is_err<i32,i32> e1;
+    assert_ne true is_ok<i32,i32> e1;
+
+    # Test err with unwrap_or (returns default)
+    let e2 <Result<i32,i32>> err<i32,i32> 99;
     assert_eq_i32 9 unwrap_or<i32,i32> e2 9;
+
+    # Test multiple err values
+    let e3 <Result<i32,i32>> err<i32,i32> 123;
+    assert is_err<i32,i32> e3;
+    assert_eq_i32 50 unwrap_or<i32,i32> e3 50;
+
     ()
+
