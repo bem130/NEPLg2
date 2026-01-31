@@ -1,6 +1,0 @@
-#import "std/stdio"
-#use std::stdio::*
-#entry "main"
-
-fn main <()*>()> ():
-    print "Hello stdlib\n"

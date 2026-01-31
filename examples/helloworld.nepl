@@ -1,0 +1,7 @@
+#entry main
+#target wasi
+
+#import "std/stdio"
+
+fn main <()*>()> ():
+    println "Hello World!";
