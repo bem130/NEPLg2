@@ -7,6 +7,8 @@ fn if_a_returns_expected() {
 #entry main
 #indent 4
 #target wasm
+    #import "std/math"
+    #use std::math::*
 
 fn main <()->i32> ():
     let a <i32> if true 0 1;
@@ -22,6 +24,8 @@ fn if_b_returns_expected() {
 #entry main
 #indent 4
 #target wasm
+    #import "std/math"
+    #use std::math::*
 
 fn main <()->i32> ():
     let b <i32> if true then 0 else 1;
@@ -37,6 +41,8 @@ fn if_c_returns_expected() {
 #entry main
 #indent 4
 #target wasm
+    #import "std/math"
+    #use std::math::*
 
 fn main <()->i32> ():
     let c <i32> if:
@@ -55,6 +61,8 @@ fn if_d_returns_expected() {
 #entry main
 #indent 4
 #target wasm
+    #import "std/math"
+    #use std::math::*
 
 fn main <()->i32> ():
     let d <i32> if:
@@ -73,6 +81,8 @@ fn if_e_returns_expected() {
 #entry main
 #indent 4
 #target wasm
+    #import "std/math"
+    #use std::math::*
 
 fn main <()->i32> ():
     let e <i32> if:
@@ -93,6 +103,8 @@ fn if_f_returns_expected() {
 #entry main
 #indent 4
 #target wasm
+    #import "std/math"
+    #use std::math::*
 
 fn main <()->i32> ():
     let f <i32> if true 0 if true 1 2;
@@ -108,6 +120,8 @@ fn if_c_variant_lt_condition() {
 #entry main
 #indent 4
 #target wasm
+    #import "std/math"
+    #use std::math::*
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -126,6 +140,8 @@ fn if_c_variant_block_values() {
 #entry main
 #indent 4
 #target wasm
+#import "std/math"
+#use std::math::*
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -144,6 +160,8 @@ fn if_c_variant_cond_keyword() {
 #entry main
 #indent 4
 #target wasm
+#import "std/math"
+#use std::math::*
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -162,6 +180,8 @@ fn if_mixed_cond_then_block_else_block() {
 #entry main
 #indent 4
 #target wasm
+#import "std/math"
+#use std::math::*
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -182,6 +202,8 @@ fn if_mixed_layout_then_inline_else() {
 #entry main
 #indent 4
 #target wasm
+#import "std/math"
+#use std::math::*
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -201,6 +223,8 @@ fn if_mixed_cond_inline_then_block_else_inline() {
 #entry main
 #indent 4
 #target wasm
+#import "std/math"
+#use std::math::*
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -220,6 +244,8 @@ fn if_inline_false_returns_expected() {
 #entry main
 #indent 4
 #target wasm
+#import "std/math"
+#use std::math::*
 
 fn main <()->i32> ():
     let x <i32> if false 0 1;
@@ -235,6 +261,8 @@ fn if_block_false_returns_expected() {
 #entry main
 #indent 4
 #target wasm
+#import "std/math"
+#use std::math::*
 
 fn main <()->i32> ():
     let x <i32> if:
@@ -253,6 +281,8 @@ fn if_mixed_cond_false_then_block_else_inline() {
 #entry main
 #indent 4
 #target wasm
+#import "std/math"
+#use std::math::*
 
 fn main <()->i32> ():
     let x <i32> if:

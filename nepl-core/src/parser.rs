@@ -1515,16 +1515,40 @@ impl Parser {
             let mut is_marker = false;
             if let Stmt::Expr(e) = &stmt {
                 let mut e_copy = e.clone();
-                if let Some(role) = Self::take_role_from_expr(&mut e_copy) {
+                let role_opt = Self::take_role_from_expr(&mut e_copy);
+                if role_opt.is_none() {
+                    // Help debugging: emit warning if a potential marker was expected but not detected.
+                    if let Some(first) = e.items.first() {
+                        let lbl = match first {
+                            PrefixItem::Symbol(sym) => match sym {
+                                Symbol::Ident(id, _) => id.name.clone(),
+                                Symbol::If(_) => "<if>".to_string(),
+                                Symbol::Let { name, .. } => name.name.clone(),
+                                _ => "<sym>".to_string(),
+                            },
+                            PrefixItem::Literal(_, _) => "<lit>".to_string(),
+                            PrefixItem::Block(_, _) => "<block>".to_string(),
+                            _ => "<other>".to_string(),
+                        };
+                        self.diagnostics.push(Diagnostic::warning(alloc::format!("take_role_from_expr did not detect marker; first_item={} items_count={}", lbl, e.items.len()), e.span));
+                    }
+                }
+                if let Some(role) = role_opt {
                     // It's a marker! Finish previous branch if not empty.
                     if !current_branch.is_empty() || current_role.is_some() {
                         branches.push((current_role, current_branch));
                     }
+                    // Start a new branch for this role.
                     current_role = Some(role);
                     current_branch = Vec::new();
-                    // If there was something else on the marker line, add it as the first item of the branch.
+                    // If there was something else on the marker line, treat that as
+                    // the complete expression for this branch (push immediately).
                     if !e_copy.items.is_empty() {
-                         current_branch.push(Stmt::Expr(e_copy));
+                        current_branch.push(Stmt::Expr(e_copy));
+                        branches.push((current_role, current_branch));
+                        // reset for following positional branches
+                        current_role = None;
+                        current_branch = Vec::new();
                     }
                     is_marker = true;
                 }
@@ -1537,8 +1561,36 @@ impl Parser {
             branches.push((current_role, current_branch));
         }
 
+        // Debug: show roles discovered in branches
+        {
+            let mut roles_desc = alloc::string::String::new();
+            for (r, stmts) in &branches {
+                if !roles_desc.is_empty() { roles_desc.push_str(", "); }
+                match r {
+                    Some(IfRole::Cond) => roles_desc.push_str("Cond"),
+                    Some(IfRole::Then) => roles_desc.push_str("Then"),
+                    Some(IfRole::Else) => roles_desc.push_str("Else"),
+                    None => roles_desc.push_str("Positional"),
+                }
+                roles_desc.push_str(alloc::format!("(stmts={})", stmts.len()).as_str());
+            }
+            self.diagnostics.push(Diagnostic::warning(alloc::format!("if-layout branches: {}", roles_desc), header_span));
+        }
+
+        // Expand branches so that positional groups with multiple statements are
+        // split into separate positional branches (one stmt -> one branch).
+        let mut expanded: Vec<(Option<IfRole>, Vec<Stmt>)> = Vec::new();
+        for (role, stmts) in branches {
+            if role.is_some() {
+                expanded.push((role, stmts));
+            } else {
+                for s in stmts {
+                    expanded.push((None, vec![s]));
+                }
+            }
+        }
+
         // Assign to slots: positional first, then fill by role.
-        // Wait, if markers are used, we follow markers.
         // If NO markers are used, we expect exactly `expected` branches and they map positionally.
         let mut slots: Vec<Option<PrefixExpr>> = vec![None; expected];
         
@@ -1554,7 +1606,7 @@ impl Parser {
         };
 
         let mut next_unfilled = 0usize;
-        for (role, stmts) in branches {
+        for (role, stmts) in expanded {
             // Convert statements into a single PrefixExpr (wrapped in Block if multiple)
             let expr = if stmts.len() == 1 {
                 if let Stmt::Expr(e) = stmts.into_iter().next().unwrap() {
