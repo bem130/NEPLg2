@@ -1,4 +1,4 @@
-name: Rust Wasm Tests (NEPL-g2)
+name: Rust Compile Tests (NEPL-g2)
 
 on:
     push:
