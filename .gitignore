@@ -3,3 +3,4 @@
 /web/vendor
 /tmp
 /*.wasm
+/*.wat
