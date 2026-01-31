@@ -128,9 +128,6 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
 
     match &expr.kind {
         HirExprKind::Var(name) => {
-            if name == "x" {
-                // println!("DEBUG: checking x at {:?}, state is {:?}", expr.span, ctx.get_state(name));
-            }
             ctx.check_use(name, expr.span, is_copy);
         }
         HirExprKind::Call { callee, args } => match callee {
@@ -303,7 +300,51 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
                 visit_expr(item, ctx, tctx);
             }
         }
-        _ => {}
+        HirExprKind::Intrinsic { args, .. } => {
+            for arg in args {
+                visit_expr(arg, ctx, tctx);
+            }
+        }
+        HirExprKind::AddrOf(inner) => {
+            visit_borrow(inner, ctx, tctx);
+        }
+        HirExprKind::Deref(inner) => {
+            visit_expr(inner, ctx, tctx);
+        }
+        HirExprKind::Drop { .. } => {}
+        HirExprKind::LiteralI32(_)
+        | HirExprKind::LiteralF32(_)
+        | HirExprKind::LiteralBool(_)
+        | HirExprKind::LiteralStr(_)
+        | HirExprKind::Unit => {}
+    }
+}
+
+fn visit_borrow(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::TypeCtx) {
+    match &expr.kind {
+        HirExprKind::Var(name) => match ctx.get_state(name) {
+            Some(VarState::Valid) => {
+                // Borrow is OK, value stays Valid.
+            }
+            Some(VarState::Moved) => {
+                ctx.diagnostics.push(Diagnostic::error(
+                    alloc::format!("borrow of moved value: `{}`", name),
+                    expr.span,
+                ));
+            }
+            Some(VarState::PossiblyMoved) => {
+                ctx.diagnostics.push(Diagnostic::error(
+                    alloc::format!("borrow of potentially moved value: `{}`", name),
+                    expr.span,
+                ));
+            }
+            None => {}
+        },
+        HirExprKind::Deref(inner) => {
+            // Re-borrowing a dereference. Still a borrow.
+            visit_borrow(inner, ctx, tctx);
+        }
+        _ => visit_expr(expr, ctx, tctx),
     }
 }
 

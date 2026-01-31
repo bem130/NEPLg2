@@ -243,6 +243,8 @@ impl<'a> Monomorphizer<'a> {
             HirExprKind::Block(b) => self.substitute_block(b, mapping),
             HirExprKind::Let { value, .. } => self.substitute_expr(value, mapping),
             HirExprKind::Set { value, .. } => self.substitute_expr(value, mapping),
+            HirExprKind::AddrOf(inner) => self.substitute_expr(inner, mapping),
+            HirExprKind::Deref(inner) => self.substitute_expr(inner, mapping),
             HirExprKind::Drop { .. } => {}
             HirExprKind::Intrinsic {
                 type_args,

@@ -1,0 +1,8 @@
+#target wasi
+#indent 4
+
+fn main <()*>()>():
+    let x 42;
+    let r &x;
+    let val *r;
+    ()

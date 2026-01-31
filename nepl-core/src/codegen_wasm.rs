@@ -375,6 +375,7 @@ fn valtype(kind: &TypeKind) -> Option<ValType> {
         TypeKind::Enum { .. } | TypeKind::Struct { .. } | TypeKind::Tuple { .. } => {
             Some(ValType::I32)
         }
+        TypeKind::Reference(_, _) | TypeKind::Box(_) => Some(ValType::I32),
         TypeKind::Named(name) => match name.as_str() {
             "i64" => Some(ValType::I64),
             "f64" => Some(ValType::F64),
@@ -1048,12 +1049,17 @@ fn gen_expr(
             }
             None
         }
-        HirExprKind::Drop { name: _ } => {
+        HirExprKind::Drop { .. } => {
             // For now, Drop is a no-op at the wasm level.
-            // In the future, this will call the allocator's dealloc function
-            // for heap-owned types (Box, Vec, String, etc.).
-            // Currently, we just discard the value.
             None
+        }
+        HirExprKind::AddrOf(inner) => {
+            gen_expr(ctx, inner, name_map, strings, locals, insts, diags);
+            valtype(&ctx.get(expr.ty))
+        }
+        HirExprKind::Deref(inner) => {
+            gen_expr(ctx, inner, name_map, strings, locals, insts, diags);
+            valtype(&ctx.get(expr.ty))
         }
     }
 }

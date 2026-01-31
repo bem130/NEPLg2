@@ -128,6 +128,8 @@ pub enum HirExprKind {
         type_args: Vec<TypeId>,
         args: Vec<HirExpr>,
     },
+    AddrOf(Box<HirExpr>),
+    Deref(Box<HirExpr>),
     Drop {
         name: String,
     },

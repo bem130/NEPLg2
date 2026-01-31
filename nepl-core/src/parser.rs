@@ -834,6 +834,14 @@ impl Parser {
                         type_args,
                     )));
                 }
+                TokenKind::Ampersand => {
+                    let span = self.next().unwrap().span;
+                    items.push(PrefixItem::Symbol(Symbol::AddrOf(span)));
+                }
+                TokenKind::Star => {
+                    let span = self.next().unwrap().span;
+                    items.push(PrefixItem::Symbol(Symbol::Deref(span)));
+                }
                 _ => {
                     let span = self.peek_span().unwrap_or_else(Span::dummy);
                     self.diagnostics
@@ -860,6 +868,8 @@ impl Parser {
                         Symbol::While(_) => alloc::format!("While"),
                         Symbol::Let { .. } => alloc::format!("Let"),
                         Symbol::Set { .. } => alloc::format!("Set"),
+                        Symbol::AddrOf(_) => alloc::format!("AddrOf"),
+                        Symbol::Deref(_) => alloc::format!("Deref"),
                     },
                     PrefixItem::Literal(_, _) => alloc::format!("Literal"),
                     PrefixItem::Block(_, _) => alloc::format!("Block"),
@@ -1151,6 +1161,14 @@ impl Parser {
                         type_args,
                     )));
                 }
+                TokenKind::Ampersand => {
+                    let span = self.next().unwrap().span;
+                    items.push(PrefixItem::Symbol(Symbol::AddrOf(span)));
+                }
+                TokenKind::Star => {
+                    let span = self.next().unwrap().span;
+                    items.push(PrefixItem::Symbol(Symbol::Deref(span)));
+                }
                 _ => {
                     let span = self.peek_span().unwrap_or_else(Span::dummy);
                     self.diagnostics
@@ -1357,6 +1375,14 @@ impl Parser {
                 TokenKind::KwWhile => {
                     let span = self.next().unwrap().span;
                     items.push(PrefixItem::Symbol(Symbol::While(span)));
+                }
+                TokenKind::Ampersand => {
+                    let span = self.next().unwrap().span;
+                    items.push(PrefixItem::Symbol(Symbol::AddrOf(span)));
+                }
+                TokenKind::Star => {
+                    let span = self.next().unwrap().span;
+                    items.push(PrefixItem::Symbol(Symbol::Deref(span)));
                 }
                 _ => {
                     let span = self.peek_span().unwrap_or_else(Span::dummy);
@@ -1869,6 +1895,8 @@ impl Parser {
             PrefixItem::Symbol(Symbol::Set { name }) => name.span,
             PrefixItem::Symbol(Symbol::If(sp)) => *sp,
             PrefixItem::Symbol(Symbol::While(sp)) => *sp,
+            PrefixItem::Symbol(Symbol::AddrOf(sp)) => *sp,
+            PrefixItem::Symbol(Symbol::Deref(sp)) => *sp,
             PrefixItem::TypeAnnotation(_, sp) => *sp,
             PrefixItem::Block(_, sp) => *sp,
             PrefixItem::Match(_, sp) => *sp,

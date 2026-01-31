@@ -245,6 +245,27 @@ fn main <()->i32> ():
 }
 
 #[test]
+fn plan_if_colon_form_with_then_else_keywords() {
+    // plan.md: `if:` plus optional then/else keywords.
+    let src = r#"
+#entry main
+#indent 4
+#target wasm
+#import "std/math"
+#use std::math::*
+
+fn main <()->i32> ():
+    if:
+        lt 1 2
+        then 10
+        else 20
+"#;
+
+    let v = run_main_i32(src);
+    assert_eq!(v, 10);
+}
+
+#[test]
 fn plan_if_nested_inline_forms() {
     // plan.md: nested if in expression position (prefix nesting)
     //

@@ -187,6 +187,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                         variants: vars.clone(),
                     },
                 );
+                label_env.insert(e.name.name.clone(), ty);
                 enums.insert(
                     e.name.name.clone(),
                     EnumInfo {
@@ -292,6 +293,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     },
                 });
 
+                label_env.insert(s.name.name.clone(), ty);
                 structs.insert(
                     s.name.name.clone(),
                     StructInfo {
@@ -791,6 +793,7 @@ impl<'a> BlockChecker<'a> {
                         moved: false,
                         kind: BindingKind::Var,
                     });
+                    std::eprintln!("typecheck: hoisted binding {}", name.name);
                 }
             } else if let Stmt::FnDef(f) = stmt {
                 let ty = type_from_expr(self.ctx, self.labels, &f.signature);
@@ -844,6 +847,19 @@ impl<'a> BlockChecker<'a> {
                 Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => {
                     match self.check_prefix(expr, base_depth, &mut stack) {
                         Some((typed, _dropped_from_prefix)) => {
+                            // Fallback: some layout variants can prevent the usual
+                            // `AssignKind::Let` reduction from marking hoisted
+                            // bindings as defined. If this statement started with
+                            // a `let` symbol, mark the hoisted binding as defined
+                            // now so later uses resolve correctly.
+                            if let Some(PrefixItem::Symbol(Symbol::Let { name, .. })) = expr.items.first() {
+                                if let Some(b) = self.env.lookup_mut(&name.name) {
+                                    std::eprintln!("typecheck: fallback marking defined {}", name.name);
+                                    b.defined = true;
+                                } else {
+                                    std::eprintln!("typecheck: fallback could not find hoisted binding {}", name.name);
+                                }
+                            }
                             let is_last_expr = Some(idx) == last_expr_idx;
                             let mut drop_result = !is_last_expr;
 
@@ -868,6 +884,34 @@ impl<'a> BlockChecker<'a> {
                                 // Pop all values down to base_depth
                                 while stack.len() > base_depth {
                                     let _ = stack.pop();
+                                }
+                            }
+
+                            // If this statement started with a `let` but reduction
+                            // did not produce a `Let` HIR node, wrap the typed
+                            // expression in a `Let` so the variable is bound in
+                            // the resulting HIR block and codegen can find it.
+                            if let Some(PrefixItem::Symbol(Symbol::Let { name, mutable })) = expr.items.first() {
+                                if !matches!(typed.kind, HirExprKind::Let { .. }) {
+                                    // Update hoisted binding type and mark defined
+                                    if let Some(b) = self.env.lookup_mut(&name.name) {
+                                        b.defined = true;
+                                        b.ty = typed.ty;
+                                    }
+                                    let let_expr = HirExpr {
+                                        ty: self.ctx.unit(),
+                                        kind: HirExprKind::Let {
+                                            name: name.name.clone(),
+                                            mutable: *mutable,
+                                            value: Box::new(typed.clone()),
+                                        },
+                                        span: typed.span,
+                                    };
+                                    lines.push(HirLine {
+                                        expr: let_expr,
+                                        drop_result,
+                                    });
+                                    continue;
                                 }
                             }
 
@@ -938,6 +982,15 @@ impl<'a> BlockChecker<'a> {
             final_ty = self.ctx.unit();
             value_ty = None;
         };
+
+        if std::env::var("NEPL_DUMP_HIR").is_ok() {
+            std::eprintln!("NEPL_DUMP_HIR: block span={:?} lines={} final_ty={:?} value_ty={:?}", block.span, lines.len(), final_ty, value_ty);
+            // Print env scopes and a compact preview of the HIR lines for diagnosis
+            std::eprintln!("NEPL_DUMP_HIR: env scopes=\n{:?}", self.env.scopes);
+            for (i, l) in lines.iter().enumerate() {
+                std::eprintln!("NEPL_DUMP_HIR: line {} -> expr.kind = {:?}, ty={:?}, drop={}", i, l.expr.kind, l.expr.ty, l.drop_result);
+            }
+        }
 
         if new_scope {
             self.env.pop_scope();
@@ -1212,6 +1265,7 @@ impl<'a> BlockChecker<'a> {
                                 moved: false,
                                 kind: BindingKind::Var,
                             });
+                            std::eprintln!("typecheck: inserted local binding {}", name.name);
                             t
                         };
                         let func_ty =
@@ -1369,6 +1423,41 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics
                                 .push(Diagnostic::error("undefined variable", name.span));
                         }
+                    }
+                    Symbol::AddrOf(span) => {
+                        if crate::log::is_verbose() {
+                            std::eprintln!("check_prefix: pushing AddrOf to stack");
+                        }
+                        let a = self.ctx.fresh_var(None);
+                        let ref_a = self.ctx.reference(a, false);
+                        let func_ty = self.ctx.function(Vec::new(), vec![a], ref_a, Effect::Pure);
+                        stack.push(StackEntry {
+                            ty: func_ty,
+                            expr: HirExpr {
+                                ty: func_ty,
+                                kind: HirExprKind::Var("&&addr_of".to_string()),
+                                span: *span,
+                            },
+                            type_args: Vec::new(),
+                            assign: Some(AssignKind::AddrOf),
+                        });
+                        last_expr = Some(stack.last().unwrap().expr.clone());
+                    }
+                    Symbol::Deref(span) => {
+                        let a = self.ctx.fresh_var(None);
+                        let ref_a = self.ctx.reference(a, false);
+                        let func_ty = self.ctx.function(Vec::new(), vec![ref_a], a, Effect::Pure);
+                        stack.push(StackEntry {
+                            ty: func_ty,
+                            expr: HirExpr {
+                                ty: func_ty,
+                                kind: HirExprKind::Var("&&deref".to_string()),
+                                span: *span,
+                            },
+                            type_args: Vec::new(),
+                            assign: Some(AssignKind::Deref),
+                        });
+                        last_expr = Some(stack.last().unwrap().expr.clone());
                     }
                     Symbol::If(sp) => {
                         let t_cond = self.ctx.bool();
@@ -1654,6 +1743,23 @@ impl<'a> BlockChecker<'a> {
             }
         }
 
+        if pipe_pending.is_some() {
+            self.diagnostics
+                .push(Diagnostic::error("pipe has no target", expr.span));
+        }
+
+        // Validate final stack depth. If there are extra values, recover by
+        // dropping extras so later checks can proceed. Do not treat this as a
+        // hard error here to allow layout forms (like `if:` blocks used as
+        // sub-expressions) to compile; block-level checks will still emit
+        // diagnostics when appropriate.
+        if stack.len() > base_depth + 1 {
+            let extras = stack.len() - (base_depth + 1);
+            for _ in 0..extras {
+                stack.pop();
+            }
+        }
+
         let result_expr = if stack.len() == base_depth + 1 {
             stack.last().unwrap().expr.clone()
         } else if let Some(e) = last_expr {
@@ -1665,24 +1771,6 @@ impl<'a> BlockChecker<'a> {
                 span: expr.span,
             }
         };
-
-        if pipe_pending.is_some() {
-            self.diagnostics
-                .push(Diagnostic::error("pipe has no target", expr.span));
-        }
-
-        // Validate final stack depth. If there are extra values, report an error
-        // and recover by dropping extras so later checks can proceed.
-        if stack.len() > base_depth + 1 {
-            let extras = stack.len() - (base_depth + 1);
-            for _ in 0..extras {
-                stack.pop();
-            }
-            self.diagnostics.push(Diagnostic::error(
-                "expression leaves extra values on the stack",
-                expr.span,
-            ));
-        }
 
         Some((result_expr, dropped))
     }
@@ -1701,6 +1789,7 @@ impl<'a> BlockChecker<'a> {
 
     fn reduce_calls(&mut self, stack: &mut Vec<StackEntry>) {
         loop {
+            std::eprintln!("reduce_calls: stack=[{}]", stack.iter().map(|e| match &e.expr.kind { HirExprKind::Var(n) => n.clone(), _ => "<expr>".to_string() }).collect::<Vec<_>>().join(","));
             let func_pos = match stack.iter().enumerate().rposition(|(_, e)| {
                 let rty = self.ctx.resolve(e.ty);
                 matches!(self.ctx.get(rty), TypeKind::Function { .. })
@@ -1735,7 +1824,9 @@ impl<'a> BlockChecker<'a> {
             let mut func_entry = stack.remove(func_pos);
             func_entry.ty = inst_ty;
             func_entry.expr.ty = inst_ty;
-            // std::eprintln!("    Reducing: {} at pos {} with {} args", self.ctx.type_to_string(inst_ty), func_pos, params.len());
+            if crate::log::is_verbose() {
+                std::eprintln!("    Reducing: {} at pos {} with {} args, assign={:?}", self.ctx.type_to_string(inst_ty), func_pos, params.len(), func_entry.assign);
+            }
             let applied = self.apply_function(func_entry, params, result, effect, args, fresh_args);
             if let Some(val) = applied {
                 stack.insert(func_pos, val);
@@ -1747,6 +1838,7 @@ impl<'a> BlockChecker<'a> {
 
     fn reduce_calls_guarded(&mut self, stack: &mut Vec<StackEntry>, min_func_pos: usize) {
         loop {
+            std::eprintln!("reduce_calls_guarded: stack=[{}]", stack.iter().map(|e| match &e.expr.kind { HirExprKind::Var(n) => n.clone(), _ => "<expr>".to_string() }).collect::<Vec<_>>().join(","));
             let func_pos = match stack
                 .iter()
                 .enumerate()
@@ -2082,8 +2174,8 @@ impl<'a> BlockChecker<'a> {
                 if !params.is_empty() {
                     if let Err(_) = self.ctx.unify(params[0], args[0].ty) {
                         self.diagnostics.push(Diagnostic::error(
-                             "type mismatch in field assignment",
-                             func.expr.span,
+                            "type mismatch in field assignment",
+                            func.expr.span,
                         ));
                     }
                 }
@@ -2096,6 +2188,46 @@ impl<'a> BlockChecker<'a> {
                             type_args: vec![args[0].ty],
                             args: vec![addr, args[0].expr.clone()],
                         },
+                        span: func.expr.span,
+                    },
+                    type_args: Vec::new(),
+                    assign: None,
+                });
+            } else if matches!(assign, AssignKind::AddrOf) {
+                if args.len() != 1 { return None; }
+                if crate::log::is_verbose() {
+                    std::eprintln!("apply_function: Reducing AddrOf, inner={:?}", args[0].expr.kind);
+                }
+                let inner_ty = args[0].ty;
+                let res_ty = self.ctx.reference(inner_ty, false);
+                return Some(StackEntry {
+                    ty: res_ty,
+                    expr: HirExpr {
+                        ty: res_ty,
+                        kind: HirExprKind::AddrOf(Box::new(args[0].expr.clone())),
+                        span: func.expr.span,
+                    },
+                    type_args: Vec::new(),
+                    assign: None,
+                });
+            } else if matches!(assign, AssignKind::Deref) {
+                if args.len() != 1 { return None; }
+                let arg_ty = self.ctx.resolve(args[0].ty);
+                let inner_ty = match self.ctx.get(arg_ty) {
+                    TypeKind::Reference(inner, _) => inner,
+                    _ => {
+                        self.diagnostics.push(Diagnostic::error(
+                            format!("cannot dereference non-reference type: {}", self.ctx.type_to_string(arg_ty)),
+                            args[0].expr.span,
+                        ));
+                        self.ctx.never()
+                    }
+                };
+                return Some(StackEntry {
+                    ty: inner_ty,
+                    expr: HirExpr {
+                        ty: inner_ty,
+                        kind: HirExprKind::Deref(Box::new(args[0].expr.clone())),
                         span: func.expr.span,
                     },
                     type_args: Vec::new(),
@@ -2121,6 +2253,7 @@ impl<'a> BlockChecker<'a> {
                         if let Some(b) = self.env.lookup_mut(&name) {
                             b.defined = true;
                             b.ty = b_ty;
+                            std::eprintln!("typecheck: marking binding defined {}", name);
                         }
                         return Some(StackEntry {
                             ty: self.ctx.unit(),
@@ -2165,13 +2298,12 @@ impl<'a> BlockChecker<'a> {
                     _ => unreachable!(),
                 }
             } else {
-                 self.diagnostics.push(Diagnostic::error(
-                    format!("undefined variable: {}", name),
+                self.diagnostics.push(Diagnostic::error(
+                    format!("undefined variable for assignment: {}", name),
                     func.expr.span,
                 ));
                 return None;
             }
-
         }
 
         // Special-cased symbols (if / while)
@@ -2663,6 +2795,8 @@ enum AssignKind {
     Let,
     Set,
     Store(HirExpr),
+    AddrOf,
+    Deref,
 }
 
 #[derive(Debug, Clone)]

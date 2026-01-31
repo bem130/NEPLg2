@@ -206,10 +206,10 @@ impl TypeCtx {
             | TypeKind::Never => true,
             TypeKind::Reference(_, _) => true,
             TypeKind::Box(_) => false,
-            TypeKind::Enum { .. } => true,
-            TypeKind::Struct { .. } => true,
+            TypeKind::Enum { .. } => false,
+            TypeKind::Struct { .. } => false,
             TypeKind::Tuple { items } => items.iter().all(|t| self.is_copy_inner(*t, seen)),
-            TypeKind::Apply { .. } => true,
+            TypeKind::Apply { .. } => false,
             TypeKind::Function { .. } => false,
             TypeKind::Var(v) => {
                 if let Some(b) = v.binding {
@@ -437,15 +437,24 @@ impl TypeCtx {
                 }
             }
             (TypeKind::Box(inner_a), TypeKind::Box(inner_b)) => {
-                let inner = self.unify(inner_a, inner_b)?;
-                Ok(self.box_ty(inner))
+                self.unify(inner_a, inner_b)?;
+                Ok(a)
             }
             (TypeKind::Reference(inner_a, mut_a), TypeKind::Reference(inner_b, mut_b)) => {
                 if mut_a != mut_b {
                     return Err(UnifyError::Mismatch);
                 }
-                let inner = self.unify(inner_a, inner_b)?;
-                Ok(self.reference(inner, mut_a))
+                self.unify(inner_a, inner_b)?;
+                Ok(a)
+            }
+            (TypeKind::Tuple { items: ta }, TypeKind::Tuple { items: tb }) => {
+                if ta.len() != tb.len() {
+                    return Err(UnifyError::Mismatch);
+                }
+                for (xa, xb) in ta.iter().zip(tb.iter()) {
+                    self.unify(*xa, *xb)?;
+                }
+                Ok(a)
             }
             (TypeKind::Apply { base: ba, args: aa }, TypeKind::Apply { base: bb, args: ab }) => {
                 if aa.len() != ab.len() {
@@ -549,7 +558,7 @@ impl TypeCtx {
                 }
                 Ok(a)
             }
-            _ => Err(UnifyError::Mismatch),
+        _ => Err(UnifyError::Mismatch),
         }
     }
 

@@ -159,3 +159,172 @@ fn main <()*>()>():
 "#;
     compile_move_test(source).expect("copy types should not move");
 }
+#[test]
+fn move_reference_ok() {
+    let source = r#"
+#target wasi
+#indent 4
+#import "std/mem"
+#use std::mem::*
+
+enum Wrapper:
+    Val <i32>
+
+fn main <()*>()>():
+    let x Wrapper::Val 1;
+    let r <&Wrapper> &x; // x is borrowed, not moved
+    let y <Wrapper> x;   // x is still valid and moved here
+"#;
+    compile_move_test(source).expect("references should not move the values");
+}
+
+#[test]
+fn move_borrow_after_move_err() {
+    let source = r#"
+#target wasi
+#indent 4
+#import "std/mem"
+#use std::mem::*
+
+enum Wrapper:
+    Val <i32>
+
+fn main <()*>()>():
+    let x Wrapper::Val 1;
+    let y <Wrapper> x;   // x moved here
+    let r <&Wrapper> &x; // error: borrow of moved value
+"#;
+    let errs = compile_move_test(source).unwrap_err();
+    assert!(errs.iter().any(|d| d.message.contains("borrow of moved value")));
+}
+
+#[test]
+fn move_pass_to_function_err() {
+    let source = r#"
+#target wasi
+#indent 4
+#import "std/mem"
+#use std::mem::*
+
+enum Wrapper:
+    Val <i32>
+
+fn consume <(Wrapper)->()> (w):
+    ()
+
+fn main <()*>()>():
+    let x Wrapper::Val 1;
+    consume x;
+    let y <Wrapper> x; // error: use of moved value x
+"#;
+    let errs = compile_move_test(source).unwrap_err();
+    assert!(errs.iter().any(|d| d.message.contains("use of moved value")));
+}
+
+#[test]
+fn move_struct_field_err() {
+    let source = r#"
+#target wasi
+#indent 4
+#import "std/mem"
+#use std::mem::*
+
+enum Wrapper:
+    Val <i32>
+
+struct S:
+    f <Wrapper>
+
+fn main <()*>()>():
+    let s <S> S Wrapper::Val 1;
+    let a <Wrapper> s.f;
+    let b <Wrapper> s.f; // error: use of moved value
+"#;
+    let errs = compile_move_test(source).unwrap_err();
+    assert!(errs.iter().any(|d| d.message.contains("use of moved value")));
+}
+
+#[test]
+fn move_branch_reinit_mixed() {
+    let source = r#"
+#target wasi
+#indent 4
+#import "std/mem"
+#use std::mem::*
+
+enum Wrapper:
+    Val <i32>
+
+fn main <()*>()>():
+    let mut x Wrapper::Val 1;
+    let cnd <bool> true;
+    if cnd:
+        then:
+            let y <Wrapper> x; // moved in then
+        else:
+            set x = Wrapper::Val 2; // re-init in else
+    let z <Wrapper> x; // error: potentially moved
+"#;
+    let errs = compile_move_test(source).unwrap_err();
+    assert!(errs.iter().any(|d| d.message.contains("potentially moved")));
+}
+
+#[test]
+fn move_nested_match_potentially_moved() {
+    let source = r#"
+#target wasi
+#indent 4
+#import "std/mem"
+#use std::mem::*
+
+enum Wrapper:
+    Val <i32>
+enum BoolWrap:
+    True
+    False
+
+fn main <()*>()>():
+    let x Wrapper::Val 1;
+    let a <BoolWrap> BoolWrap::True;
+    match a:
+        True:
+            match a:
+                True:
+                    let y <Wrapper> x; // moved in inner arm
+                False:
+                    ()
+        False:
+            ()
+    let z <Wrapper> x; // error: potentially moved
+"#;
+    let errs = compile_move_test(source).unwrap_err();
+    assert!(errs.iter().any(|d| d.message.contains("potentially moved")));
+}
+
+#[test]
+fn move_in_match_arms() {
+    let source = r#"
+#target wasi
+#indent 4
+#import "std/mem"
+#use std::mem::*
+
+enum Wrapper:
+    Val <i32>
+enum BoolWrap:
+    True
+    False
+
+fn main <()*>()>():
+    let x Wrapper::Val 1;
+    let v <BoolWrap> BoolWrap::True;
+    match v:
+        True:
+            let y <Wrapper> x; // moved in this arm
+        False:
+            ()
+    let z <Wrapper> x; // error: potentially moved
+"#;
+    let errs = compile_move_test(source).unwrap_err();
+    assert!(errs.iter().any(|d| d.message.contains("potentially moved")));
+}
