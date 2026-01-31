@@ -73,6 +73,7 @@ pub enum TokenKind {
         func: String,
         signature: String,
     },
+    DirIntrinsic,
 
     // wasm text line (inside #wasm: block)
     WasmText(String),
@@ -416,6 +417,20 @@ impl<'a> LexState<'a> {
             // Expect body one indent deeper
             let current_indent = *self.indent_stack.last().unwrap();
             self.pending_wasm_base = Some(current_indent + self.indent_unit);
+        } else if body.starts_with("intrinsic") {
+            let span = Span::new(
+                self.file_id,
+                line_offset as u32,
+                (line_offset + 10) as u32, // #intrinsic
+            );
+            self.tokens.push(Token {
+                kind: TokenKind::DirIntrinsic,
+                span,
+            });
+            let rest = body.strip_prefix("intrinsic").unwrap();
+            // Lex the rest of the line as regular tokens (args)
+            let rest_start = line_offset + 10; // length of "#intrinsic"
+            self.lex_regular(rest, rest_start);
         } else {
             let span = Span::new(
                 self.file_id,

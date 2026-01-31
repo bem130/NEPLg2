@@ -488,6 +488,11 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     continue;
                 }
             };
+            if let TypeKind::Function { type_params, .. } = ctx.get(f_ty) {
+                for (p_node, p_id) in f.type_params.iter().zip(type_params.iter()) {
+                    label_env.insert(p_node.name.clone(), *p_id);
+                }
+            }
             match check_function(
                 f,
                 f_ty,
@@ -1140,6 +1145,52 @@ impl<'a> BlockChecker<'a> {
                         last_expr = Some(stack.last().unwrap().expr.clone());
                     }
                 },
+                PrefixItem::Intrinsic(intrin, sp) => {
+                    let mut type_args = Vec::new();
+                    for t in &intrin.type_args {
+                        type_args.push(type_from_expr(self.ctx, self.labels, t));
+                    }
+                    
+                    let mut args = Vec::new();
+                    for arg in &intrin.args {
+                        let mut arg_stack = Vec::new();
+                        if let Some((hexpr, _)) = self.check_prefix(arg, 0, &mut arg_stack) {
+                            args.push(hexpr);
+                        } else {
+                             return None;
+                        }
+                    }
+                    
+                    let ty = if intrin.name == "size_of" || intrin.name == "align_of" {
+                        self.ctx.i32()
+                    } else if intrin.name == "load" {
+                        if type_args.len() == 1 {
+                             type_args[0]
+                        } else {
+                             self.ctx.unit()
+                        }
+                    } else if intrin.name == "store" {
+                         self.ctx.unit()
+                    } else {
+                        self.diagnostics.push(Diagnostic::error("unknown intrinsic", *sp));
+                        self.ctx.unit()
+                    };
+                    
+                    stack.push(StackEntry {
+                        ty,
+                        expr: HirExpr {
+                            ty,
+                            kind: HirExprKind::Intrinsic {
+                                name: intrin.name.clone(),
+                                type_args,
+                                args,
+                            },
+                            span: *sp,
+                        },
+                        assign: None,
+                    });
+                    last_expr = Some(stack.last().unwrap().expr.clone());
+                }
                 PrefixItem::TypeAnnotation(ty_expr, _span) => {
                     let ty = type_from_expr(self.ctx, self.labels, ty_expr);
                     // record target type and current stack depth; do NOT treat as an expression

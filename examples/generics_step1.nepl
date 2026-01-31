@@ -1,0 +1,10 @@
+#import "std/mem"
+#import "std/stdio"
+#use std::mem::*
+#use std::stdio::*
+
+fn main <()*>()> ():
+    print "Hello Step 1\n"
+    let x <i32> 123
+    print_i32 x
+    print "\n"

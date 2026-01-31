@@ -31,3 +31,16 @@ fn store_u8 <(i32,i32)*>()> (p, v):
         local.get $p
         local.get $v
         i32.store8
+
+// Generic intrinsics
+fn size_of <.T> <()->i32> ():
+    #intrinsic "size_of" <.T> ()
+
+fn align_of <.T> <()->i32> ():
+    #intrinsic "align_of" <.T> ()
+
+fn load <.T> <(i32)->.T> (ptr):
+    #intrinsic "load" <.T> (ptr)
+
+fn store <.T> <(i32,.T)->()> (ptr, val):
+    #intrinsic "store" <.T> (ptr, val)

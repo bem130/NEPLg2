@@ -642,6 +642,67 @@ impl Parser {
                     }));
                     let _ = set_span; // span kept in symbol name
                 }
+                TokenKind::DirIntrinsic => {
+                    let kw_span = self.next().unwrap().span;
+                    let (name, _name_span) = match self.peek_kind() {
+                        Some(TokenKind::StringLiteral(s)) => {
+                            let tok = self.next().unwrap();
+                            (s.clone(), tok.span)
+                        }
+                        _ => {
+                            let sp = self.peek_span().unwrap_or(kw_span);
+                            self.diagnostics.push(Diagnostic::error(
+                                "expected string literal for intrinsic name",
+                                sp,
+                            ));
+                            return None;
+                        }
+                    };
+
+                    let mut type_args = Vec::new();
+                    if self.check(TokenKind::LAngle) {
+                        self.consume_if(TokenKind::LAngle);
+                        loop {
+                            if self.check(TokenKind::RAngle) {
+                                break;
+                            }
+                            type_args.push(self.parse_type_expr()?);
+                            if !self.consume_if(TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                        self.expect(TokenKind::RAngle)?;
+                    }
+
+                    let lp = if self.check(TokenKind::LParen) {
+                        self.next().unwrap().span
+                    } else {
+                        let sp = self.peek_span().unwrap_or(kw_span);
+                        self.diagnostics.push(Diagnostic::error(
+                            "expected '(' after intrinsic name/res",
+                            sp,
+                        ));
+                        return None;
+                    };
+
+                    let (args, args_span, _) = if self.consume_if(TokenKind::RParen) {
+                        let rp = self.peek_span().unwrap_or(lp);
+                        (Vec::new(), lp.join(rp).unwrap_or(lp), false)
+                    } else {
+                        self.parse_tuple_items(lp)?
+                    };
+                    
+                    let end_span = args_span;
+                    items.push(PrefixItem::Intrinsic(
+                        IntrinsicExpr {
+                            name,
+                            type_args,
+                            args,
+                            span: kw_span.join(end_span).unwrap_or(kw_span),
+                        },
+                        kw_span.join(end_span).unwrap_or(kw_span),
+                    ));
+                }
                 TokenKind::KwIf => {
                     let span = self.next().unwrap().span;
                     items.push(PrefixItem::Symbol(Symbol::If(span)));
@@ -1525,6 +1586,7 @@ impl Parser {
             PrefixItem::Match(_, sp) => *sp,
             PrefixItem::Pipe(sp) => *sp,
             PrefixItem::Tuple(_, sp) => *sp,
+            PrefixItem::Intrinsic(_, sp) => *sp,
         }
     }
 

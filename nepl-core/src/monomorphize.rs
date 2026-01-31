@@ -187,7 +187,7 @@ impl<'a> Monomorphizer<'a> {
                 self.substitute_expr(cond, mapping);
                 self.substitute_expr(body, mapping);
             }
-            HirExprKind::Match { scrutinee, arms } => {
+        HirExprKind::Match { scrutinee, arms } => {
                 self.substitute_expr(scrutinee, mapping);
                 for arm in arms {
                     self.substitute_expr(&mut arm.body, mapping);
@@ -225,6 +225,18 @@ impl<'a> Monomorphizer<'a> {
             HirExprKind::Let { value, .. } => self.substitute_expr(value, mapping),
             HirExprKind::Set { value, .. } => self.substitute_expr(value, mapping),
             HirExprKind::Drop { .. } => {}
+            HirExprKind::Intrinsic {
+                type_args,
+                args,
+                name: _,
+            } => {
+                for arg in type_args.iter_mut() {
+                    *arg = self.ctx.substitute(*arg, mapping);
+                }
+                for arg in args {
+                    self.substitute_expr(arg, mapping);
+                }
+            }
         }
     }
 }

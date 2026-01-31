@@ -78,6 +78,7 @@ pub enum PrefixItem {
     Match(MatchExpr, Span),
     Pipe(Span),
     Tuple(Vec<PrefixExpr>, Span),
+    Intrinsic(IntrinsicExpr, Span),
 }
 
 /// Special symbols in the language.
@@ -235,5 +236,14 @@ pub struct MatchArm {
 pub struct MatchExpr {
     pub scrutinee: PrefixExpr,
     pub arms: Vec<MatchArm>,
+    pub span: Span,
+}
+
+/// Intrinsic expression: `#intrinsic "name" <Args...> (Exprs...)`
+#[derive(Debug, Clone, PartialEq)]
+pub struct IntrinsicExpr {
+    pub name: String,
+    pub type_args: Vec<TypeExpr>,
+    pub args: Vec<PrefixExpr>,
     pub span: Span,
 }

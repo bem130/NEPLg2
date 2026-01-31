@@ -515,7 +515,9 @@ fn gen_expr(
         HirExprKind::Unit => None,
         HirExprKind::Var(name) => {
             if let Some(idx) = locals.lookup(name) {
-                insts.push(Instruction::LocalGet(idx));
+                if valtype(&ctx.get(expr.ty)).is_some() {
+                    insts.push(Instruction::LocalGet(idx));
+                }
                 valtype(&ctx.get(expr.ty))
             } else if let Some(fidx) = name_map.get(name) {
                 insts.push(Instruction::Call(*fidx));
@@ -582,6 +584,88 @@ fn gen_expr(
         }
         HirExprKind::Block(b) => {
             gen_block(ctx, b, name_map, strings, locals, insts, diags).flatten()
+        }
+        HirExprKind::Intrinsic {
+            name,
+            type_args,
+            args,
+        } => {
+            if name == "size_of" {
+                let ty = type_args[0];
+                let vt = valtype(&ctx.get(ty));
+                match vt {
+                    Some(_) => insts.push(Instruction::I32Const(4)),
+                    None => insts.push(Instruction::I32Const(0)),
+                }
+                Some(ValType::I32)
+            } else if name == "align_of" {
+                insts.push(Instruction::I32Const(4));
+                Some(ValType::I32)
+            } else if name == "load" {
+                let ty = type_args[0];
+                let vt = valtype(&ctx.get(ty));
+                // address
+                gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
+                match vt {
+                    Some(ValType::I32) => {
+                        insts.push(Instruction::I32Load(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                        Some(ValType::I32)
+                    }
+                    Some(ValType::F32) => {
+                        insts.push(Instruction::F32Load(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                        Some(ValType::F32)
+                    }
+                    None => {
+                        insts.push(Instruction::Drop);
+                        None
+                    }
+                    _ => None, // Only I32/F32 supported currently
+                }
+            } else if name == "store" {
+                let ty = type_args[0];
+                let vt = valtype(&ctx.get(ty));
+                
+                // address
+                gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
+                // value
+                gen_expr(ctx, &args[1], name_map, strings, locals, insts, diags);
+
+                match vt {
+                    Some(ValType::I32) => {
+                        insts.push(Instruction::I32Store(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                        None
+                    }
+                    Some(ValType::F32) => {
+                        insts.push(Instruction::F32Store(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                        None
+                    }
+                    None => {
+                        insts.push(Instruction::Drop);
+                        insts.push(Instruction::Drop);
+                        None
+                    }
+                    _ => None,
+                }
+            } else {
+                diags.push(Diagnostic::error("unknown codegen intrinsic", expr.span));
+                None
+            }
         }
         HirExprKind::EnumConstruct {
             name: _,
@@ -832,7 +916,9 @@ fn gen_expr(
         HirExprKind::Let { name, value, .. } => {
             let idx = locals.ensure_local(name.clone(), value.ty, ctx);
             gen_expr(ctx, value, name_map, strings, locals, insts, diags);
-            insts.push(Instruction::LocalSet(idx));
+            if valtype(&ctx.get(value.ty)).is_some() {
+                insts.push(Instruction::LocalSet(idx));
+            }
             None
         }
         HirExprKind::Set { name, value } => {

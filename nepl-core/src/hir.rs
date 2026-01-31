@@ -123,6 +123,11 @@ pub enum HirExprKind {
         name: String,
         value: Box<HirExpr>,
     },
+    Intrinsic {
+        name: String,
+        type_args: Vec<TypeId>,
+        args: Vec<HirExpr>,
+    },
     Drop {
         name: String,
     },
