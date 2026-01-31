@@ -13,10 +13,12 @@ fn cast_f32_to_i32 <(f32)->i32> (v):
     #intrinsic "f32_to_i32" <> (v)
 
 fn cast_bool_to_i32 <(bool)->i32> (v):
-    if v:
-        1
-    else:
-        0
+    if:
+        v
+        then:
+            1
+        else:
+            0
 
 fn cast_i32_to_bool <(i32)->bool> (v):
     ne v 0

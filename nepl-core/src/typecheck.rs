@@ -1220,11 +1220,46 @@ impl<'a> BlockChecker<'a> {
                         }
                     } else if intrin.name == "unreachable" {
                          self.ctx.never()
+                    } else if intrin.name == "i32_to_f32" {
+                        self.ctx.f32()
+                    } else if intrin.name == "f32_to_i32" {
+                        self.ctx.i32()
+                    } else if intrin.name == "reinterpret_i32_f32" {
+                        self.ctx.f32()
+                    } else if intrin.name == "reinterpret_f32_i32" {
+                        self.ctx.i32()
                     } else {
                         self.diagnostics.push(Diagnostic::error("unknown intrinsic", *sp));
                         self.ctx.unit()
                     };
                     
+                    // Validate intrinsic argument types for known cast/bitcast intrinsics
+                    if intrin.name == "i32_to_f32" || intrin.name == "reinterpret_i32_f32" {
+                        if args.len() != 1 {
+                            self.diagnostics.push(Diagnostic::error(
+                                "intrinsic expects 1 argument",
+                                *sp,
+                            ));
+                        } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.i32()) {
+                            self.diagnostics.push(Diagnostic::error(
+                                "intrinsic argument type mismatch (expected i32)",
+                                *sp,
+                            ));
+                        }
+                    } else if intrin.name == "f32_to_i32" || intrin.name == "reinterpret_f32_i32" {
+                        if args.len() != 1 {
+                            self.diagnostics.push(Diagnostic::error(
+                                "intrinsic expects 1 argument",
+                                *sp,
+                            ));
+                        } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.f32()) {
+                            self.diagnostics.push(Diagnostic::error(
+                                "intrinsic argument type mismatch (expected f32)",
+                                *sp,
+                            ));
+                        }
+                    }
+
                     stack.push(StackEntry {
                         ty,
                         expr: HirExpr {

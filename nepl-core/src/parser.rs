@@ -1,5 +1,5 @@
 //! Parser for NEPLG2 surface syntax (prefix + indentation blocks).
-
+//! Parser for NEPLG2 surface syntax (prefix + indentation blocks).
 #![no_std]
 extern crate alloc;
 
@@ -526,6 +526,32 @@ impl Parser {
                     let colon_span = self.next().unwrap().span;
                     let block = self.parse_block_after_colon()?;
                     let span = colon_span.join(block.span).unwrap_or(colon_span);
+                    // Emit diagnostic showing current header item shapes (debug)
+                    {
+                        let mut shapes = alloc::string::String::new();
+                        for (i, it) in items.iter().enumerate() {
+                            if i > 0 { shapes.push_str(", "); }
+                            let label = match it {
+                                PrefixItem::Symbol(sym) => match sym {
+                                    Symbol::Ident(id, _) => alloc::format!("Ident({})", id.name),
+                                    Symbol::If(_) => alloc::format!("If"),
+                                    Symbol::While(_) => alloc::format!("While"),
+                                    Symbol::Let { .. } => alloc::format!("Let"),
+                                    Symbol::Set { .. } => alloc::format!("Set"),
+                                },
+                                PrefixItem::Literal(_, _) => alloc::format!("Literal"),
+                                PrefixItem::Block(_, _) => alloc::format!("Block"),
+                                PrefixItem::Match(_, _) => alloc::format!("Match"),
+                                PrefixItem::TypeAnnotation(_, _) => alloc::format!("TypeAnnotation"),
+                                PrefixItem::Pipe(_) => alloc::format!("Pipe"),
+                                PrefixItem::Tuple(_, _) => alloc::format!("Tuple"),
+                                PrefixItem::Group(_, _) => alloc::format!("Group"),
+                                PrefixItem::Intrinsic(_, _) => alloc::format!("Intrinsic"),
+                            };
+                            shapes.push_str(&label);
+                        }
+                        self.diagnostics.push(Diagnostic::warning(alloc::format!("pre-extract header_items=[{}]", shapes), colon_span));
+                    }
                     // If this prefix line contains an `if`, try to split the following
                     // block into then/else branch blocks when top-level `else:` markers exist.
                     if items
@@ -544,8 +570,42 @@ impl Parser {
                         };
                         match self.extract_if_layout_exprs(block.clone(), expected, colon_span) {
                             Ok(mut args) => {
-                                for a in args.drain(..) {
-                                    items.extend(a.items);
+                                // Debug: emit a diagnostic describing header and arg shapes
+                                let header_count = items.len();
+                                let mut arg_shapes = alloc::string::String::new();
+                                for (i, a) in args.iter().enumerate() {
+                                    let first = a.items.first();
+                                    let label = match first {
+                                        Some(PrefixItem::Symbol(Symbol::Ident(id, _))) =>
+                                            alloc::format!("Ident({})", id.name),
+                                        Some(PrefixItem::Block(_, _)) => alloc::format!("Block"),
+                                        Some(PrefixItem::Literal(_, _)) => alloc::format!("Literal"),
+                                        Some(PrefixItem::Match(_, _)) => alloc::format!("Match"),
+                                        Some(PrefixItem::TypeAnnotation(_, _)) => alloc::format!("TypeAnnotation"),
+                                        Some(PrefixItem::Pipe(_)) => alloc::format!("Pipe"),
+                                        None => alloc::format!("Empty"),
+                                        _ => alloc::format!("Other"),
+                                    };
+                                    if i > 0 { arg_shapes.push_str(", "); }
+                                    arg_shapes.push_str(&alloc::format!("{}:{}", a.items.len(), label));
+                                }
+                                self.diagnostics.push(Diagnostic::warning(
+                                    alloc::format!("if-layout: header_items={} args=[{}]", header_count, arg_shapes),
+                                    colon_span,
+                                ));
+                                for mut a in args.drain(..) {
+                                    if a.items.len() == 1 {
+                                        // single item: splice it in
+                                        let only = a.items.remove(0);
+                                        items.push(only);
+                                    } else {
+                                        // multiple items: wrap into a single Block item
+                                        let wrapped = Block {
+                                            items: vec![Stmt::Expr(a.clone())],
+                                            span: a.span,
+                                        };
+                                        items.push(PrefixItem::Block(wrapped, a.span));
+                                    }
                                 }
                             }
                             Err(diag) => {
@@ -775,6 +835,33 @@ impl Parser {
         // to the basic `if cond A B` shape expected by later passes.
         self.normalize_then_else(&mut items);
 
+        // Debug: if this prefix contains an If marker, emit a diagnostic showing item shapes
+        if items.iter().any(|it| matches!(it, PrefixItem::Symbol(Symbol::If(_)))) {
+            let mut shapes = alloc::string::String::new();
+            for (i, it) in items.iter().enumerate() {
+                if i > 0 { shapes.push_str(", "); }
+                let label = match it {
+                    PrefixItem::Symbol(sym) => match sym {
+                        Symbol::Ident(id, _) => alloc::format!("Ident({})", id.name),
+                        Symbol::If(_) => alloc::format!("If"),
+                        Symbol::While(_) => alloc::format!("While"),
+                        Symbol::Let { .. } => alloc::format!("Let"),
+                        Symbol::Set { .. } => alloc::format!("Set"),
+                    },
+                    PrefixItem::Literal(_, _) => alloc::format!("Literal"),
+                    PrefixItem::Block(_, _) => alloc::format!("Block"),
+                    PrefixItem::Match(_, _) => alloc::format!("Match"),
+                    PrefixItem::TypeAnnotation(_, _) => alloc::format!("TypeAnnotation"),
+                    PrefixItem::Pipe(_) => alloc::format!("Pipe"),
+                    PrefixItem::Tuple(_, _) => alloc::format!("Tuple"),
+                    PrefixItem::Group(_, _) => alloc::format!("Group"),
+                    PrefixItem::Intrinsic(_, _) => alloc::format!("Intrinsic"),
+                };
+                shapes.push_str(&label);
+            }
+            self.diagnostics.push(Diagnostic::warning(alloc::format!("prefix-if items=[{}]", shapes), items.first().map(|i| self.item_span(i)).unwrap_or(start_span)));
+        }
+
         let end_span = if trailing_semis > 0 {
             last_semi_span.unwrap_or(
                 items
@@ -876,8 +963,42 @@ impl Parser {
                         };
                         match self.extract_if_layout_exprs(block.clone(), expected, colon_span) {
                             Ok(mut args) => {
-                                for a in args.drain(..) {
-                                    items.extend(a.items);
+                                // Debug: emit a diagnostic describing header and arg shapes
+                                let header_count = items.len();
+                                let mut arg_shapes = alloc::string::String::new();
+                                for (i, a) in args.iter().enumerate() {
+                                    let first = a.items.first();
+                                    let label = match first {
+                                        Some(PrefixItem::Symbol(Symbol::Ident(id, _))) =>
+                                            alloc::format!("Ident({})", id.name),
+                                        Some(PrefixItem::Block(_, _)) => alloc::format!("Block"),
+                                        Some(PrefixItem::Literal(_, _)) => alloc::format!("Literal"),
+                                        Some(PrefixItem::Match(_, _)) => alloc::format!("Match"),
+                                        Some(PrefixItem::TypeAnnotation(_, _)) => alloc::format!("TypeAnnotation"),
+                                        Some(PrefixItem::Pipe(_)) => alloc::format!("Pipe"),
+                                        None => alloc::format!("Empty"),
+                                        _ => alloc::format!("Other"),
+                                    };
+                                    if i > 0 { arg_shapes.push_str(", "); }
+                                    arg_shapes.push_str(&alloc::format!("{}:{}", a.items.len(), label));
+                                }
+                                self.diagnostics.push(Diagnostic::warning(
+                                    alloc::format!("if-layout: header_items={} args=[{}]", header_count, arg_shapes),
+                                    colon_span,
+                                ));
+                                for mut a in args.drain(..) {
+                                    if a.items.len() == 1 {
+                                        // single item: splice it in
+                                        let only = a.items.remove(0);
+                                        items.push(only);
+                                    } else {
+                                        // multiple items: wrap into a single Block item
+                                        let wrapped = Block {
+                                            items: vec![Stmt::Expr(a.clone())],
+                                            span: a.span,
+                                        };
+                                        items.push(PrefixItem::Block(wrapped, a.span));
+                                    }
                                 }
                             }
                             Err(diag) => {
@@ -1227,21 +1348,53 @@ impl Parser {
     }
 
     fn take_role_from_expr(expr: &mut PrefixExpr) -> Option<IfRole> {
-        match expr.items.first() {
-            Some(PrefixItem::Symbol(Symbol::Ident(id, _))) if id.name == "cond" => {
+        // Direct marker case: first item is the marker identifier
+        if let Some(PrefixItem::Symbol(Symbol::Ident(id, _))) = expr.items.first() {
+            if id.name == "cond" {
                 expr.items.remove(0);
-                Some(IfRole::Cond)
-            }
-            Some(PrefixItem::Symbol(Symbol::Ident(id, _))) if id.name == "then" => {
+                return Some(IfRole::Cond);
+            } else if id.name == "then" {
                 expr.items.remove(0);
-                Some(IfRole::Then)
-            }
-            Some(PrefixItem::Symbol(Symbol::Ident(id, _))) if id.name == "else" => {
+                return Some(IfRole::Then);
+            } else if id.name == "else" {
                 expr.items.remove(0);
-                Some(IfRole::Else)
+                return Some(IfRole::Else);
             }
-            _ => None,
         }
+        // The marker may be wrapped inside a Block item anywhere in the expr's items.
+        // Scan each item and, if found, remove the marker and normalize the whole
+        // expr into a single Block PrefixItem containing the remaining inner expr.
+        for i in 0..expr.items.len() {
+            if let PrefixItem::Block(block, block_span) = &mut expr.items[i] {
+                if let Some(stmt) = block.items.first_mut() {
+                    if let Stmt::Expr(inner) = stmt {
+                        if let Some(PrefixItem::Symbol(Symbol::Ident(id, _))) = inner.items.first() {
+                            let role = if id.name == "cond" {
+                                IfRole::Cond
+                            } else if id.name == "then" {
+                                IfRole::Then
+                            } else if id.name == "else" {
+                                IfRole::Else
+                            } else {
+                                continue;
+                            };
+                            // remove the marker token
+                            inner.items.remove(0);
+                            // Wrap the remaining inner expression(s) into a single Block
+                            // so downstream code sees a single PrefixItem for the branch.
+                            let wrapped_block = Block {
+                                items: vec![Stmt::Expr(inner.clone())],
+                                span: *block_span,
+                            };
+                            expr.items = vec![PrefixItem::Block(wrapped_block, *block_span)];
+                            return Some(role);
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     fn if_layout_needs_cond(items: &[PrefixItem]) -> bool {
@@ -1275,6 +1428,26 @@ impl Parser {
                     ));
                 }
             }
+        }
+
+        // DEBUG: record basic shape of extracted exprs for troubleshooting
+        for (i, ex) in exprs.iter().enumerate() {
+            let first = ex.items.first();
+            let label = match first {
+                Some(PrefixItem::Symbol(Symbol::Ident(id, _))) =>
+                    alloc::format!("Ident({})", id.name),
+                Some(PrefixItem::Block(_, _)) => alloc::format!("Block"),
+                Some(PrefixItem::Literal(_, _)) => alloc::format!("Literal"),
+                Some(PrefixItem::Match(_, _)) => alloc::format!("Match"),
+                Some(PrefixItem::TypeAnnotation(_, _)) => alloc::format!("TypeAnnotation"),
+                Some(PrefixItem::Pipe(_)) => alloc::format!("Pipe"),
+                None => alloc::format!("Empty"),
+                _ => alloc::format!("Other"),
+            };
+            self.diagnostics.push(Diagnostic::warning(
+                alloc::format!("if-layout expr[{}] first={}", i, label),
+                header_span,
+            ));
         }
 
         // Assign by role labels if present, otherwise by order.

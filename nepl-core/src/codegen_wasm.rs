@@ -752,6 +752,26 @@ fn gen_expr(
 
                 insts.push(Instruction::LocalGet(ptr_local));
                 Some(ValType::I32)
+            } else if name == "i32_to_f32" {
+                // signed convert i32 -> f32
+                gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
+                insts.push(Instruction::F32ConvertI32S);
+                Some(ValType::F32)
+            } else if name == "f32_to_i32" {
+                // signed trunc f32 -> i32
+                gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
+                insts.push(Instruction::I32TruncF32S);
+                Some(ValType::I32)
+            } else if name == "reinterpret_i32_f32" {
+                // bitcast i32 -> f32
+                gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
+                insts.push(Instruction::F32ReinterpretI32);
+                Some(ValType::F32)
+            } else if name == "reinterpret_f32_i32" {
+                // bitcast f32 -> i32
+                gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
+                insts.push(Instruction::I32ReinterpretF32);
+                Some(ValType::I32)
             } else if name == "unreachable" {
                 insts.push(Instruction::Unreachable);
                 None

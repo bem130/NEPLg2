@@ -223,16 +223,10 @@ if:
         <then_expr>
     else:
         <else_expr>
-if <cond_expr>
-    then:
-        <then_expr>
-    else:
-        <else_expr>
-if cond <cond_expr>
-    then:
-        <then_expr>
-    else:
-        <else_expr>
+if:
+    cond <cond_expr>
+    then <then_expr>
+    else <else_expr>
 ```
 
 ```neplg2
@@ -242,18 +236,6 @@ if true 0 1
 
 // 1行 if then else
 if true then 0 else 1
-
-// 複数行 if then else
-if true:
-    then 0
-    else 1
-
-// 複数行 if then else
-if true:
-    then:
-        0
-    else:
-        1
 
 // 複数行 if then else
 if:
