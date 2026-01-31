@@ -1,11 +1,12 @@
 use nepl_core::loader::Loader;
 use nepl_core::{compile_module, CompileOptions, CompileTarget};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use wasmi::{Caller, Engine, Extern, Linker, Module, Store};
 
 /// Compile source to wasm bytes.
 pub fn compile_src(src: &str) -> Vec<u8> {
-    let loader = Loader::new(stdlib_root());
+    let mut loader = Loader::new(stdlib_root());
     let loaded = loader
         .load_inline("<test>".into(), src.to_string())
         .expect("load");
@@ -22,10 +23,8 @@ pub fn compile_src(src: &str) -> Vec<u8> {
 
 /// Compile source with explicit options (uses Loader to resolve imports).
 pub fn compile_src_with_options(src: &str, options: CompileOptions) -> Vec<u8> {
-    let loader = Loader::new(stdlib_root());
-    let loaded = loader
-        .load_inline("<test>".into(), src.to_string())
-        .expect("load");
+    let mut loader = Loader::new(stdlib_root());
+    let loaded = loader.load_inline(PathBuf::from("test.nepl"), src.to_string()).expect("load");
     let artifact = compile_module(loaded.module, options).expect("compile failure");
     artifact.wasm
 }

@@ -6,10 +6,12 @@ use std::path::PathBuf;
 mod harness;
 
 fn compile_move_test(source: &str) -> Result<Vec<u8>, Vec<Diagnostic>> {
-    let loader = Loader::new(stdlib_root());
+    let mut loader = Loader::new(stdlib_root());
     let loaded = loader
         .load_inline("<test>".into(), source.to_string())
         .expect("load");
+
+
     match compile_module(
         loaded.module,
         CompileOptions {

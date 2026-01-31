@@ -1,4 +1,4 @@
-use nepl_core::loader::Loader;
+use nepl_core::{compile_module, loader::Loader};
 
 #[test]
 fn compile_various_if_forms() {
@@ -32,7 +32,7 @@ fn main <()*>()> ():
     let _ <i32> if true 0 if true 1 2;
 "#;
 
-    let loader = Loader::new(
+    let mut loader = Loader::new(
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("stdlib"),
@@ -41,7 +41,7 @@ fn main <()*>()> ():
         .load_inline("<test>".into(), src.to_string())
         .expect("load");
 
-    match nepl_core::compile_module(
+    match compile_module(
         loaded.module.clone(),
         nepl_core::CompileOptions {
             target: None,

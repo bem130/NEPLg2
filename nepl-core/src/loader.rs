@@ -14,6 +14,29 @@ use std::fs;
 use std::path::PathBuf;
 extern crate std;
 
+#[derive(Debug)]
+pub enum LoaderError {
+    Io(String),
+    Core(CoreError),
+}
+
+impl core::fmt::Display for LoaderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            LoaderError::Io(s) => write!(f, "IO error: {}", s),
+            LoaderError::Core(e) => write!(f, "Core error: {:?}", e),
+        }
+    }
+}
+
+impl std::error::Error for LoaderError {}
+ 
+ impl From<CoreError> for LoaderError {
+     fn from(e: CoreError) -> Self {
+         LoaderError::Core(e)
+     }
+ }
+
 /// Holds all loaded sources and their assigned FileId.
 #[derive(Debug, Clone)]
 pub struct SourceMap {
@@ -99,37 +122,43 @@ impl Loader {
     }
 
     /// Load an already-provided source string as a pseudo file (for stdin use).
-    pub fn load_inline(&mut self, path: PathBuf, src: String) -> Result<Module, CoreError> {
+    pub fn load_inline(&mut self, path: PathBuf, src: String) -> Result<LoadResult, LoaderError> {
         let mut sm = SourceMap::new();
         let mut cache: BTreeMap<PathBuf, Module> = BTreeMap::new();
         let mut processing: BTreeSet<PathBuf> = BTreeSet::new();
         let mut imported: BTreeSet<PathBuf> = BTreeSet::new();
-        let res = self.load_from_contents(
+        let module = self.load_from_contents(
             path,
             src,
             &mut sm,
             &mut cache,
             &mut processing,
             &mut imported,
-        );
-        self.source_map = sm;
-        res
+        )?;
+        self.source_map = sm.clone();
+        Ok(LoadResult {
+            module,
+            source_map: sm,
+        })
     }
 
-    pub fn load(&mut self, entry: &PathBuf) -> Result<Module, CoreError> {
+    pub fn load(&mut self, entry: &PathBuf) -> Result<LoadResult, LoaderError> {
         let mut sm = SourceMap::new();
         let mut cache: BTreeMap<PathBuf, Module> = BTreeMap::new();
         let mut processing: BTreeSet<PathBuf> = BTreeSet::new();
         let mut imported: BTreeSet<PathBuf> = BTreeSet::new();
-        let res = self.load_file(
+        let module = self.load_file(
             entry,
             &mut sm,
             &mut cache,
             &mut processing,
             &mut imported,
-        );
-        self.source_map = sm;
-        res
+        )?;
+        self.source_map = sm.clone();
+        Ok(LoadResult {
+            module,
+            source_map: sm,
+        })
     }
 
     fn load_from_contents(
@@ -140,14 +169,14 @@ impl Loader {
         cache: &mut BTreeMap<PathBuf, Module>,
         processing: &mut BTreeSet<PathBuf>,
         imported_once: &mut BTreeSet<PathBuf>,
-    ) -> Result<Module, CoreError> {
+    ) -> Result<Module, LoaderError> {
         // For pseudo files (stdin) canonicalize may fail; fall back to provided path.
         let canon = path.canonicalize().unwrap_or(path.clone());
         if let Some(m) = cache.get(&canon) {
             return Ok(m.clone());
         }
         if !processing.insert(canon.clone()) {
-            return Err(CoreError::Io(format!(
+            return Err(LoaderError::Io(format!(
                 "circular import/include detected at {:?}",
                 canon
             )));
@@ -168,20 +197,20 @@ impl Loader {
         cache: &mut BTreeMap<PathBuf, Module>,
         processing: &mut BTreeSet<PathBuf>,
         imported_once: &mut BTreeSet<PathBuf>,
-    ) -> Result<Module, CoreError> {
+    ) -> Result<Module, LoaderError> {
         let canon = path
             .canonicalize()
-            .map_err(|e| CoreError::Io(e.to_string()))?;
+            .map_err(|e| LoaderError::Io(e.to_string()))?;
         if let Some(m) = cache.get(&canon) {
             return Ok(m.clone());
         }
         if !processing.insert(canon.clone()) {
-            return Err(CoreError::Io(format!(
+            return Err(LoaderError::Io(format!(
                 "circular import/include detected at {:?}",
                 canon
             )));
         }
-        let src = fs::read_to_string(&canon).map_err(|e| CoreError::Io(e.to_string()))?;
+        let src = fs::read_to_string(&canon).map_err(|e| LoaderError::Io(e.to_string()))?;
         let file_id = sm.add(canon.clone(), src.clone());
         let module = self.parse_module(file_id, src)?;
         let module =
@@ -199,7 +228,7 @@ impl Loader {
         cache: &mut BTreeMap<PathBuf, Module>,
         processing: &mut BTreeSet<PathBuf>,
         imported_once: &mut BTreeSet<PathBuf>,
-    ) -> Result<Module, CoreError> {
+    ) -> Result<Module, LoaderError> {
         let mut directives = module.directives.clone();
         let mut items = Vec::new();
         for stmt in module.root.items.clone() {

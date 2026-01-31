@@ -12,7 +12,7 @@ fn show_loaded_files() {
 fn main <()* >()> ():
     print "ok"
 "#;
-    let loader = Loader::new(
+    let mut loader = Loader::new(
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("stdlib"),

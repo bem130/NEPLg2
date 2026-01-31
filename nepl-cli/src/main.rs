@@ -88,9 +88,9 @@ fn execute(cli: Cli) -> Result<()> {
         Some(path) => {
             let mut loader = Loader::new(stdlib_root()?);
             match loader.load(&PathBuf::from(path)) {
-                Ok(m) => (m, loader.source_map().clone()),
+                Ok(res) => (res.module, loader.source_map().clone()),
                 Err(e) => {
-                    if let CoreError::Diagnostics(diags) = &e {
+                    if let nepl_core::loader::LoaderError::Core(CoreError::Diagnostics(diags)) = &e {
                         render_diagnostics(diags, loader.source_map());
                         std::process::exit(1);
                     }
@@ -103,9 +103,9 @@ fn execute(cli: Cli) -> Result<()> {
             io::stdin().read_to_string(&mut buffer)?;
             let mut loader = Loader::new(stdlib_root()?);
             match loader.load_inline(PathBuf::from("<stdin>"), buffer) {
-                Ok(m) => (m, loader.source_map().clone()),
+                Ok(res) => (res.module, loader.source_map().clone()),
                 Err(e) => {
-                    if let CoreError::Diagnostics(diags) = &e {
+                    if let nepl_core::loader::LoaderError::Core(CoreError::Diagnostics(diags)) = &e {
                         render_diagnostics(diags, loader.source_map());
                         std::process::exit(1);
                     }
@@ -236,9 +236,9 @@ fn run_tests(args: TestArgs, verbose: bool) -> Result<()> {
 fn run_test_file(path: &Path, std_root: &Path, verbose: bool) -> Result<()> {
     let mut loader = Loader::new(std_root.to_path_buf());
     println!("[nepl-cli] run_test_file: loading {}", path.display());
-    let module = match loader.load(&path.to_path_buf()) {
-        Ok(m) => m,
-        Err(CoreError::Diagnostics(diags)) => {
+    let res = match loader.load(&path.to_path_buf()) {
+        Ok(res) => res,
+        Err(nepl_core::loader::LoaderError::Core(CoreError::Diagnostics(diags))) => {
             render_diagnostics(&diags, loader.source_map());
             return Err(anyhow::anyhow!("parsing failed"));
         }
@@ -246,7 +246,7 @@ fn run_test_file(path: &Path, std_root: &Path, verbose: bool) -> Result<()> {
     };
     println!("[nepl-cli] compile_module for {}", path.display());
     let artifact = match compile_module(
-        module,
+        res.module,
         CompileOptions {
             target: Some(CompileTarget::Wasi),
             verbose,

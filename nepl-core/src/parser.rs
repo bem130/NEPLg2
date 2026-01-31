@@ -611,6 +611,24 @@ impl Parser {
                     let span = start.join(end).unwrap_or(start);
                     items.push(PrefixItem::TypeAnnotation(ty, span));
                 }
+                TokenKind::Minus => {
+                    let minus_span = self.next().unwrap().span;
+                    match self.peek_kind() {
+                        Some(TokenKind::IntLiteral(v)) => {
+                            let tok = self.next().unwrap();
+                            let combined = alloc::format!("-{}", v);
+                            items.push(PrefixItem::Literal(Literal::Int(combined), minus_span.join(tok.span).unwrap_or(minus_span)));
+                        }
+                        Some(TokenKind::FloatLiteral(v)) => {
+                            let tok = self.next().unwrap();
+                            let combined = alloc::format!("-{}", v);
+                            items.push(PrefixItem::Literal(Literal::Float(combined), minus_span.join(tok.span).unwrap_or(minus_span)));
+                        }
+                        _ => {
+                            items.push(PrefixItem::Symbol(Symbol::Ident(Ident { name: "-".to_string(), span: minus_span }, Vec::new())));
+                        }
+                    }
+                }
                 TokenKind::IntLiteral(_)
                 | TokenKind::FloatLiteral(_)
                 | TokenKind::BoolLiteral(_)
@@ -663,13 +681,21 @@ impl Parser {
                     }));
                 }
                 TokenKind::KwSet => {
-                    let set_span = self.next().unwrap().span;
-                    let (name, span) = self.expect_ident()?;
+                    let set_tok = self.next().unwrap();
+                    let (mut name, mut span) = self.expect_ident()?;
+                    while self.consume_if(TokenKind::Dot) {
+                        if let Some((field, fspan)) = self.expect_ident() {
+                            name.push('.');
+                            name.push_str(&field);
+                            span = span.join(fspan).unwrap_or(span);
+                        } else {
+                            break;
+                        }
+                    }
                     self.consume_if(TokenKind::Equals);
                     items.push(PrefixItem::Symbol(Symbol::Set {
-                        name: Ident { name, span },
+                        name: Ident { name, span: set_tok.span.join(span).unwrap_or(span) },
                     }));
-                    let _ = set_span; // span kept in symbol name
                 }
                 TokenKind::DirIntrinsic => {
                     let kw_span = self.next().unwrap().span;
