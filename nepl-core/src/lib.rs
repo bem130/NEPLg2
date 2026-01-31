@@ -22,6 +22,7 @@ pub mod compiler;
 pub mod hir;
 pub mod lexer;
 pub mod loader;
+pub mod log;
 pub mod monomorphize;
 pub mod parser;
 pub mod passes;

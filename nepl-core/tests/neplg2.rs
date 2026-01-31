@@ -9,6 +9,7 @@ fn compile_ok(src: &str) {
         src,
         CompileOptions {
             target: Some(CompileTarget::Wasm),
+            verbose: false,
         },
     );
     assert!(result.is_ok(), "expected success, got {:?}", result);
@@ -20,6 +21,7 @@ fn compile_err(src: &str) {
         src,
         CompileOptions {
             target: Some(CompileTarget::Wasm),
+            verbose: false,
         },
     );
     assert!(result.is_err(), "expected error, got {:?}", result);
@@ -31,6 +33,7 @@ fn compile_ok_target(src: &str, target: CompileTarget) {
         src,
         CompileOptions {
             target: Some(target),
+            verbose: false,
         },
     );
     assert!(result.is_ok(), "expected success, got {:?}", result);
@@ -42,6 +45,7 @@ fn compile_err_target(src: &str, target: CompileTarget) {
         src,
         CompileOptions {
             target: Some(target),
+            verbose: false,
         },
     );
     assert!(result.is_err(), "expected error, got {:?}", result);
@@ -403,7 +407,13 @@ fn target_directive_sets_default_to_wasi() {
 fn main <()* >()> ():
     print "ok"
 "#;
-    let wasm = compile_src_with_options(src, CompileOptions { target: None });
+    let wasm = compile_src_with_options(
+        src,
+        CompileOptions {
+            target: None,
+            verbose: false,
+        },
+    );
     assert!(!wasm.is_empty());
 }
 
@@ -416,6 +426,13 @@ fn duplicate_target_directive_is_error() {
 fn main <()->i32> ():
     0
 "#;
-    let result = compile_wasm(FileId(0), src, CompileOptions { target: None });
+    let result = compile_wasm(
+        FileId(0),
+        src,
+        CompileOptions {
+            target: None,
+            verbose: false,
+        },
+    );
     assert!(result.is_err(), "expected error, got {:?}", result);
 }

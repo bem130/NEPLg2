@@ -126,3 +126,11 @@
 # 2026-01-31 作業メモ (テスト整合)
 - nepl-core の `list_get_out_of_bounds_err` テストを現行 stdlib に合わせ、`list_nil/list_cons/list_get` と `Option` の `Some/None` マッチに更新。
 - `cargo test` と `cargo run -p nepl-cli -- test` の両方が成功することを確認。
+
+# 2026-01-31 作業メモ (ログ抑制)
+- typecheck/unify/monomorphize/wasm_sig の成功時ログを削除し、OK時の `nepl-cli test` の出力を削減。
+- `cargo run -p nepl-cli -- test` はテスト結果のみ表示されることを確認（Rust の警告は別途表示）。
+
+# 2026-01-31 作業メモ (verbose フラグ)
+- `nepl-cli` に `--verbose` を追加し、詳細なコンパイラログを必要時のみ出力できるようにした。
+- `CompileOptions.verbose` で制御し、typecheck/unify/monomorphize/wasm_sig のログをフラグ連動にした。

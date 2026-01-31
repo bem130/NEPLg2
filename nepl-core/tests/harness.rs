@@ -13,6 +13,7 @@ pub fn compile_src(src: &str) -> Vec<u8> {
         loaded.module,
         CompileOptions {
             target: Some(CompileTarget::Wasm),
+            verbose: false,
         },
     )
     .expect("compile failure");
@@ -252,6 +253,7 @@ pub fn run_main_capture_stdout(src: &str) -> String {
         src,
         CompileOptions {
             target: Some(CompileTarget::Wasi),
+            verbose: false,
         },
     );
     let engine = Engine::default();
@@ -513,6 +515,7 @@ pub fn run_main_capture_stdout_with_stdin(src: &str, stdin: &[u8]) -> String {
         src,
         CompileOptions {
             target: Some(CompileTarget::Wasi),
+            verbose: false,
         },
     );
     let engine = Engine::default();

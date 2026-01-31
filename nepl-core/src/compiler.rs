@@ -36,11 +36,16 @@ impl CompileTarget {
 pub struct CompileOptions {
     /// Explicit target override (e.g., CLI flag). If None, #target or default is used.
     pub target: Option<CompileTarget>,
+    /// Emit verbose compiler logs for debugging.
+    pub verbose: bool,
 }
 
 impl Default for CompileOptions {
     fn default() -> Self {
-        Self { target: None }
+        Self {
+            target: None,
+            verbose: false,
+        }
     }
 }
 
@@ -53,6 +58,7 @@ pub fn compile_module(
     module: ast::Module,
     options: CompileOptions,
 ) -> Result<CompilationArtifact, CoreError> {
+    crate::log::set_verbose(options.verbose);
     let target = resolve_target(&module, options)?;
     let tc = typecheck::typecheck(&module, target);
     if tc.module.is_none() {

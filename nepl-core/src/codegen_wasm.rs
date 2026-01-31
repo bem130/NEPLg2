@@ -106,7 +106,14 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
         if let Some(sig) = wasm_sig(ctx, f.result, &f.params) {
             functions.push(FuncLower::user(f.clone(), sig));
         } else {
-            std::eprintln!("codegen: failed to lower signature for {}: result={:?}, params={:?}", f.name, ctx.get(f.result), f.params.iter().map(|p| ctx.get(p.ty)).collect::<Vec<_>>());
+            if crate::log::is_verbose() {
+                std::eprintln!(
+                    "codegen: failed to lower signature for {}: result={:?}, params={:?}",
+                    f.name,
+                    ctx.get(f.result),
+                    f.params.iter().map(|p| ctx.get(p.ty)).collect::<Vec<_>>()
+                );
+            }
             diags.push(Diagnostic::error(
                 "unsupported function signature for wasm",
                 f.span,
@@ -300,7 +307,9 @@ fn wasm_sig(
         if let Some(v) = valtype(&vk) {
             param_types.push(v);
         } else {
-            std::eprintln!("wasm_sig: rejected param {} with type {:?}", p.name, vk);
+            if crate::log::is_verbose() {
+                std::eprintln!("wasm_sig: rejected param {} with type {:?}", p.name, vk);
+            }
             return None;
         }
     }
@@ -309,8 +318,10 @@ fn wasm_sig(
         vec![v]
     } else {
         if !matches!(res_kind, TypeKind::Unit) {
-             std::eprintln!("wasm_sig: rejected result type {:?}", res_kind);
-             return None;
+            if crate::log::is_verbose() {
+                std::eprintln!("wasm_sig: rejected result type {:?}", res_kind);
+            }
+            return None;
         }
         // unit return is fine in wasm
         Vec::new()
@@ -333,13 +344,21 @@ fn wasm_sig_ids(
         }
     }
     let res_kind = ctx.get(result);
-    std::eprintln!("wasm_sig: checking result type {:?} with valtype={:?}", res_kind, valtype(&res_kind));
+    if crate::log::is_verbose() {
+        std::eprintln!(
+            "wasm_sig: checking result type {:?} with valtype={:?}",
+            res_kind,
+            valtype(&res_kind)
+        );
+    }
     let res = if let Some(v) = valtype(&res_kind) {
         vec![v]
     } else {
         if !matches!(res_kind, TypeKind::Unit) {
-             std::eprintln!("wasm_sig: REJECTED result type {:?}", res_kind);
-             return None;
+            if crate::log::is_verbose() {
+                std::eprintln!("wasm_sig: REJECTED result type {:?}", res_kind);
+            }
+            return None;
         }
         // unit return is fine in wasm
         Vec::new()

@@ -28,7 +28,13 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
     } else {
         for (name, f) in &mono.funcs {
             if let TypeKind::Function { type_params, .. } = mono.ctx.get(f.func_ty) {
-                std::eprintln!("monomorphize: checking {}, params.len={}", name, type_params.len());
+                if crate::log::is_verbose() {
+                    std::eprintln!(
+                        "monomorphize: checking {}, params.len={}",
+                        name,
+                        type_params.len()
+                    );
+                }
                 if type_params.is_empty() {
                     initial.push(name.clone());
                 }
@@ -37,7 +43,9 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
     }
 
     for name in initial {
-        std::eprintln!("monomorphize: initial function {}", name);
+        if crate::log::is_verbose() {
+            std::eprintln!("monomorphize: initial function {}", name);
+        }
         mono.request_instantiation(name, Vec::new());
     }
 

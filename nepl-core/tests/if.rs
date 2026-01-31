@@ -43,7 +43,10 @@ fn main <()*>()> ():
 
     match nepl_core::compile_module(
         loaded.module.clone(),
-        nepl_core::CompileOptions { target: None },
+        nepl_core::CompileOptions {
+            target: None,
+            verbose: false,
+        },
     ) {
         Ok(_) => {}
         Err(nepl_core::CoreError::Diagnostics(diags)) => {

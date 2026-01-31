@@ -229,7 +229,9 @@ impl TypeCtx {
         if ra != a || rb != b {
             return self.unify(ra, rb);
         }
-        std::eprintln!("unify: {:?} with {:?}", self.get(ra), self.get(rb));
+        if crate::log::is_verbose() {
+            std::eprintln!("unify: {:?} with {:?}", self.get(ra), self.get(rb));
+        }
         let ra = self.resolve(ra);
         let rb = self.resolve(rb);
         if ra != a || rb != b {
@@ -323,11 +325,18 @@ impl TypeCtx {
                     }
                     if let (Some(pa), Some(pb)) = (a_var.payload, b_var.payload) {
                         if let Err(e) = self.unify(pa, pb) {
-                            std::eprintln!("unify: variant {} payload mismatch", a_var.name);
+                            if crate::log::is_verbose() {
+                                std::eprintln!("unify: variant {} payload mismatch", a_var.name);
+                            }
                             return Err(e);
                         }
                     } else if a_var.payload.is_some() || b_var.payload.is_some() {
-                        std::eprintln!("unify: variant {} payload presence mismatch", a_var.name);
+                        if crate::log::is_verbose() {
+                            std::eprintln!(
+                                "unify: variant {} payload presence mismatch",
+                                a_var.name
+                            );
+                        }
                         return Err(UnifyError::Mismatch);
                     }
                 }

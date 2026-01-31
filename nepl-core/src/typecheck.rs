@@ -475,7 +475,9 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     ));
                     continue;
                 }
-                std::eprintln!("typecheck: registering global func {}", f.name.name);
+                if crate::log::is_verbose() {
+                    std::eprintln!("typecheck: registering global func {}", f.name.name);
+                }
                 env.insert_global(Binding {
                     name: f.name.name.clone(),
                     ty,
@@ -2076,7 +2078,14 @@ impl<'a> BlockChecker<'a> {
                         // General call (builtin or user)
                         for (arg, param_ty) in args.iter().zip(params.iter()) {
                             if let Err(_) = self.ctx.unify(arg.ty, *param_ty) {
-                                std::eprintln!("apply_function: mismatch for arg {} type {:?} vs param type {:?}", name, self.ctx.get(arg.ty), self.ctx.get(*param_ty));
+                                if crate::log::is_verbose() {
+                                    std::eprintln!(
+                                        "apply_function: mismatch for arg {} type {:?} vs param type {:?}",
+                                        name,
+                                        self.ctx.get(arg.ty),
+                                        self.ctx.get(*param_ty)
+                                    );
+                                }
                                 self.diagnostics.push(Diagnostic::error(
                                     "argument type mismatch",
                                     arg.expr.span,

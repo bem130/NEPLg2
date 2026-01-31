@@ -32,7 +32,10 @@ fn main <()* >()> ():
     // Try to compile module and print diagnostics with source mapping
     match nepl_core::compile_module(
         loaded.module.clone(),
-        nepl_core::CompileOptions { target: None },
+        nepl_core::CompileOptions {
+            target: None,
+            verbose: false,
+        },
     ) {
         Ok(artifact) => println!("compiled ok, wasm len {}", artifact.wasm.len()),
         Err(nepl_core::CoreError::Diagnostics(diags)) => {

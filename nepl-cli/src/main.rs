@@ -53,6 +53,9 @@ struct Cli {
 
     #[arg(long, value_name = "TARGET", value_parser = ["wasm", "wasi"], help = "Compilation target: wasm or wasi (overrides #target)")]
     target: Option<String>,
+
+    #[arg(short, long, global = true, help = "Enable verbose compiler logging")]
+    verbose: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -75,7 +78,7 @@ fn main() -> Result<()> {
 
 fn execute(cli: Cli) -> Result<()> {
     if let Some(Command::Test(args)) = cli.command {
-        return run_tests(args);
+        return run_tests(args, cli.verbose);
     }
     if !cli.run && cli.output.is_none() {
         return Err(anyhow::anyhow!("Either --run or --output is required"));
@@ -133,6 +136,7 @@ fn execute(cli: Cli) -> Result<()> {
         .unwrap_or(CompileTarget::Wasm);
     let options = CompileOptions {
         target: target_override,
+        verbose: cli.verbose,
     };
 
     match cli.emit.as_str() {
@@ -163,7 +167,7 @@ fn execute(cli: Cli) -> Result<()> {
     Ok(())
 }
 
-fn run_tests(args: TestArgs) -> Result<()> {
+fn run_tests(args: TestArgs, verbose: bool) -> Result<()> {
     let std_root = stdlib_root()?;
     let dir = PathBuf::from(&args.dir);
     let base = if dir.is_absolute() {
@@ -195,7 +199,7 @@ fn run_tests(args: TestArgs) -> Result<()> {
             .display()
             .to_string();
         print!("test {name} ... ");
-        match run_test_file(&file, &std_root) {
+        match run_test_file(&file, &std_root, verbose) {
             Ok(()) => {
                 println!("ok");
             }
@@ -214,7 +218,7 @@ fn run_tests(args: TestArgs) -> Result<()> {
     }
 }
 
-fn run_test_file(path: &Path, std_root: &Path) -> Result<()> {
+fn run_test_file(path: &Path, std_root: &Path, verbose: bool) -> Result<()> {
     let loader = Loader::new(std_root.to_path_buf());
     let loaded = match loader.load(&path.to_path_buf()) {
         Ok(l) => l,
@@ -238,6 +242,7 @@ fn run_test_file(path: &Path, std_root: &Path) -> Result<()> {
         loaded.module,
         CompileOptions {
             target: Some(CompileTarget::Wasi),
+            verbose,
         },
     ) {
         Ok(a) => a,

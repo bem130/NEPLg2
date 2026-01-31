@@ -10,6 +10,7 @@ fn compile_err(src: &str) {
         src,
         CompileOptions {
             target: Some(CompileTarget::Wasm),
+            verbose: false,
         },
     );
     assert!(result.is_err(), "expected error, got {:?}", result);
@@ -21,6 +22,7 @@ fn compile_ok(src: &str) {
         src,
         CompileOptions {
             target: Some(CompileTarget::Wasm),
+            verbose: false,
         },
     );
     assert!(result.is_ok(), "expected success, got {:?}", result);

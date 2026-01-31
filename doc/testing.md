@@ -14,6 +14,12 @@ Run all stdlib tests:
 cargo run -p nepl-cli -- test
 ```
 
+Enable verbose compiler logs (for debugging):
+
+```
+cargo run -p nepl-cli -- test --verbose
+```
+
 Filter by substring (path match):
 
 ```
