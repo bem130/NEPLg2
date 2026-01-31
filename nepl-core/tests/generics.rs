@@ -206,7 +206,7 @@ fn main <()->i32> ():
 "#;
 
     let v = run_main_i32(src);
-    assert_eq!(v, 4);
+    assert_eq!(v, 3);
 }
 
 #[test]

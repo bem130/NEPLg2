@@ -960,7 +960,8 @@ impl<'a> BlockChecker<'a> {
                 }
             }
         }
-        for item in &expr.items {
+        for (idx, item) in expr.items.iter().enumerate() {
+            let next_is_pipe = matches!(expr.items.get(idx + 1), Some(PrefixItem::Pipe(_)));
             match item {
                 PrefixItem::Literal(lit, span) => {
                     let (ty, hir) = match lit {
@@ -1222,7 +1223,15 @@ impl<'a> BlockChecker<'a> {
             // Try applying pending ascription before call reduction
             try_apply_pending_ascription(self, stack, &mut pending_ascription);
 
-            let pending_base = pending_ascription.map(|(_, base)| base);
+            let mut pending_base = pending_ascription.map(|(_, base)| base);
+            let mut pipe_guard = false;
+            if next_is_pipe {
+                if let Some(assign_pos) = stack.iter().rposition(|e| e.assign.is_some()) {
+                    let guard_pos = assign_pos + 1;
+                    pending_base = Some(pending_base.map_or(guard_pos, |base| base.max(guard_pos)));
+                    pipe_guard = true;
+                }
+            }
             if let Some(base_len) = pending_base {
                 self.reduce_calls_guarded(stack, base_len);
             } else {
@@ -1232,7 +1241,7 @@ impl<'a> BlockChecker<'a> {
             // Try applying pending ascription after call reduction
             try_apply_pending_ascription(self, stack, &mut pending_ascription);
 
-            if pending_base.is_some() && pending_ascription.is_none() {
+            if pending_base.is_some() && pending_ascription.is_none() && !pipe_guard {
                 self.reduce_calls(stack);
             }
         }
@@ -1800,10 +1809,15 @@ impl<'a> BlockChecker<'a> {
                                     for arg in &type_args {
                                         resolved_args.push(self.ctx.resolve_id(*arg));
                                     }
+                                    let applied_ty = if resolved_args.is_empty() {
+                                        info.ty
+                                    } else {
+                                        self.ctx.apply(info.ty, resolved_args.clone())
+                                    };
                                     return Some(StackEntry {
-                                        ty: result,
+                                        ty: applied_ty,
                                         expr: HirExpr {
-                                            ty: result,
+                                            ty: applied_ty,
                                             kind: HirExprKind::EnumConstruct {
                                                 name: enm.to_string(),
                                                 variant: var.to_string(),
@@ -1817,7 +1831,7 @@ impl<'a> BlockChecker<'a> {
                                 }
                             }
                         }
-                        if self.structs.contains_key(name) {
+                        if let Some(s) = self.structs.get(name) {
                             if args.len() != params.len() {
                                 self.diagnostics.push(Diagnostic::error(
                                     "struct constructor arity mismatch",
@@ -1837,10 +1851,15 @@ impl<'a> BlockChecker<'a> {
                             for arg in &type_args {
                                 resolved_args.push(self.ctx.resolve_id(*arg));
                             }
+                            let applied_ty = if resolved_args.is_empty() {
+                                s.ty
+                            } else {
+                                self.ctx.apply(s.ty, resolved_args.clone())
+                            };
                             return Some(StackEntry {
-                                ty: result,
+                                ty: applied_ty,
                                 expr: HirExpr {
-                                    ty: result,
+                                    ty: applied_ty,
                                     kind: HirExprKind::StructConstruct {
                                         name: name.clone(),
                                         type_args: resolved_args.clone(),
@@ -1876,10 +1895,11 @@ impl<'a> BlockChecker<'a> {
                             }
                             FuncRef::User(name.clone(), resolved_args.clone())
                         };
+                        let resolved_result = self.ctx.resolve_id(result);
                         return Some(StackEntry {
-                            ty: result,
+                            ty: resolved_result,
                             expr: HirExpr {
-                                ty: result,
+                                ty: resolved_result,
                                 kind: HirExprKind::Call {
                                     callee,
                                     args: args.into_iter().map(|a| a.expr).collect(),

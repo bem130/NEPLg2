@@ -1,6 +1,7 @@
 #![no_std]
 extern crate alloc;
 
+use alloc::collections::BTreeSet;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
@@ -166,7 +167,16 @@ impl TypeCtx {
     }
 
     pub fn is_copy(&self, id: TypeId) -> bool {
-        match self.get_ref(id) {
+        let mut seen = BTreeSet::new();
+        self.is_copy_inner(id, &mut seen)
+    }
+
+    fn is_copy_inner(&self, id: TypeId, seen: &mut BTreeSet<TypeId>) -> bool {
+        let resolved = self.resolve_id(id);
+        if !seen.insert(resolved) {
+            return false;
+        }
+        match self.get_ref(resolved) {
             TypeKind::Unit
             | TypeKind::I32
             | TypeKind::F32
@@ -181,7 +191,7 @@ impl TypeCtx {
             TypeKind::Function { .. } => false,
             TypeKind::Var(v) => {
                 if let Some(b) = v.binding {
-                    self.is_copy(b)
+                    self.is_copy_inner(b, seen)
                 } else {
                     false
                 }
@@ -195,21 +205,21 @@ impl TypeCtx {
     }
 
     pub fn get(&self, id: TypeId) -> TypeKind {
-        match &self.arena[id.0] {
-            TypeKind::Var(tv) => {
-                if let Some(b) = tv.binding {
-                    self.get(b)
-                } else {
-                    TypeKind::Var(tv.clone())
-                }
-            }
+        let resolved = self.resolve_id(id);
+        match &self.arena[resolved.0] {
+            TypeKind::Var(tv) => TypeKind::Var(tv.clone()),
             other => other.clone(),
         }
     }
 
     pub fn unify(&mut self, a: TypeId, b: TypeId) -> Result<TypeId, UnifyError> {
-        let ra = self.resolve(a);
-        let rb = self.resolve(b);
+        let ra = self.resolve_id(a);
+        let rb = self.resolve_id(b);
+        if ra != a || rb != b {
+            return self.unify(ra, rb);
+        }
+        let ra = self.resolve(ra);
+        let rb = self.resolve(rb);
         if ra != a || rb != b {
             return self.unify(ra, rb);
         }
@@ -226,11 +236,25 @@ impl TypeCtx {
                         return Err(UnifyError::Mismatch);
                     }
                 }
-                let target = if va.label.is_some() { a } else { b };
-                self.bind_var(target, if target == a { b } else { a });
-                Ok(target)
+                match (va.label.is_some(), vb.label.is_some()) {
+                    (true, false) => {
+                        self.bind_var(b, a);
+                        Ok(a)
+                    }
+                    (false, true) => {
+                        self.bind_var(a, b);
+                        Ok(b)
+                    }
+                    _ => {
+                        self.bind_var(b, a);
+                        Ok(a)
+                    }
+                }
             }
             (TypeKind::Var(mut va), other) => {
+                if self.occurs_in(a, b, &mut BTreeSet::new()) {
+                    return Err(UnifyError::Mismatch);
+                }
                 if let Some(label) = va.label.take() {
                     if !label_matches(&label, &other) {
                         return Err(UnifyError::Mismatch);
@@ -240,6 +264,9 @@ impl TypeCtx {
                 Ok(b)
             }
             (other, TypeKind::Var(mut vb)) => {
+                if self.occurs_in(b, a, &mut BTreeSet::new()) {
+                    return Err(UnifyError::Mismatch);
+                }
                 if let Some(label) = vb.label.take() {
                     if !label_matches(&label, &other) {
                         return Err(UnifyError::Mismatch);
@@ -352,6 +379,10 @@ impl TypeCtx {
     }
 
     fn bind_var(&mut self, var: TypeId, target: TypeId) {
+        let target = self.resolve_id(target);
+        if target == var {
+            return;
+        }
         if let TypeKind::Var(tv) = &mut self.arena[var.0] {
             tv.binding = Some(target);
         }
@@ -390,8 +421,21 @@ impl TypeCtx {
         ty: TypeId,
         mapping: &alloc::collections::BTreeMap<TypeId, TypeId>,
     ) -> TypeId {
+        let mut seen = BTreeSet::new();
+        self.substitute_inner(ty, mapping, &mut seen)
+    }
+
+    fn substitute_inner(
+        &mut self,
+        ty: TypeId,
+        mapping: &alloc::collections::BTreeMap<TypeId, TypeId>,
+        seen: &mut BTreeSet<TypeId>,
+    ) -> TypeId {
         if let Some(target) = mapping.get(&ty) {
             return *target;
+        }
+        if !seen.insert(ty) {
+            return ty;
         }
         match self.get(ty) {
             TypeKind::Unit
@@ -409,13 +453,13 @@ impl TypeCtx {
             } => {
                 let mut new_tps = Vec::new();
                 for tp in type_params {
-                    new_tps.push(self.substitute(tp, mapping));
+                    new_tps.push(self.substitute_inner(tp, mapping, seen));
                 }
                 let mut new_vars = Vec::new();
                 for v in variants {
                     new_vars.push(EnumVariantInfo {
                         name: v.name.clone(),
-                        payload: v.payload.map(|p| self.substitute(p, mapping)),
+                        payload: v.payload.map(|p| self.substitute_inner(p, mapping, seen)),
                     });
                 }
                 self.store(TypeKind::Enum {
@@ -431,11 +475,11 @@ impl TypeCtx {
             } => {
                 let mut new_tps = Vec::new();
                 for tp in type_params {
-                    new_tps.push(self.substitute(tp, mapping));
+                    new_tps.push(self.substitute_inner(tp, mapping, seen));
                 }
                 let mut new_fs = Vec::new();
                 for f in fields {
-                    new_fs.push(self.substitute(f, mapping));
+                    new_fs.push(self.substitute_inner(f, mapping, seen));
                 }
                 self.store(TypeKind::Struct {
                     name,
@@ -451,29 +495,29 @@ impl TypeCtx {
             } => {
                 let mut new_tps = Vec::new();
                 for tp in type_params {
-                    new_tps.push(self.substitute(tp, mapping));
+                    new_tps.push(self.substitute_inner(tp, mapping, seen));
                 }
                 let mut new_ps = Vec::new();
                 for p in params {
-                    new_ps.push(self.substitute(p, mapping));
+                    new_ps.push(self.substitute_inner(p, mapping, seen));
                 }
-                let new_r = self.substitute(result, mapping);
+                let new_r = self.substitute_inner(result, mapping, seen);
                 self.function(new_tps, new_ps, new_r, effect)
             }
             TypeKind::Apply { base, args } => {
                 let mut new_args = Vec::new();
                 for a in args {
-                    new_args.push(self.substitute(a, mapping));
+                    new_args.push(self.substitute_inner(a, mapping, seen));
                 }
-                let new_base = self.substitute(base, mapping);
+                let new_base = self.substitute_inner(base, mapping, seen);
                 self.apply(new_base, new_args)
             }
             TypeKind::Box(inner) => {
-                let ni = self.substitute(inner, mapping);
+                let ni = self.substitute_inner(inner, mapping, seen);
                 self.box_ty(ni)
             }
             TypeKind::Reference(inner, is_mut) => {
-                let ni = self.substitute(inner, mapping);
+                let ni = self.substitute_inner(inner, mapping, seen);
                 self.reference(ni, is_mut)
             }
         }
@@ -564,15 +608,22 @@ impl TypeCtx {
     }
 
     pub fn resolve_id(&self, ty: TypeId) -> TypeId {
-        match &self.arena[ty.0] {
-            TypeKind::Var(tv) => {
-                if let Some(b) = tv.binding {
-                    self.resolve_id(b)
-                } else {
-                    ty
-                }
+        let mut cur = ty;
+        let mut seen = BTreeSet::new();
+        loop {
+            if !seen.insert(cur) {
+                return cur;
             }
-            _ => ty,
+            match &self.arena[cur.0] {
+                TypeKind::Var(tv) => {
+                    if let Some(b) = tv.binding {
+                        cur = b;
+                        continue;
+                    }
+                }
+                _ => {}
+            }
+            return cur;
         }
     }
 
@@ -697,6 +748,99 @@ impl TypeCtx {
                 _ => false,
             },
             _ => false,
+        }
+    }
+
+    fn occurs_in(&self, var: TypeId, ty: TypeId, seen: &mut BTreeSet<TypeId>) -> bool {
+        let ty = self.resolve_id(ty);
+        if ty == var {
+            return true;
+        }
+        if !seen.insert(ty) {
+            return false;
+        }
+        match self.get(ty) {
+            TypeKind::Unit
+            | TypeKind::I32
+            | TypeKind::F32
+            | TypeKind::Bool
+            | TypeKind::Str
+            | TypeKind::Never
+            | TypeKind::Named(_) => false,
+            TypeKind::Var(tv) => {
+                if let Some(b) = tv.binding {
+                    self.occurs_in(var, b, seen)
+                } else {
+                    false
+                }
+            }
+            TypeKind::Enum {
+                type_params,
+                variants,
+                ..
+            } => {
+                for tp in type_params {
+                    if self.occurs_in(var, tp, seen) {
+                        return true;
+                    }
+                }
+                for v in variants {
+                    if let Some(p) = v.payload {
+                        if self.occurs_in(var, p, seen) {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
+            TypeKind::Struct {
+                type_params,
+                fields,
+                ..
+            } => {
+                for tp in type_params {
+                    if self.occurs_in(var, tp, seen) {
+                        return true;
+                    }
+                }
+                for f in fields {
+                    if self.occurs_in(var, f, seen) {
+                        return true;
+                    }
+                }
+                false
+            }
+            TypeKind::Function {
+                type_params,
+                params,
+                result,
+                ..
+            } => {
+                for tp in type_params {
+                    if self.occurs_in(var, tp, seen) {
+                        return true;
+                    }
+                }
+                for p in params {
+                    if self.occurs_in(var, p, seen) {
+                        return true;
+                    }
+                }
+                self.occurs_in(var, result, seen)
+            }
+            TypeKind::Apply { base, args } => {
+                if self.occurs_in(var, base, seen) {
+                    return true;
+                }
+                for a in args {
+                    if self.occurs_in(var, a, seen) {
+                        return true;
+                    }
+                }
+                false
+            }
+            TypeKind::Box(inner) => self.occurs_in(var, inner, seen),
+            TypeKind::Reference(inner, _) => self.occurs_in(var, inner, seen),
         }
     }
 }

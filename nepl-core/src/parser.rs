@@ -642,6 +642,7 @@ impl Parser {
                     let m = self.parse_match_expr()?;
                     let sp = m.span;
                     items.push(PrefixItem::Match(m, sp));
+                    break;
                 }
                 TokenKind::Ident(name) => {
                     let tok = self.next().unwrap();
@@ -832,13 +833,20 @@ impl Parser {
     fn normalize_then_else(&mut self, items: &mut Vec<PrefixItem>) {
         // Remove inline `cond`/`then`/`else` tokens, but preserve a leading
         // marker when it is the first item on the line (marker form).
+        let has_then_else = items.iter().any(|item| {
+            matches!(
+                item,
+                PrefixItem::Symbol(crate::ast::Symbol::Ident(ident))
+                    if ident.name == "then" || ident.name == "else"
+            )
+        });
         let mut i = 0;
         while i < items.len() {
             let remove = match &items[i] {
                 PrefixItem::Symbol(crate::ast::Symbol::Ident(ident)) => {
                     let n = ident.name.as_str();
                     // remove only if not the first item (i != 0)
-                    (n == "then" || n == "else" || n == "cond") && i != 0
+                    ((n == "then" || n == "else") && i != 0) || (n == "cond" && i != 0 && has_then_else)
                 }
                 _ => false,
             };
@@ -877,11 +885,6 @@ impl Parser {
         }
         match tail.as_slice() {
             [.., PrefixItem::Symbol(Symbol::If(_))] => true,
-            [.., PrefixItem::Symbol(Symbol::If(_)), PrefixItem::Symbol(Symbol::Ident(id))]
-                if id.name == "cond" =>
-            {
-                true
-            }
             _ => false,
         }
     }

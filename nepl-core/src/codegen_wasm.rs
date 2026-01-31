@@ -708,25 +708,33 @@ fn gen_expr(
                 Some(vt) => wasm_encoder::BlockType::Result(vt),
                 None => wasm_encoder::BlockType::Empty,
             }));
-            if arms.len() == 2 {
-                // arm0
-                let arm0 = &arms[0];
-                insts.push(Instruction::LocalGet(ptr_local));
-                insts.push(Instruction::I32Load(MemArg {
-                    offset: 0,
-                    align: 2,
-                    memory_index: 0,
-                }));
-                let tag0 = enum_variant_tag(ctx, scrutinee.ty, &arm0.variant);
-                insts.push(Instruction::I32Const(tag0 as i32));
+            if arms.is_empty() {
+                insts.push(Instruction::Unreachable);
+                insts.push(Instruction::End);
+                return result_ty;
+            }
+
+            let tag_local = locals.alloc_temp(ValType::I32);
+            insts.push(Instruction::LocalGet(ptr_local));
+            insts.push(Instruction::I32Load(MemArg {
+                offset: 0,
+                align: 2,
+                memory_index: 0,
+            }));
+            insts.push(Instruction::LocalSet(tag_local));
+
+            for (idx, arm) in arms.iter().enumerate() {
+                let is_last = idx + 1 == arms.len();
+                let tag = enum_variant_tag(ctx, scrutinee.ty, &arm.variant);
+                insts.push(Instruction::LocalGet(tag_local));
+                insts.push(Instruction::I32Const(tag as i32));
                 insts.push(Instruction::I32Eq);
                 insts.push(Instruction::If(match result_ty {
                     Some(vt) => wasm_encoder::BlockType::Result(vt),
                     None => wasm_encoder::BlockType::Empty,
                 }));
-                if let Some(bind) = &arm0.bind_local {
-                    if let Some(payload_ty) = enum_variant_payload(ctx, scrutinee.ty, &arm0.variant)
-                    {
+                if let Some(bind) = &arm.bind_local {
+                    if let Some(payload_ty) = enum_variant_payload(ctx, scrutinee.ty, &arm.variant) {
                         let lidx = locals.ensure_local(bind.clone(), payload_ty, ctx);
                         insts.push(Instruction::LocalGet(ptr_local));
                         insts.push(Instruction::I32Const(4));
@@ -744,50 +752,26 @@ fn gen_expr(
                             })),
                             _ => diags.push(Diagnostic::error(
                                 "unsupported enum payload type",
-                                arm0.body.span,
+                                arm.body.span,
                             )),
                         }
                         insts.push(Instruction::LocalSet(lidx));
                     }
                 }
-                gen_expr(ctx, &arm0.body, name_map, strings, locals, insts, diags);
-                insts.push(Instruction::Else);
-                // arm1 (fallback)
-                let arm1 = &arms[1];
-                if let Some(bind) = &arm1.bind_local {
-                    if let Some(payload_ty) = enum_variant_payload(ctx, scrutinee.ty, &arm1.variant)
-                    {
-                        let lidx = locals.ensure_local(bind.clone(), payload_ty, ctx);
-                        insts.push(Instruction::LocalGet(ptr_local));
-                        insts.push(Instruction::I32Const(4));
-                        insts.push(Instruction::I32Add);
-                        match valtype(&ctx.get(payload_ty)).unwrap_or(ValType::I32) {
-                            ValType::I32 => insts.push(Instruction::I32Load(MemArg {
-                                offset: 0,
-                                align: 2,
-                                memory_index: 0,
-                            })),
-                            ValType::F32 => insts.push(Instruction::F32Load(MemArg {
-                                offset: 0,
-                                align: 2,
-                                memory_index: 0,
-                            })),
-                            _ => diags.push(Diagnostic::error(
-                                "unsupported enum payload type",
-                                arm1.body.span,
-                            )),
-                        }
-                        insts.push(Instruction::LocalSet(lidx));
-                    }
+                gen_expr(ctx, &arm.body, name_map, strings, locals, insts, diags);
+                if is_last {
+                    insts.push(Instruction::Else);
+                    insts.push(Instruction::Unreachable);
+                    insts.push(Instruction::End);
+                } else {
+                    insts.push(Instruction::Else);
                 }
-                gen_expr(ctx, &arm1.body, name_map, strings, locals, insts, diags);
-                insts.push(Instruction::End); // end outer if
-                insts.push(Instruction::End); // end block
-            } else {
-                // Fallback: unreachable for unsupported arity
-                insts.push(Instruction::Unreachable);
+            }
+
+            for _ in 0..(arms.len() - 1) {
                 insts.push(Instruction::End);
             }
+            insts.push(Instruction::End);
             result_ty
         }
         HirExprKind::Let { name, value, .. } => {
