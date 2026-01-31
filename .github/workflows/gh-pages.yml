@@ -1,10 +1,15 @@
-name: Deploy NEPL-g1 playground to GitHub Pages
+name: Deploy NEPL-g2 playground to GitHub Pages
 
-on:
-    push:
-        branches:
-            - main
-    workflow_dispatch:
+# on:
+#     push:
+#         branches:
+#             - main
+#             - develop
+#     pull_request:
+#         branches:
+#             - main
+#             - develop
+on: {}
 
 permissions:
     contents: read
@@ -49,11 +54,11 @@ jobs:
               uses: Swatinem/rust-cache@v2
               with:
                   # Shared cache with tests and wasm workflow
-                  shared-key: nepl-g1
+                  shared-key: nepl-g2
                   cache-on-failure: true
 
             - name: Build wasm app with trunk
-              run: trunk build --release --public-url /NEPL-g1/
+              run: trunk build --release --public-url /NEPL-g2/
               # If your Trunk project is not at repo root, uncomment:
               # working-directory: path/to/your/trunk/project
 

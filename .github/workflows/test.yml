@@ -1,14 +1,15 @@
-name: Rust Tests (NEPL-g1)
+name: Rust Tests (NEPL-g2)
 
-on:
-    push:
-        branches:
-            - main
-            - develop
-    pull_request:
-        branches:
-            - main
-            - develop
+# on:
+#     push:
+#         branches:
+#             - main
+#             - develop
+#     pull_request:
+#         branches:
+#             - main
+#             - develop
+on: {}
 
 jobs:
     test:
@@ -31,8 +32,8 @@ jobs:
             - name: Cache Cargo build
               uses: Swatinem/rust-cache@v2
               with:
-                  # Shared cache key for all NEPL-g1 workflows
-                  shared-key: nepl-g1
+                  # Shared cache key for all NEPL-g2 workflows
+                  shared-key: nepl-g2
                   cache-on-failure: true
 
             - name: Run cargo test

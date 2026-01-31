@@ -1,4 +1,4 @@
-name: Rust Wasm Tests (NEPL-g1)
+name: Rust Wasm Tests (NEPL-g2)
 
 on:
     push:
@@ -35,8 +35,17 @@ jobs:
               uses: Swatinem/rust-cache@v2
               with:
                   # Same cache key as other workflows
-                  shared-key: nepl-g1
+                  shared-key: nepl-g2
                   cache-on-failure: true
 
-            - name: Compile tests for wasm32 (no run)
+            - name: Rust Compile tests (no run)
+              run: cargo test --no-run --all --all-features --locked
+
+            - name: Rust Compile tests wasm32 (no run)
               run: cargo test --target wasm32-unknown-unknown --no-run --all --all-features --locked
+
+            - name: Rust tests
+              run: cargo test --all --all-features --locked
+
+            - name: NEPL-g2 tests (no run)
+              run: cargo run -p nepl-cli -- test
