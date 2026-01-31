@@ -1,5 +1,6 @@
 #![no_std]
 extern crate alloc;
+extern crate std;
 
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -190,8 +191,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
         }
         match item {
             Stmt::EnumDef(e) => {
-                if enums.contains_key(&e.name.name) {
-                    diagnostics.push(Diagnostic::error("duplicate enum definition", e.name.span));
+                if enums.contains_key(&e.name.name) || env.lookup(&e.name.name).is_some() {
                     continue;
                 }
                 if env.lookup(&e.name.name).is_some() || structs.contains_key(&e.name.name) {
@@ -231,17 +231,50 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     e.name.name.clone(),
                     EnumInfo {
                         ty,
-                        type_params: tps,
-                        variants: vars,
+                        type_params: tps.clone(),
+                        variants: vars.clone(),
                     },
                 );
+
+                // Register variants as global functions
+                for (i, v) in vars.iter().enumerate() {
+                    let mut params = Vec::new();
+                    if let Some(pty) = v.payload {
+                        params.push(pty);
+                    }
+                    let func_ty = ctx.function(tps.clone(), params.clone(), ty, Effect::Pure);
+                    
+                    // Simple name (e.g. "Some")
+                    env.insert_global(Binding {
+                        name: v.name.clone(),
+                        ty: func_ty,
+                        mutable: false,
+                        defined: true,
+                        moved: false,
+                        kind: BindingKind::Func {
+                            effect: Effect::Pure,
+                            arity: params.len(),
+                            builtin: None,
+                        },
+                    });
+                    
+                    // Qualified name (e.g. "Option::Some")
+                    env.insert_global(Binding {
+                        name: format!("{}::{}", e.name.name, v.name),
+                        ty: func_ty,
+                        mutable: false,
+                        defined: true,
+                        moved: false,
+                        kind: BindingKind::Func {
+                            effect: Effect::Pure,
+                            arity: params.len(),
+                            builtin: None,
+                        },
+                    });
+                }
             }
             Stmt::StructDef(s) => {
-                if structs.contains_key(&s.name.name) {
-                    diagnostics.push(Diagnostic::error(
-                        "duplicate struct definition",
-                        s.name.span,
-                    ));
+                if structs.contains_key(&s.name.name) || env.lookup(&s.name.name).is_some() {
                     continue;
                 }
                 if env.lookup(&s.name.name).is_some() || enums.contains_key(&s.name.name) {
@@ -433,10 +466,6 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
             } = ctx.get(ty)
             {
                 if env.lookup(&f.name.name).is_some() {
-                    diagnostics.push(Diagnostic::error(
-                        "duplicate function definition",
-                        f.name.span,
-                    ));
                     continue;
                 }
                 if enums.contains_key(&f.name.name) || structs.contains_key(&f.name.name) {
@@ -446,6 +475,7 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
                     ));
                     continue;
                 }
+                std::eprintln!("typecheck: registering global func {}", f.name.name);
                 env.insert_global(Binding {
                     name: f.name.name.clone(),
                     ty,
@@ -997,8 +1027,48 @@ impl<'a> BlockChecker<'a> {
                     last_expr = Some(stack.last().unwrap().expr.clone());
                 }
                 PrefixItem::Symbol(sym) => match sym {
-                    Symbol::Ident(id) => {
+                    Symbol::Ident(id, type_args) => {
                         if let Some(binding) = self.env.lookup(&id.name) {
+                            let mut ty = binding.ty;
+                            let mut fresh_args = Vec::new();
+                            
+                            // If explicit type arguments are provided, use them.
+                            if !type_args.is_empty() {
+                                let mut args = Vec::new();
+                                for arg_expr in type_args {
+                                    args.push(type_from_expr(self.ctx, self.labels, arg_expr));
+                                }
+                                
+                                let func_data = if let TypeKind::Function { type_params, params, result, effect } = self.ctx.get(ty) {
+                                    Some((type_params.clone(), params.clone(), result, effect))
+                                } else {
+                                    None
+                                };
+
+                                if let Some((type_params, params, result, effect)) = func_data {
+                                    if type_params.len() == args.len() {
+                                        let mut mapping = BTreeMap::new();
+                                        for (p, a) in type_params.iter().zip(args.iter()) {
+                                            mapping.insert(self.ctx.resolve_id(*p), self.ctx.resolve_id(*a));
+                                        }
+                                        ty = self.ctx.substitute(result, &mapping);
+                                        let substituted_params = params.iter().map(|p| self.ctx.substitute(*p, &mapping)).collect();
+                                        ty = self.ctx.function(Vec::new(), substituted_params, ty, effect);
+                                        fresh_args = args;
+                                    } else {
+                                        self.diagnostics.push(Diagnostic::error(
+                                            format!("expected {} type arguments, got {}", type_params.len(), args.len()),
+                                            id.span
+                                        ));
+                                    }
+                                }
+                            } else {
+                                // If NO explicit type arguments, instantiate with fresh vars.
+                                let (inst_ty, args) = self.ctx.instantiate(ty);
+                                ty = inst_ty;
+                                fresh_args = args;
+                            }
+
                             match &binding.kind {
                                 BindingKind::Func {
                                     effect: _,
@@ -1006,9 +1076,9 @@ impl<'a> BlockChecker<'a> {
                                     builtin: _,
                                 } => {
                                     stack.push(StackEntry {
-                                        ty: binding.ty,
+                                        ty,
                                         expr: HirExpr {
-                                            ty: binding.ty,
+                                            ty,
                                             kind: HirExprKind::Var(id.name.clone()),
                                             span: id.span,
                                         },
@@ -1019,9 +1089,9 @@ impl<'a> BlockChecker<'a> {
                                 }
                                 BindingKind::Var => {
                                     stack.push(StackEntry {
-                                        ty: binding.ty,
+                                        ty,
                                         expr: HirExpr {
-                                            ty: binding.ty,
+                                            ty,
                                             kind: HirExprKind::Var(id.name.clone()),
                                             span: id.span,
                                         },
@@ -1171,6 +1241,8 @@ impl<'a> BlockChecker<'a> {
                         }
                     } else if intrin.name == "store" {
                          self.ctx.unit()
+                    } else if intrin.name == "unreachable" {
+                         self.ctx.never()
                     } else {
                         self.diagnostics.push(Diagnostic::error("unknown intrinsic", *sp));
                         self.ctx.unit()
@@ -1229,6 +1301,19 @@ impl<'a> BlockChecker<'a> {
                         assign: None,
                     });
                     last_expr = Some(stack.last().unwrap().expr.clone());
+                }
+                PrefixItem::Group(inner, _sp) => {
+                    let mut group_stack = Vec::new();
+                    if let Some((hexpr, _)) = self.check_prefix(inner, 0, &mut group_stack) {
+                        stack.push(StackEntry {
+                            ty: hexpr.ty,
+                            expr: hexpr,
+                            assign: None,
+                        });
+                        last_expr = Some(stack.last().unwrap().expr.clone());
+                    } else {
+                        return None;
+                    }
                 }
                 PrefixItem::Block(b, sp) => {
                     // Treat blocks uniformly; parser now desugars `if:`/`if <cond>:`
@@ -1458,7 +1543,11 @@ impl<'a> BlockChecker<'a> {
             let scrut_ty = scrut_expr.ty;
             let resolved_ty = self.ctx.resolve(scrut_ty);
             let variants = match self.ctx.get(resolved_ty) {
-                TypeKind::Enum { variants, .. } => Some(variants),
+                TypeKind::Enum { variants, .. } => Some(variants.clone()),
+                TypeKind::Bool => Some(alloc::vec![
+                    EnumVariantInfo { name: "true".to_string(), payload: None },
+                    EnumVariantInfo { name: "false".to_string(), payload: None },
+                ]),
                 _ => None,
             };
             if variants.is_none() {
@@ -1471,15 +1560,20 @@ impl<'a> BlockChecker<'a> {
             let mut arms_hir = Vec::new();
             let mut result_ty: Option<TypeId> = None;
             for arm in &m.arms {
-                if !seen.insert(arm.variant.name.clone()) {
+                let arm_var_name = if let Some(pos) = arm.variant.name.find("::") {
+                    &arm.variant.name[pos + 2..]
+                } else {
+                    &arm.variant.name
+                };
+                if !seen.insert(arm_var_name.to_string()) {
                     self.diagnostics
                         .push(Diagnostic::error("duplicate match arm", arm.variant.span));
                     continue;
                 }
-                let var_info = variants.iter().find(|v| v.name == arm.variant.name);
+                let var_info = variants.iter().find(|v| v.name == arm_var_name);
                 if var_info.is_none() {
                     self.diagnostics.push(Diagnostic::error(
-                        "unknown enum variant in match",
+                        alloc::format!("unknown enum variant '{}' in match", arm.variant.name),
                         arm.variant.span,
                     ));
                     continue;
@@ -1488,6 +1582,7 @@ impl<'a> BlockChecker<'a> {
                 self.env.push_scope();
                 if let Some(bind) = &arm.bind {
                     if let Some(pty) = var_info.payload {
+
                         let _ = self.env.insert_local(Binding {
                             name: bind.name.clone(),
                             ty: pty,
@@ -1509,7 +1604,11 @@ impl<'a> BlockChecker<'a> {
                 if let Some(t) = result_ty {
                     if let Err(_) = self.ctx.unify(t, body_ty) {
                         self.diagnostics.push(Diagnostic::error(
-                            "match arms have incompatible types",
+                            alloc::format!(
+                                "match arms have incompatible types: {} and {}",
+                                self.ctx.type_to_string(t),
+                                self.ctx.type_to_string(body_ty)
+                            ),
                             arm.span,
                         ));
                     }
@@ -1555,7 +1654,7 @@ impl<'a> BlockChecker<'a> {
         let mut else_idx: Option<usize> = None;
         for (i, stmt) in b.items.iter().enumerate() {
             if let Stmt::Expr(e) = stmt {
-                if let Some(PrefixItem::Symbol(Symbol::Ident(id))) = e.items.first() {
+                if let Some(PrefixItem::Symbol(Symbol::Ident(id, _))) = e.items.first() {
                     if id.name == "else" {
                         else_idx = Some(i);
                         break;
@@ -1574,7 +1673,7 @@ impl<'a> BlockChecker<'a> {
 
         let then_block = if then_items.len() == 1 {
             if let Stmt::Expr(e) = then_items.remove(0) {
-                if let Some(PrefixItem::Symbol(Symbol::Ident(id))) = e.items.first() {
+                if let Some(PrefixItem::Symbol(Symbol::Ident(id, _))) = e.items.first() {
                     if id.name == "then" {
                         // drop leading marker and convert remaining items into block
                         let mut items = e.items;
@@ -1838,11 +1937,13 @@ impl<'a> BlockChecker<'a> {
             if let Some(binding) = self.env.lookup(name) {
                 match &binding.kind {
                     BindingKind::Var => {
-                        self.diagnostics.push(Diagnostic::error(
-                            "variable is not callable",
-                            func.expr.span,
-                        ));
-                        return None;
+                        if !matches!(self.ctx.get(func.ty), TypeKind::Function { .. }) {
+                            self.diagnostics.push(Diagnostic::error(
+                                "variable is not callable",
+                                func.expr.span,
+                            ));
+                            return None;
+                        }
                     }
                     BindingKind::Func { builtin, .. } => {
                         // Enum/struct constructors
@@ -1948,6 +2049,7 @@ impl<'a> BlockChecker<'a> {
                         // General call (builtin or user)
                         for (arg, param_ty) in args.iter().zip(params.iter()) {
                             if let Err(_) = self.ctx.unify(arg.ty, *param_ty) {
+                                std::eprintln!("apply_function: mismatch for arg {} type {:?} vs param type {:?}", name, self.ctx.get(arg.ty), self.ctx.get(*param_ty));
                                 self.diagnostics.push(Diagnostic::error(
                                     "argument type mismatch",
                                     arg.expr.span,
@@ -2140,10 +2242,22 @@ fn type_from_expr(ctx: &mut TypeCtx, labels: &mut LabelEnv, t: &TypeExpr) -> Typ
         TypeExpr::Str => ctx.str(),
         TypeExpr::Never => ctx.never(),
         TypeExpr::Named(name) => {
-            if let Some(id) = ctx.lookup_named(name) {
-                id
-            } else {
-                ctx.register_named(name.clone(), TypeKind::Named(name.clone()))
+            if let Some(id) = labels.get(name) {
+                return *id;
+            }
+            match name.as_str() {
+                "i32" => ctx.i32(),
+                "f32" => ctx.f32(),
+                "bool" => ctx.bool(),
+                "str" => ctx.str(),
+                "never" => ctx.never(),
+                _ => {
+                    if let Some(id) = ctx.lookup_named(name) {
+                        id
+                    } else {
+                        ctx.register_named(name.clone(), TypeKind::Named(name.clone()))
+                    }
+                }
             }
         }
         TypeExpr::Apply(base, args) => {

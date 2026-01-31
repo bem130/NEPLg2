@@ -348,7 +348,6 @@ impl Parser {
             }
         }
         self.expect(TokenKind::RParen)?;
-
         self.expect(TokenKind::Colon)?;
         let body = self.parse_block_after_colon()?;
 
@@ -404,11 +403,7 @@ impl Parser {
     }
 
     fn parse_block_after_colon(&mut self) -> Option<Block> {
-        if !self.consume_if(TokenKind::Newline) {
-            let span = self.peek_span().unwrap_or_else(Span::dummy);
-            self.diagnostics
-                .push(Diagnostic::error("expected newline after ':'", span));
-        }
+        while self.consume_if(TokenKind::Newline) {}
         self.expect(TokenKind::Indent)?;
         let block = self.parse_block_until(TokenEnd::Dedent)?;
         self.expect(TokenKind::Dedent)?;
@@ -606,13 +601,8 @@ impl Parser {
                             if saw_comma {
                                 items.push(PrefixItem::Tuple(elems, tup_span));
                             } else {
-                                let span = self.peek_span().unwrap_or(lp);
-                                self.diagnostics.push(Diagnostic::error(
-                                    "parenthesized expressions are not supported; use tuple syntax with commas",
-                                    span,
-                                ));
                                 if let Some(first) = elems.into_iter().next() {
-                                    items.extend(first.items);
+                                    items.push(PrefixItem::Group(first, tup_span));
                                 }
                             }
                         } else {
@@ -721,21 +711,55 @@ impl Parser {
                     let tok = self.next().unwrap();
                     let mut full = name.clone();
                     let mut end_span = tok.span;
-                    while self.check(TokenKind::PathSep) {
-                        let _ = self.next();
-                        if let Some(TokenKind::Ident(n2)) = self.peek_kind() {
-                            let tok2 = self.next().unwrap();
-                            full.push_str("::");
-                            full.push_str(&n2);
-                            end_span = end_span.join(tok2.span).unwrap_or(tok2.span);
+                    let mut type_args = Vec::new();
+                    loop {
+                        if self.check(TokenKind::LAngle) {
+                            let saved = self.pos;
+                            let saved_diags = self.diagnostics.len();
+                            self.next(); // consume <
+                            let mut ok = true;
+                            let mut temp_args = Vec::new();
+                            loop {
+                                if let Some(ty) = self.parse_type_expr() {
+                                    temp_args.push(ty);
+                                } else {
+                                    ok = false;
+                                    break;
+                                }
+                                if self.consume_if(TokenKind::Comma) {
+                                    continue;
+                                }
+                                break;
+                            }
+                            if ok && self.consume_if(TokenKind::RAngle) {
+                                type_args.extend(temp_args);
+                            } else {
+                                self.pos = saved;
+                                self.diagnostics.truncate(saved_diags);
+                                break;
+                            }
+                        } else if self.check(TokenKind::PathSep) {
+                            let _ = self.next();
+                            if let Some(TokenKind::Ident(n2)) = self.peek_kind() {
+                                let tok2 = self.next().unwrap();
+                                full.push_str("::");
+                                full.push_str(&n2);
+                                end_span = end_span.join(tok2.span).unwrap_or(tok2.span);
+                            } else {
+                                break;
+                            }
                         } else {
                             break;
                         }
                     }
-                    items.push(PrefixItem::Symbol(Symbol::Ident(Ident {
-                        name: full,
-                        span: end_span,
-                    })));
+
+                    items.push(PrefixItem::Symbol(Symbol::Ident(
+                        Ident {
+                            name: full,
+                            span: end_span,
+                        },
+                        type_args,
+                    )));
                 }
                 _ => {
                     let span = self.peek_span().unwrap_or_else(Span::dummy);
@@ -971,10 +995,13 @@ impl Parser {
                             break;
                         }
                     }
-                    items.push(PrefixItem::Symbol(Symbol::Ident(Ident {
-                        name: full,
-                        span: end_span,
-                    })));
+                    items.push(PrefixItem::Symbol(Symbol::Ident(
+                        Ident {
+                            name: full,
+                            span: end_span,
+                        },
+                        Vec::new(),
+                    )));
                 }
                 _ => {
                     let span = self.peek_span().unwrap_or_else(Span::dummy);
@@ -1114,10 +1141,13 @@ impl Parser {
                 }
                 TokenKind::Ident(name) => {
                     let tok = self.next().unwrap();
-                    items.push(PrefixItem::Symbol(Symbol::Ident(Ident {
-                        name: name.clone(),
-                        span: tok.span,
-                    })));
+                    items.push(PrefixItem::Symbol(Symbol::Ident(
+                        Ident {
+                            name: name.clone(),
+                            span: tok.span,
+                        },
+                        Vec::new(),
+                    )));
                 }
                 TokenKind::KwLet => {
                     let _ = self.next();
@@ -1174,14 +1204,14 @@ impl Parser {
         let has_then_else = items.iter().any(|item| {
             matches!(
                 item,
-                PrefixItem::Symbol(crate::ast::Symbol::Ident(ident))
+                PrefixItem::Symbol(crate::ast::Symbol::Ident(ident, _))
                     if ident.name == "then" || ident.name == "else"
             )
         });
         let mut i = 0;
         while i < items.len() {
             let remove = match &items[i] {
-                PrefixItem::Symbol(crate::ast::Symbol::Ident(ident)) => {
+                PrefixItem::Symbol(crate::ast::Symbol::Ident(ident, _)) => {
                     let n = ident.name.as_str();
                     // remove only if not the first item (i != 0)
                     ((n == "then" || n == "else") && i != 0) || (n == "cond" && i != 0 && has_then_else)
@@ -1198,15 +1228,15 @@ impl Parser {
 
     fn take_role_from_expr(expr: &mut PrefixExpr) -> Option<IfRole> {
         match expr.items.first() {
-            Some(PrefixItem::Symbol(Symbol::Ident(id))) if id.name == "cond" => {
+            Some(PrefixItem::Symbol(Symbol::Ident(id, _))) if id.name == "cond" => {
                 expr.items.remove(0);
                 Some(IfRole::Cond)
             }
-            Some(PrefixItem::Symbol(Symbol::Ident(id))) if id.name == "then" => {
+            Some(PrefixItem::Symbol(Symbol::Ident(id, _))) if id.name == "then" => {
                 expr.items.remove(0);
                 Some(IfRole::Then)
             }
-            Some(PrefixItem::Symbol(Symbol::Ident(id))) if id.name == "else" => {
+            Some(PrefixItem::Symbol(Symbol::Ident(id, _))) if id.name == "else" => {
                 expr.items.remove(0);
                 Some(IfRole::Else)
             }
@@ -1324,7 +1354,16 @@ impl Parser {
             if self.consume_if(TokenKind::Newline) {
                 continue;
             }
-            let (vname, vspan) = self.expect_ident()?;
+            let (vname_tok, vspan_tok) = self.expect_ident()?;
+            let mut vname = vname_tok;
+            let mut vspan = vspan_tok;
+            while self.consume_if(TokenKind::PathSep) {
+                let (part, pspan) = self.expect_ident()?;
+                vname.push_str("::");
+                vname.push_str(&part);
+                vspan = vspan.join(pspan).unwrap_or(vspan);
+            }
+
             let bind = if let Some(TokenKind::Ident(bn)) = self.peek_kind() {
                 let (bnm, bspan) = self.expect_ident()?;
                 Some(Ident {
@@ -1496,9 +1535,13 @@ impl Parser {
         if self.consume_if(kind.clone()) {
             Some(())
         } else {
-            let span = self.peek_span().unwrap_or_else(Span::dummy);
+            let (span, found) = if let Some(tok) = self.peek() {
+                (tok.span, alloc::format!("{:?}", tok.kind))
+            } else {
+                (Span::dummy(), "EOF".to_string())
+            };
             self.diagnostics.push(Diagnostic::error(
-                alloc::format!("expected {:?}", kind),
+                alloc::format!("expected {:?}, found {}", kind, found),
                 span,
             ));
             None
@@ -1545,6 +1588,10 @@ impl Parser {
         self.tokens.get(self.pos).map(|t| t.span)
     }
 
+    fn peek(&self) -> Option<&Token> {
+        self.tokens.get(self.pos)
+    }
+
     fn next(&mut self) -> Option<Token> {
         if self.pos < self.tokens.len() {
             let t = self.tokens[self.pos].clone();
@@ -1576,7 +1623,7 @@ impl Parser {
     fn item_span(&self, item: &PrefixItem) -> Span {
         match item {
             PrefixItem::Literal(_, sp) => *sp,
-            PrefixItem::Symbol(Symbol::Ident(id)) => id.span,
+            PrefixItem::Symbol(Symbol::Ident(id, _)) => id.span,
             PrefixItem::Symbol(Symbol::Let { name, .. }) => name.span,
             PrefixItem::Symbol(Symbol::Set { name }) => name.span,
             PrefixItem::Symbol(Symbol::If(sp)) => *sp,
@@ -1586,6 +1633,7 @@ impl Parser {
             PrefixItem::Match(_, sp) => *sp,
             PrefixItem::Pipe(sp) => *sp,
             PrefixItem::Tuple(_, sp) => *sp,
+            PrefixItem::Group(_, sp) => *sp,
             PrefixItem::Intrinsic(_, sp) => *sp,
         }
     }

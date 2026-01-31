@@ -15,7 +15,7 @@ pub enum Effect {
 }
 
 /// Surface-level type expression (before inference).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeExpr {
     Unit,
     I32,
@@ -78,13 +78,14 @@ pub enum PrefixItem {
     Match(MatchExpr, Span),
     Pipe(Span),
     Tuple(Vec<PrefixExpr>, Span),
+    Group(PrefixExpr, Span),
     Intrinsic(IntrinsicExpr, Span),
 }
 
 /// Special symbols in the language.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Symbol {
-    Ident(Ident),
+    Ident(Ident, Vec<TypeExpr>),
     Let { name: Ident, mutable: bool },
     Set { name: Ident },
     If(Span),

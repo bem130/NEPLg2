@@ -7,14 +7,14 @@
 #import "std/test"
 #use std::test::*
 
-fn main <()*> ()> ():
-    let r1 <ResultI32> ok 5;
+fn main <() -> ()> ():
+    let r1 <Result<i32,i32>> ok<i32,i32> 5;
     assert_ok_i32 r1;
-    let r2 <ResultI32> ok 5;
-    assert_eq_i32 5 unwrap_or r2 0;
+    let r2 <Result<i32,i32>> ok<i32,i32> 5;
+    assert_eq_i32 5 unwrap_or<i32,i32> r2 0;
 
-    let e1 <ResultI32> err 7;
+    let e1 <Result<i32,i32>> err<i32,i32> 7;
     assert_err_i32 e1;
-    let e2 <ResultI32> err 7;
-    assert_eq_i32 9 unwrap_or e2 9;
+    let e2 <Result<i32,i32>> err<i32,i32> 7;
+    assert_eq_i32 9 unwrap_or<i32,i32> e2 9;
     ()

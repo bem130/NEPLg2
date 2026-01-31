@@ -1,5 +1,6 @@
 #![no_std]
 extern crate alloc;
+extern crate std;
 
 use alloc::collections::BTreeMap;
 use alloc::string::String;
@@ -27,6 +28,7 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
     } else {
         for (name, f) in &mono.funcs {
             if let TypeKind::Function { type_params, .. } = mono.ctx.get(f.func_ty) {
+                std::eprintln!("monomorphize: checking {}, params.len={}", name, type_params.len());
                 if type_params.is_empty() {
                     initial.push(name.clone());
                 }
@@ -35,6 +37,7 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
     }
 
     for name in initial {
+        std::eprintln!("monomorphize: initial function {}", name);
         mono.request_instantiation(name, Vec::new());
     }
 
@@ -125,7 +128,7 @@ impl<'a> Monomorphizer<'a> {
         let mut mapping = BTreeMap::new();
         if let TypeKind::Function { type_params, .. } = self.ctx.get(f.func_ty) {
             for (tp, arg) in type_params.iter().zip(args.iter()) {
-                mapping.insert(*tp, *arg);
+                mapping.insert(self.ctx.resolve_id(*tp), self.ctx.resolve_id(*arg));
             }
         }
 

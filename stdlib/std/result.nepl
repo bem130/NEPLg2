@@ -4,61 +4,61 @@
 #use std::mem::*
 
 // Generic Result type
-enum Result<.T,.E>:
+enum Result<.T, .E>:
     Ok <.T>
     Err <.E>
 
-fn ok <.T,.E> <(.T)->Result<.T,.E>> (v):
-    Result<.T,.E>::Ok v
+fn ok <.T, .E> <(.T)->Result<.T, .E>> (v):
+    Result<.T, .E>::Ok v
 
-fn err <.T,.E> <(.E)->Result<.T,.E>> (e):
-    Result<.T,.E>::Err e
+fn err <.T, .E> <(.E)->Result<.T, .E>> (e):
+    Result<.T, .E>::Err e
 
-fn is_ok <.T,.E> <(Result<.T,.E>)->bool> (r):
+fn is_ok <.T, .E> <(Result<.T, .E>)->bool> (r):
     match r:
-        Ok v:
+        Result::Ok v:
             true
-        Err e:
+        Result::Err e:
             false
 
-fn is_err <.T,.E> <(Result<.T,.E>)->bool> (r):
+fn is_err <.T, .E> <(Result<.T, .E>)->bool> (r):
     match r:
-        Ok v:
+        Result::Ok v:
             false
-        Err e:
+        Result::Err e:
             true
 
-fn unwrap_ok <.T,.E> <(Result<.T,.E>)->.T> (r):
+fn unwrap_ok <.T, .E> <(Result<.T, .E>)->.T> (r):
     match r:
-        Ok v:
+        Result::Ok v:
             v
-        Err e:
+        Result::Err e:
             #intrinsic "unreachable" <> ()
 
-fn unwrap_err <.T,.E> <(Result<.T,.E>)->.E> (r):
+fn unwrap_err <.T, .E> <(Result<.T, .E>)->.E> (r):
     match r:
-        Ok v:
+        Result::Ok v:
             #intrinsic "unreachable" <> ()
-        Err e:
+        Result::Err e:
             e
 
-fn unwrap_or <.T,.E> <(Result<.T,.E>,.T)->.T> (r, default):
+fn unwrap_or <.T, .E> <(Result<.T, .E>, .T)->.T> (r, default):
     match r:
-        Ok v:
+        Result::Ok v:
             v
-        Err e:
+        Result::Err e:
             default
 
-fn map <.T,.U,.E> <(Result<.T,.E>, (.T)->.U)->Result<.U,.E>> (r, f):
+fn map <.T, .U, .E> <(Result<.T, .E>, (.T)->.U)->Result<.U, .E>> (r, f):
     match r:
-        Ok v:
-            ok<.U,.E> f v
-        Err e:
-            err<.U,.E> e
+        Result::Ok v:
+            ok<.U, .E> (f v)
+        Result::Err e:
+            err<.U, .E> e
 
-fn map_err <.T,.E,.F> <(Result<.T,.E>, (.E)->.F)->Result<.T,.F>> (r, f):
+fn map_err <.T, .E, .F> <(Result<.T, .E>, (.E)->.F)->Result<.T, .F>> (r, f):
     match r:
-        Ok v:
-            ok<.T,.F> v
-        Err e:
-            err<.T,.F> f e
+        Result::Ok v:
+            ok<.T, .F> v
+        Result::Err e:
+            err<.T, .F> (f e)

@@ -2,6 +2,7 @@
 
 #![no_std]
 extern crate alloc;
+extern crate std;
 
 use alloc::collections::BTreeMap;
 use alloc::format;
@@ -105,6 +106,7 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
         if let Some(sig) = wasm_sig(ctx, f.result, &f.params) {
             functions.push(FuncLower::user(f.clone(), sig));
         } else {
+            std::eprintln!("codegen: failed to lower signature for {}: result={:?}, params={:?}", f.name, ctx.get(f.result), f.params.iter().map(|p| ctx.get(p.ty)).collect::<Vec<_>>());
             diags.push(Diagnostic::error(
                 "unsupported function signature for wasm",
                 f.span,
@@ -298,6 +300,7 @@ fn wasm_sig(
         if let Some(v) = valtype(&vk) {
             param_types.push(v);
         } else {
+            std::eprintln!("wasm_sig: rejected param {} with type {:?}", p.name, vk);
             return None;
         }
     }
@@ -305,6 +308,11 @@ fn wasm_sig(
     let res = if let Some(v) = valtype(&res_kind) {
         vec![v]
     } else {
+        if !matches!(res_kind, TypeKind::Unit) {
+             std::eprintln!("wasm_sig: rejected result type {:?}", res_kind);
+             return None;
+        }
+        // unit return is fine in wasm
         Vec::new()
     };
     Some((param_types, res))
@@ -325,9 +333,15 @@ fn wasm_sig_ids(
         }
     }
     let res_kind = ctx.get(result);
+    std::eprintln!("wasm_sig: checking result type {:?} with valtype={:?}", res_kind, valtype(&res_kind));
     let res = if let Some(v) = valtype(&res_kind) {
         vec![v]
     } else {
+        if !matches!(res_kind, TypeKind::Unit) {
+             std::eprintln!("wasm_sig: REJECTED result type {:?}", res_kind);
+             return None;
+        }
+        // unit return is fine in wasm
         Vec::new()
     };
     Some((param_types, res))
@@ -342,8 +356,14 @@ fn valtype(kind: &TypeKind) -> Option<ValType> {
         | TypeKind::Struct { .. }
         | TypeKind::Tuple { .. }
         | TypeKind::Named(_) => Some(ValType::I32),
-        TypeKind::Apply { .. } => Some(ValType::I32),
-        _ => None,
+        TypeKind::Apply { .. } => {
+            // std::eprintln!("valtype: Apply is Some(I32)");
+            Some(ValType::I32)
+        }
+        other => {
+            // std::eprintln!("valtype: other {:?} is None", other);
+            None
+        }
     }
 }
 

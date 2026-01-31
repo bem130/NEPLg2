@@ -1,5 +1,6 @@
 #![no_std]
 extern crate alloc;
+extern crate std;
 
 use alloc::collections::BTreeSet;
 use alloc::string::{String, ToString};
@@ -228,6 +229,7 @@ impl TypeCtx {
         if ra != a || rb != b {
             return self.unify(ra, rb);
         }
+        std::eprintln!("unify: {:?} with {:?}", self.get(ra), self.get(rb));
         let ra = self.resolve(ra);
         let rb = self.resolve(rb);
         if ra != a || rb != b {
@@ -320,8 +322,12 @@ impl TypeCtx {
                         return Err(UnifyError::Mismatch);
                     }
                     if let (Some(pa), Some(pb)) = (a_var.payload, b_var.payload) {
-                        self.unify(pa, pb)?;
+                        if let Err(e) = self.unify(pa, pb) {
+                            std::eprintln!("unify: variant {} payload mismatch", a_var.name);
+                            return Err(e);
+                        }
                     } else if a_var.payload.is_some() || b_var.payload.is_some() {
+                        std::eprintln!("unify: variant {} payload presence mismatch", a_var.name);
                         return Err(UnifyError::Mismatch);
                     }
                 }
@@ -382,6 +388,22 @@ impl TypeCtx {
                 self.unify(ra, rb)?;
                 Ok(self.function(ta, pa, ra, ea))
             }
+            (TypeKind::Named(na), TypeKind::Enum { name: nb, .. })
+            | (TypeKind::Enum { name: na, .. }, TypeKind::Named(nb)) => {
+                if na == nb {
+                    Ok(a)
+                } else {
+                    Err(UnifyError::Mismatch)
+                }
+            }
+            (TypeKind::Named(na), TypeKind::Struct { name: nb, .. })
+            | (TypeKind::Struct { name: na, .. }, TypeKind::Named(nb)) => {
+                if na == nb {
+                    Ok(a)
+                } else {
+                    Err(UnifyError::Mismatch)
+                }
+            }
             (TypeKind::Box(inner_a), TypeKind::Box(inner_b)) => {
                 let inner = self.unify(inner_a, inner_b)?;
                 Ok(self.box_ty(inner))
@@ -392,6 +414,56 @@ impl TypeCtx {
                 }
                 let inner = self.unify(inner_a, inner_b)?;
                 Ok(self.reference(inner, mut_a))
+            }
+            (TypeKind::Apply { base: ba, args: aa }, TypeKind::Apply { base: bb, args: ab }) => {
+                if aa.len() != ab.len() {
+                    return Err(UnifyError::Mismatch);
+                }
+                self.unify(ba, bb)?;
+                for (xa, xb) in aa.iter().zip(ab.iter()) {
+                    self.unify(*xa, *xb)?;
+                }
+                Ok(a)
+            }
+            (TypeKind::Enum { name: na, type_params: ta, .. }, TypeKind::Apply { base: bb, args: ab }) => {
+                if ta.len() != ab.len() {
+                    return Err(UnifyError::Mismatch);
+                }
+                self.unify(a, bb)?;
+                for (xa, xb) in ta.iter().zip(ab.iter()) {
+                    self.unify(*xa, *xb)?;
+                }
+                Ok(a)
+            }
+            (TypeKind::Apply { base: ba, args: aa }, TypeKind::Enum { name: nb, type_params: tb, .. }) => {
+                if aa.len() != tb.len() {
+                    return Err(UnifyError::Mismatch);
+                }
+                self.unify(ba, b)?;
+                for (xa, xb) in aa.iter().zip(tb.iter()) {
+                    self.unify(*xa, *xb)?;
+                }
+                Ok(a)
+            }
+            (TypeKind::Struct { name: na, type_params: ta, .. }, TypeKind::Apply { base: bb, args: ab }) => {
+                if ta.len() != ab.len() {
+                    return Err(UnifyError::Mismatch);
+                }
+                self.unify(a, bb)?;
+                for (xa, xb) in ta.iter().zip(ab.iter()) {
+                    self.unify(*xa, *xb)?;
+                }
+                Ok(a)
+            }
+            (TypeKind::Apply { base: ba, args: aa }, TypeKind::Struct { name: nb, type_params: tb, .. }) => {
+                if aa.len() != tb.len() {
+                    return Err(UnifyError::Mismatch);
+                }
+                self.unify(ba, b)?;
+                for (xa, xb) in aa.iter().zip(tb.iter()) {
+                    self.unify(*xa, *xb)?;
+                }
+                Ok(a)
             }
             _ => Err(UnifyError::Mismatch),
         }
@@ -450,9 +522,12 @@ impl TypeCtx {
         mapping: &alloc::collections::BTreeMap<TypeId, TypeId>,
         seen: &mut BTreeSet<TypeId>,
     ) -> TypeId {
+        let ty = self.resolve_id(ty);
         if let Some(target) = mapping.get(&ty) {
+            // std::eprintln!("substitute: found {:?} -> {:?}", ty, target);
             return *target;
         }
+        // std::eprintln!("substitute: NOT found {:?} in {:?}", ty, mapping.keys().collect::<Vec<_>>());
         if !seen.insert(ty) {
             return ty;
         }
@@ -472,7 +547,8 @@ impl TypeCtx {
             } => {
                 let mut new_tps = Vec::new();
                 for tp in type_params {
-                    new_tps.push(self.substitute_inner(tp, mapping, seen));
+                    let nt = self.substitute_inner(tp, mapping, seen);
+                    new_tps.push(nt);
                 }
                 let mut new_vars = Vec::new();
                 for v in variants {
@@ -494,7 +570,10 @@ impl TypeCtx {
             } => {
                 let mut new_tps = Vec::new();
                 for tp in type_params {
-                    new_tps.push(self.substitute_inner(tp, mapping, seen));
+                    let nt = self.substitute_inner(tp, mapping, seen);
+                    if nt == self.resolve_id(tp) {
+                        new_tps.push(nt);
+                    }
                 }
                 let mut new_fs = Vec::new();
                 for f in fields {
@@ -521,7 +600,10 @@ impl TypeCtx {
             } => {
                 let mut new_tps = Vec::new();
                 for tp in type_params {
-                    new_tps.push(self.substitute_inner(tp, mapping, seen));
+                    let nt = self.substitute_inner(tp, mapping, seen);
+                    if nt == self.resolve_id(tp) {
+                        new_tps.push(nt);
+                    }
                 }
                 let mut new_ps = Vec::new();
                 for p in params {
@@ -551,6 +633,15 @@ impl TypeCtx {
 
     pub fn resolve(&mut self, ty: TypeId) -> TypeId {
         match self.get(ty) {
+            TypeKind::Named(name) => {
+                if let Some(actual) = self.named.get(&name).copied() {
+                    if actual == ty {
+                        return ty;
+                    }
+                    return self.resolve(actual);
+                }
+                ty
+            }
             TypeKind::Apply { base, args } => {
                 let base_ty = self.resolve(base);
                 match self.get(base_ty) {
@@ -733,7 +824,15 @@ impl TypeCtx {
                 s
             }
             TypeKind::Function { .. } => String::from("func"),
-            TypeKind::Var(_) => String::from("var"),
+            TypeKind::Var(v) => {
+                if let Some(b) = v.binding {
+                    self.type_to_string(b)
+                } else if let Some(l) = &v.label {
+                    l.clone()
+                } else {
+                    String::from("var")
+                }
+            }
             TypeKind::Apply { base, args } => {
                 let mut s = match self.get(base) {
                     TypeKind::Enum { name, .. }

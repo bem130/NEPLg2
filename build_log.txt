@@ -1,0 +1,253 @@
+typecheck: registering global func load_i32
+typecheck: registering global func store_i32
+typecheck: registering global func load_u8
+typecheck: registering global func store_u8
+typecheck: registering global func size_of
+typecheck: registering global func align_of
+typecheck: registering global func load
+typecheck: registering global func store
+typecheck: registering global func ok
+typecheck: registering global func err
+typecheck: registering global func is_ok
+typecheck: registering global func is_err
+typecheck: registering global func unwrap_ok
+typecheck: registering global func unwrap_err
+typecheck: registering global func unwrap_or
+typecheck: registering global func map
+typecheck: registering global func map_err
+typecheck: registering global func add
+typecheck: registering global func sub
+typecheck: registering global func mul
+typecheck: registering global func div_s
+typecheck: registering global func mod_s
+typecheck: registering global func lt
+typecheck: registering global func eq
+typecheck: registering global func le
+typecheck: registering global func test_str_eq
+typecheck: registering global func test_str_eq_loop
+typecheck: registering global func trap
+typecheck: registering global func fail
+typecheck: registering global func assert
+typecheck: registering global func assert_eq_i32
+typecheck: registering global func assert_str_eq
+typecheck: registering global func assert_ok_i32
+typecheck: registering global func assert_err_i32
+typecheck: registering global func main
+unify: I32 with I32
+unify: I32 with I32
+unify: Var(TypeVar { label: Some("T"), binding: None }) with Var(TypeVar { label: Some("T"), binding: None })
+unify: Unit with Unit
+unify: Var(TypeVar { label: Some("T"), binding: None }) with Var(TypeVar { label: Some("T"), binding: None })
+unify: Enum { name: "Result", type_params: [TypeId(12), TypeId(13)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(12)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(13)) }] } with Apply { base: TypeId(14), args: [TypeId(35), TypeId(36)] }
+unify: Enum { name: "Result", type_params: [TypeId(12), TypeId(13)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(12)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(13)) }] } with Enum { name: "Result", type_params: [TypeId(35), TypeId(36)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(35)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(36)) }] }
+unify: Var(TypeVar { label: Some("T"), binding: None }) with Var(TypeVar { label: Some("T"), binding: None })
+unify: Var(TypeVar { label: Some("E"), binding: None }) with Var(TypeVar { label: Some("E"), binding: None })
+unify: Var(TypeVar { label: Some("E"), binding: None }) with Var(TypeVar { label: Some("E"), binding: None })
+unify: Enum { name: "Result", type_params: [TypeId(12), TypeId(13)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(12)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(13)) }] } with Apply { base: TypeId(14), args: [TypeId(40), TypeId(41)] }
+unify: Enum { name: "Result", type_params: [TypeId(12), TypeId(13)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(12)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(13)) }] } with Enum { name: "Result", type_params: [TypeId(40), TypeId(41)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(40)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(41)) }] }
+unify: Var(TypeVar { label: Some("T"), binding: None }) with Var(TypeVar { label: Some("T"), binding: None })
+unify: Var(TypeVar { label: Some("E"), binding: None }) with Var(TypeVar { label: Some("E"), binding: None })
+unify: Bool with Bool
+unify: Bool with Bool
+unify: Bool with Bool
+unify: Bool with Bool
+unify: Var(TypeVar { label: Some("T"), binding: None }) with Never
+unify: Never with Never
+unify: Never with Var(TypeVar { label: Some("E"), binding: None })
+unify: Never with Never
+unify: Var(TypeVar { label: Some("T"), binding: None }) with Var(TypeVar { label: Some("T"), binding: None })
+unify: Var(TypeVar { label: Some("T"), binding: None }) with Var(TypeVar { label: Some("T"), binding: None })
+unify: Var(TypeVar { label: Some("U"), binding: None }) with Var(TypeVar { label: Some("U"), binding: None })
+unify: Var(TypeVar { label: Some("E"), binding: None }) with Var(TypeVar { label: Some("E"), binding: None })
+unify: Apply { base: TypeId(120), args: [TypeId(71), TypeId(72)] } with Apply { base: TypeId(123), args: [TypeId(71), TypeId(72)] }
+unify: Enum { name: "Result", type_params: [TypeId(71), TypeId(72)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(71)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(72)) }] } with Enum { name: "Result", type_params: [TypeId(71), TypeId(72)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(71)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(72)) }] }
+unify: Var(TypeVar { label: Some("U"), binding: None }) with Var(TypeVar { label: Some("U"), binding: None })
+unify: Var(TypeVar { label: Some("E"), binding: None }) with Var(TypeVar { label: Some("E"), binding: None })
+unify: Apply { base: TypeId(120), args: [TypeId(71), TypeId(72)] } with Apply { base: TypeId(14), args: [TypeId(71), TypeId(72)] }
+unify: Enum { name: "Result", type_params: [TypeId(71), TypeId(72)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(71)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(72)) }] } with Enum { name: "Result", type_params: [TypeId(71), TypeId(72)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(71)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(72)) }] }
+unify: Var(TypeVar { label: Some("U"), binding: None }) with Var(TypeVar { label: Some("U"), binding: None })
+unify: Var(TypeVar { label: Some("E"), binding: None }) with Var(TypeVar { label: Some("E"), binding: None })
+unify: Var(TypeVar { label: Some("T"), binding: None }) with Var(TypeVar { label: Some("T"), binding: None })
+unify: Var(TypeVar { label: Some("F"), binding: None }) with Var(TypeVar { label: Some("F"), binding: None })
+unify: Apply { base: TypeId(131), args: [TypeId(78), TypeId(80)] } with Apply { base: TypeId(134), args: [TypeId(78), TypeId(80)] }
+unify: Enum { name: "Result", type_params: [TypeId(78), TypeId(80)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(78)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(80)) }] } with Enum { name: "Result", type_params: [TypeId(78), TypeId(80)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(78)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(80)) }] }
+unify: Var(TypeVar { label: Some("T"), binding: None }) with Var(TypeVar { label: Some("T"), binding: None })
+unify: Var(TypeVar { label: Some("F"), binding: None }) with Var(TypeVar { label: Some("F"), binding: None })
+unify: Apply { base: TypeId(131), args: [TypeId(78), TypeId(80)] } with Apply { base: TypeId(14), args: [TypeId(78), TypeId(80)] }
+unify: Enum { name: "Result", type_params: [TypeId(78), TypeId(80)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(78)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(80)) }] } with Enum { name: "Result", type_params: [TypeId(78), TypeId(80)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(78)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(80)) }] }
+unify: Var(TypeVar { label: Some("T"), binding: None }) with Var(TypeVar { label: Some("T"), binding: None })
+unify: Var(TypeVar { label: Some("F"), binding: None }) with Var(TypeVar { label: Some("F"), binding: None })
+unify: Str with I32
+unify: I32 with I32
+unify: Var(TypeVar { label: None, binding: None }) with I32
+unify: Str with I32
+unify: I32 with I32
+unify: Var(TypeVar { label: None, binding: None }) with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: Str with Str
+unify: Str with Str
+unify: I32 with I32
+unify: I32 with I32
+unify: Bool with Bool
+unify: Bool with Bool
+unify: Bool with Bool
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: Str with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: Var(TypeVar { label: None, binding: None }) with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: Str with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: Var(TypeVar { label: None, binding: None }) with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: Str with Str
+unify: Str with Str
+unify: I32 with I32
+unify: I32 with I32
+unify: Bool with Bool
+unify: Bool with Bool
+unify: Bool with Bool
+unify: Bool with Bool
+unify: Bool with Bool
+unify: Unit with Unit
+unify: Bool with Bool
+unify: Unit with Unit
+unify: Unit with Unit
+unify: I32 with I32
+unify: I32 with I32
+unify: Bool with Bool
+unify: Unit with Unit
+unify: Unit with Unit
+unify: Str with Str
+unify: Str with Str
+unify: Bool with Bool
+unify: Unit with Unit
+unify: Unit with Unit
+unify: Unit with Unit
+unify: Unit with Unit
+unify: Unit with Unit
+unify: Unit with Unit
+unify: I32 with I32
+unify: Apply { base: TypeId(173), args: [TypeId(1), TypeId(1)] } with Apply { base: TypeId(14), args: [TypeId(1), TypeId(1)] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: I32 with I32
+unify: I32 with I32
+unify: Var(TypeVar { label: None, binding: None }) with Apply { base: TypeId(14), args: [TypeId(1), TypeId(1)] }
+unify: Var(TypeVar { label: None, binding: None }) with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Apply { base: TypeId(14), args: [TypeId(1), TypeId(1)] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: Apply { base: TypeId(183), args: [TypeId(1), TypeId(1)] } with Apply { base: TypeId(14), args: [TypeId(1), TypeId(1)] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: I32 with I32
+unify: I32 with I32
+unify: Var(TypeVar { label: None, binding: None }) with Apply { base: TypeId(14), args: [TypeId(1), TypeId(1)] }
+unify: Var(TypeVar { label: None, binding: None }) with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Apply { base: TypeId(190), args: [TypeId(1), TypeId(1)] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: Apply { base: TypeId(196), args: [TypeId(1), TypeId(1)] } with Apply { base: TypeId(14), args: [TypeId(1), TypeId(1)] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: I32 with I32
+unify: I32 with I32
+unify: Var(TypeVar { label: None, binding: None }) with Apply { base: TypeId(14), args: [TypeId(1), TypeId(1)] }
+unify: Var(TypeVar { label: None, binding: None }) with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Apply { base: TypeId(14), args: [TypeId(1), TypeId(1)] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: Apply { base: TypeId(206), args: [TypeId(1), TypeId(1)] } with Apply { base: TypeId(14), args: [TypeId(1), TypeId(1)] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: I32 with I32
+unify: I32 with I32
+unify: Var(TypeVar { label: None, binding: None }) with Apply { base: TypeId(14), args: [TypeId(1), TypeId(1)] }
+unify: Var(TypeVar { label: None, binding: None }) with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Apply { base: TypeId(213), args: [TypeId(1), TypeId(1)] }
+unify: Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] } with Enum { name: "Result", type_params: [TypeId(1), TypeId(1)], variants: [EnumVariantInfo { name: "Ok", payload: Some(TypeId(1)) }, EnumVariantInfo { name: "Err", payload: Some(TypeId(1)) }] }
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: I32 with I32
+unify: Unit with Unit
+monomorphize: initial function main
+wasm_sig: checking result type I32 with valtype=Some(I32)
+wasm_sig: checking result type Unit with valtype=None
+wasm_sig: checking result type I32 with valtype=Some(I32)
+wasm_sig: checking result type I32 with valtype=Some(I32)
+wasm_sig: checking result type Unit with valtype=None
+wasm_sig: checking result type I32 with valtype=Some(I32)
+wasm_sig: rejected param e with type Var(TypeVar { label: Some("E"), binding: None })
+codegen: failed to lower signature for err: result=Apply { base: TypeId(241), args: [TypeId(12), TypeId(13)] }, params=[Var(TypeVar { label: Some("E"), binding: None })]
+wasm_sig: rejected param v with type Var(TypeVar { label: Some("T"), binding: None })
+codegen: failed to lower signature for ok: result=Apply { base: TypeId(264), args: [TypeId(12), TypeId(13)] }, params=[Var(TypeVar { label: Some("T"), binding: None })]
+wasm_sig: rejected param default with type Var(TypeVar { label: Some("T"), binding: None })
+codegen: failed to lower signature for unwrap_or: result=Var(TypeVar { label: Some("T"), binding: None }), params=[Apply { base: TypeId(250), args: [TypeId(65), TypeId(66)] }, Var(TypeVar { label: Some("T"), binding: None })]
+error: unsupported function signature for wasm
+ --> \\?\D:\project\NEPLg2\stdlib\std\result.nepl:14:4
+    14 | fn err <.T, .E> <(.E)->Result<.T, .E>> (e):
+       |    ^^^
+
+error: unsupported function signature for wasm
+ --> \\?\D:\project\NEPLg2\stdlib\std\result.nepl:11:4
+    11 | fn ok <.T, .E> <(.T)->Result<.T, .E>> (v):
+       |    ^^
+
+error: unsupported function signature for wasm
+ --> \\?\D:\project\NEPLg2\stdlib\std\result.nepl:45:4
+    45 | fn unwrap_or <.T, .E> <(Result<.T, .E>, .T)->.T> (r, default):
+       |    ^^^^^^^^^
+
+error: unknown function
+ --> \\?\D:\project\NEPLg2\stdlib\tests\result.nepl:11:30
+    11 |     let r1 <Result<i32,i32>> ok<i32,i32> 5;
+       |                              ^^
+
+error: unknown function
+ --> \\?\D:\project\NEPLg2\stdlib\tests\result.nepl:13:30
+    13 |     let r2 <Result<i32,i32>> ok<i32,i32> 5;
+       |                              ^^
+
+error: unknown function
+ --> \\?\D:\project\NEPLg2\stdlib\tests\result.nepl:14:21
+    14 |     assert_eq_i32 5 unwrap_or<i32,i32> r2 0;
+       |                     ^^^^^^^^^
+
+error: unknown function
+ --> \\?\D:\project\NEPLg2\stdlib\tests\result.nepl:16:30
+    16 |     let e1 <Result<i32,i32>> err<i32,i32> 7;
+       |                              ^^^
+
+error: unknown function
+ --> \\?\D:\project\NEPLg2\stdlib\tests\result.nepl:18:30
+    18 |     let e2 <Result<i32,i32>> err<i32,i32> 7;
+       |                              ^^^
+
+error: unknown function
+ --> \\?\D:\project\NEPLg2\stdlib\tests\result.nepl:19:21
+    19 |     assert_eq_i32 9 unwrap_or<i32,i32> e2 9;
+       |                     ^^^^^^^^^
+
+test result.nepl ... FAILED
+compilation failed
+Error: 1 tests failed

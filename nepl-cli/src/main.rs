@@ -216,9 +216,24 @@ fn run_tests(args: TestArgs) -> Result<()> {
 
 fn run_test_file(path: &Path, std_root: &Path) -> Result<()> {
     let loader = Loader::new(std_root.to_path_buf());
-    let loaded = loader
-        .load(&path.to_path_buf())
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let loaded = match loader.load(&path.to_path_buf()) {
+        Ok(l) => l,
+        Err(CoreError::Diagnostics(diags)) => {
+            // We need to provide a source map for rendering, but loader.load failed.
+            // Actually Loader should provide the source map even on failure in its Ok branch,
+            // but here we only have the error.
+            // Let's assume the error rendering can happen if we have a way to get the source map.
+            // For now, just print the error and hope for the best, or better:
+            // The loader.load implementation could be changed to return (LoadResult, Vec<Diagnostic>).
+            // But for now, I'll just use a workaround:
+            eprintln!("Parse error in {}", path.display());
+            for d in diags {
+                eprintln!("{:?}: {}", d.primary.span, d.message);
+            }
+            return Err(anyhow::anyhow!("parsing failed"));
+        }
+        Err(e) => return Err(anyhow::anyhow!(e.to_string())),
+    };
     let artifact = match compile_module(
         loaded.module,
         CompileOptions {

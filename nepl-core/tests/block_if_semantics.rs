@@ -49,7 +49,7 @@ fn match_arm_local_drop_preserves_return() {
 #use std::option::*
 
 fn main <()->i32> ():
-    match some 5:
+    match some<i32> 5:
         Some v:
             let y v;
             v

@@ -54,16 +54,16 @@ fn assert_str_eq <(str,str)->()> (expected, actual):
         else:
             trap
 
-fn assert_ok_i32 <(ResultI32)->()> (r):
+fn assert_ok_i32 <(Result<i32,i32>)->()> (r):
     match r:
-        Ok v:
+        Result::Ok v:
             ()
-        Err e:
+        Result::Err e:
             trap
 
-fn assert_err_i32 <(ResultI32)->()> (r):
+fn assert_err_i32 <(Result<i32,i32>)->()> (r):
     match r:
-        Ok v:
+        Result::Ok v:
             trap
-        Err e:
+        Result::Err e:
             ()
