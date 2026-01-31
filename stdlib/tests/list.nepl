@@ -8,11 +8,14 @@
 #use std::option::*
 #import "std/test"
 #use std::test::*
+#import "std/stdio"
+#use std::stdio::*
 
 fn main <()*> ()> ():
     // Test list_nil
     let l0 <i32> list_nil<i32>;
     assert_eq_i32 0 list_len<i32> l0;
+    println "Checked nil"
 
     // Test list_cons and list_len
     let l1 <i32> list_cons<i32> 10 l0;
@@ -23,6 +26,7 @@ fn main <()*> ()> ():
 
     let l3 <i32> list_cons<i32> 30 l2;
     assert_eq_i32 3 list_len<i32> l3;
+    println "Checked len"
 
     // Test list_get on valid indices
     match list_get<i32> l3 0:
@@ -57,6 +61,7 @@ fn main <()*> ()> ():
         Option::None:
             trap;
 
+    println "Checked head"
     let l3_tail <i32> list_tail<i32> l3;
     match list_head<i32> l3_tail:
         Option::Some x:
@@ -65,6 +70,7 @@ fn main <()*> ()> ():
             trap;
 
     // Test list_reverse
+    println "Checked tail"
     let l_rev <i32> list_reverse<i32> l3;
     match list_get<i32> l_rev 0:
         Option::Some x:
@@ -78,6 +84,7 @@ fn main <()*> ()> ():
         Option::None:
             trap;
 
+    println "Checked reverse"
     list_free<i32> l3;
     ()
 

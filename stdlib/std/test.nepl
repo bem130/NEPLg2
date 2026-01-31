@@ -38,19 +38,22 @@ fn trap <()->()> ():
         drop
 
 fn fail <(str)->()> (msg):
-    trap
+    #wasm:
+        unreachable
 
 fn assert <(bool)->()> (ok):
     if:
         ok
         then ()
-        else trap
+        else:
+            trap;
 
 fn assert_eq_i32 <(i32,i32)->()> (expected, actual):
     if:
         eq expected actual
         then ()
-        else trap
+        else:
+            trap;
 
 fn assert_ne <(bool,bool)->()> (a, b):
     if:
@@ -58,27 +61,29 @@ fn assert_ne <(bool,bool)->()> (a, b):
         then:
             if:
                 b
-                then trap
+                then:
+                    trap;
                 else ()
         else:
             if:
                 b
                 then ()
-                else trap
+                else:
+                    trap;
 
 fn assert_str_eq <(str,str)->()> (expected, actual):
-    if test_str_eq expected actual () trap
+    if test_str_eq expected actual () (trap; ())
 
 fn assert_ok_i32 <(Result<i32,i32>)->()> (r):
     match r:
         Result::Ok v:
             ()
         Result::Err e:
-            trap
+            trap;
 
 fn assert_err_i32 <(Result<i32,i32>)->()> (r):
     match r:
         Result::Ok v:
-            trap
+            trap;
         Result::Err e:
             ()

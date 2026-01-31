@@ -26,7 +26,7 @@ fn kind_str <(ErrorKind)->str> (k):
         ErrorKind::Other:
             "Other"
 
-fn span_to_string <(Span)->str> (sp):
+fn span_to_string <(Span)*>str> (sp):
     let fid <str> from_i32 sp.file_id;
     let s <str> from_i32 sp.start;
     let e <str> from_i32 sp.end;
@@ -35,7 +35,7 @@ fn span_to_string <(Span)->str> (sp):
     let t2 <str> concat t1 "-";
     concat t2 e
 
-fn diag_to_string <(Error)->str> (e):
+fn diag_to_string <(Error)*>str> (e):
     let k <str> kind_str e.kind;
     let h0 <str> concat "error[" k;
     let h1 <str> concat h0 "]: ";
@@ -51,13 +51,13 @@ fn diag_to_string <(Error)->str> (e):
         Option::None:
             ()
 
-    match e.source:
-        Option::Some src:
-            let src_str <str> diag_to_string src;
-            let p0 <str> concat "caused by: " src_str;
-            set out concat out p0;
-        Option::None:
-            ()
+    // match e.source:
+    //    Option::Some src:
+    //        let src_str <str> diag_to_string src;
+    //        let p0 <str> concat "caused by: " src_str;
+    //        set out concat out p0;
+    //    Option::None:
+    //        ()
     out
 
 #if[target=wasi]
@@ -65,11 +65,11 @@ fn diag_to_string <(Error)->str> (e):
 #use std::stdio::*
 
 #if[target=wasi]
-fn diag_print <(Error)->()> (e):
+fn diag_print <(Error)*>()> (e):
     let s <str> diag_to_string e;
     print s
 
 #if[target=wasi]
-fn diag_println <(Error)->()> (e):
+fn diag_println <(Error)*>()> (e):
     let s <str> diag_to_string e;
     println s

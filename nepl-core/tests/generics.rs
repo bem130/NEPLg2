@@ -67,8 +67,11 @@ fn main <()->i32> ():
     let _nested <Option<Option<i32>>> Option::Some Option::Some 1
     let x <bool> is_some a
     let y <bool> is_some b
-    if x:
-        if y 10 20
+    <i32> if:
+        cond:
+            x
+        then:
+            if y 10 20
         else:
             30
 "#;

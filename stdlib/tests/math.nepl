@@ -6,6 +6,10 @@
 #use std::math::*
 #import "std/test"
 #use std::test::*
+#import "std/stdio"
+#use std::stdio::*
+#import "std/string"
+#use std::string::*
 
 fn main <()*> ()> ():
     // i32 arithmetic
@@ -13,19 +17,23 @@ fn main <()*> ()> ():
     assert_eq_i32 -1 i32_sub 1 2;
     assert_eq_i32 6 i32_mul 2 3;
     assert_eq_i32 3 i32_div_s 6 2;
+    println "Checked basic math"
     assert_eq_i32 1 i32_rem_s 7 3;
 
     // i32 bitwise operations
     assert_eq_i32 3 i32_and 7 3;  // 111 & 011 = 011
+    println "Checked and"
     assert_eq_i32 7 i32_or 5 3;   // 101 | 011 = 111
     assert_eq_i32 6 i32_xor 5 3;  // 101 ^ 011 = 110
+    println "Checked xor"
 
     // i32 shifts
     assert_eq_i32 8 i32_shl 2 2;   // 2 << 2 = 8
     assert_eq_i32 1 i32_shr_s 4 2; // 4 >> 2 = 1
+    println "Checked shifts"
 
     // i32 bit manipulation
-    assert_eq_i32 1 i32_clz 2147483648;  // leading zeros in 0x80000000
+    assert_eq_i32 0 i32_clz 2147483648;  // leading zeros in 0x80000000
     assert_eq_i32 0 i32_ctz 1;           // trailing zeros in 1
 
     // i32 comparisons
@@ -35,6 +43,7 @@ fn main <()*> ()> ():
     assert i32_ge_s 2 2;
     assert i32_eq 5 5;
     assert i32_ne 5 6;
+    println "Checked comparisons"
 
     // Backwards compatibility aliases (i32 only)
     assert_eq_i32 5 add 2 3;

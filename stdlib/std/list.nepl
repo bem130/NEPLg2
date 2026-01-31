@@ -6,6 +6,10 @@
 #use std::math::*
 #import "std/option"
 #use std::option::*
+#import "std/stdio"
+#use std::stdio::*
+#import "std/string"
+#use std::string::*
 
 // Generic linked list
 // Node layout: [value:.T][next:i32]
@@ -59,6 +63,11 @@ fn list_get <.T> <(i32,i32)*>Option<.T>> (lst, idx):
             let mut cur <i32> lst
             let mut i <i32> 0
             while lt i idx:
+                println "list_get loop"
+                println "idx:"
+                println from_i32 idx
+                println "i:"
+                println from_i32 i
                 if:
                     cond:
                         eq cur 0
@@ -83,3 +92,12 @@ fn list_free <.T> <(i32)*>()> (lst):
         let next <i32> load_i32 add cur size_of<.T>
         dealloc cur node_size
         set cur next
+
+fn list_reverse <.T> <(i32)*>i32> (lst):
+    let mut new_list <i32> 0;
+    let mut cur <i32> lst;
+    while ne cur 0:
+        let val <.T> load<.T> cur;
+        set new_list list_cons<.T> val new_list;
+        set cur load_i32 add cur size_of<.T>;
+    new_list

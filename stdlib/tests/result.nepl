@@ -11,7 +11,7 @@ fn main <() *> ()> ():
     // Test ok and is_ok
     let r1 <Result<i32,i32>> ok<i32,i32> 5;
     assert is_ok<i32,i32> r1;
-    assert_ne true is_err<i32,i32> r1;
+    assert_ne true is_err<i32,i32> ok<i32,i32> 5;
 
     // Test ok with unwrap_or
     let r2 <Result<i32,i32>> ok<i32,i32> 10;
@@ -24,7 +24,7 @@ fn main <() *> ()> ():
     // Test err and is_err
     let e1 <Result<i32,i32>> err<i32,i32> 7;
     assert is_err<i32,i32> e1;
-    assert_ne true is_ok<i32,i32> e1;
+    assert_ne true is_ok<i32,i32> err<i32,i32> 7;
 
     // Test err with unwrap_or (returns default)
     let e2 <Result<i32,i32>> err<i32,i32> 99;
@@ -33,7 +33,8 @@ fn main <() *> ()> ():
     // Test multiple err values
     let e3 <Result<i32,i32>> err<i32,i32> 123;
     assert is_err<i32,i32> e3;
-    assert_eq_i32 50 unwrap_or<i32,i32> e3 50;
+    let e4 <Result<i32,i32>> err<i32,i32> 123;
+    assert_eq_i32 50 unwrap_or<i32,i32> e4 50;
 
     ()
 

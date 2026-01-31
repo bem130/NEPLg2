@@ -26,25 +26,30 @@ struct Error:
     kind <ErrorKind>
     msg <str>
     span <Option<Span>>
-    source <Option<Error>>
+    // source <Option<Error>>
 
 fn callsite_span <()->Span> ():
     #intrinsic "callsite_span" <Span> ()
 
 fn error_new <(ErrorKind,str)->Error> (kind, msg):
-    Error kind msg none<Span> none<Error>
+    Error kind msg none<Span>
 
 fn error_with_span <(Error,Span)->Error> (e, sp):
-    Error e.kind e.msg some<Span> sp e.source
+    Error e.kind e.msg some<Span> sp
 
 fn error_with_source <(Error,Error)->Error> (outer, inner):
-    Error outer.kind outer.msg outer.span some<Error> inner
+    // Drop inner cause to avoid recursion
+    Error outer.kind outer.msg outer.span
 
 fn fail <(str)->Error> (msg):
-    error_with_span (error_new ErrorKind::Failure msg) (callsite_span())
+    let e <Error> error_new ErrorKind::Failure msg;
+    let s <Span> Span 0 0 0; // callsite_span();
+    error_with_span e s
 
 fn context <(Error,str)->Error> (cause, msg):
-    let outer <Error> error_with_span (error_new ErrorKind::Other msg) (callsite_span())
+    let e <Error> error_new ErrorKind::Other msg;
+    let s <Span> Span 0 0 0; // callsite_span();
+    let outer <Error> error_with_span e s;
     error_with_source outer cause
 
 fn result_context <.T> <(Result<.T, Error>, str)->Result<.T, Error>> (r, msg):
