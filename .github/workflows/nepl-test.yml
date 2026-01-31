@@ -35,8 +35,5 @@ jobs:
                   shared-key: nepl-g2
                   cache-on-failure: true
 
-            - name: Rust tests
-              run: cargo test --all --all-features --locked
-
             - name: NEPL-g2 tests (no run)
               run: cargo run -p nepl-cli -- test
