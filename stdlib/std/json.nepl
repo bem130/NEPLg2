@@ -1,0 +1,103 @@
+#indent 4
+
+#import "std/mem"
+#use std::mem::*
+#import "std/option"
+#use std::option::*
+#import "std/vec"
+#use std::vec::*
+
+// JSON value type
+// Tag: 0=null, 1=bool, 2=number, 3=string, 4=array, 5=object
+
+enum JsonValue:
+    Null
+    Bool <i32>
+    Number <i32>  // fixed-point or i32 for simplicity
+    String <i32>  // pointer to string
+    Array <i32>   // pointer to Vec<JsonValue>
+    Object <i32>  // pointer to key-value list
+
+fn json_null <()->JsonValue> ():
+    JsonValue::Null
+
+fn json_bool <(bool)->JsonValue> (v):
+    if v:
+        JsonValue::Bool 1
+    else:
+        JsonValue::Bool 0
+
+fn json_number <(i32)->JsonValue> (n):
+    JsonValue::Number n
+
+fn json_string <(i32)->JsonValue> (s):
+    JsonValue::String s
+
+fn json_array <(i32)->JsonValue> (arr):
+    JsonValue::Array arr
+
+fn json_object <(i32)->JsonValue> (obj):
+    JsonValue::Object obj
+
+fn json_is_null <(JsonValue)->bool> (v):
+    match v:
+        Null:
+            true
+        Bool b:
+            false
+        Number n:
+            false
+        String s:
+            false
+        Array a:
+            false
+        Object o:
+            false
+
+fn json_as_bool <(JsonValue)->Option<bool>> (v):
+    match v:
+        Bool b:
+            if eq b 0:
+                some<bool> false
+            else:
+                some<bool> true
+        Null:
+            none<bool>
+        Number n:
+            none<bool>
+        String s:
+            none<bool>
+        Array a:
+            none<bool>
+        Object o:
+            none<bool>
+
+fn json_as_number <(JsonValue)->Option<i32>> (v):
+    match v:
+        Number n:
+            some<i32> n
+        Null:
+            none<i32>
+        Bool b:
+            none<i32>
+        String s:
+            none<i32>
+        Array a:
+            none<i32>
+        Object o:
+            none<i32>
+
+fn json_as_string <(JsonValue)->Option<i32>> (v):
+    match v:
+        String s:
+            some<i32> s
+        Null:
+            none<i32>
+        Bool b:
+            none<i32>
+        Number n:
+            none<i32>
+        Array a:
+            none<i32>
+        Object o:
+            none<i32>

@@ -2,42 +2,67 @@
 
 #import "std/mem"
 #use std::mem::*
-#import "std/math"
-#use std::math::*
-#import "std/result"
-#use std::result::*
+#import "std/option"
+#use std::option::*
 
-// Simple fixed-capacity list of i32 (capacity 16)
+// Generic linked list
+// Node layout: [value:.T][next:i32]
 
-fn new <()*>i32> ():
-    let ptr <i32> alloc 12;
-    store_i32 ptr 0;
-    store_i32 add ptr 4 16;
-    let data <i32> alloc mul 16 4;
-    store_i32 add ptr 8 data;
-    ptr
+fn list_nil <.T> <()->i32> ():
+    0
 
-fn len <(i32)->i32> (lst):
-    load_i32 lst
+fn list_cons <.T> <(.T,i32)*>i32> (head, tail):
+    let node_size <i32> add size_of<.T> 4
+    let node <i32> alloc node_size
+    store<.T> node head
+    store_i32 add node size_of<.T> tail
+    node
 
-fn push <(i32,i32)*>()> (lst, val):
-    let l <i32> load_i32 lst;
-    let data <i32> load_i32 add lst 8;
-    store_i32 add data mul l 4 val;
-    store_i32 lst add l 1;
-    ()
+fn list_head <.T> <(i32)->Option<.T>> (lst):
+    if eq lst 0:
+        none<.T>
+    else:
+        some<.T> load<.T> lst
 
-fn get <(i32,i32)->ResultI32> (lst, idx):
-    let len <i32> load_i32 lst;
-    
-    if:
-        lt idx 0
-        ResultI32::Err 1
+fn list_tail <.T> <(i32)->i32> (lst):
+    if eq lst 0:
+        0
+    else:
+        load_i32 add lst size_of<.T>
+
+fn list_is_empty <.T> <(i32)->bool> (lst):
+    eq lst 0
+
+fn list_len <.T> <(i32)->i32> (lst):
+    let mut count <i32> 0
+    let mut cur <i32> lst
+    while ne cur 0:
+        set count add count 1
+        set cur load_i32 add cur size_of<.T>
+    count
+
+fn list_get <.T> <(i32,i32)->Option<.T>> (lst, idx):
+    if lt idx 0:
+        none<.T>
+    else:
+        let mut cur <i32> lst
+        let mut i <i32> 0
+        while lt i idx:
+            if eq cur 0:
+                // return early via break would be nice; use flag instead
+                set i idx
+            else:
+                set cur load_i32 add cur size_of<.T>
+                set i add i 1
+        if eq cur 0:
+            none<.T>
         else:
-            if:
-                le len idx
-                ResultI32::Err 1
-                else:
-                    let data <i32> load_i32 add lst 8;
-                    let v <i32> load_i32 add data mul idx 4;
-                    ResultI32::Ok v
+            some<.T> load<.T> cur
+
+fn list_free <.T> <(i32)*>()> (lst):
+    let node_size <i32> add size_of<.T> 4
+    let mut cur <i32> lst
+    while ne cur 0:
+        let next <i32> load_i32 add cur size_of<.T>
+        dealloc cur node_size
+        set cur next

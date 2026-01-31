@@ -1,0 +1,33 @@
+#indent 4
+
+#import "std/mem"
+#use std::mem::*
+
+// Cast intrinsics for type conversions
+// These use compiler intrinsics to perform safe type casts
+
+fn cast_i32_to_f32 <(i32)->f32> (v):
+    #intrinsic "i32_to_f32" <> (v)
+
+fn cast_f32_to_i32 <(f32)->i32> (v):
+    #intrinsic "f32_to_i32" <> (v)
+
+fn cast_bool_to_i32 <(bool)->i32> (v):
+    if v:
+        1
+    else:
+        0
+
+fn cast_i32_to_bool <(i32)->bool> (v):
+    ne v 0
+
+// Bitcast operations (reinterpret bytes)
+fn bitcast_i32_to_f32 <(i32)->f32> (v):
+    #intrinsic "reinterpret_i32_f32" <> (v)
+
+fn bitcast_f32_to_i32 <(f32)->i32> (v):
+    #intrinsic "reinterpret_f32_i32" <> (v)
+
+// Pointer casts (unsafe)
+fn ptr_cast <.T,.U> <(i32)->i32> (ptr):
+    ptr  // identity since all pointers are i32

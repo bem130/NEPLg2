@@ -3,26 +3,49 @@
 #import "std/mem"
 #use std::mem::*
 
-enum OptionI32:
+// Generic Option type
+enum Option<.T>:
     None
-    Some <i32>
+    Some <.T>
 
-fn none <()->OptionI32> ():
-    OptionI32::None
+fn none <.T> <()->Option<.T>> ():
+    Option<.T>::None
 
-fn some <(i32)->OptionI32> (v):
-    OptionI32::Some v
+fn some <.T> <(.T)->Option<.T>> (v):
+    Option<.T>::Some v
 
-fn is_some <(OptionI32)->bool> (o):
+fn is_some <.T> <(Option<.T>)->bool> (o):
     match o:
         Some v:
             true
         None:
             false
 
-fn is_none <(OptionI32)->bool> (o):
+fn is_none <.T> <(Option<.T>)->bool> (o):
     match o:
         Some v:
             false
         None:
             true
+
+fn unwrap <.T> <(Option<.T>)->.T> (o):
+    match o:
+        Some v:
+            v
+        None:
+            // TODO: panic intrinsic
+            #intrinsic "unreachable" <> ()
+
+fn unwrap_or <.T> <(Option<.T>,.T)->.T> (o, default):
+    match o:
+        Some v:
+            v
+        None:
+            default
+
+fn map <.T,.U> <(Option<.T>, (.T)->.U)->Option<.U>> (o, f):
+    match o:
+        Some v:
+            some<.U> f v
+        None:
+            none<.U>

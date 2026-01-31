@@ -1,0 +1,123 @@
+#indent 4
+
+#import "std/mem"
+#use std::mem::*
+#import "std/math"
+#use std::math::*
+
+// HashSet<i32> - simple open-addressing set for i32
+// Entry layout: [occupied:i32][key:i32]
+// Header: [count:i32][cap:i32][entries_ptr:i32]
+
+fn hash_i32 <(i32)->i32> (key):
+    let mut h <i32> key
+    set h mul h 0x5bd1e995
+    set h add h div_s h 16
+    set h mul h 0x5bd1e995
+    h
+
+fn hashset_new <()*>i32> ():
+    let cap <i32> 16
+    let entry_size <i32> 8
+    let entries <i32> alloc mul cap entry_size
+    let mut i <i32> 0
+    while lt i cap:
+        store_i32 add entries mul i entry_size 0
+        set i add i 1
+    let header <i32> alloc 12
+    store_i32 header 0
+    store_i32 add header 4 cap
+    store_i32 add header 8 entries
+    header
+
+fn hashset_insert <(i32,i32)*>bool> (hs, key):
+    let cap <i32> load_i32 add hs 4
+    let entries <i32> load_i32 add hs 8
+    let entry_size <i32> 8
+    let idx <i32> mod_s abs hash_i32 key cap
+    let mut cur <i32> idx
+    let mut result <bool> false
+    let mut done <i32> 0
+    while eq done 0:
+        let entry <i32> add entries mul cur entry_size
+        let occupied <i32> load_i32 entry
+        if eq occupied 0:
+            store_i32 entry 1
+            store_i32 add entry 4 key
+            store_i32 hs add load_i32 hs 1
+            set result true
+            set done 1
+        else:
+            let ekey <i32> load_i32 add entry 4
+            if eq ekey key:
+                set done 1  // already present
+            else:
+                set cur mod_s add cur 1 cap
+                if eq cur idx:
+                    set done 1
+    result
+
+fn hashset_contains <(i32,i32)->bool> (hs, key):
+    let cap <i32> load_i32 add hs 4
+    let entries <i32> load_i32 add hs 8
+    let entry_size <i32> 8
+    let idx <i32> mod_s abs hash_i32 key cap
+    let mut cur <i32> idx
+    let mut result <bool> false
+    let mut done <i32> 0
+    while eq done 0:
+        let entry <i32> add entries mul cur entry_size
+        let occupied <i32> load_i32 entry
+        if eq occupied 0:
+            set done 1
+        else:
+            let ekey <i32> load_i32 add entry 4
+            if eq ekey key:
+                set result true
+                set done 1
+            else:
+                set cur mod_s add cur 1 cap
+                if eq cur idx:
+                    set done 1
+    result
+
+fn hashset_remove <(i32,i32)*>bool> (hs, key):
+    let cap <i32> load_i32 add hs 4
+    let entries <i32> load_i32 add hs 8
+    let entry_size <i32> 8
+    let idx <i32> mod_s abs hash_i32 key cap
+    let mut cur <i32> idx
+    let mut result <bool> false
+    let mut done <i32> 0
+    while eq done 0:
+        let entry <i32> add entries mul cur entry_size
+        let occupied <i32> load_i32 entry
+        if eq occupied 0:
+            set done 1
+        else:
+            let ekey <i32> load_i32 add entry 4
+            if eq ekey key:
+                store_i32 entry 0
+                store_i32 hs sub load_i32 hs 1
+                set result true
+                set done 1
+            else:
+                set cur mod_s add cur 1 cap
+                if eq cur idx:
+                    set done 1
+    result
+
+fn hashset_len <(i32)->i32> (hs):
+    load_i32 hs
+
+fn hashset_free <(i32)*>()> (hs):
+    let cap <i32> load_i32 add hs 4
+    let entries <i32> load_i32 add hs 8
+    dealloc entries mul cap 8
+    dealloc hs 12
+
+fn abs <(i32)->i32> (x):
+    if lt x 0:
+        sub 0 x
+    else:
+        x

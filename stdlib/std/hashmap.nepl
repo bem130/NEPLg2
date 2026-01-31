@@ -1,0 +1,136 @@
+#indent 4
+
+#import "std/mem"
+#use std::mem::*
+#import "std/math"
+#use std::math::*
+#import "std/option"
+#use std::option::*
+
+// Simple hash function for i32 keys
+fn hash_i32 <(i32)->i32> (key):
+    // murmur-ish mixing
+    let mut h <i32> key
+    set h mul h 0x5bd1e995
+    set h add h div_s h 16
+    set h mul h 0x5bd1e995
+    h
+
+// HashMap<i32, .V> - simple open-addressing hash map
+// Entry layout: [occupied:i32][key:i32][value:.V]
+// Header: [count:i32][cap:i32][entries_ptr:i32]
+
+fn hashmap_new <.V> <()*>i32> ():
+    let cap <i32> 16
+    let entry_size <i32> add 8 size_of<.V>
+    let entries <i32> alloc mul cap entry_size
+    // zero all occupied flags
+    let mut i <i32> 0
+    while lt i cap:
+        store_i32 add entries mul i entry_size 0
+        set i add i 1
+    let header <i32> alloc 12
+    store_i32 header 0  // count
+    store_i32 add header 4 cap
+    store_i32 add header 8 entries
+    header
+
+fn hashmap_insert <.V> <(i32,i32,.V)*>()> (hm, key, val):
+    let cap <i32> load_i32 add hm 4
+    let entries <i32> load_i32 add hm 8
+    let entry_size <i32> add 8 size_of<.V>
+    let idx <i32> mod_s abs hash_i32 key cap
+    let mut cur <i32> idx
+    let mut found <i32> 0
+    while eq found 0:
+        let entry <i32> add entries mul cur entry_size
+        let occupied <i32> load_i32 entry
+        if eq occupied 0:
+            // empty slot
+            store_i32 entry 1
+            store_i32 add entry 4 key
+            store<.V> add entry 8 val
+            store_i32 hm add load_i32 hm 1
+            set found 1
+        else:
+            let ekey <i32> load_i32 add entry 4
+            if eq ekey key:
+                // update
+                store<.V> add entry 8 val
+                set found 1
+            else:
+                // probe next
+                set cur mod_s add cur 1 cap
+                if eq cur idx:
+                    // full, need resize (not implemented for simplicity)
+                    set found 1
+
+fn hashmap_get <.V> <(i32,i32)->Option<.V>> (hm, key):
+    let cap <i32> load_i32 add hm 4
+    let entries <i32> load_i32 add hm 8
+    let entry_size <i32> add 8 size_of<.V>
+    let idx <i32> mod_s abs hash_i32 key cap
+    let mut cur <i32> idx
+    let mut result <Option<.V>> none<.V>
+    let mut done <i32> 0
+    while eq done 0:
+        let entry <i32> add entries mul cur entry_size
+        let occupied <i32> load_i32 entry
+        if eq occupied 0:
+            set done 1
+        else:
+            let ekey <i32> load_i32 add entry 4
+            if eq ekey key:
+                set result some<.V> load<.V> add entry 8
+                set done 1
+            else:
+                set cur mod_s add cur 1 cap
+                if eq cur idx:
+                    set done 1
+    result
+
+fn hashmap_contains <.V> <(i32,i32)->bool> (hm, key):
+    is_some<.V> hashmap_get<.V> hm key
+
+fn hashmap_remove <.V> <(i32,i32)*>Option<.V>> (hm, key):
+    let cap <i32> load_i32 add hm 4
+    let entries <i32> load_i32 add hm 8
+    let entry_size <i32> add 8 size_of<.V>
+    let idx <i32> mod_s abs hash_i32 key cap
+    let mut cur <i32> idx
+    let mut result <Option<.V>> none<.V>
+    let mut done <i32> 0
+    while eq done 0:
+        let entry <i32> add entries mul cur entry_size
+        let occupied <i32> load_i32 entry
+        if eq occupied 0:
+            set done 1
+        else:
+            let ekey <i32> load_i32 add entry 4
+            if eq ekey key:
+                set result some<.V> load<.V> add entry 8
+                store_i32 entry 0  // mark empty
+                store_i32 hm sub load_i32 hm 1
+                set done 1
+            else:
+                set cur mod_s add cur 1 cap
+                if eq cur idx:
+                    set done 1
+    result
+
+fn hashmap_len <.V> <(i32)->i32> (hm):
+    load_i32 hm
+
+fn hashmap_free <.V> <(i32)*>()> (hm):
+    let cap <i32> load_i32 add hm 4
+    let entries <i32> load_i32 add hm 8
+    let entry_size <i32> add 8 size_of<.V>
+    dealloc entries mul cap entry_size
+    dealloc hm 12
+
+// abs helper
+fn abs <(i32)->i32> (x):
+    if lt x 0:
+        sub 0 x
+    else:
+        x
