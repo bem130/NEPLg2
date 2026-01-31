@@ -1,8 +1,8 @@
 #indent 4
 
-# ====================================
-# i32 Operations
-# ====================================
+// ====================================
+// i32 Operations
+// ====================================
 
 #if[target=wasm]
 fn i32_add <(i32,i32)->i32> (a,b):
@@ -110,19 +110,19 @@ fn i32_rotr <(i32,i32)->i32> (a,b):
         i32.rotr
 
 #if[target=wasm]
-fn i32_clz <i32->i32> (a):
+fn i32_clz <(i32)->i32> (a):
     #wasm:
         local.get $a
         i32.clz
 
 #if[target=wasm]
-fn i32_ctz <i32->i32> (a):
+fn i32_ctz <(i32)->i32> (a):
     #wasm:
         local.get $a
         i32.ctz
 
 #if[target=wasm]
-fn i32_popcnt <i32->i32> (a):
+fn i32_popcnt <(i32)->i32> (a):
     #wasm:
         local.get $a
         i32.popcnt
@@ -197,9 +197,9 @@ fn i32_ge_u <(i32,i32)->bool> (a,b):
         local.get $b
         i32.ge_u
 
-# ====================================
-# i64 Operations
-# ====================================
+// ====================================
+// i64 Operations
+// ====================================
 
 #if[target=wasm]
 fn i64_add <(i64,i64)->i64> (a,b):
@@ -307,19 +307,19 @@ fn i64_rotr <(i64,i64)->i64> (a,b):
         i64.rotr
 
 #if[target=wasm]
-fn i64_clz <i64->i64> (a):
+fn i64_clz <(i64)->i64> (a):
     #wasm:
         local.get $a
         i64.clz
 
 #if[target=wasm]
-fn i64_ctz <i64->i64> (a):
+fn i64_ctz <(i64)->i64> (a):
     #wasm:
         local.get $a
         i64.ctz
 
 #if[target=wasm]
-fn i64_popcnt <i64->i64> (a):
+fn i64_popcnt <(i64)->i64> (a):
     #wasm:
         local.get $a
         i64.popcnt
@@ -394,9 +394,9 @@ fn i64_ge_u <(i64,i64)->bool> (a,b):
         local.get $b
         i64.ge_u
 
-# ====================================
-# f32 Operations
-# ====================================
+// ====================================
+// f32 Operations
+// ====================================
 
 #if[target=wasm]
 fn f32_add <(f32,f32)->f32> (a,b):
@@ -427,43 +427,43 @@ fn f32_div <(f32,f32)->f32> (a,b):
         f32.div
 
 #if[target=wasm]
-fn f32_sqrt <f32->f32> (a):
+fn f32_sqrt <(f32)->f32> (a):
     #wasm:
         local.get $a
         f32.sqrt
 
 #if[target=wasm]
-fn f32_abs <f32->f32> (a):
+fn f32_abs <(f32)->f32> (a):
     #wasm:
         local.get $a
         f32.abs
 
 #if[target=wasm]
-fn f32_neg <f32->f32> (a):
+fn f32_neg <(f32)->f32> (a):
     #wasm:
         local.get $a
         f32.neg
 
 #if[target=wasm]
-fn f32_ceil <f32->f32> (a):
+fn f32_ceil <(f32)->f32> (a):
     #wasm:
         local.get $a
         f32.ceil
 
 #if[target=wasm]
-fn f32_floor <f32->f32> (a):
+fn f32_floor <(f32)->f32> (a):
     #wasm:
         local.get $a
         f32.floor
 
 #if[target=wasm]
-fn f32_trunc <f32->f32> (a):
+fn f32_trunc <(f32)->f32> (a):
     #wasm:
         local.get $a
         f32.trunc
 
 #if[target=wasm]
-fn f32_nearest <f32->f32> (a):
+fn f32_nearest <(f32)->f32> (a):
     #wasm:
         local.get $a
         f32.nearest
@@ -531,9 +531,9 @@ fn f32_ge <(f32,f32)->bool> (a,b):
         local.get $b
         f32.ge
 
-# ====================================
-# f64 Operations
-# ====================================
+// ====================================
+// f64 Operations
+// ====================================
 
 #if[target=wasm]
 fn f64_add <(f64,f64)->f64> (a,b):
@@ -564,43 +564,43 @@ fn f64_div <(f64,f64)->f64> (a,b):
         f64.div
 
 #if[target=wasm]
-fn f64_sqrt <f64->f64> (a):
+fn f64_sqrt <(f64)->f64> (a):
     #wasm:
         local.get $a
         f64.sqrt
 
 #if[target=wasm]
-fn f64_abs <f64->f64> (a):
+fn f64_abs <(f64)->f64> (a):
     #wasm:
         local.get $a
         f64.abs
 
 #if[target=wasm]
-fn f64_neg <f64->f64> (a):
+fn f64_neg <(f64)->f64> (a):
     #wasm:
         local.get $a
         f64.neg
 
 #if[target=wasm]
-fn f64_ceil <f64->f64> (a):
+fn f64_ceil <(f64)->f64> (a):
     #wasm:
         local.get $a
         f64.ceil
 
 #if[target=wasm]
-fn f64_floor <f64->f64> (a):
+fn f64_floor <(f64)->f64> (a):
     #wasm:
         local.get $a
         f64.floor
 
 #if[target=wasm]
-fn f64_trunc <f64->f64> (a):
+fn f64_trunc <(f64)->f64> (a):
     #wasm:
         local.get $a
         f64.trunc
 
 #if[target=wasm]
-fn f64_nearest <f64->f64> (a):
+fn f64_nearest <(f64)->f64> (a):
     #wasm:
         local.get $a
         f64.nearest
@@ -668,229 +668,229 @@ fn f64_ge <(f64,f64)->bool> (a,b):
         local.get $b
         f64.ge
 
-# ====================================
-# Type Conversions
-# ====================================
+// ====================================
+// Type Conversions
+// ====================================
 
-# i32 sign extension
+// i32 sign extension
 #if[target=wasm]
-fn i32_extend_i8_s <i32->i32> (a):
+fn i32_extend_i8_s <(i32)->i32> (a):
     #wasm:
         local.get $a
         i32.extend8_s
 
 #if[target=wasm]
-fn i32_extend_i16_s <i32->i32> (a):
+fn i32_extend_i16_s <(i32)->i32> (a):
     #wasm:
         local.get $a
         i32.extend16_s
 
-# i32 <-> i64
+// i32 <-> i64
 #if[target=wasm]
-fn i64_extend_i32_s <i32->i64> (a):
+fn i64_extend_i32_s <(i32)->i64> (a):
     #wasm:
         local.get $a
         i64.extend_i32_s
 
 #if[target=wasm]
-fn i64_extend_i32_u <i32->i64> (a):
+fn i64_extend_i32_u <(i32)->i64> (a):
     #wasm:
         local.get $a
         i64.extend_i32_u
 
 #if[target=wasm]
-fn i32_wrap_i64 <i64->i32> (a):
+fn i32_wrap_i64 <(i64)->i32> (a):
     #wasm:
         local.get $a
         i32.wrap_i64
 
-# i32/i64 <-> f32
+// i32/i64 <-> f32
 #if[target=wasm]
-fn f32_convert_i32_s <i32->f32> (a):
+fn f32_convert_i32_s <(i32)->f32> (a):
     #wasm:
         local.get $a
         f32.convert_i32_s
 
 #if[target=wasm]
-fn f32_convert_i32_u <i32->f32> (a):
+fn f32_convert_i32_u <(i32)->f32> (a):
     #wasm:
         local.get $a
         f32.convert_i32_u
 
 #if[target=wasm]
-fn f32_convert_i64_s <i64->f32> (a):
+fn f32_convert_i64_s <(i64)->f32> (a):
     #wasm:
         local.get $a
         f32.convert_i64_s
 
 #if[target=wasm]
-fn f32_convert_i64_u <i64->f32> (a):
+fn f32_convert_i64_u <(i64)->f32> (a):
     #wasm:
         local.get $a
         f32.convert_i64_u
 
 #if[target=wasm]
-fn i32_trunc_f32_s <f32->i32> (a):
+fn i32_trunc_f32_s <(f32)->i32> (a):
     #wasm:
         local.get $a
         i32.trunc_f32_s
 
 #if[target=wasm]
-fn i32_trunc_f32_u <f32->i32> (a):
+fn i32_trunc_f32_u <(f32)->i32> (a):
     #wasm:
         local.get $a
         i32.trunc_f32_u
 
 #if[target=wasm]
-fn i32_trunc_sat_f32_s <f32->i32> (a):
+fn i32_trunc_sat_f32_s <(f32)->i32> (a):
     #wasm:
         local.get $a
         i32.trunc_sat_f32_s
 
 #if[target=wasm]
-fn i32_trunc_sat_f32_u <f32->i32> (a):
+fn i32_trunc_sat_f32_u <(f32)->i32> (a):
     #wasm:
         local.get $a
         i32.trunc_sat_f32_u
 
 #if[target=wasm]
-fn i64_trunc_f32_s <f32->i64> (a):
+fn i64_trunc_f32_s <(f32)->i64> (a):
     #wasm:
         local.get $a
         i64.trunc_f32_s
 
 #if[target=wasm]
-fn i64_trunc_f32_u <f32->i64> (a):
+fn i64_trunc_f32_u <(f32)->i64> (a):
     #wasm:
         local.get $a
         i64.trunc_f32_u
 
 #if[target=wasm]
-fn i64_trunc_sat_f32_s <f32->i64> (a):
+fn i64_trunc_sat_f32_s <(f32)->i64> (a):
     #wasm:
         local.get $a
         i64.trunc_sat_f32_s
 
 #if[target=wasm]
-fn i64_trunc_sat_f32_u <f32->i64> (a):
+fn i64_trunc_sat_f32_u <(f32)->i64> (a):
     #wasm:
         local.get $a
         i64.trunc_sat_f32_u
 
-# i32/i64 <-> f64
+// i32/i64 <-> f64
 #if[target=wasm]
-fn f64_convert_i32_s <i32->f64> (a):
+fn f64_convert_i32_s <(i32)->f64> (a):
     #wasm:
         local.get $a
         f64.convert_i32_s
 
 #if[target=wasm]
-fn f64_convert_i32_u <i32->f64> (a):
+fn f64_convert_i32_u <(i32)->f64> (a):
     #wasm:
         local.get $a
         f64.convert_i32_u
 
 #if[target=wasm]
-fn f64_convert_i64_s <i64->f64> (a):
+fn f64_convert_i64_s <(i64)->f64> (a):
     #wasm:
         local.get $a
         f64.convert_i64_s
 
 #if[target=wasm]
-fn f64_convert_i64_u <i64->f64> (a):
+fn f64_convert_i64_u <(i64)->f64> (a):
     #wasm:
         local.get $a
         f64.convert_i64_u
 
 #if[target=wasm]
-fn i32_trunc_f64_s <f64->i32> (a):
+fn i32_trunc_f64_s <(f64)->i32> (a):
     #wasm:
         local.get $a
         i32.trunc_f64_s
 
 #if[target=wasm]
-fn i32_trunc_f64_u <f64->i32> (a):
+fn i32_trunc_f64_u <(f64)->i32> (a):
     #wasm:
         local.get $a
         i32.trunc_f64_u
 
 #if[target=wasm]
-fn i32_trunc_sat_f64_s <f64->i32> (a):
+fn i32_trunc_sat_f64_s <(f64)->i32> (a):
     #wasm:
         local.get $a
         i32.trunc_sat_f64_s
 
 #if[target=wasm]
-fn i32_trunc_sat_f64_u <f64->i32> (a):
+fn i32_trunc_sat_f64_u <(f64)->i32> (a):
     #wasm:
         local.get $a
         i32.trunc_sat_f64_u
 
 #if[target=wasm]
-fn i64_trunc_f64_s <f64->i64> (a):
+fn i64_trunc_f64_s <(f64)->i64> (a):
     #wasm:
         local.get $a
         i64.trunc_f64_s
 
 #if[target=wasm]
-fn i64_trunc_f64_u <f64->i64> (a):
+fn i64_trunc_f64_u <(f64)->i64> (a):
     #wasm:
         local.get $a
         i64.trunc_f64_u
 
 #if[target=wasm]
-fn i64_trunc_sat_f64_s <f64->i64> (a):
+fn i64_trunc_sat_f64_s <(f64)->i64> (a):
     #wasm:
         local.get $a
         i64.trunc_sat_f64_s
 
 #if[target=wasm]
-fn i64_trunc_sat_f64_u <f64->i64> (a):
+fn i64_trunc_sat_f64_u <(f64)->i64> (a):
     #wasm:
         local.get $a
         i64.trunc_sat_f64_u
 
-# f32 <-> f64
+// f32 <-> f64
 #if[target=wasm]
-fn f64_promote_f32 <f32->f64> (a):
+fn f64_promote_f32 <(f32)->f64> (a):
     #wasm:
         local.get $a
         f64.promote_f32
 
 #if[target=wasm]
-fn f32_demote_f64 <f64->f32> (a):
+fn f32_demote_f64 <(f64)->f32> (a):
     #wasm:
         local.get $a
         f32.demote_f64
 
-# Bit reinterpretation
+// Bit reinterpretation
 #if[target=wasm]
-fn f32_reinterpret_i32 <i32->f32> (a):
+fn f32_reinterpret_i32 <(i32)->f32> (a):
     #wasm:
         local.get $a
         f32.reinterpret_i32
 
 #if[target=wasm]
-fn i32_reinterpret_f32 <f32->i32> (a):
+fn i32_reinterpret_f32 <(f32)->i32> (a):
     #wasm:
         local.get $a
         i32.reinterpret_f32
 
 #if[target=wasm]
-fn f64_reinterpret_i64 <i64->f64> (a):
+fn f64_reinterpret_i64 <(i64)->f64> (a):
     #wasm:
         local.get $a
         f64.reinterpret_i64
 
 #if[target=wasm]
-fn i64_reinterpret_f64 <f64->i64> (a):
+fn i64_reinterpret_f64 <(f64)->i64> (a):
     #wasm:
         local.get $a
         i64.reinterpret_f64
 
-# ====================================
-# Backwards compatibility aliases
-# ====================================
+// ====================================
+// Backwards compatibility aliases
+// ====================================
 
 #if[target=wasm]
 fn add <(i32,i32)->i32> (a,b):

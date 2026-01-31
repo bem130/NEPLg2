@@ -372,10 +372,14 @@ fn valtype(kind: &TypeKind) -> Option<ValType> {
         TypeKind::Unit => None,
         TypeKind::I32 | TypeKind::Bool | TypeKind::Str => Some(ValType::I32),
         TypeKind::F32 => Some(ValType::F32),
-        TypeKind::Enum { .. }
-        | TypeKind::Struct { .. }
-        | TypeKind::Tuple { .. }
-        | TypeKind::Named(_) => Some(ValType::I32),
+        TypeKind::Enum { .. } | TypeKind::Struct { .. } | TypeKind::Tuple { .. } => {
+            Some(ValType::I32)
+        }
+        TypeKind::Named(name) => match name.as_str() {
+            "i64" => Some(ValType::I64),
+            "f64" => Some(ValType::F64),
+            _ => Some(ValType::I32),
+        },
         TypeKind::Apply { .. } => {
             // std::eprintln!("valtype: Apply is Some(I32)");
             Some(ValType::I32)
