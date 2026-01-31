@@ -9,6 +9,7 @@ anyhow.workspace = true
 clap.workspace = true
 nepl-core = { path = "../nepl-core" }
 wasmi.workspace = true
+wasmprinter.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -14,6 +14,7 @@ anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 wasmi = "0.31.2"
 wasm-bindgen = "0.2"
+wasmprinter = "0.2"
 assert_cmd = "2.0"
 predicates = "3.1"
 tempfile = "3.10"

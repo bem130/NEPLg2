@@ -12,6 +12,7 @@ use nepl_core::{
     CompilationArtifact, CompileOptions, CompileTarget,
 };
 use wasmi::{Caller, Engine, Linker, Module, Store};
+use wasmprinter::print_bytes;
 
 #[derive(Default)]
 struct AllocState {
@@ -280,6 +281,16 @@ fn write_output(path: &str, bytes: &[u8]) -> Result<()> {
         }
     }
     fs::write(path, bytes).with_context(|| format!("failed to write output file {path}"))?;
+
+    // Write WAT (WebAssembly Text Format) as well
+    if path.ends_with(".wasm") {
+        let wat_path = path.trim_end_matches(".wasm").to_string() + ".wat";
+        let wat_text = print_bytes(bytes)
+            .with_context(|| "failed to convert wasm to wat")?;
+        fs::write(&wat_path, wat_text.as_bytes())
+            .with_context(|| format!("failed to write WAT file {wat_path}"))?;
+    }
+
     Ok(())
 }
 
