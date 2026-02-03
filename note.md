@@ -590,3 +590,4 @@
 ## テスト実行結果
 - `cargo test`
 - `cargo run -p nepl-cli -- test`
+- nepl-web の stdlib 埋め込みを build.rs で自動生成するように変更し、/stdlib 配下の .nepl を網羅的に取り込むようにした。

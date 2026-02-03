@@ -142,40 +142,12 @@ fn stdlib_sources(root: &PathBuf) -> BTreeMap<PathBuf, String> {
     map
 }
 
-fn stdlib_entries() -> Vec<(&'static str, &'static str)> {
-    vec![
-        ("std.nepl", include_str!("../../stdlib/std.nepl")),
-        ("std/cast.nepl", include_str!("../../stdlib/std/cast.nepl")),
-        ("std/diag.nepl", include_str!("../../stdlib/std/diag.nepl")),
-        ("std/error.nepl", include_str!("../../stdlib/std/error.nepl")),
-        ("std/hashmap.nepl", include_str!("../../stdlib/std/hashmap.nepl")),
-        ("std/hashset.nepl", include_str!("../../stdlib/std/hashset.nepl")),
-        ("std/json.nepl", include_str!("../../stdlib/std/json.nepl")),
-        ("std/list.nepl", include_str!("../../stdlib/std/list.nepl")),
-        ("std/math.nepl", include_str!("../../stdlib/std/math.nepl")),
-        ("std/mem.nepl", include_str!("../../stdlib/std/mem.nepl")),
-        ("std/option.nepl", include_str!("../../stdlib/std/option.nepl")),
-        ("std/result.nepl", include_str!("../../stdlib/std/result.nepl")),
-        ("std/stack.nepl", include_str!("../../stdlib/std/stack.nepl")),
-        ("std/stdio.nepl", include_str!("../../stdlib/std/stdio.nepl")),
-        ("std/string.nepl", include_str!("../../stdlib/std/string.nepl")),
-        ("std/test.nepl", include_str!("../../stdlib/std/test.nepl")),
-        ("std/vec.nepl", include_str!("../../stdlib/std/vec.nepl")),
-        ("kp/kpread.nepl", include_str!("../../stdlib/kp/kpread.nepl")),
-    ]
+include!(concat!(env!("OUT_DIR"), "/stdlib_entries.rs"));
+
+fn stdlib_entries() -> &'static [(&'static str, &'static str)] {
+    STD_LIB_ENTRIES
 }
 
-fn test_sources() -> Vec<(&'static str, &'static str)> {
-    vec![
-        ("math", include_str!("../../stdlib/tests/math.nepl")),
-        ("list", include_str!("../../stdlib/tests/list.nepl")),
-        ("error", include_str!("../../stdlib/tests/error.nepl")),
-        ("diag", include_str!("../../stdlib/tests/diag.nepl")),
-        ("cast", include_str!("../../stdlib/tests/cast.nepl")),
-        ("stack", include_str!("../../stdlib/tests/stack.nepl")),
-        ("result", include_str!("../../stdlib/tests/result.nepl")),
-        ("option", include_str!("../../stdlib/tests/option.nepl")),
-        ("string", include_str!("../../stdlib/tests/string.nepl")),
-        ("vec", include_str!("../../stdlib/tests/vec.nepl")),
-    ]
+fn test_sources() -> &'static [(&'static str, &'static str)] {
+    TEST_ENTRIES
 }
