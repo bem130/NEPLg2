@@ -30,6 +30,7 @@ Notes:
 - Tests are compiled and executed with the WASI target.
 - A non-zero exit code is treated as a failure.
 - The test runner loads stdlib from the repository `stdlib/` directory.
+- The test runner passes fixed arguments `--flag value` (argv[1..]) to WASI programs.
 
 ## stdlib test module
 
@@ -86,6 +87,8 @@ The current stdlib is intentionally minimal and i32-focused:
 - `std/list`: fixed-capacity list of i32 with bounds-checked get
 - `std/stdio`: WASI `print`, `println`, `print_i32`, `println_i32`, `read_all`,
   `read_line`
+- `std/cliarg`: WASI `args_sizes_get/args_get` argument access (`cliarg_count`,
+  `cliarg_get`, `cliarg_program`)
 - `std/test`: basic assertions for stdlib tests
 
 If you extend stdlib behavior, add a matching `.nepl` test under

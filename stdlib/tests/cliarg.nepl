@@ -1,0 +1,26 @@
+#entry main
+#indent 4
+#target wasi
+
+#import "std/cliarg" as *
+#import "std/option" as *
+#import "std/test" as *
+
+fn main <()*> ()> ():
+    let c <i32> cliarg_count;
+    assert_eq_i32 3 c;
+    assert is_none<str> cliarg_get -1;
+    assert is_none<str> cliarg_get c;
+
+    match cliarg_get 1:
+        Option::Some s:
+            assert_str_eq "--flag" s;
+        Option::None:
+            trap;
+
+    match cliarg_get 2:
+        Option::Some s:
+            assert_str_eq "value" s;
+        Option::None:
+            trap;
+    ()

@@ -1,0 +1,169 @@
+#indent 4
+
+#extern "wasi_snapshot_preview1" "args_sizes_get" fn args_sizes_get <(i32,i32)->i32>
+#extern "wasi_snapshot_preview1" "args_get" fn args_get <(i32,i32)->i32>
+
+#import "std/mem" as *
+#import "std/math" as *
+#import "std/option" as *
+
+// cliarg: WASI のコマンドライン引数取得
+//
+// 目的:
+// - WASI の args_sizes_get/args_get を使い、argv を読み出します。
+//
+// 実装(アルゴリズム):
+// - args_sizes_get で argc と文字列バッファ長を取得します。
+// - args_get で argv 配列と NUL 終端文字列群をメモリに書き込みます。
+// - NUL 終端の文字列を [len][bytes] 形式の str にコピーします。
+//
+// 注意(重要):
+// - WASI ターゲット専用です（wasm では使用できません）。
+// - 取得ごとにメモリを確保し、解放しません。
+// - argv[0] はプログラム名相当です。
+//
+// 計算量:
+// - 引数取得は O(total_bytes)
+
+// cstr_len: NUL 終端文字列の長さを求める
+//
+// 目的:
+// - p から NUL までのバイト数を返します。
+//
+// 実装(アルゴリズム):
+// - 1 バイトずつ読み、0 に達したら停止します。
+//
+// 注意(重要):
+// - 終端が無い場合は未定義です。
+//
+// 計算量:
+// - O(n)
+fn cstr_len <(i32)*>i32> (p):
+    let mut i <i32> 0
+    let mut done <i32> 0
+    while eq done 0:
+        let b <i32> load_u8 add p i;
+        if:
+            cond:
+                eq b 0
+            then:
+                set done 1;
+            else:
+                set i add i 1;
+    i
+
+// cstr_to_str: NUL 終端文字列を str にコピーする
+//
+// 目的:
+// - p から読み取った文字列を str として返します。
+//
+// 実装(アルゴリズム):
+// - cstr_len で長さを求め、len+4 を確保してコピーします。
+//
+// 注意(重要):
+// - 呼び出しごとに新しい領域を確保します。
+//
+// 計算量:
+// - O(n)
+fn cstr_to_str <(i32)*>str> (p):
+    let len <i32> cstr_len p
+    let out <i32> alloc add 4 len
+    store_i32 out len
+    let mut i <i32> 0
+    while lt i len:
+        let b <i32> load_u8 add p i;
+        store_u8 add out add 4 i b;
+        set i add i 1;
+    out
+
+// cliarg_count: 引数の個数を返す
+//
+// 目的:
+// - argc を返します（argv[0] を含みます）。
+//
+// 実装(アルゴリズム):
+// - args_sizes_get で argc を取得します。
+//
+// 注意(重要):
+// - 失敗時は 0 を返します。
+//
+// 計算量:
+// - O(1)
+fn cliarg_count <()*>i32> ():
+    let meta <i32> alloc 8
+    let argc_ptr <i32> meta
+    let buf_ptr <i32> add meta 4
+    let errno <i32> args_sizes_get argc_ptr buf_ptr
+    if:
+        eq errno 0
+        then:
+            load_i32 argc_ptr
+        else:
+            0
+
+// cliarg_get: 指定 index の引数を取得する
+//
+// 目的:
+// - idx が範囲内なら Some(str)、範囲外なら None を返します。
+//
+// 実装(アルゴリズム):
+// - args_sizes_get/args_get を呼び出し、argv を取得します。
+// - argv[idx] を NUL 終端として読み取り、str にコピーします。
+//
+// 注意(重要):
+// - idx < 0 は None になります。
+// - 取得ごとにメモリを確保します。
+//
+// 計算量:
+// - O(total_bytes + len)
+fn cliarg_get <(i32)*>Option<str>> (idx):
+    if:
+        cond:
+            lt idx 0
+        then:
+            none<str>
+        else:
+            let meta <i32> alloc 8
+            let argc_ptr <i32> meta
+            let buf_ptr <i32> add meta 4
+            let errno <i32> args_sizes_get argc_ptr buf_ptr
+            if:
+                eq errno 0
+                then:
+                    let argc <i32> load_i32 argc_ptr
+                    if:
+                        cond:
+                            lt idx argc
+                        then:
+                            let argv <i32> alloc mul argc 4
+                            let buf_size <i32> load_i32 buf_ptr
+                            let argv_buf <i32> alloc buf_size
+                            let errno2 <i32> args_get argv argv_buf
+                            if:
+                                eq errno2 0
+                                then:
+                                    let offset <i32> mul idx 4
+                                    let arg_ptr <i32> load_i32 add argv offset
+                                    some<str> cstr_to_str arg_ptr
+                                else:
+                                    none<str>
+                        else:
+                            none<str>
+                else:
+                    none<str>
+
+// cliarg_program: argv[0] を返す
+//
+// 目的:
+// - プログラム名相当の引数を返します。
+//
+// 実装(アルゴリズム):
+// - cliarg_get 0 を呼びます。
+//
+// 注意(重要):
+// - 取得に失敗した場合は None です。
+//
+// 計算量:
+// - O(total_bytes + len)
+fn cliarg_program <()*>Option<str>> ():
+    cliarg_get 0

@@ -22,6 +22,7 @@ struct AllocState {
     stdin: Vec<u8>,
     stdin_pos: usize,
     stdin_eof: bool,
+    args: Vec<Vec<u8>>,
 }
 
 /// コマンドライン引数を定義するための構造体
@@ -48,6 +49,13 @@ struct Cli {
 
     #[arg(long, help = "Run the code if the output format is wasm")]
     run: bool,
+    #[arg(
+        value_name = "ARGS",
+        num_args = 0..,
+        trailing_var_arg = true,
+        help = "Arguments passed to the WASI program after --"
+    )]
+    run_args: Vec<String>,
     #[arg(
         long,
         help = "Compile as library (do not wrap top-level in an implicit main)"
@@ -105,6 +113,10 @@ fn execute(cli: Cli) -> Result<()> {
         return Err(anyhow::anyhow!("Either --run or --output is required"));
     }
     let emits = expand_emits(&cli.emit);
+    let program_name = cli
+        .input
+        .clone()
+        .unwrap_or_else(|| "<stdin>".to_string());
     let (module, source_map) = match cli.input {
         Some(path) => {
             let mut loader = Loader::new(stdlib_root()?);
@@ -193,7 +205,10 @@ fn execute(cli: Cli) -> Result<()> {
         write_outputs(&base, &artifact.wasm, &emits)?;
     }
     if cli.run {
-        let result = run_wasm(&artifact, run_target)?;
+        let mut wasm_args = Vec::new();
+        wasm_args.push(program_name);
+        wasm_args.extend(cli.run_args.clone());
+        let result = run_wasm(&artifact, run_target, wasm_args)?;
         println!("Program exited with {result}");
     }
 
@@ -282,7 +297,11 @@ fn run_test_file(path: &Path, std_root: &Path, verbose: bool) -> Result<()> {
         }
         Err(e) => return Err(anyhow::anyhow!(e.to_string())),
     };
-    let result = run_wasm(&artifact, CompileTarget::Wasi)?;
+    let mut wasm_args = Vec::new();
+    wasm_args.push(path.display().to_string());
+    wasm_args.push("--flag".to_string());
+    wasm_args.push("value".to_string());
+    let result = run_wasm(&artifact, CompileTarget::Wasi, wasm_args)?;
     if result != 0 {
         return Err(anyhow::anyhow!("non-zero exit code: {result}"));
     }
@@ -471,10 +490,22 @@ fn minify_wat_text(input: &str) -> String {
     out.trim().to_string()
 }
 
-fn run_wasm(artifact: &CompilationArtifact, target: CompileTarget) -> Result<i32> {
+fn run_wasm(
+    artifact: &CompilationArtifact,
+    target: CompileTarget,
+    args: Vec<String>,
+) -> Result<i32> {
     let engine = Engine::default();
     let module = Module::new(&engine, artifact.wasm.as_slice())
         .context("failed to compile wasm artifact")?;
+    let args_bytes: Vec<Vec<u8>> = args
+        .into_iter()
+        .map(|s| {
+            let mut b = s.into_bytes();
+            b.push(0);
+            b
+        })
+        .collect();
 
     let mut linker: Linker<AllocState> = Linker::new(&engine);
     // Env prints for legacy wasm target
@@ -701,6 +732,83 @@ fn run_wasm(artifact: &CompilationArtifact, target: CompileTarget) -> Result<i32
     if matches!(target, CompileTarget::Wasi) {
         linker.func_wrap(
             "wasi_snapshot_preview1",
+            "args_sizes_get",
+            |mut caller: Caller<'_, AllocState>, argc_ptr: i32, argv_buf_size_ptr: i32| -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if argc_ptr < 0 || argv_buf_size_ptr < 0 {
+                    return 21;
+                }
+                let argc = caller.data().args.len() as u32;
+                let buf_size: u32 = caller
+                    .data()
+                    .args
+                    .iter()
+                    .map(|a| a.len() as u32)
+                    .sum();
+                let mem_len = memory.data(&caller).len();
+                let argc_offset = argc_ptr as usize;
+                let buf_offset = argv_buf_size_ptr as usize;
+                if argc_offset + 4 > mem_len || buf_offset + 4 > mem_len {
+                    return 21;
+                }
+                if memory
+                    .write(&mut caller, argc_offset, &argc.to_le_bytes())
+                    .is_err()
+                {
+                    return 21;
+                }
+                if memory
+                    .write(&mut caller, buf_offset, &buf_size.to_le_bytes())
+                    .is_err()
+                {
+                    return 21;
+                }
+                0
+            },
+        )?;
+        linker.func_wrap(
+            "wasi_snapshot_preview1",
+            "args_get",
+            |mut caller: Caller<'_, AllocState>, argv: i32, argv_buf: i32| -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if argv < 0 || argv_buf < 0 {
+                    return 21;
+                }
+                let mem_len = memory.data(&caller).len();
+                let args = caller.data().args.clone();
+                let mut argv_offset = argv as usize;
+                let mut buf_offset = argv_buf as usize;
+                for arg in args.iter() {
+                    if argv_offset + 4 > mem_len {
+                        return 21;
+                    }
+                    let ptr_bytes = (buf_offset as u32).to_le_bytes();
+                    if memory
+                        .write(&mut caller, argv_offset, &ptr_bytes)
+                        .is_err()
+                    {
+                        return 21;
+                    }
+                    if buf_offset + arg.len() > mem_len {
+                        return 21;
+                    }
+                    if memory.write(&mut caller, buf_offset, arg).is_err() {
+                        return 21;
+                    }
+                    argv_offset += 4;
+                    buf_offset += arg.len();
+                }
+                0
+            },
+        )?;
+        linker.func_wrap(
+            "wasi_snapshot_preview1",
             "fd_read",
             |mut caller: Caller<'_, AllocState>,
              fd: i32,
@@ -847,6 +955,7 @@ fn run_wasm(artifact: &CompilationArtifact, target: CompileTarget) -> Result<i32
             stdin: Vec::new(),
             stdin_pos: 0,
             stdin_eof: false,
+            args: args_bytes,
         },
     );
     let instance_pre = linker

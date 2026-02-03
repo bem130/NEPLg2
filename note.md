@@ -1,4 +1,15 @@
 # 状況メモ (2026-01-22)
+# 2026-02-03 作業メモ (cliarg 追加)
+- stdlib/std/cliarg.nepl を追加し、WASI args_sizes_get/args_get で argv を取得できるようにした。
+- stdlib/tests/cliarg.nepl を追加し、範囲外/負の index が None になることを確認するテストを用意した。
+- doc/testing.md の stdlib 一覧に std/cliarg を追記した。
+- nepl-cli の WASI ランタイムに args_sizes_get/args_get を追加し、`--` 以降の引数を渡せるようにした。
+- テスト: `cargo test` と `cargo run -p nepl-cli -- test` を実行。
+# 2026-02-03 作業メモ (cliarg 実引数テスト)
+- stdlib/tests/cliarg.nepl を更新し、argv[1..] の値を検証するテストを追加した。
+- nepl-cli の stdlib テスト実行で `--flag value` を argv に渡すよう変更した。
+- doc/testing.md に stdlib テストが固定引数を渡す旨を追記した。
+- テスト: `cargo test` と `cargo run -p nepl-cli -- test` を実行。
 # 2026-02-03 作業メモ (stdlib コメント言語統一)
 - stdlib/std/option.nepl と stdlib/std/result.nepl の英語コメント行を削除し、コメントが日本語のみになるよう統一。
 - テスト: `cargo test` と `cargo run -p nepl-cli -- test` を実行。

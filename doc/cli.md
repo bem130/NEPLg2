@@ -35,6 +35,16 @@ nepl-cli --input examples/counter.nepl --output target/counter --emit wasm,wat,w
 
 If omitted, the compiler uses the build profile it was compiled with.
 
+## Run and program arguments
+
+When `--run` is used, arguments after `--` are passed to the WASI program.
+The program name is always provided as `argv[0]` (input path or `<stdin>`).
+
+Example:
+```
+nepl-cli --input examples/counter.nepl --run -- --flag value
+```
+
 ## WAT generation
 
 - Pretty WAT uses the default formatting from `wasmprinter`.
