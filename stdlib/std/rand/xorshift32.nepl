@@ -1,0 +1,56 @@
+#indent 4
+#import "std/math" as *
+
+// xorshift32: 32bit Xorshift PRNG
+//
+// 目的:
+// - 高速で軽量な疑似乱数生成器を提供します。
+//
+// 実装(アルゴリズム):
+// - 状態を 3 回 shift/xor して更新します。
+//
+// 注意(重要):
+// - 暗号論的安全性はありません（CSPRNGではありません）。
+// - シードが 0 の場合は 1 に補正されます。
+//
+// 計算量:
+// - O(1)
+
+struct Xorshift32:
+    state <i32>
+
+// new_xorshift32: 生成器を初期化する
+//
+// 目的:
+// - シードから Xorshift32 を作成します。
+//
+// 実装(アルゴリズム):
+// - seed が 0 なら 1 にします。
+//
+// 注意(重要):
+// - 0 は無効な状態です。
+fn new_xorshift32 <(i32)->Xorshift32> (seed):
+    let s <i32> if:
+        eq seed 0
+        then 1
+        else seed
+    Xorshift32 s
+
+// xorshift32_next: 次の乱数を得る
+//
+// 目的:
+// - 状態を更新し、新しい状態と生成された乱数を返します。
+//
+// 実装(アルゴリズム):
+// - x ^= x << 13
+// - x ^= x >> 17
+// - x ^= x << 5
+//
+// 注意(重要):
+// - 新しい状態を受け取って繰り越してください。
+fn xorshift32_next <(Xorshift32)->(Xorshift32, i32)> (rng):
+    let x <i32> rng.state
+    let x1 <i32> i32_xor x (i32_shl x 13)
+    let x2 <i32> i32_xor x1 (i32_shr_u x1 17)
+    let x3 <i32> i32_xor x2 (i32_shl x2 5)
+    (Xorshift32 x3, x3)

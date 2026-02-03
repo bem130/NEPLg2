@@ -1,0 +1,51 @@
+#indent 4
+#import "std/math" as *
+
+// fnv1a32: FNV-1a 32bit Hash
+//
+// 目的:
+// - 非暗号学的で高速なハッシュ関数を提供します。
+//
+// 実装(アルゴリズム):
+// - FNV-1a (hash XOR byte) * prime
+//
+// 注意(重要):
+// - 暗号用途には使えません。
+//
+// 計算量:
+// - update: O(1)
+
+struct Fnv1a32:
+    hash <i32>
+
+// new_fnv1a32: ハッシャーを初期化する
+//
+// 目的:
+// - オフセット基底値で初期化された Fnv1a32 を返します。
+//
+// 実装(アルゴリズム):
+// - 基底値: 0x811c9dc5 (-2128831035)
+fn new_fnv1a32 <()->Fnv1a32> ():
+    Fnv1a32 -2128831035
+
+// fnv1a32_update: バイトで状態を更新する
+//
+// 目的:
+// - 入力バイトをハッシュに混合します。
+//
+// 実装(アルゴリズム):
+// - hash = (hash ^ byte) * prime
+// - prime: 0x01000193 (16777619)
+fn fnv1a32_update <(Fnv1a32, i32)->Fnv1a32> (h, byte):
+    let prime <i32> 16777619
+    let current <i32> h.hash
+    let x <i32> i32_xor current byte
+    let next <i32> i32_mul x prime
+    Fnv1a32 next
+
+// fnv1a32_finalize: ハッシュ値を取り出す
+//
+// 目的:
+// - 現在のハッシュ値を返します。
+fn fnv1a32_finalize <(Fnv1a32)->i32> (h):
+    h.hash

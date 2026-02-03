@@ -1,0 +1,35 @@
+#indent 4
+#import "std/vec" as *
+
+// sha256: SHA-256 Hash (Draft/Skeleton)
+//
+// 目的:
+// - SHA-256 アルゴリズムのインターフェイス定義（ドラフト）。
+//
+// 実装(アルゴリズム):
+// - バッファリングのみを行うスケルトン実装です。
+//
+// 注意(重要):
+// - まだ実際のハッシュ計算を行いません。
+//
+// 計算量:
+// - update: O(1)
+
+struct Sha256:
+    buffer <Vec<i32>>
+
+// new_sha256: ハッシャーを初期化する
+fn new_sha256 <()->Sha256> ():
+    Sha256 vec_new<i32> ()
+
+// sha256_update: バイトで状態を更新する
+fn sha256_update <(Sha256, i32)->Sha256> (ctx, byte):
+    let new_vec <Vec<i32>> vec_push<i32> ctx.buffer byte
+    Sha256 new_vec
+
+// sha256_finalize: ハッシュ値を計算する（未実装）
+//
+// 返り値:
+// - 現在は入力バッファをそのまま返しています（デバッグ用）。
+fn sha256_finalize <(Sha256)->Vec<i32>> (ctx):
+    ctx.buffer
