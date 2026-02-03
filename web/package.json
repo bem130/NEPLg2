@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "description": "Web playground for NEPLg2 programming language",
   "scripts": {
-    "start": "npx serve .",
-    "copy": "cp ../examples/*.nepl examples/",
-    "build": "npm run copy && echo 'No build step yet'"
+    "start": "npm run copy && npx serve .",
+    "copy": "mkdir -p examples && cp ../examples/*.nepl examples/",
+    "build": "npm run copy && trunk build --release"
   },
   "keywords": [],
   "author": "",

@@ -59,6 +59,11 @@ jobs:
                   shared-key: nepl-g2
                   cache-on-failure: true
 
+            - name: Populate examples
+              run: |
+                  mkdir -p web/examples
+                  cp examples/*.nepl web/examples/
+
             - name: Build wasm app with trunk
               run: trunk build --release --public-url /NEPLg2/
               # If your Trunk project is not at repo root, uncomment:
