@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -23,6 +23,13 @@ struct AllocState {
     stdin_pos: usize,
     stdin_eof: bool,
     args: Vec<Vec<u8>>,
+    files: BTreeMap<i32, FileState>,
+    next_fd: i32,
+}
+
+struct FileState {
+    data: Vec<u8>,
+    pos: usize,
 }
 
 /// コマンドライン引数を定義するための構造体
@@ -814,6 +821,54 @@ fn run_wasm(
         )?;
         linker.func_wrap(
             "wasi_snapshot_preview1",
+            "path_open",
+            |mut caller: Caller<'_, AllocState>,
+             _dirfd: i32,
+             _dirflags: i32,
+             path_ptr: i32,
+             path_len: i32,
+             _oflags: i32,
+             _rights_base: i64,
+             _rights_inherit: i64,
+             _fdflags: i32,
+             fd_out: i32|
+             -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if path_ptr < 0 || path_len < 0 || fd_out < 0 {
+                    return 21;
+                }
+                let mem = memory.data(&caller);
+                let start = path_ptr as usize;
+                let end = start.saturating_add(path_len as usize);
+                if end > mem.len() || (fd_out as usize) + 4 > mem.len() {
+                    return 21;
+                }
+                let path = std::str::from_utf8(&mem[start..end]).unwrap_or("");
+                let data = match fs::read(path) {
+                    Ok(d) => d,
+                    Err(_) => return 44,
+                };
+                let fd = caller.data().next_fd;
+                caller.data_mut().next_fd += 1;
+                caller
+                    .data_mut()
+                    .files
+                    .insert(fd, FileState { data, pos: 0 });
+                let fd_bytes = (fd as u32).to_le_bytes();
+                if memory
+                    .write(&mut caller, fd_out as usize, &fd_bytes)
+                    .is_err()
+                {
+                    return 21;
+                }
+                0
+            },
+        )?;
+        linker.func_wrap(
+            "wasi_snapshot_preview1",
             "fd_read",
             |mut caller: Caller<'_, AllocState>,
              fd: i32,
@@ -821,9 +876,6 @@ fn run_wasm(
              iovs_len: i32,
              nread: i32|
              -> i32 {
-                if fd != 0 {
-                    return 8;
-                }
                 let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
                     Some(m) => m,
                     None => return 21,
@@ -832,59 +884,110 @@ fn run_wasm(
                 let mut total = 0usize;
                 let mut offset = iovs as usize;
                 let count = if iovs_len > 0 { iovs_len as usize } else { 0 };
-                if caller.data().stdin_pos >= caller.data().stdin.len()
-                    && !caller.data().stdin_eof
-                {
-                    let mut buf = vec![0u8; 4096];
-                    let read = match io::stdin().read(&mut buf) {
-                        Ok(n) => n,
-                        Err(_) => 0,
-                    };
-                    if read == 0 {
-                        caller.data_mut().stdin_eof = true;
-                        caller.data_mut().stdin.clear();
-                        caller.data_mut().stdin_pos = 0;
-                    } else {
-                        caller.data_mut().stdin = buf[..read].to_vec();
-                        caller.data_mut().stdin_pos = 0;
+                if fd == 0 {
+                    if caller.data().stdin_pos >= caller.data().stdin.len()
+                        && !caller.data().stdin_eof
+                    {
+                        let mut buf = vec![0u8; 4096];
+                        let read = match io::stdin().read(&mut buf) {
+                            Ok(n) => n,
+                            Err(_) => 0,
+                        };
+                        if read == 0 {
+                            caller.data_mut().stdin_eof = true;
+                            caller.data_mut().stdin.clear();
+                            caller.data_mut().stdin_pos = 0;
+                        } else {
+                            caller.data_mut().stdin = buf[..read].to_vec();
+                            caller.data_mut().stdin_pos = 0;
+                        }
+                    }
+                    let stdin_snapshot = caller.data().stdin.clone();
+                    let mut pos = caller.data().stdin_pos;
+                    for _ in 0..count {
+                        if offset + 8 > data_snapshot.len() {
+                            return 21;
+                        }
+                        let base = u32::from_le_bytes(
+                            data_snapshot[offset..offset + 4].try_into().unwrap(),
+                        ) as usize;
+                        let len = u32::from_le_bytes(
+                            data_snapshot[offset + 4..offset + 8].try_into().unwrap(),
+                        ) as usize;
+                        offset += 8;
+                        if base + len > data_snapshot.len() {
+                            return 21;
+                        }
+                        if pos >= stdin_snapshot.len() {
+                            break;
+                        }
+                        let avail = stdin_snapshot.len() - pos;
+                        let take = if len < avail { len } else { avail };
+                        if take == 0 {
+                            break;
+                        }
+                        memory
+                            .write(&mut caller, base, &stdin_snapshot[pos..pos + take])
+                            .ok();
+                        pos += take;
+                        total += take;
+                    }
+                    caller.data_mut().stdin_pos = pos;
+                } else {
+                    for _ in 0..count {
+                        if offset + 8 > data_snapshot.len() {
+                            return 21;
+                        }
+                        let base = u32::from_le_bytes(
+                            data_snapshot[offset..offset + 4].try_into().unwrap(),
+                        ) as usize;
+                        let len = u32::from_le_bytes(
+                            data_snapshot[offset + 4..offset + 8].try_into().unwrap(),
+                        ) as usize;
+                        offset += 8;
+                        if base + len > data_snapshot.len() {
+                            return 21;
+                        }
+                        let (take, chunk) = {
+                            let file = match caller.data_mut().files.get_mut(&fd) {
+                                Some(f) => f,
+                                None => return 8,
+                            };
+                            if file.pos >= file.data.len() {
+                                (0, Vec::new())
+                            } else {
+                                let avail = file.data.len() - file.pos;
+                                let take = if len < avail { len } else { avail };
+                                let chunk = file.data[file.pos..file.pos + take].to_vec();
+                                file.pos += take;
+                                (take, chunk)
+                            }
+                        };
+                        if take == 0 {
+                            break;
+                        }
+                        memory.write(&mut caller, base, &chunk).ok();
+                        total += take;
                     }
                 }
-                let stdin_snapshot = caller.data().stdin.clone();
-                let mut pos = caller.data().stdin_pos;
-                for _ in 0..count {
-                    if offset + 8 > data_snapshot.len() {
-                        return 21;
-                    }
-                    let base = u32::from_le_bytes(
-                        data_snapshot[offset..offset + 4].try_into().unwrap(),
-                    ) as usize;
-                    let len = u32::from_le_bytes(
-                        data_snapshot[offset + 4..offset + 8].try_into().unwrap(),
-                    ) as usize;
-                    offset += 8;
-                    if base + len > data_snapshot.len() {
-                        return 21;
-                    }
-                    if pos >= stdin_snapshot.len() {
-                        break;
-                    }
-                    let avail = stdin_snapshot.len() - pos;
-                    let take = if len < avail { len } else { avail };
-                    if take == 0 {
-                        break;
-                    }
-                    memory
-                        .write(&mut caller, base, &stdin_snapshot[pos..pos + take])
-                        .ok();
-                    pos += take;
-                    total += take;
-                }
-                caller.data_mut().stdin_pos = pos;
                 if let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) {
                     let bytes = (total as u32).to_le_bytes();
                     if (nread as usize) + 4 <= mem.data(&caller).len() {
                         mem.write(&mut caller, nread as usize, &bytes).ok();
                     }
+                }
+                0
+            },
+        )?;
+        linker.func_wrap(
+            "wasi_snapshot_preview1",
+            "fd_close",
+            |mut caller: Caller<'_, AllocState>, fd: i32| -> i32 {
+                if fd <= 2 {
+                    return 0;
+                }
+                if caller.data_mut().files.remove(&fd).is_none() {
+                    return 8;
                 }
                 0
             },
@@ -961,6 +1064,8 @@ fn run_wasm(
             stdin_pos: 0,
             stdin_eof: false,
             args: args_bytes,
+            files: BTreeMap::new(),
+            next_fd: 4,
         },
     );
     let instance_pre = linker

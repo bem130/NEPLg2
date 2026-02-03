@@ -8,7 +8,7 @@ extern crate alloc;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 
-use crate::ast::{EnumDef, FnDef, StructDef, Visibility};
+use crate::ast::{EnumDef, FnAlias, FnDef, StructDef, Visibility};
 use crate::module_graph::{ExportEntry, ExportKind, ExportTable, ModuleGraph, ModuleId};
 use crate::ast::{ImportClause, ImportItem};
 use alloc::vec::Vec;
@@ -55,6 +55,20 @@ pub fn collect_defs(graph: &ModuleGraph) -> DefTable {
         for stmt in &node.module.root.items {
             match stmt {
                 crate::ast::Stmt::FnDef(FnDef { name, vis, .. })
+                    if *vis == Visibility::Pub =>
+                {
+                    let id = DefId(next_id);
+                    next_id += 1;
+                    map.insert(
+                        name.name.clone(),
+                        DefInfo {
+                            id,
+                            kind: DefKind::Function,
+                            module: node.id,
+                        },
+                    );
+                }
+                crate::ast::Stmt::FnAlias(FnAlias { name, vis, .. })
                     if *vis == Visibility::Pub =>
                 {
                     let id = DefId(next_id);

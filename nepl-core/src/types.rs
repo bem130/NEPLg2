@@ -17,6 +17,7 @@ pub struct TypeId(pub usize);
 pub enum TypeKind {
     Unit,
     I32,
+    U8,
     F32,
     Bool,
     Str,
@@ -69,6 +70,7 @@ pub struct TypeCtx {
     arena: Vec<TypeKind>,
     unit: TypeId,
     i32_ty: TypeId,
+    u8_ty: TypeId,
     f32_ty: TypeId,
     bool_ty: TypeId,
     str_ty: TypeId,
@@ -92,6 +94,8 @@ impl TypeCtx {
         arena.push(TypeKind::Unit);
         let i32_ty = TypeId(arena.len());
         arena.push(TypeKind::I32);
+        let u8_ty = TypeId(arena.len());
+        arena.push(TypeKind::U8);
         let f32_ty = TypeId(arena.len());
         arena.push(TypeKind::F32);
         let bool_ty = TypeId(arena.len());
@@ -105,6 +109,7 @@ impl TypeCtx {
             arena,
             unit,
             i32_ty,
+            u8_ty,
             f32_ty,
             bool_ty,
             str_ty,
@@ -118,6 +123,9 @@ impl TypeCtx {
     }
     pub fn i32(&self) -> TypeId {
         self.i32_ty
+    }
+    pub fn u8(&self) -> TypeId {
+        self.u8_ty
     }
     pub fn f32(&self) -> TypeId {
         self.f32_ty
@@ -200,6 +208,7 @@ impl TypeCtx {
         match self.get_ref(resolved) {
             TypeKind::Unit
             | TypeKind::I32
+            | TypeKind::U8
             | TypeKind::F32
             | TypeKind::Bool
             | TypeKind::Str
@@ -314,6 +323,7 @@ impl TypeCtx {
             }
             (TypeKind::Unit, TypeKind::Unit) => Ok(self.unit),
             (TypeKind::I32, TypeKind::I32) => Ok(self.i32_ty),
+            (TypeKind::U8, TypeKind::U8) => Ok(self.u8_ty),
             (TypeKind::F32, TypeKind::F32) => Ok(self.f32_ty),
             (TypeKind::Str, TypeKind::I32) | (TypeKind::I32, TypeKind::Str) => Ok(self.i32_ty),
             (TypeKind::Bool, TypeKind::Bool) => Ok(self.bool_ty),
@@ -629,6 +639,7 @@ impl TypeCtx {
         match self.get(ty) {
             TypeKind::Unit
             | TypeKind::I32
+            | TypeKind::U8
             | TypeKind::F32
             | TypeKind::Bool
             | TypeKind::Str
@@ -851,6 +862,7 @@ impl TypeCtx {
         match self.get(ty) {
             TypeKind::Unit => String::from("unit"),
             TypeKind::I32 => String::from("i32"),
+            TypeKind::U8 => String::from("u8"),
             TypeKind::F32 => String::from("f32"),
             TypeKind::Bool => String::from("bool"),
             TypeKind::Str => String::from("str"),
@@ -966,6 +978,7 @@ impl TypeCtx {
         match self.get(ty) {
             TypeKind::Unit
             | TypeKind::I32
+            | TypeKind::U8
             | TypeKind::F32
             | TypeKind::Bool
             | TypeKind::Str

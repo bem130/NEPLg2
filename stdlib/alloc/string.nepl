@@ -514,7 +514,7 @@ fn str_split <(str,str)*>Vec<str>> (s, sep):
 //
 // 計算量:
 // - O(d)  (d は桁数)
-// fn cast from_i32;
+fn cast from_i32;
 fn from_i32 <(i32)*>str> (x):
     if:
         eq x 0
@@ -571,7 +571,7 @@ fn from_i32 <(i32)*>str> (x):
 //
 // 計算量:
 // - O(n)
-// fn cast to_i32;
+fn cast to_i32;
 fn to_i32 <(str)*>Result<i32,i32>> (s):
     let n <i32> load_i32 s;
     let mut i <i32> 0;

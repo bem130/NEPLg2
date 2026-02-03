@@ -1,5 +1,5 @@
 mod harness;
-use harness::run_main_i32;
+use harness::{run_main_i32, run_main_wasi_i32};
 
 // ============================================================================
 // Self-Hosting Requirements / Feature Gap Tests
@@ -14,13 +14,13 @@ use harness::run_main_i32;
 // 不足機能: ファイルの読み込み、書き込み、パスの結合など
 // WASI環境下での `path_open`, `fd_read`, `fd_write` 等のラッパーが必要です。
 #[test]
-#[ignore] // 未実装のためスキップ
 fn test_req_file_io() {
     let src = r#"
 #entry main
 #indent 4
 // 想定: std/fs モジュールの追加、または std/stdio の拡張
 #import "std/fs" as *
+#import "std/stdio" as *
 #import "core/result" as *
 
 fn main <()*>i32> ():
@@ -36,7 +36,8 @@ fn main <()*>i32> ():
         Result::Err e:
             e
 "#;
-    let _ = run_main_i32(src);
+    let v = run_main_wasi_i32(src);
+    assert_eq!(v, 0);
 }
 
 // 2. バイト列/エンコード出力 (Byte Arrays / Encoding)
@@ -44,17 +45,18 @@ fn main <()*>i32> ():
 // 不足機能: u8型、バイト配列(Vec<u8>)、ビット操作、バイナリ出力
 // WASMバイナリを生成するために、i32ではなくバイト単位での精密な操作が必要です。
 #[test]
-#[ignore] // 未実装のためスキップ
 fn test_req_byte_manipulation() {
     let src = r#"
 #entry main
 #indent 4
 #import "alloc/vec" as *
+#import "core/cast" as *
+#import "core/option" as *
 
 fn main <()*>i32> ():
     // 要件: u8 型 (現状は i32/bool/f32/str のみで u8 がない)
-    let b1 <u8> 0xDE;
-    let b2 <u8> 0xAD;
+    let b1 <u8> cast 0xDE;
+    let b2 <u8> cast 0xAD;
     
     // 要件: Vec<u8> (バイトバッファ)
     let mut buf <Vec<u8>> vec_new<u8> ();
@@ -62,10 +64,12 @@ fn main <()*>i32> ():
     vec_push<u8> buf b2;
     
     // 要件: バイト単位のアクセス
-    let val <u8> vec_get<u8> buf 0;
-    
-    // i32へのキャスト等
-    cast<u8, i32> val
+    match vec_get<u8> buf 0:
+        Option::Some val:
+            // i32へのキャスト等
+            cast val
+        Option::None:
+            0
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 222); // 0xDE

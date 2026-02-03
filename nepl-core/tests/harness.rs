@@ -1,5 +1,7 @@
 use nepl_core::loader::Loader;
 use nepl_core::{compile_module, CompileOptions, CompileTarget};
+use std::collections::BTreeMap;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use wasmi::{Caller, Engine, Extern, Linker, Module, Store};
@@ -28,6 +30,17 @@ pub fn compile_src_with_options(src: &str, options: CompileOptions) -> Vec<u8> {
     let loaded = loader.load_inline(PathBuf::from("test.nepl"), src.to_string()).expect("load");
     let artifact = compile_module(loaded.module, options).expect("compile failure");
     artifact.wasm
+}
+
+struct WasiFile {
+    data: Vec<u8>,
+    pos: usize,
+}
+
+struct WasiState {
+    args: Vec<Vec<u8>>,
+    files: BTreeMap<i32, WasiFile>,
+    next_fd: i32,
 }
 
 /// Compile and run `main` returning i32 (or 0 if main is ())->()).
@@ -259,41 +272,270 @@ pub fn run_main_wasi_i32(src: &str) -> i32 {
     );
     let engine = Engine::default();
     let module = Module::new(&engine, &*wasm).expect("module");
-    let mut linker = Linker::new(&engine);
-    // WASI mock
+    let mut linker: Linker<WasiState> = Linker::new(&engine);
+    linker
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "args_sizes_get",
+            |mut caller: Caller<'_, WasiState>, argc_ptr: i32, argv_buf_size_ptr: i32| -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if argc_ptr < 0 || argv_buf_size_ptr < 0 {
+                    return 21;
+                }
+                let argc = caller.data().args.len() as u32;
+                let buf_size: u32 = caller
+                    .data()
+                    .args
+                    .iter()
+                    .map(|a| a.len() as u32)
+                    .sum();
+                let mem_len = memory.data(&caller).len();
+                let argc_offset = argc_ptr as usize;
+                let buf_offset = argv_buf_size_ptr as usize;
+                if argc_offset + 4 > mem_len || buf_offset + 4 > mem_len {
+                    return 21;
+                }
+                if memory
+                    .write(&mut caller, argc_offset, &argc.to_le_bytes())
+                    .is_err()
+                {
+                    return 21;
+                }
+                if memory
+                    .write(&mut caller, buf_offset, &buf_size.to_le_bytes())
+                    .is_err()
+                {
+                    return 21;
+                }
+                0
+            },
+        )
+        .unwrap();
+    linker
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "args_get",
+            |mut caller: Caller<'_, WasiState>, argv: i32, argv_buf: i32| -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if argv < 0 || argv_buf < 0 {
+                    return 21;
+                }
+                let mem_len = memory.data(&caller).len();
+                let args = caller.data().args.clone();
+                let mut argv_offset = argv as usize;
+                let mut buf_offset = argv_buf as usize;
+                for arg in args.iter() {
+                    if argv_offset + 4 > mem_len {
+                        return 21;
+                    }
+                    let ptr_bytes = (buf_offset as u32).to_le_bytes();
+                    if memory
+                        .write(&mut caller, argv_offset, &ptr_bytes)
+                        .is_err()
+                    {
+                        return 21;
+                    }
+                    if buf_offset + arg.len() > mem_len {
+                        return 21;
+                    }
+                    if memory.write(&mut caller, buf_offset, arg).is_err() {
+                        return 21;
+                    }
+                    argv_offset += 4;
+                    buf_offset += arg.len();
+                }
+                0
+            },
+        )
+        .unwrap();
+    linker
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "path_open",
+            |mut caller: Caller<'_, WasiState>,
+             _dirfd: i32,
+             _dirflags: i32,
+             path_ptr: i32,
+             path_len: i32,
+             _oflags: i32,
+             _rights_base: i64,
+             _rights_inherit: i64,
+             _fdflags: i32,
+             fd_out: i32|
+             -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if path_ptr < 0 || path_len < 0 || fd_out < 0 {
+                    return 21;
+                }
+                let mem = memory.data(&caller);
+                let start = path_ptr as usize;
+                let end = start.saturating_add(path_len as usize);
+                if end > mem.len() || (fd_out as usize) + 4 > mem.len() {
+                    return 21;
+                }
+                let path = std::str::from_utf8(&mem[start..end]).unwrap_or("");
+                let content = if path == "test.nepl" {
+                    b"selfhost".to_vec()
+                } else {
+                    return 44;
+                };
+                let fd = caller.data().next_fd;
+                caller.data_mut().next_fd += 1;
+                caller.data_mut().files.insert(
+                    fd,
+                    WasiFile {
+                        data: content,
+                        pos: 0,
+                    },
+                );
+                let fd_bytes = (fd as u32).to_le_bytes();
+                if memory
+                    .write(&mut caller, fd_out as usize, &fd_bytes)
+                    .is_err()
+                {
+                    return 21;
+                }
+                0
+            },
+        )
+        .unwrap();
     linker
         .func_wrap(
             "wasi_snapshot_preview1",
             "fd_read",
-            |_caller: Caller<'_, ()>, _: i32, _: i32, _: i32, _: i32| -> i32 { 0 },
+            |mut caller: Caller<'_, WasiState>,
+             fd: i32,
+             iovs: i32,
+             iovs_len: i32,
+             nread: i32|
+             -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if fd < 0 || iovs < 0 || iovs_len < 0 || nread < 0 {
+                    return 21;
+                }
+                let data_snapshot = memory.data(&caller).to_vec();
+                let mut total = 0usize;
+                let mut offset = iovs as usize;
+                let count = if iovs_len > 0 { iovs_len as usize } else { 0 };
+                for _ in 0..count {
+                    if offset + 8 > data_snapshot.len() {
+                        return 21;
+                    }
+                    let base = u32::from_le_bytes(
+                        data_snapshot[offset..offset + 4].try_into().unwrap(),
+                    ) as usize;
+                    let len = u32::from_le_bytes(
+                        data_snapshot[offset + 4..offset + 8].try_into().unwrap(),
+                    ) as usize;
+                    offset += 8;
+                    if base + len > data_snapshot.len() {
+                        return 21;
+                    }
+                    let (take, chunk) = {
+                        let file = match caller.data_mut().files.get_mut(&fd) {
+                            Some(f) => f,
+                            None => return 8,
+                        };
+                        if file.pos >= file.data.len() {
+                            (0, Vec::new())
+                        } else {
+                            let avail = file.data.len() - file.pos;
+                            let take = if len < avail { len } else { avail };
+                            let chunk = file.data[file.pos..file.pos + take].to_vec();
+                            file.pos += take;
+                            (take, chunk)
+                        }
+                    };
+                    if take == 0 {
+                        break;
+                    }
+                    memory.write(&mut caller, base, &chunk).ok();
+                    total += take;
+                }
+                if let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    let bytes = (total as u32).to_le_bytes();
+                    if (nread as usize) + 4 <= mem.data(&caller).len() {
+                        mem.write(&mut caller, nread as usize, &bytes).ok();
+                    }
+                }
+                0
+            },
+        )
+        .unwrap();
+    linker
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "fd_close",
+            |mut caller: Caller<'_, WasiState>, fd: i32| -> i32 {
+                if caller.data_mut().files.remove(&fd).is_none() {
+                    return 8;
+                }
+                0
+            },
         )
         .unwrap();
     linker
         .func_wrap(
             "wasi_snapshot_preview1",
             "fd_write",
-            |_caller: Caller<'_, ()>, _: i32, _: i32, _: i32, _: i32| -> i32 { 0 },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "environ_sizes_get",
-            |_caller: Caller<'_, ()>, _: i32, _: i32| -> i32 { 0 },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "environ_get",
-            |_caller: Caller<'_, ()>, _: i32, _: i32| -> i32 { 0 },
-        )
-        .unwrap();
-    linker
-        .func_wrap(
-            "wasi_snapshot_preview1",
-            "proc_exit",
-            |_caller: Caller<'_, ()>, _: i32| {},
+            |mut caller: Caller<'_, WasiState>,
+             fd: i32,
+             iovs: i32,
+             iovs_len: i32,
+             nwritten: i32|
+             -> i32 {
+                if fd != 1 {
+                    return 8;
+                }
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                let data_snapshot = memory.data(&caller).to_vec();
+                let mut total = 0usize;
+                let mut offset = iovs as usize;
+                let mut stdout = std::io::stdout().lock();
+                for _ in 0..iovs_len {
+                    if offset + 8 > data_snapshot.len() {
+                        return 21;
+                    }
+                    let base = u32::from_le_bytes(
+                        data_snapshot[offset..offset + 4].try_into().unwrap(),
+                    ) as usize;
+                    let len = u32::from_le_bytes(
+                        data_snapshot[offset + 4..offset + 8].try_into().unwrap(),
+                    ) as usize;
+                    offset += 8;
+                    if base + len > data_snapshot.len() {
+                        return 21;
+                    }
+                    let slice = &data_snapshot[base..base + len];
+                    if stdout.write_all(slice).is_err() {
+                        return 21;
+                    }
+                    total += len;
+                }
+                let _ = stdout.flush();
+                if let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    let bytes = (total as u32).to_le_bytes();
+                    if (nwritten as usize) + 4 <= mem.data(&caller).len() {
+                        mem.write(&mut caller, nwritten as usize, &bytes).ok();
+                    }
+                }
+                0
+            },
         )
         .unwrap();
 
@@ -302,7 +544,7 @@ pub fn run_main_wasi_i32(src: &str) -> i32 {
         .func_wrap(
             "nepl_alloc",
             "alloc",
-            |mut caller: Caller<'_, ()>, size: i32| -> i32 {
+            |mut caller: Caller<'_, WasiState>, size: i32| -> i32 {
                 let header = 8u32;
                 let size = size as u32;
                 let total = ((size + header + 7) / 8) * 8;
@@ -368,7 +610,7 @@ pub fn run_main_wasi_i32(src: &str) -> i32 {
         .func_wrap(
             "nepl_alloc",
             "dealloc",
-            |mut caller: Caller<'_, ()>, ptr: i32, size: i32| {
+            |mut caller: Caller<'_, WasiState>, ptr: i32, size: i32| {
                 let header = 8u32;
                 let ptr = ptr as u32;
                 let _size = size as u32;
@@ -402,7 +644,7 @@ pub fn run_main_wasi_i32(src: &str) -> i32 {
         .func_wrap(
             "nepl_alloc",
             "realloc",
-            |mut caller: Caller<'_, ()>, ptr: i32, old_size: i32, new_size: i32| -> i32 {
+            |mut caller: Caller<'_, WasiState>, ptr: i32, old_size: i32, new_size: i32| -> i32 {
                 let header = 8u32;
                 let ptr = ptr as u32;
                 let old = old_size as u32;
@@ -461,7 +703,14 @@ pub fn run_main_wasi_i32(src: &str) -> i32 {
         )
         .unwrap();
 
-    let mut store = Store::new(&engine, ());
+    let mut store = Store::new(
+        &engine,
+        WasiState {
+            args: Vec::new(),
+            files: BTreeMap::new(),
+            next_fd: 4,
+        },
+    );
     let instance = linker
         .instantiate(&mut store, &module)
         .and_then(|pre| pre.start(&mut store))

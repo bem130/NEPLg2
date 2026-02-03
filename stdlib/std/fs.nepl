@@ -1,0 +1,187 @@
+#indent 4
+
+#extern "wasi_snapshot_preview1" "path_open" fn path_open <(i32,i32,i32,i32,i32,i64,i64,i32,i32)->i32>
+#extern "wasi_snapshot_preview1" "fd_read" fn fd_read <(i32,i32,i32,i32)->i32>
+#extern "wasi_snapshot_preview1" "fd_close" fn fd_close <(i32)->i32>
+
+#import "core/cast" as *
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/result" as *
+#import "alloc/vec" as *
+#import "alloc/string" as *
+
+// fs: WASI ファイル読み込み
+//
+// 目的:
+// - WASI の path_open/fd_read/fd_close を使った簡易ファイル読み込みを提供します。
+//
+// 実装(アルゴリズム):
+// - path_open で fd を開き、fd_read をループしてバッファに蓄積します。
+// - 読み込み結果を Vec<u8> または str に変換します。
+//
+// 注意(重要):
+// - 権限/パス解決はホスト環境に依存します。
+// - UTF-8 検証は行わず、バイト列をそのまま str に格納します。
+//
+// 計算量:
+// - 読み込みバイト数に比例 (O(n))
+
+// i64_from_i32: i32 を i64 に拡張する
+//
+// 目的:
+// - WASI API 用に i64 値を作ります。
+//
+// 実装(アルゴリズム):
+// - i64.extend_i32_u を呼びます。
+//
+// 注意(重要):
+// - 符号なし拡張です。
+//
+// 計算量:
+// - O(1)
+fn i64_from_i32 <(i32)->i64> (v):
+    i64_extend_i32_u v
+
+// fs_open_read: ファイルを読み込み専用で開く
+//
+// 目的:
+// - path を開き、fd を返します。
+//
+// 実装(アルゴリズム):
+// - path_open を呼び、fd_out から fd を取得します。
+//
+// 注意(重要):
+// - dirfd は 3 (preopen) を仮定します。
+// - 失敗時は Err(errno) を返します。
+//
+// 計算量:
+// - O(1)
+fn fs_open_read <(str)*>Result<i32,i32>> (path):
+    let fd_out <i32> alloc 4;
+    store_i32 fd_out 0;
+    let path_ptr <i32> add path 4;
+    let path_len <i32> load_i32 path;
+    let rights <i64> i64_from_i32 0;
+    let errno <i32> path_open 3 0 path_ptr path_len 0 rights rights 0 fd_out;
+    if:
+        eq errno 0
+        then Result::Ok load_i32 fd_out
+        else Result::Err errno
+
+// fs_read_fd_bytes: fd から全て読み込んで Vec<u8> を返す
+//
+// 目的:
+// - fd の内容をすべて読み込み、バイト列として返します。
+//
+// 実装(アルゴリズム):
+// - 固定長バッファで fd_read を繰り返し、Vec<u8> に push します。
+//
+// 注意(重要):
+// - 途中でエラーが出た場合は Err(errno) を返します。
+//
+// 計算量:
+// - O(n)
+fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
+    let mut buf <Vec<u8>> vec_new<u8> ();
+    let cap <i32> 256;
+    let tmp <i32> alloc cap;
+    let iov <i32> alloc 8;
+    store_i32 iov tmp;
+    store_i32 add iov 4 cap;
+    let nread <i32> alloc 4;
+    let mut done <i32> 0;
+    let mut err <i32> 0;
+
+    while eq done 0:
+        store_i32 nread 0;
+        let errno <i32> fd_read fd iov 1 nread;
+        if:
+            eq errno 0
+            then:
+                let n <i32> load_i32 nread;
+                if:
+                    eq n 0
+                    then set done 1;
+                    else:
+                        let mut i <i32> 0;
+                        while lt i n:
+                            let b <i32> load_u8 add tmp i;
+                            set buf vec_push<u8> buf cast b;
+                            set i add i 1;
+            else:
+                set err errno;
+                set done 1;
+
+    if:
+        eq err 0
+        then Result::Ok buf
+        else Result::Err err
+
+// fs_bytes_to_string: Vec<u8> を str に変換する
+//
+// 目的:
+// - バイト列をそのまま str 形式に詰め直します。
+//
+// 実装(アルゴリズム):
+// - [len][bytes] 形式の領域を確保し、1 バイトずつコピーします。
+//
+// 注意(重要):
+// - UTF-8 の検証は行いません。
+//
+// 計算量:
+// - O(n)
+fn fs_bytes_to_string <(Vec<u8>)*>str> (buf):
+    let len <i32> buf.len;
+    let out <i32> alloc add 4 len;
+    store_i32 out len;
+    let data <i32> buf.data;
+    let mut i <i32> 0;
+    while lt i len:
+        let b <i32> load_u8 add data i;
+        store_u8 add out add 4 i b;
+        set i add i 1;
+    out
+
+// fs_read_to_bytes: ファイルを読み込んで Vec<u8> を返す
+//
+// 目的:
+// - path を開き、内容をバイト列として返します。
+//
+// 実装(アルゴリズム):
+// - fs_open_read → fs_read_fd_bytes → fd_close の順に処理します。
+//
+// 注意(重要):
+// - 失敗時は Err(errno) を返します。
+//
+// 計算量:
+// - O(n)
+fn fs_read_to_bytes <(str)*>Result<Vec<u8>,i32>> (path):
+    match fs_open_read path:
+        Result::Ok fd:
+            let res <Result<Vec<u8>,i32>> fs_read_fd_bytes fd;
+            let _ <i32> fd_close fd;
+            res
+        Result::Err e:
+            Result::Err e
+
+// fs_read_to_string: ファイルを読み込んで str を返す
+//
+// 目的:
+// - path を読み込み、文字列として返します。
+//
+// 実装(アルゴリズム):
+// - fs_read_to_bytes で読み込み、fs_bytes_to_string で変換します。
+//
+// 注意(重要):
+// - UTF-8 検証は行いません。
+// - 失敗時は Err(errno) を返します。
+//
+// 計算量:
+// - O(n)
+fn fs_read_to_string <(str)*>Result<str,i32>> (path):
+    match fs_read_to_bytes path:
+        Result::Ok bytes:
+            Result::Ok fs_bytes_to_string bytes
+        Result::Err e:
+            Result::Err e

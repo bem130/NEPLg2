@@ -166,6 +166,14 @@ impl ModuleGraphBuilder {
                             node.id,
                         )?;
                     }
+                    crate::ast::Stmt::FnAlias(a) if a.vis == crate::ast::Visibility::Pub => {
+                        Self::insert_export(
+                            &mut exports,
+                            &a.name.name,
+                            ExportKind::Function,
+                            node.id,
+                        )?;
+                    }
                     crate::ast::Stmt::StructDef(s) if s.vis == crate::ast::Visibility::Pub => {
                         Self::insert_export(
                             &mut exports,

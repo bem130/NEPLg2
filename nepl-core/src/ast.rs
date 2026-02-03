@@ -19,6 +19,7 @@ pub enum Effect {
 pub enum TypeExpr {
     Unit,
     I32,
+    U8,
     F32,
     Bool,
     Never,
@@ -110,6 +111,14 @@ pub struct FnDef {
     pub signature: TypeExpr,
     pub params: Vec<Ident>,
     pub body: FnBody,
+}
+
+/// Function alias definition.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FnAlias {
+    pub vis: Visibility,
+    pub name: Ident,
+    pub target: Ident,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -208,6 +217,7 @@ pub enum Directive {
 pub enum Stmt {
     Directive(Directive),
     FnDef(FnDef),
+    FnAlias(FnAlias),
     StructDef(StructDef),
     EnumDef(EnumDef),
     Wasm(WasmBlock),

@@ -16,6 +16,9 @@
 // 計算量:
 // - すべて O(1)
 
+// cast: i32 -> f32 変換のエイリアス
+fn cast cast_i32_to_f32;
+
 // cast_i32_to_f32: i32 -> f32 変換
 //
 // 目的:
@@ -32,6 +35,9 @@
 fn cast_i32_to_f32 <(i32)->f32> (v):
     #intrinsic "i32_to_f32" <> (v)
 
+// cast: f32 -> i32 変換のエイリアス
+fn cast cast_f32_to_i32;
+
 // cast_f32_to_i32: f32 -> i32 変換
 //
 // 目的:
@@ -47,6 +53,9 @@ fn cast_i32_to_f32 <(i32)->f32> (v):
 // - O(1)
 fn cast_f32_to_i32 <(f32)->i32> (v):
     #intrinsic "f32_to_i32" <> (v)
+
+// cast: bool -> i32 変換のエイリアス
+fn cast cast_bool_to_i32;
 
 // cast_bool_to_i32: bool -> i32 変換
 //
@@ -84,6 +93,47 @@ fn cast_bool_to_i32 <(bool)->i32> (v):
 // - O(1)
 fn cast_i32_to_bool <(i32)->bool> (v):
     ne v 0
+
+// cast: i32 -> bool 変換のエイリアス
+fn cast cast_i32_to_bool;
+
+// cast: i32 -> u8 変換のエイリアス
+fn cast cast_i32_to_u8;
+
+// cast_i32_to_u8: i32 -> u8 変換
+//
+// 目的:
+// - i32 を u8 に変換します。
+//
+// 実装(アルゴリズム):
+// - intrinsic "i32_to_u8" を呼びます。
+//
+// 注意(重要):
+// - 下位 8 ビットのみが保持されます。
+//
+// 計算量:
+// - O(1)
+fn cast_i32_to_u8 <(i32)->u8> (v):
+    #intrinsic "i32_to_u8" <> (v)
+
+// cast: u8 -> i32 変換のエイリアス
+fn cast cast_u8_to_i32;
+
+// cast_u8_to_i32: u8 -> i32 変換
+//
+// 目的:
+// - u8 を i32 に変換します。
+//
+// 実装(アルゴリズム):
+// - intrinsic "u8_to_i32" を呼びます。
+//
+// 注意(重要):
+// - 値域は 0..=255 です。
+//
+// 計算量:
+// - O(1)
+fn cast_u8_to_i32 <(u8)->i32> (v):
+    #intrinsic "u8_to_i32" <> (v)
 
 // bitcast_i32_to_f32: i32 のビット列を f32 として解釈する
 //

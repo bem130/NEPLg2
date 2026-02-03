@@ -3,6 +3,7 @@
 #target wasi
 
 #import "alloc/vec" as *
+#import "core/cast" as *
 #import "core/option" as *
 #import "std/test" as *
 
@@ -45,5 +46,13 @@ fn main <()*> ()> ():
     let p0 vec_new<i32>;
     let p1 vec_push<i32> p0 10;
     assert is_none<i32> vec_get<i32> p1 -1;
+
+    let b0 vec_new<u8>;
+    let b1 vec_push<u8> b0 cast 65;
+    match vec_get<u8> b1 0:
+        Option::Some x:
+            assert_eq_i32 65 cast x
+        Option::None:
+            test_fail "vec_get<u8> returned None";
 
     ()

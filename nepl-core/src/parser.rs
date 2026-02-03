@@ -488,6 +488,18 @@ impl Parser {
             span: name_tok.1,
         };
 
+        if matches!(self.peek_kind(), Some(TokenKind::Ident(_)))
+            && matches!(self.peek_kind_at(1), Some(TokenKind::Semicolon))
+        {
+            let target_tok = self.expect_ident()?;
+            let target = Ident {
+                name: target_tok.0,
+                span: target_tok.1,
+            };
+            self.expect(TokenKind::Semicolon)?;
+            return Some(Stmt::FnAlias(FnAlias { vis, name, target }));
+        }
+
         // If next is LAngle, it could be generics OR signature.
         let mut type_params = Vec::new();
         if self.check(TokenKind::LAngle) {
@@ -607,10 +619,12 @@ impl Parser {
             if self.consume_if(TokenKind::Newline) {
                 continue;
             }
-            if let Some(Stmt::FnDef(f)) = self.parse_fn() {
-                methods.push(f);
-            } else {
-                self.next();
+            match self.parse_fn() {
+                Some(Stmt::FnDef(f)) => methods.push(f),
+                Some(_) => {}
+                None => {
+                    self.next();
+                }
             }
         }
         self.expect(TokenKind::Dedent)?;
@@ -659,10 +673,12 @@ impl Parser {
             if self.consume_if(TokenKind::Newline) {
                 continue;
             }
-            if let Some(Stmt::FnDef(f)) = self.parse_fn() {
-                methods.push(f);
-            } else {
-                self.next();
+            match self.parse_fn() {
+                Some(Stmt::FnDef(f)) => methods.push(f),
+                Some(_) => {}
+                None => {
+                    self.next();
+                }
             }
         }
         self.expect(TokenKind::Dedent)?;
@@ -2240,6 +2256,7 @@ impl Parser {
                 let _ = self.next();
                 let mut ty = match name.as_str() {
                     "i32" => TypeExpr::I32,
+                    "u8" => TypeExpr::U8,
                     "f32" => TypeExpr::F32,
                     "bool" => TypeExpr::Bool,
                     "never" => TypeExpr::Never,
@@ -2469,6 +2486,7 @@ impl Parser {
                 Directive::NoPrelude { span } => *span,
             },
             Stmt::FnDef(f) => f.name.span,
+            Stmt::FnAlias(a) => a.name.span,
             Stmt::StructDef(s) => s.name.span,
             Stmt::EnumDef(e) => e.name.span,
             Stmt::Wasm(w) => w.span,
@@ -2540,6 +2558,7 @@ fn parse_type_expr_str(s: &str, span: Span, diags: &mut Vec<Diagnostic>) -> Opti
 fn simple_type_atom(t: &str, span: Span, diags: &mut Vec<Diagnostic>) -> Option<TypeExpr> {
     match t {
         "i32" => Some(TypeExpr::I32),
+        "u8" => Some(TypeExpr::U8),
         "f32" => Some(TypeExpr::F32),
         "bool" => Some(TypeExpr::Bool),
         "never" => Some(TypeExpr::Never),

@@ -212,6 +212,7 @@ pub fn typecheck(
     // Collect top-level function signatures (hoist)
     // Also hoist struct/enum definitions
     let mut pending_if: Option<bool> = None;
+    let mut fn_aliases: Vec<&FnAlias> = Vec::new();
     for item in &module.root.items {
         if let Stmt::Directive(d) = item {
             if let Some(allowed) = gate_allows(d, target, profile) {
@@ -575,6 +576,10 @@ pub fn typecheck(
         if !allowed {
             continue;
         }
+        if let Stmt::FnAlias(a) = item {
+            fn_aliases.push(a);
+            continue;
+        }
         if let Stmt::FnDef(f) = item {
             let mut f_labels = LabelEnv::new();
             let (mut tps, bounds_vec, _bounds_map) =
@@ -888,6 +893,76 @@ pub fn typecheck(
         }
     }
 
+    for alias in fn_aliases {
+        if enums.contains_key(&alias.name.name) || structs.contains_key(&alias.name.name) {
+            diagnostics.push(Diagnostic::error(
+                "name already used by another item",
+                alias.name.span,
+            ));
+            continue;
+        }
+        let targets = env.lookup_all(&alias.target.name);
+        if targets.is_empty() {
+            diagnostics.push(Diagnostic::error(
+                "alias target not found",
+                alias.target.span,
+            ));
+            continue;
+        }
+        let mut target_infos = Vec::new();
+        for target in targets {
+            let (symbol, effect, arity, builtin, bounds) = match &target.kind {
+                BindingKind::Func {
+                    symbol,
+                    effect,
+                    arity,
+                    builtin,
+                    type_param_bounds,
+                } => (
+                    symbol.clone(),
+                    *effect,
+                    *arity,
+                    *builtin,
+                    type_param_bounds.clone(),
+                ),
+                _ => {
+                    diagnostics.push(Diagnostic::error(
+                        "alias target is not a function",
+                        alias.target.span,
+                    ));
+                    continue;
+                }
+            };
+            target_infos.push((target.ty, symbol, effect, arity, builtin, bounds));
+        }
+        for (ty, symbol, effect, arity, builtin, bounds) in target_infos {
+            if let Some(existing) = env.lookup(&alias.name.name) {
+                if !matches!(existing.kind, BindingKind::Func { .. }) {
+                    diagnostics.push(Diagnostic::error(
+                        "name already used by another item",
+                        alias.name.span,
+                    ));
+                    break;
+                }
+            }
+            env.remove_duplicate_func(&alias.name.name, ty, &ctx);
+            env.insert_global(Binding {
+                name: alias.name.name.clone(),
+                ty,
+                mutable: false,
+                defined: true,
+                moved: false,
+                kind: BindingKind::Func {
+                    symbol,
+                    effect,
+                    arity,
+                    builtin,
+                    type_param_bounds: bounds,
+                },
+            });
+        }
+    }
+
     let resolved_entry = if let Some(name) = entry {
         let bindings = env.lookup_all(&name);
         let mut func_symbols = Vec::new();
@@ -1125,6 +1200,8 @@ impl<'a> BlockChecker<'a> {
                     });
                     dump!("typecheck: hoisted binding {}", name.name);
                 }
+            } else if let Stmt::FnAlias(_) = stmt {
+                // function alias is handled at top-level
             } else if let Stmt::FnDef(f) = stmt {
                 if !f.type_params.is_empty() {
                     self.diagnostics.push(Diagnostic::error(
@@ -1231,6 +1308,7 @@ impl<'a> BlockChecker<'a> {
                     }
                 }
                 Stmt::Directive(_) => {}
+                Stmt::FnAlias(_) => {}
                 Stmt::FnDef(_) => {
                     // Nested function bodies are not type-checked here
                 }
@@ -1901,7 +1979,11 @@ impl<'a> BlockChecker<'a> {
                          self.ctx.never()
                     } else if intrin.name == "i32_to_f32" {
                         self.ctx.f32()
+                    } else if intrin.name == "i32_to_u8" {
+                        self.ctx.u8()
                     } else if intrin.name == "f32_to_i32" {
+                        self.ctx.i32()
+                    } else if intrin.name == "u8_to_i32" {
                         self.ctx.i32()
                     } else if intrin.name == "reinterpret_i32_f32" {
                         self.ctx.f32()
@@ -1913,7 +1995,10 @@ impl<'a> BlockChecker<'a> {
                     };
                     
                     // Validate intrinsic argument types for known cast/bitcast intrinsics
-                    if intrin.name == "i32_to_f32" || intrin.name == "reinterpret_i32_f32" {
+                    if intrin.name == "i32_to_f32"
+                        || intrin.name == "reinterpret_i32_f32"
+                        || intrin.name == "i32_to_u8"
+                    {
                         if args.len() != 1 {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic expects 1 argument",
@@ -1925,7 +2010,8 @@ impl<'a> BlockChecker<'a> {
                                 *sp,
                             ));
                         }
-                    } else if intrin.name == "f32_to_i32" || intrin.name == "reinterpret_f32_i32" {
+                    } else if intrin.name == "f32_to_i32" || intrin.name == "reinterpret_f32_i32"
+                    {
                         if args.len() != 1 {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic expects 1 argument",
@@ -1934,6 +2020,18 @@ impl<'a> BlockChecker<'a> {
                         } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.f32()) {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic argument type mismatch (expected f32)",
+                                *sp,
+                            ));
+                        }
+                    } else if intrin.name == "u8_to_i32" {
+                        if args.len() != 1 {
+                            self.diagnostics.push(Diagnostic::error(
+                                "intrinsic expects 1 argument",
+                                *sp,
+                            ));
+                        } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.u8()) {
+                            self.diagnostics.push(Diagnostic::error(
+                                "intrinsic argument type mismatch (expected u8)",
                                 *sp,
                             ));
                         }
@@ -3442,6 +3540,7 @@ fn type_from_expr(ctx: &mut TypeCtx, labels: &mut LabelEnv, t: &TypeExpr) -> Typ
     match t {
         TypeExpr::Unit => ctx.unit(),
         TypeExpr::I32 => ctx.i32(),
+        TypeExpr::U8 => ctx.u8(),
         TypeExpr::F32 => ctx.f32(),
         TypeExpr::Bool => ctx.bool(),
         TypeExpr::Str => ctx.str(),
@@ -3452,6 +3551,7 @@ fn type_from_expr(ctx: &mut TypeCtx, labels: &mut LabelEnv, t: &TypeExpr) -> Typ
             }
             match name.as_str() {
                 "i32" => ctx.i32(),
+                "u8" => ctx.u8(),
                 "f32" => ctx.f32(),
                 "bool" => ctx.bool(),
                 "str" => ctx.str(),
@@ -3613,6 +3713,7 @@ fn type_contains_unbound_var(ctx: &TypeCtx, ty: TypeId) -> bool {
     match ctx.get(ty) {
         TypeKind::Unit
         | TypeKind::I32
+        | TypeKind::U8
         | TypeKind::F32
         | TypeKind::Bool
         | TypeKind::Str

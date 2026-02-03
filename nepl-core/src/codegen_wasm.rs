@@ -370,7 +370,7 @@ fn wasm_sig_ids(
 fn valtype(kind: &TypeKind) -> Option<ValType> {
     match kind {
         TypeKind::Unit => None,
-        TypeKind::I32 | TypeKind::Bool | TypeKind::Str => Some(ValType::I32),
+        TypeKind::I32 | TypeKind::U8 | TypeKind::Bool | TypeKind::Str => Some(ValType::I32),
         TypeKind::F32 => Some(ValType::F32),
         TypeKind::Enum { .. } | TypeKind::Struct { .. } | TypeKind::Tuple { .. } => {
             Some(ValType::I32)
@@ -660,27 +660,49 @@ fn gen_expr(
         } => {
             if name == "size_of" {
                 let ty = type_args[0];
-                let vt = valtype(&ctx.get(ty));
-                match vt {
-                    Some(_) => insts.push(Instruction::I32Const(4)),
-                    None => insts.push(Instruction::I32Const(0)),
-                }
+                let size = match ctx.get(ty) {
+                    TypeKind::U8 => 1,
+                    TypeKind::Named(name) if name == "i64" || name == "f64" => 8,
+                    _ => match valtype(&ctx.get(ty)) {
+                        Some(_) => 4,
+                        None => 0,
+                    },
+                };
+                insts.push(Instruction::I32Const(size));
                 Some(ValType::I32)
             } else if name == "align_of" {
-                insts.push(Instruction::I32Const(4));
+                let ty = type_args[0];
+                let align = match ctx.get(ty) {
+                    TypeKind::U8 => 1,
+                    TypeKind::Named(name) if name == "i64" || name == "f64" => 8,
+                    _ => match valtype(&ctx.get(ty)) {
+                        Some(_) => 4,
+                        None => 0,
+                    },
+                };
+                insts.push(Instruction::I32Const(align));
                 Some(ValType::I32)
             } else if name == "load" {
                 let ty = type_args[0];
-                let vt = valtype(&ctx.get(ty));
+                let ty_kind = ctx.get(ty);
+                let vt = valtype(&ty_kind);
                 // address
                 gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
                 match vt {
                     Some(ValType::I32) => {
-                        insts.push(Instruction::I32Load(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
+                        if matches!(ty_kind, TypeKind::U8) {
+                            insts.push(Instruction::I32Load8U(MemArg {
+                                offset: 0,
+                                align: 0,
+                                memory_index: 0,
+                            }));
+                        } else {
+                            insts.push(Instruction::I32Load(MemArg {
+                                offset: 0,
+                                align: 2,
+                                memory_index: 0,
+                            }));
+                        }
                         Some(ValType::I32)
                     }
                     Some(ValType::F32) => {
@@ -699,7 +721,8 @@ fn gen_expr(
                 }
             } else if name == "store" {
                 let ty = type_args[0];
-                let vt = valtype(&ctx.get(ty));
+                let ty_kind = ctx.get(ty);
+                let vt = valtype(&ty_kind);
                 
                 // address
                 gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
@@ -708,11 +731,19 @@ fn gen_expr(
 
                 match vt {
                     Some(ValType::I32) => {
-                        insts.push(Instruction::I32Store(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
+                        if matches!(ty_kind, TypeKind::U8) {
+                            insts.push(Instruction::I32Store8(MemArg {
+                                offset: 0,
+                                align: 0,
+                                memory_index: 0,
+                            }));
+                        } else {
+                            insts.push(Instruction::I32Store(MemArg {
+                                offset: 0,
+                                align: 2,
+                                memory_index: 0,
+                            }));
+                        }
                         None
                     }
                     Some(ValType::F32) => {
@@ -781,10 +812,18 @@ fn gen_expr(
                 gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
                 insts.push(Instruction::F32ConvertI32S);
                 Some(ValType::F32)
+            } else if name == "i32_to_u8" {
+                gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
+                insts.push(Instruction::I32Const(255));
+                insts.push(Instruction::I32And);
+                Some(ValType::I32)
             } else if name == "f32_to_i32" {
                 // signed trunc f32 -> i32
                 gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
                 insts.push(Instruction::I32TruncF32S);
+                Some(ValType::I32)
+            } else if name == "u8_to_i32" {
+                gen_expr(ctx, &args[0], name_map, strings, locals, insts, diags);
                 Some(ValType::I32)
             } else if name == "reinterpret_i32_f32" {
                 // bitcast i32 -> f32
