@@ -3,6 +3,9 @@
 - wasm32-unknown-unknown での `cargo test --no-run` が getrandom の js feature なしで失敗していたため、`nepl-core` の wasm32 用 dev-dependencies に `getrandom` (features=["js"]) を追加した。
 - `cargo test --target wasm32-unknown-unknown --no-run --all --all-features` を実行し、Cargo.lock を更新してビルドが通ることを確認。
 - `cargo test --target wasm32-unknown-unknown --no-run --all --all-features --locked` も成功。
+# 2026-02-03 作業メモ (selfhost string builder)
+- stdlib/alloc/string.nepl に StringBuilder（sb_append/sb_append_i32/sb_build）を追加し、selfhost_req の文字列ビルダ要件を解禁した。
+- stdlib/tests/string.nepl に StringBuilder の検証を追加した。
 # 2026-02-03 作業メモ (selfhost string utils)
 - stdlib/alloc/string.nepl に trim/starts_with/ends_with/slice/split を追加し、ASCII 空白判定や split 用の補助関数を実装した。
 - stdlib/tests/string.nepl を拡充して trim/starts_with/ends_with/slice/split のテストを追加した。
@@ -570,4 +573,20 @@
 ## テスト実行結果
 - `cargo test` (300s でタイムアウト。コンパイル警告までは出力されたがテスト完走は未確認)
 - `cargo test -p nepl-core --test neplg2 -- --nocapture`
+- `cargo run -p nepl-cli -- test`
+
+# 2026-02-03 作業メモ (string map/set 追加)
+## 修正内容
+- `alloc/collections/hashmap_str` と `hashset_str` を追加し、FNV-1a と `str_eq` による内容比較で str キー/要素を扱えるようにした。
+- `stdlib/tests/hashmap_str.nepl` と `hashset_str.nepl` を追加し、同内容文字列の別バッファでも検索できることを確認するテストを用意。
+- `nepl-core/tests/selfhost_req.rs` の文字列マップ要件を `hashmap_str` で実行できる形に更新し、テストを有効化。
+- `stdlib/tests/string.nepl` の `StringBuilder` テストで余剰スタック値が出ていた呼び出し形式を修正。
+- `doc/testing.md` に `hashmap_str`/`hashset_str` の記述を追加。
+
+## 備考
+- 汎用的な Map/Set の trait ベース実装は未着手（selfhost_req の trait 拡張と合わせて今後対応）。
+- `hashmap_str`/`hashset_str` のハッシュ計算は `set`/`while` を使わない再帰実装に変更し、純粋関数として利用可能にした。
+
+## テスト実行結果
+- `cargo test`
 - `cargo run -p nepl-cli -- test`

@@ -82,4 +82,13 @@ fn main <()*> ()> ():
     let parts3 str_split "abc" "";
     assert_eq_i32 1 vec_len<str> parts3;
 
+    // Test StringBuilder
+    let mut sb <StringBuilder> string_builder_new;
+    set sb sb_append sb "Error: ";
+    set sb sb_append_i32 sb 404;
+    set sb sb_append sb " Not Found";
+    let msg <str> sb_build sb;
+    assert_str_eq "Error: 404 Not Found" msg;
+    assert_eq_i32 20 len msg;
+
     ()

@@ -117,24 +117,26 @@ fn main <()*>i32> ():
 // 不足機能: generic Map/Set、あるいは String 専用の Map/Set
 // シンボルテーブルや識別子の管理に不可欠です。現状は i32 キーのみです。
 #[test]
-#[ignore] // 未実装のためスキップ
 fn test_req_string_map() {
     let src = r#"
 #entry main
 #indent 4
-#import "alloc/collections/hashmap" as *
+#import "alloc/collections/hashmap_str" as *
 #import "alloc/string" as *
+#import "core/option" as *
 
 fn main <()*>i32> ():
     // 要件: キーに str を指定できる HashMap
-    // 現状の HashMap は内部で i32 キー前提の実装になっている可能性が高い
-    let mut map <HashMap<str, i32>> hashmap_new<str, i32> ();
+    let mut map <i32> hashmap_str_new<i32>;
     
-    hashmap_insert<str, i32> map "foo" 10;
-    hashmap_insert<str, i32> map "bar" 20;
+    hashmap_str_insert<i32> map "foo" 10;
+    hashmap_str_insert<i32> map "bar" 20;
     
-    let v <i32> hashmap_get<str, i32> map "foo";
-    v
+    match hashmap_str_get<i32> map "foo":
+        Option::Some v:
+            v
+        Option::None:
+            1
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 10);
@@ -145,7 +147,6 @@ fn main <()*>i32> ():
 // 不足機能: append 可能な文字列バッファ、format! 相当
 // エラーメッセージ生成やコード生成で文字列連結を繰り返すと効率が悪いため。
 #[test]
-#[ignore] // 未実装のためスキップ
 fn test_req_string_builder() {
     let src = r#"
 #entry main
@@ -154,16 +155,16 @@ fn test_req_string_builder() {
 
 fn main <()*>i32> ():
     // 要件: StringBuilder のような可変文字列バッファ
-    let mut sb <StringBuilder> string_builder_new ();
+    let mut sb <StringBuilder> string_builder_new;
     
-    sb_append sb "Error: ";
-    sb_append_i32 sb 404;
-    sb_append sb " Not Found";
+    set sb sb_append sb "Error: ";
+    set sb sb_append_i32 sb 404;
+    set sb sb_append sb " Not Found";
     
     let res <str> sb_build sb;
     
     // "Error: 404 Not Found"
-    str_len res
+    len res
 "#;
     let v = run_main_i32(src);
     assert_ne!(v, 0);

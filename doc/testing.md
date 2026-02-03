@@ -83,7 +83,7 @@ The current stdlib is intentionally minimal and i32-focused:
 - `std/math`: i32 arithmetic and comparisons
 - `std/mem`: linear memory alloc/load/store helpers
 - `alloc/string`: length, equality, from_i32, to_i32 (Result<i32,i32>), find (stub),
-  trim, starts_with, ends_with, slice, split
+  trim, starts_with, ends_with, slice, split, StringBuilder
 - `std/result`: `ResultI32` and helpers
 - `std/option`: `OptionI32` and helpers
 - `std/list`: fixed-capacity list of i32 with bounds-checked get
@@ -93,6 +93,8 @@ The current stdlib is intentionally minimal and i32-focused:
   `cliarg_get`, `cliarg_program`)
 - `std/hashmap`: i32 キーの簡易ハッシュマップ（オープンアドレス法）
 - `std/hashset`: i32 要素の簡易ハッシュ集合（オープンアドレス法）
+- `std/hashmap_str`: str キーの簡易ハッシュマップ（FNV-1a + str_eq）
+- `std/hashset_str`: str 要素の簡易ハッシュ集合（FNV-1a + str_eq）
 - `std/json`: JsonValue の簡易表現とアクセサ
 - `std/btreemap`: i32 キーの順序付きマップ（配列ベース、二分探索）
 - `std/btreeset`: i32 要素の順序付き集合（配列ベース、二分探索）

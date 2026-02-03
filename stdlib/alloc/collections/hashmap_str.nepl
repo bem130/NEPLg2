@@ -1,0 +1,314 @@
+#indent 4
+
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/option" as *
+#import "alloc/string" as *
+#import "alloc/hash/fnv1a32" as *
+
+// hashmap_str: str キーの簡易ハッシュマップ
+//
+// 目的:
+// - str キーと .V 値の対応を保持します。
+//
+// 実装(アルゴリズム):
+// - オープンアドレス法で線形探索します。
+// - エントリは [occupied][key(str)][value] の配置です。
+//
+// 注意(重要):
+// - リサイズは未実装です（満杯時は挿入に失敗します）。
+// - キー比較は str_eq で内容比較します。
+//
+// 計算量:
+// - 平均 O(1)、最悪 O(n)
+
+// hash_str: str の簡易ハッシュ
+//
+// 目的:
+// - 文字列内容からハッシュ値を生成します。
+//
+// 実装(アルゴリズム):
+// - FNV-1a 32bit をバイト列に適用します。
+// - 再帰でバイト列を走査します。
+//
+// 注意(重要):
+// - 暗号用途には使えません。
+// - UTF-8 のバイト列をそのまま混合します。
+//
+// 計算量:
+// - O(n)
+fn hash_str <(str)->i32> (s):
+    let n <i32> len s;
+    let h0 <Fnv1a32> new_fnv1a32;
+    let h1 <Fnv1a32> hash_str_loop s n 0 h0;
+    fnv1a32_finalize h1
+
+// hash_str_loop: hash_str の内部ループ
+//
+// 目的:
+// - idx から末尾までのバイトを順に混合します。
+//
+// 実装(アルゴリズム):
+// - idx==n なら現在の状態を返します。
+// - それ以外は 1 バイト更新して再帰します。
+//
+// 注意(重要):
+// - 再帰の深さは文字列長に比例します。
+//
+// 計算量:
+// - O(n)
+fn hash_str_loop <(str,i32,i32,Fnv1a32)->Fnv1a32> (s, n, idx, h):
+    if:
+        eq idx n
+        then h
+        else:
+            let b <i32> load_u8 add s add 4 idx;
+            let h2 <Fnv1a32> fnv1a32_update h b;
+            hash_str_loop s n add idx 1 h2
+
+// hashmap_str_new: 新しいマップを作る
+//
+// 目的:
+// - 既定容量で空のマップを作成します。
+//
+// 実装(アルゴリズム):
+// - エントリ領域を確保し occupied を 0 に初期化します。
+//
+// 注意(重要):
+// - 返り値はヘッダのポインタです。
+//
+// 計算量:
+// - O(cap)
+fn hashmap_str_new <.V> <()*>i32> ():
+    let cap <i32> 16
+    let entry_size <i32> add 8 size_of<.V>
+    let entries <i32> alloc mul cap entry_size
+    let mut i <i32> 0
+    while lt i cap:
+        do:
+            store_i32 add entries mul i entry_size 0
+            set i add i 1
+    let header <i32> alloc 12
+    store_i32 header 0  // count
+    store_i32 add header 4 cap
+    store_i32 add header 8 entries
+    header
+
+// hashmap_str_insert: キーに値を設定する
+//
+// 目的:
+// - key に val を格納します（既存なら上書き）。
+//
+// 実装(アルゴリズム):
+// - ハッシュ位置から線形探索し、空きか同一キーに格納します。
+//
+// 注意(重要):
+// - 満杯時の拡張は未実装です。
+//
+// 計算量:
+// - 平均 O(1)、最悪 O(n)
+fn hashmap_str_insert <.V> <(i32,str,.V)*>()> (hm, key, val):
+    let cap <i32> load_i32 add hm 4
+    let entries <i32> load_i32 add hm 8
+    let entry_size <i32> add 8 size_of<.V>
+    let idx <i32> mod_s abs hash_str key cap
+    let mut cur <i32> idx
+    let mut found <i32> 0
+    while eq found 0:
+        do:
+            let entry <i32> add entries mul cur entry_size
+            let occupied <i32> load_i32 entry
+            if:
+                eq occupied 0
+                then:
+                    store_i32 entry 1
+                    store<str> add entry 4 key
+                    store<.V> add entry 8 val
+                    store_i32 hm add load_i32 hm 1
+                    set found 1
+                else:
+                    let ekey <str> load<str> add entry 4
+                    if:
+                        str_eq ekey key
+                        then:
+                            store<.V> add entry 8 val
+                            set found 1
+                        else:
+                            set cur mod_s add cur 1 cap
+                            if:
+                                eq cur idx
+                                set found 1
+                                ()
+
+// hashmap_str_get_loop: 線形探索の内部ループ
+//
+// 目的:
+// - cur から開始して key を探索します。
+//
+// 実装(アルゴリズム):
+// - occupied==0 なら None。
+// - key 一致なら Some。
+// - 次スロットへ進み、idx に戻ったら None。
+//
+// 注意(重要):
+// - entries は [occupied][key][value] の配列です。
+//
+// 計算量:
+// - 平均 O(1)、最悪 O(n)
+fn hashmap_str_get_loop <.V> <(i32,i32,i32,i32,i32,str)->Option<.V>> (entries, entry_size, cap, idx, cur, key):
+    let entry <i32> add entries mul cur entry_size
+    let occupied <i32> load_i32 entry
+    if:
+        eq occupied 0
+        then:
+            none<.V>
+        else:
+            let ekey <str> load<str> add entry 4
+            if:
+                str_eq ekey key
+                then:
+                    some<.V> load<.V> add entry 8
+                else:
+                    let next <i32> mod_s add cur 1 cap
+                    if:
+                        eq next idx
+                        then:
+                            none<.V>
+                        else:
+                            hashmap_str_get_loop<.V> entries entry_size cap idx next key
+
+// hashmap_str_get: キーから値を取得する
+//
+// 目的:
+// - key に対応する値を Option で返します。
+//
+// 実装(アルゴリズム):
+// - ハッシュ位置から線形探索し、見つかれば Some を返します。
+//
+// 注意(重要):
+// - 見つからない場合は None です。
+//
+// 計算量:
+// - 平均 O(1)、最悪 O(n)
+fn hashmap_str_get <.V> <(i32,str)->Option<.V>> (hm, key):
+    let cap <i32> load_i32 add hm 4
+    let entries <i32> load_i32 add hm 8
+    let entry_size <i32> add 8 size_of<.V>
+    let idx <i32> mod_s abs hash_str key cap
+    hashmap_str_get_loop<.V> entries entry_size cap idx idx key
+
+// hashmap_str_contains: キーの存在確認
+//
+// 目的:
+// - key が存在するかを返します。
+//
+// 実装(アルゴリズム):
+// - hashmap_str_get の結果を is_some で判定します。
+//
+// 注意(重要):
+// - 値の取得は行いません。
+//
+// 計算量:
+// - 平均 O(1)、最悪 O(n)
+fn hashmap_str_contains <.V> <(i32,str)->bool> (hm, key):
+    is_some<.V> hashmap_str_get<.V> hm key
+
+// hashmap_str_remove: キーを削除する
+//
+// 目的:
+// - key を削除し、値があれば Some で返します。
+//
+// 実装(アルゴリズム):
+// - 線形探索で見つけたら occupied を 0 にします。
+//
+// 注意(重要):
+// - 削除後のクラスタ再配置は未実装です。
+//
+// 計算量:
+// - 平均 O(1)、最悪 O(n)
+fn hashmap_str_remove <.V> <(i32,str)*>Option<.V>> (hm, key):
+    let cap <i32> load_i32 add hm 4
+    let entries <i32> load_i32 add hm 8
+    let entry_size <i32> add 8 size_of<.V>
+    let idx <i32> mod_s abs hash_str key cap
+    let mut cur <i32> idx
+    let mut result <Option<.V>> none<.V>
+    let mut done <i32> 0
+    while eq done 0:
+        do:
+            let entry <i32> add entries mul cur entry_size
+            let occupied <i32> load_i32 entry
+            if:
+                eq occupied 0
+                then set done 1
+                else:
+                    let ekey <str> load<str> add entry 4
+                    if:
+                        str_eq ekey key
+                        then:
+                            set result some<.V> load<.V> add entry 8
+                            store_i32 entry 0  // mark empty
+                            store_i32 hm sub load_i32 hm 1
+                            set done 1
+                        else:
+                            set cur mod_s add cur 1 cap
+                            if:
+                                eq cur idx
+                                set done 1
+                                ()
+    result
+
+// hashmap_str_len: 要素数を返す
+//
+// 目的:
+// - 登録済み要素数を返します。
+//
+// 実装(アルゴリズム):
+// - ヘッダの count を返します。
+//
+// 注意(重要):
+// - 削除の扱いにより正確性が低下する可能性があります。
+//
+// 計算量:
+// - O(1)
+fn hashmap_str_len <.V> <(i32)->i32> (hm):
+    load_i32 hm
+
+// hashmap_str_free: メモリを解放する
+//
+// 目的:
+// - エントリ領域とヘッダを解放します。
+//
+// 実装(アルゴリズム):
+// - cap と entry_size で領域を解放します。
+//
+// 注意(重要):
+// - この後 hm を使うと未定義です。
+//
+// 計算量:
+// - O(1)
+fn hashmap_str_free <.V> <(i32)*>()> (hm):
+    let cap <i32> load_i32 add hm 4
+    let entries <i32> load_i32 add hm 8
+    let entry_size <i32> add 8 size_of<.V>
+    dealloc entries mul cap entry_size
+    dealloc hm 12
+
+// abs: 絶対値を返す
+//
+// 目的:
+// - x の絶対値を返します。
+//
+// 実装(アルゴリズム):
+// - 0 と比較して符号を反転します。
+//
+// 注意(重要):
+// - 最小値の取り扱いは未検討です。
+//
+// 計算量:
+// - O(1)
+fn abs <(i32)->i32> (x):
+    if:
+        lt x 0
+        then sub 0 x
+        else x

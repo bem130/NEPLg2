@@ -87,6 +87,115 @@ fn concat3 <(str,str,str)*>str> (a,b,c):
     let ab <str> concat a b;
     concat ab c
 
+// StringBuilder: 文字列ビルダ
+//
+// 目的:
+// - 複数の文字列を段階的に追加し、最後に 1 つへまとめます。
+//
+// 実装(アルゴリズム):
+// - Vec<str> に部分文字列を保持します。
+//
+// 注意(重要):
+// - sb_build は concat を繰り返すため O(n^2) になり得ます。
+//
+// 計算量:
+// - 追加: ならし O(1)
+// - build: O(n^2)
+struct StringBuilder:
+    parts <Vec<str>>
+
+// string_builder_new: 空のビルダを作る
+//
+// 目的:
+// - 空の StringBuilder を返します。
+//
+// 実装(アルゴリズム):
+// - vec_new で Vec<str> を作ります。
+//
+// 注意(重要):
+// - 初期容量は Vec の既定値に従います。
+//
+// 計算量:
+// - O(1)
+fn string_builder_new <()*>StringBuilder> ():
+    StringBuilder vec_new<str>
+
+// sb_append: 文字列を追加する
+//
+// 目的:
+// - s をビルダに追加して返します。
+//
+// 実装(アルゴリズム):
+// - 内部 Vec に push します。
+//
+// 注意(重要):
+// - 返り値の StringBuilder を受け取り直してください。
+//
+// 計算量:
+// - ならし O(1)
+fn sb_append <(StringBuilder,str)*>StringBuilder> (sb, s):
+    let parts <Vec<str>> sb.parts;
+    let parts2 <Vec<str>> vec_push<str> parts s;
+    StringBuilder parts2
+
+// sb_append_i32: i32 を追加する
+//
+// 目的:
+// - v を文字列化して追加します。
+//
+// 実装(アルゴリズム):
+// - from_i32 を呼び、sb_append に渡します。
+//
+// 注意(重要):
+// - 負数は from_i32 の制約に従います。
+//
+// 計算量:
+// - O(d)
+fn sb_append_i32 <(StringBuilder,i32)*>StringBuilder> (sb, v):
+    let s <str> from_i32 v;
+    sb_append sb s
+
+// sb_build: 文字列を生成する
+//
+// 目的:
+// - 追加された部分文字列を 1 つに連結して返します。
+//
+// 実装(アルゴリズム):
+// - parts を順に辿り、concat を繰り返します。
+//
+// 注意(重要):
+// - concat の反復により O(n^2) になり得ます。
+//
+// 計算量:
+// - O(n^2)
+fn sb_build <(StringBuilder)*>str> (sb):
+    let parts <Vec<str>> sb.parts;
+    let n <i32> parts.len;
+    let data <i32> parts.data;
+    sb_build_loop data n 0 ""
+
+// sb_build_loop: build の内部ループ
+//
+// 目的:
+// - idx から末尾までを連結して返します。
+//
+// 実装(アルゴリズム):
+// - 再帰で concat を積み上げます。
+//
+// 注意(重要):
+// - concat は新しい文字列を作るためコストがかかります。
+//
+// 計算量:
+// - O(n^2)
+fn sb_build_loop <(i32,i32,i32,str)*>str> (data, n, idx, acc):
+    if:
+        eq idx n
+        then acc
+        else:
+            let offset <i32> mul idx size_of<str>;
+            let part <str> load<str> add data offset;
+            sb_build_loop data n add idx 1 concat acc part
+
 // str_eq: 文字列が等しいか判定する
 //
 // 目的:
@@ -405,6 +514,7 @@ fn str_split <(str,str)*>Vec<str>> (s, sep):
 //
 // 計算量:
 // - O(d)  (d は桁数)
+// fn cast from_i32;
 fn from_i32 <(i32)*>str> (x):
     if:
         eq x 0
@@ -461,6 +571,7 @@ fn from_i32 <(i32)*>str> (x):
 //
 // 計算量:
 // - O(n)
+// fn cast to_i32;
 fn to_i32 <(str)*>Result<i32,i32>> (s):
     let n <i32> load_i32 s;
     let mut i <i32> 0;
