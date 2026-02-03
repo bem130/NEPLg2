@@ -4,7 +4,6 @@
 #import "std/mem" as *
 #import "std/result" as *
 #import "std/string" as *
-#import "std/error" as *
 #if[target=wasi]
 #import "std/diag" as *
 
@@ -193,23 +192,6 @@ fn trap <()*>()> ():
         i32.const 0
         i32.div_s
         drop
-
-// fail: 失敗時に異常終了する
-//
-// 目的:
-// - 失敗時の到達不能箇所として使います。
-//
-// 実装(アルゴリズム):
-// - trap を呼びます。
-//
-// 注意(重要):
-// - 呼び出すと即座に異常終了します。
-//
-// 計算量:
-// - O(1)
-fn fail <(str)*>()> (msg):
-    test_print_fail msg;
-    trap
 
 // assert: 条件が false のとき失敗する
 //
