@@ -97,6 +97,7 @@ struct LexState<'a> {
     src: &'a str,
     indent_stack: Vec<usize>,
     indent_unit: usize,
+    expect_indent: bool,
     diagnostics: Vec<Diagnostic>,
     tokens: Vec<Token>,
     wasm_base: Option<usize>,
@@ -109,6 +110,7 @@ pub fn lex(file_id: FileId, src: &str) -> LexResult {
         src,
         indent_stack: vec![0],
         indent_unit: 4,
+        expect_indent: false,
         diagnostics: Vec::new(),
         tokens: Vec::new(),
         wasm_base: None,
@@ -158,6 +160,9 @@ impl<'a> LexState<'a> {
         if content.trim().is_empty() {
             return;
         }
+
+        let allow_indent = self.expect_indent || self.pending_wasm_base.is_some();
+        self.expect_indent = false;
 
         // compute indentation locally to avoid borrowing issues
         let mut width = 0usize;
@@ -214,6 +219,14 @@ impl<'a> LexState<'a> {
             }
         }
 
+        let is_directive = !in_wasm && rest.trim_start().starts_with('#');
+        if is_directive && !allow_indent {
+            let current_indent = *self.indent_stack.last().unwrap();
+            if actual_indent > current_indent {
+                effective_indent = current_indent;
+            }
+        }
+
         // Always emit INDENT/DEDENT to keep parser block structure even inside #wasm.
         self.adjust_indent(effective_indent, line_start);
 
@@ -223,7 +236,7 @@ impl<'a> LexState<'a> {
             let text = rest.trim_end().to_string();
             let end = line_start + content.len();
             self.push_token(TokenKind::WasmText(text), line_offset, end);
-        } else if rest.trim_start().starts_with('#') {
+        } else if is_directive {
             self.lex_directive(rest.trim_start(), line_offset, content.len());
         } else {
             self.lex_regular(rest, line_offset);
@@ -234,6 +247,10 @@ impl<'a> LexState<'a> {
             kind: TokenKind::Newline,
             span: Span::new(self.file_id, newline_pos as u32, newline_pos as u32),
         });
+
+        if !in_wasm && !is_directive && content.trim_end().ends_with(':') {
+            self.expect_indent = true;
+        }
     }
 
     fn adjust_indent(&mut self, indent: usize, line_start: usize) {

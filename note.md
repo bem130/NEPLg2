@@ -255,3 +255,33 @@
 ## 状態
 - 全 if テスト 15 個が成功し、合計実行時間 5.12 秒でコンプリート（以前は一部でメモリ割り当てエラー）
 - debug ファイル削除済み: `parse_if_debug.rs`、`compile_if_a.rs`
+
+# 2026-02-03 作業メモ (if テスト停止/lexer)
+## 問題発見
+- if テストの一部でコンパイラが停止し、巨大メモリ割り当てエラーが発生。
+- テスト内の `#import`/`#use` 行がトップレベルでインデントされていた。
+
+## 原因特定と修正
+- lexer がトップレベルのディレクティブ行でもインデント増加を `Indent` として出力してしまい、想定外のブロック構造になって typecheck が停止していた。
+- `expect_indent` を追加し、直前の行末 `:` か `#wasm` ブロックの時のみインデント増加を許可するように修正。
+- ディレクティブ行で不正なインデント増加がある場合はインデントを据え置き、トップレベル扱いに固定。
+
+## テスト実行結果
+- `cargo test -p nepl-core --test if` が通過。
+
+# 2026-02-03 作業メモ (整数リテラル/move_check)
+## 修正内容
+- 整数リテラルの `i32` 変換が overflow で 0 になっていたため、`i128` でパースして `i32` にラップする実装に修正。`0x` 16進にも対応し、無効値は診断を出す。
+- `Intrinsic::load`/`store` の move_check を特殊扱いし、アドレス側は borrow として扱うように修正。`load` はロード対象型が Copy のとき borrow 扱い、`store` は常にアドレスを borrow として処理。
+- `visit_borrow` で `Intrinsic` の引数を再帰的に borrow として扱い、誤った move 判定を抑制。
+- Struct/Enum/Apply は Copy ではない前提を維持。
+- `std/vec` で len/cap/data をローカルに保持し、同一値への複数アクセスによる move_check 失敗を回避。
+
+## テスト実行結果
+- `cargo run -p nepl-cli -- test` が通過。
+- `cargo test` が通過。
+
+## plan.md との差分メモ (追加)
+- トップレベルのディレクティブ行のインデント扱い（`#wasm` ブロック以外は増加を無視する仕様）が plan.md に未記載。
+- 整数リテラルの overflow ルール（`i32` へのラップ）と 16 進表記の仕様が plan.md に未記載。
+- move_check における `load`/`store` の borrow 扱いが plan.md に未記載。

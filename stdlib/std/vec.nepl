@@ -34,56 +34,70 @@ fn vec_is_empty <.T> <(Vec<.T>)->bool> (v):
     eq v.len 0
 
 fn vec_push <.T> <(Vec<.T>,.T)*>Vec<.T>> (v, item):
+    let len <i32> v.len
+    let cap <i32> v.cap
+    let data <i32> v.data
     if:
-        eq v.len v.cap
+        eq len cap
         then:
             // grow
-            let new_cap <i32> mul v.cap 2
-            let new_data <i32> realloc v.data mul v.cap size_of<.T> mul new_cap size_of<.T>
-            let offset <i32> mul v.len size_of<.T>
+            let new_cap <i32> mul cap 2
+            let new_data <i32> realloc data mul cap size_of<.T> mul new_cap size_of<.T>
+            let offset <i32> mul len size_of<.T>
             store<.T> add new_data offset item
-            Vec<.T> add v.len 1 new_cap new_data
+            Vec<.T> add len 1 new_cap new_data
         else:
-            let offset <i32> mul v.len size_of<.T>
-            store<.T> add v.data offset item
-            Vec<.T> add v.len 1 v.cap v.data
+            let offset <i32> mul len size_of<.T>
+            store<.T> add data offset item
+            Vec<.T> add len 1 cap data
 
 fn vec_get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
+    let len <i32> v.len
+    let data <i32> v.data
     if:
         lt idx 0
         then none<.T>
         else:
             if:
-                le v.len idx
+                le len idx
                 then none<.T>
                 else:
                     let offset <i32> mul idx size_of<.T>
-                    some<.T> load<.T> add v.data offset
+                    some<.T> load<.T> add data offset
 
 fn vec_set <.T> <(Vec<.T>,i32,.T)*>()> (v, idx, item):
+    let len <i32> v.len
+    let data <i32> v.data
     if:
         lt idx 0
         then ()
         else:
             if:
-                le v.len idx
+                le len idx
                 then ()
                 else:
                     let offset <i32> mul idx size_of<.T>
-                    store<.T> add v.data offset item
+                    store<.T> add data offset item
 
 fn vec_pop <.T> <(Vec<.T>)*>(Vec<.T>,Option<.T>)> (v):
+    let len <i32> v.len
+    let cap <i32> v.cap
+    let data <i32> v.data
     if:
-        eq v.len 0
-        then (v, none<.T>)
+        eq len 0
+        then (Vec<.T> len cap data, none<.T>)
         else:
-            let new_len <i32> sub v.len 1
+            let new_len <i32> sub len 1
             let offset <i32> mul new_len size_of<.T>
-            let item <.T> load<.T> add v.data offset
-            (Vec<.T> new_len v.cap v.data, some<.T> item)
+            let item <.T> load<.T> add data offset
+            (Vec<.T> new_len cap data, some<.T> item)
 
 fn vec_clear <.T> <(Vec<.T>)*>Vec<.T>> (v):
-    Vec<.T> 0 v.cap v.data
+    let cap <i32> v.cap
+    let data <i32> v.data
+    Vec<.T> 0 cap data
 
 fn vec_free <.T> <(Vec<.T>)*>()> (v):
-    dealloc v.data mul v.cap size_of<.T>
+    let cap <i32> v.cap
+    let data <i32> v.data
+    dealloc data mul cap size_of<.T>

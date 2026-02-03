@@ -1048,7 +1048,16 @@ impl<'a> BlockChecker<'a> {
                 PrefixItem::Literal(lit, span) => {
                     let (ty, hir) = match lit {
                         Literal::Int(text) => {
-                            let v = text.parse::<i32>().unwrap_or(0);
+                            let v = match parse_i32_literal(text) {
+                                Some(v) => v,
+                                None => {
+                                    self.diagnostics.push(Diagnostic::error(
+                                        "invalid integer literal",
+                                        *span,
+                                    ));
+                                    0
+                                }
+                            };
                             (self.ctx.i32(), HirExprKind::LiteralI32(v))
                         }
                         Literal::Float(text) => {
@@ -2861,6 +2870,27 @@ fn parse_variant_name(name: &str) -> Option<(&str, &str)> {
     let a = parts.next()?;
     let b = parts.next()?;
     Some((a, b))
+}
+
+fn parse_i32_literal(text: &str) -> Option<i32> {
+    let (neg, digits) = if let Some(rest) = text.strip_prefix('-') {
+        (true, rest)
+    } else {
+        (false, text)
+    };
+    let (radix, digits) = if let Some(rest) = digits.strip_prefix("0x") {
+        (16, rest)
+    } else if let Some(rest) = digits.strip_prefix("0X") {
+        (16, rest)
+    } else {
+        (10, digits)
+    };
+    if digits.is_empty() {
+        return None;
+    }
+    let unsigned = i128::from_str_radix(digits, radix).ok()?;
+    let signed = if neg { -unsigned } else { unsigned };
+    Some(signed as i32)
 }
 
 fn target_allows(target: &str, active: CompileTarget) -> bool {

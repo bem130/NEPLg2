@@ -300,9 +300,38 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
                 visit_expr(item, ctx, tctx);
             }
         }
-        HirExprKind::Intrinsic { args, .. } => {
-            for arg in args {
-                visit_expr(arg, ctx, tctx);
+        HirExprKind::Intrinsic {
+            name,
+            type_args,
+            args,
+        } => {
+            match name.as_str() {
+                "load" => {
+                    let is_copy_load = type_args
+                        .get(0)
+                        .map(|ty| tctx.is_copy(*ty))
+                        .unwrap_or(false);
+                    if let Some(addr) = args.get(0) {
+                        if is_copy_load {
+                            visit_borrow(addr, ctx, tctx);
+                        } else {
+                            visit_expr(addr, ctx, tctx);
+                        }
+                    }
+                }
+                "store" => {
+                    if let Some(addr) = args.get(0) {
+                        visit_borrow(addr, ctx, tctx);
+                    }
+                    if let Some(val) = args.get(1) {
+                        visit_expr(val, ctx, tctx);
+                    }
+                }
+                _ => {
+                    for arg in args {
+                        visit_expr(arg, ctx, tctx);
+                    }
+                }
             }
         }
         HirExprKind::AddrOf(inner) => {
@@ -343,6 +372,11 @@ fn visit_borrow(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types:
         HirExprKind::Deref(inner) => {
             // Re-borrowing a dereference. Still a borrow.
             visit_borrow(inner, ctx, tctx);
+        }
+        HirExprKind::Intrinsic { args, .. } => {
+            for arg in args {
+                visit_borrow(arg, ctx, tctx);
+            }
         }
         _ => visit_expr(expr, ctx, tctx),
     }
