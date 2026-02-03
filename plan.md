@@ -24,10 +24,8 @@ NEPLG1では様々な機能の共存を図ったが、一度これを廃し、�
 #indent 4
 #target wasi
 
-#import "std/math"
-#use std::math::*
-#import "std/stdio"
-#use std::stdio::*
+#import "core/math" as *
+#import "std/stdio" as *
 
 fn main <()*> ()> ():
     let mut a <i32> 0;
@@ -72,18 +70,27 @@ letやlet mutで型推論によって変数の型`.x`を確定する
 setではletやlet mutで定義した`.x`に則る (`.label`の説明でおこなった処理と同一)
 
 
+## オフサイドルール
 
-## `:`ブロック オフサイドルール
-`:`を用いて改行した次の行ではインデントが1つ増える  
-`:`を書いた行のインデントになった時点でそのブロックが終了し、ブロックは1つの式を成す  
-`;`は`:`ブロックの直下の式で使えるスタック復帰命令である  
+オフサイドルールはブロック式か引数の2種類に分けられる
+
+### ブロック式 オフサイドルール
+ブロック式とは、複数の式を纏めて一つの式を成すものである  
+ブロックのオフサイドルールを用いて改行した次の行ではインデントが1つ増える  
+`block:`を書いた行のインデントになった時点でそのブロックが終了し、ブロックは1つの式を成す  
+`;`は`block:`の直下の式で使えるスタック復帰の確認命令である  
 インデントの不正はエラーになります  
-`:`は任意の行末で使用できます  
-`:`ブロックの`:`の後ろには空白とコメントしか使えません  
-`:`ブロックは式であるため、他の式と同様に関数呼び出しの引数などに使うことができます 
+`block:`は任意の行末で使用できます  
+`block:`ブロックの`block:`の後ろには空白とコメントしか使えません  
+`block:`ブロックは式であるため、他の式と同様に関数呼び出しの引数などに使うことができます 
 
-`:` が1つの式となるのは、無名のブロックと、`while`、および`if`の`then``else`に適用される  
-`if`や`struct`、`enum`などは式を成すものではない  
+`block:` が1つの式となるのは、通常のブロックと、`while`の`cond``do`、および`if`の`cond``then``else`などに適用される  
+`if`や`struct`、`enum`などはブロック式を成すものではない  
+
+### 引数 オフサイドルール
+関数の引数は改行して並べることができる
+引数のオフサイドルールを用いて改行した次の行ではインデントが1つ増える
+その関数の引数の全ては同じインデントレベルで並べて書く必要がある
 
 ## 型注釈
 `<T>`のように`<``>`で囲まれた型名は型注釈である  
@@ -130,7 +137,7 @@ entryに指定された関数は、`.label`を含まない、完全に具体的�
 
 ## 糖衣構文
 `fn name`は`let name`の糖衣構文である ただし、nameの型`.x`は`a->b`か`a*>b`であるという制限を設ける  
-`then:`や`else:`は`:`の糖衣構文である ただしこれはifのみで用いれるという制限を設ける
+`then:`や`else:`は`block:`の糖衣構文である ただしこれはifのみで用いれるという制限を設ける
 
 ## リテラルなど
 `i32`は小数点を含まない数字です`1` `2` `3`など
@@ -157,10 +164,10 @@ entryに指定された関数は、`.label`を含まない、完全に具体的�
 ベースは`"if" <cond_expr> <then_expr> <else_expr>`
 ここに、cond then else などのキーワードを適切に追加することができる
 具体的には`<cond_expr>`を`"cond" <cond_expr>`のようにキーワードを付与できる
-また、`if`に対する`:` つまり `if:` については、ブロックを成すものではなく、cond_expr then_expr else_expr を改行して表示できるようにするものである
+また、`if`に対する`:` つまり `if:` については、ブロックを成すものではなく、cond_expr then_expr else_expr を改行して表示できるようにするものである これは関数の引数に対する改行の扱いと同じである
 `if:`は、具体的には、その次の行から式3つ分だけインデントを1つふやしてcond_expr then_expr else_expr とする 3行分ではなく式3つ分であるのは、cond_expr then_expr else_exprのそれぞれで通常の`:`ブロックを使用して複数行となる可能性があるためである
-`cond`や`then`や`else`に対して付与された`:`は、`if`に対する付与ではないため、通常の`:`ブロックである
-`cond:` は 通常の`:`と同じであり、1つのブロック式である
+`cond:`や`then:`や`else:`は、通常の`block:`である ただし、順番にcond,then,elseの制約がある これはcond,then,elseのキーワードを`block`に置換することで意味が変わるのを防ぐためである
+`cond:` は 通常の`block:`と同じであり、1つのブロック式である
 また、`"if" <cond_expr>`の後ろの`:`、`"if" <cond_expr> :`では、then_exprとelse_exprを改行して表示できるようにする
 `"if" <cond_expr> :`は、具体的には、その次の行から式2つ分だけインデントを1つふやしてthen_expr else_expr とする
 この`<cond_expr>`にもcondキーワードを付与できるようにするが、実用上は不要であろう
@@ -171,28 +178,28 @@ if <cond_expr> <then_expr> <else_expr>
 // cond_expr then_expr else_expr にはそれぞれキーワードを付与可能
 if cond <cond_expr> then <then_expr> else <else_expr>
 // 改行 `if:`では続くcond then elseをインデント付きで改行して記述可能
-if:
+if: // これは引数の方
     <cond_expr>
     <then_expr>
     <else_expr>
 // cond_expr then_expr else_expr にはそれぞれキーワードを付与可能
-if:
+if: // これは引数の方
     cond <cond_expr>
     then <then_expr>
     else <else_expr>
-if <cond_expr>
+if <cond_expr>: // これは引数の方
     then <then_expr>
     else <else_expr>
-if cond <cond_expr>
+if cond <cond_expr>: // これは引数の方
     then <then_expr>
     else <else_expr>
-// cond then else に対する `:` は通常の`:`ブロック
+// cond: then: else: は block: の特別な書き方
 if: // cond,then,else exprが複数行のときの推奨の書き方
-    cond:
+    cond: // これはブロックの方
         <cond_expr>
-    then:
+    then: // これはブロックの方
         <then_expr>
-    else:
+    else: // これはブロックの方
         <else_expr>
 if: // cond,then,else exprが1行のときの推奨の書き方
     cond <cond_expr>
@@ -209,29 +216,29 @@ if true 0 1
 if true then 0 else 1
 
 // 複数行 if then else
-if:
+if: // これは引数の方
     true
     0
     1
 
 // 複数行 if then else
-if:
+if: // これは引数の方
     true
-    then:
+    then: // これはブロックの方
         0
-    else:
+    else: // これはブロックの方
         1
 
-if:
-    cond:
+if: // これは引数の方
+    cond: // これはブロックの方
         true
-    then:
+    then: // これはブロックの方
         0
-    else:
+    else: // これはブロックの方
         1
 
 // 複数行 if then else
-if:
+if: // これは引数の方
     true
     then 0
     else 1
@@ -243,37 +250,71 @@ if true then 0 else if true then 1 else 2
 
 // 複数行 if else 組み合わせ
 
-if:
+if: // これは引数の方
     true
-    then:
+    then: // これはブロックの方
         0
-    else:
-        if:
-            cond:
+    else: // これはブロックの方
+        if: // これは引数の方
+            cond: // これはブロックの方
                 true
-            then:
+            then: // これはブロックの方
                 1
-            else:
+            else: // これはブロックの方
                 2
 
-if:
+if: // これは引数の方
     true
-    then:
+    then: // これはブロックの方
         0
-    else if:
+    else if: // これは引数の方
         cond:
             true
-        then:
+        then: // これはブロックの方
             1
-        else:
+        else: // これはブロックの方
             2
 
 ```
 
+### while
+
+ifと同様
+cond:,do:はblock:の特別な場合 順番は固定
+breakを追加
+```
+while false set i add i 1;
+while cond false do set i add i 1;
+while false: // これは引数の方
+    set i add i 1
+while false: // これは引数の方
+    do: // これはブロックの方
+        set i add i 1
+while: // これは引数の方
+    cond false
+    do: // これはブロックの方
+        set i add i 1
+while: // これは引数の方
+    cond: // これはブロックの方
+        false
+    do: // これはブロックの方
+        set i add i 1
+while: // これは引数の方
+    false
+    set i add i 1
+```
+
+### tuple
+
+```
+Tuple:
+    a
+    b
+```
 
 ### ブロック 文 セミコロン
 
-`:`によってインデントでまとめられた複数の式をブロックという
+`block:`によってインデントでまとめられた複数の式をブロックという
 ブロック自体は一つの式になり、一つの値を返す
 
 ブロック直下の式を文という
@@ -281,11 +322,11 @@ if:
 
 ```
 // ブロック
-:
+block:
     <文>;
     <文>;
     <文>
-:
+block:
     <文>
     <文>
     <文>
@@ -301,17 +342,17 @@ if:
 `;`は専らスタックの確認のみに用いられるものであり、省略することができる  
 
 
-`:`に入った時点のスタックを`[ X ]`として説明する  
+`block:`に入った時点のスタックを`[ X ]`として説明する  
 
 ```
-:
+block:
     // この時点で`[ X ]`
     add 1 2; // ok
     add 1 2 // ok
     add 1 2 3; // エラー
 ```
 
-`:`の直下の式`add 1 2;`では、`;`の直前で`[ X, i32 ]`であり、`;`の直後で`[ X ]`となる  
+`block:`の直下の式`add 1 2;`では、`;`の直前で`[ X, i32 ]`であり、`;`の直後で`[ X ]`となる  
 `add 1 2 3;`では、`;`の直前で`[ X, i32, i32 ]`であり、スタックが長すぎるのでエラーである  
 
 ブロックの値は、その最後の文の値になる  
@@ -319,14 +360,14 @@ if:
 
 ```
 // このブロックの値は11
-<i32> :
+<i32> block:
     add 1 2; // ここで3をスタックから捨てる
     add 3 4  // ここで7をスタックから捨てる
     add 5 6 // これがブロックの値
 ```
 ```
 // このブロックの値は()
-<()> :
+<()> block:
     add 1 2; // ここで3をスタックから捨てる
     add 3 4  // ここで7をスタックから捨てる
     add 5 6; // ここで11をスタックから捨てて、()がブロックの値
@@ -339,11 +380,11 @@ n 番目（最後の文）だけがブロックの値を決める
 ;なしなら、その文の値がブロックの値
 ```
 // 1行に2つの文を入れるのはエラー
-<()> :
+<()> block:
     add 1 2 add 3 4 // エラー
     add 5 6;
 // ブロックの中にifを入れられる
-<i32> :
+<i32> block:
     if false:
         then:
             add 1 2
