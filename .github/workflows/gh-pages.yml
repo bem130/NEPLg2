@@ -60,7 +60,7 @@ jobs:
                   cache-on-failure: true
 
             - name: Build wasm app with trunk
-              run: trunk build --release --public-url /NEPL-g2/
+              run: trunk build --release --public-url /NEPLg2/
               # If your Trunk project is not at repo root, uncomment:
               # working-directory: path/to/your/trunk/project
 
