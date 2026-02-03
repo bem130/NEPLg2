@@ -269,7 +269,7 @@ impl TypeCtx {
             (TypeKind::Never, TypeKind::Var(_)) => Ok(b),
             (TypeKind::Var(va), TypeKind::Var(vb)) => {
                 if let (Some(la), Some(lb)) = (&va.label, &vb.label) {
-                    if la != lb {
+                    if la != lb && la != "Self" && lb != "Self" {
                         return Err(UnifyError::Mismatch);
                     }
                 }

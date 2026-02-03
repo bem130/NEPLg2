@@ -660,12 +660,44 @@ pub fn typecheck(
             continue;
         }
         if let Stmt::FnDef(f) = item {
-            let f_ty = match env.lookup(&f.name.name) {
-                Some(b) => b.ty,
-                None => {
+            let f_ty = {
+                let bindings = env.lookup_all(&f.name.name);
+                let mut funcs: Vec<&Binding> = bindings
+                    .into_iter()
+                    .filter(|b| matches!(b.kind, BindingKind::Func { .. }))
+                    .collect();
+                if funcs.is_empty() {
                     // The function was not hoisted (due to a prior error such as
                     // duplicate name). Skip type-checking its body to avoid panics.
                     continue;
+                }
+                if funcs.len() == 1 {
+                    funcs[0].ty
+                } else {
+                    let mut tmp_labels = LabelEnv::new();
+                    for tp in &f.type_params {
+                        let tv = ctx.fresh_var(Some(tp.name.name.clone()));
+                        tmp_labels.insert(tp.name.name.clone(), tv);
+                    }
+                    let sig_ty = type_from_expr(&mut ctx, &mut tmp_labels, &f.signature);
+                    let sig_key = function_signature_string(&ctx, sig_ty);
+                    let mut matched: Option<TypeId> = None;
+                    for binding in funcs.drain(..) {
+                        if function_signature_string(&ctx, binding.ty) == sig_key {
+                            matched = Some(binding.ty);
+                            break;
+                        }
+                    }
+                    match matched {
+                        Some(ty) => ty,
+                        None => {
+                            diagnostics.push(Diagnostic::error(
+                                "function signature does not match any overload",
+                                f.name.span,
+                            ));
+                            continue;
+                        }
+                    }
                 }
             };
             let mut type_param_bounds = BTreeMap::new();
@@ -1153,9 +1185,16 @@ impl<'a> BlockChecker<'a> {
             match stmt {
                 Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => {
                     match self.check_prefix(expr, base_depth, &mut stack) {
-                        Some((typed, _dropped_from_prefix)) => {
+                        Some((typed, dropped_from_prefix)) => {
                             let is_last_expr = Some(idx) == last_expr_idx;
                             let mut drop_result = !is_last_expr;
+
+                            if dropped_from_prefix {
+                                self.diagnostics.push(Diagnostic::error(
+                                    "expression left extra values on the stack",
+                                    typed.span,
+                                ));
+                            }
 
                             // If there was an explicit semicolon token, require that the
                             // statement left exactly one value on the stack; otherwise
@@ -1284,7 +1323,7 @@ impl<'a> BlockChecker<'a> {
         base_depth: usize,
         stack: &mut Vec<StackEntry>,
     ) -> Option<(HirExpr, bool)> {
-        let dropped = false;
+        let mut dropped = false;
         let mut last_expr: Option<HirExpr> = None;
         let mut pipe_pending: Option<StackEntry> = None;
         // (target_type, stack_depth_when_annotation_appeared)
@@ -2079,6 +2118,7 @@ impl<'a> BlockChecker<'a> {
             for _ in 0..extras {
                 stack.pop();
             }
+            dropped = true;
         }
 
         let mut result_expr = if stack.len() == base_depth + 1 {
@@ -3233,14 +3273,14 @@ impl Env {
     }
 
     fn remove_duplicate_func(&mut self, name: &str, ty: TypeId, ctx: &TypeCtx) {
-        let target = ctx.type_to_string(ctx.resolve_id(ty));
+        let target = function_signature_string(ctx, ty);
         if let Some(scope) = self.scopes.first_mut() {
             scope.retain(|b| {
                 if b.name != name {
                     return true;
                 }
                 if let BindingKind::Func { .. } = b.kind {
-                    let existing = ctx.type_to_string(ctx.resolve_id(b.ty));
+                    let existing = function_signature_string(ctx, b.ty);
                     existing != target
                 } else {
                     true
@@ -3481,8 +3521,41 @@ fn mangle_impl_method(trait_name: &str, method: &str, target_ty: TypeId, ctx: &T
     name
 }
 
+fn function_signature_string(ctx: &TypeCtx, ty: TypeId) -> String {
+    let resolved = ctx.resolve_id(ty);
+    match ctx.get(resolved) {
+        TypeKind::Function {
+            params,
+            result,
+            effect,
+            ..
+        } => {
+            let mut s = String::from("func");
+            s.push_str("__");
+            if params.is_empty() {
+                s.push_str("unit");
+            } else {
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        s.push('_');
+                    }
+                    s.push_str(&ctx.type_to_string(*p));
+                }
+            }
+            s.push_str("__");
+            s.push_str(&ctx.type_to_string(result));
+            match effect {
+                Effect::Pure => s.push_str("__pure"),
+                Effect::Impure => s.push_str("__imp"),
+            }
+            s
+        }
+        _ => ctx.type_to_string(resolved),
+    }
+}
+
 fn type_signature_matches(ctx: &TypeCtx, a: TypeId, b: TypeId) -> bool {
-    ctx.type_to_string(ctx.resolve_id(a)) == ctx.type_to_string(ctx.resolve_id(b))
+    function_signature_string(ctx, a) == function_signature_string(ctx, b)
 }
 
 fn type_contains_unbound_var(ctx: &TypeCtx, ty: TypeId) -> bool {

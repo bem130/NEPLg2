@@ -1,4 +1,10 @@
 # 状況メモ (2026-01-22)
+# 2026-02-03 作業メモ (trait/overload 修正の根本対応)
+- overload の重複削除が `type_to_string` の "func" 返却で全て同一扱いになっていたため、関数シグネチャ文字列を導入し、重複判定と impl メソッド署名一致判定をシグネチャ比較に変更。
+- trait method の呼び出しで `Self` ラベルと型パラメータが不一致になる問題を、`Self` ラベルは任意型と統一可能にすることで解消。
+- monomorphize で trait 呼び出しを具体関数へ解決する際、解決先関数のインスタンス化要求を行うよう変更し、unknown function を解消。
+- テスト: `cargo run -p nepl-cli -- test` は成功（警告あり）。
+- テスト: `cargo test` は 120 秒でタイムアウト（警告出力後に未完了）。
 # 2026-02-03 作業メモ (stdlib テスト拡充/修正)
 - stdlib/std/hashmap.nepl の if レイアウトを修正し、hash_i32 を純粋関数に書き換え（16進リテラルを10進へ置換）。hashmap_get は再帰ループで純粋化。
 - stdlib/std/hashset.nepl の hash_i32 を純粋関数へ変更し、hashset_contains を再帰ループで純粋化。hashset_contains_loop のシグネチャ不整合も修正。
@@ -536,3 +542,12 @@
 
 ## テスト実行結果
 - `printf '1\0 3\0' | cargo run -p nepl-cli -- -i examples/abc086_a.tmp.nepl --run`
+
+# 2026-02-03 オーバーロード解決/スタック超過診断修正
+- 関数定義の2回目走査で、名前一致だけで型を引いていた箇所を「シグネチャ一致」で選ぶように変更し、オーバーロードの取り違えを防止。
+- prefix 式で余剰スタック値をドロップした場合に診断を出すようにし、過剰引数の呼び出しをエラー化。
+
+## テスト実行結果
+- `cargo test` (300s でタイムアウト。コンパイル警告までは出力されたがテスト完走は未確認)
+- `cargo test -p nepl-core --test neplg2 -- --nocapture`
+- `cargo run -p nepl-cli -- test`

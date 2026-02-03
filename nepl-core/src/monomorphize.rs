@@ -230,7 +230,8 @@ impl<'a> Monomorphizer<'a> {
                             self.ctx.type_to_string(resolved),
                         );
                         if let Some(func_name) = self.impl_map.get(&key) {
-                            *callee = FuncRef::User(func_name.clone(), Vec::new());
+                            let inst = self.request_instantiation(func_name.clone(), Vec::new());
+                            *callee = FuncRef::User(inst, Vec::new());
                         }
                     }
                     FuncRef::Builtin(_) => {}
