@@ -76,13 +76,13 @@ fn main <()*>i32> ():
 // 不足機能: slice, split, trim, starts_with, char/byte iterator
 // パーサーを書くには `len` と `concat` だけでは不十分で、高度な文字列操作が必要です。
 #[test]
-#[ignore] // 未実装のためスキップ
 fn test_req_string_utils() {
     let src = r#"
 #entry main
 #indent 4
 #import "alloc/string" as *
 #import "alloc/vec" as *
+#import "core/option" as *
 
 fn main <()*>i32> ():
     let s "  fn main(a: i32)  ";
@@ -91,20 +91,22 @@ fn main <()*>i32> ():
     let trimmed <str> str_trim s;
     
     // 要件: starts_with / ends_with
-    if not (str_starts_with trimmed "fn"):
-        return 1;
-        
-    // 要件: split (区切り文字での分割)
-    let parts <Vec<str>> str_split trimmed "(";
-    let name_part <str> vec_get<str> parts 0; // "fn main"
+    if:
+        not str_starts_with trimmed "fn"
+        then 1
+        else:
+            // 要件: split (区切り文字での分割)
+            let parts <Vec<str>> str_split trimmed "(";
+            let name_part <str> unwrap<str> vec_get<str> parts 0; // "fn main"
+            
+            // 要件: substring / slice
+            let func_name <str> str_slice name_part 3 len name_part; // "main"
+            
+            if:
+                str_eq func_name "main"
+                then 0
+                else 2
     
-    // 要件: substring / slice
-    let func_name <str> str_slice name_part 3 (str_len name_part); // "main"
-    
-    if str_eq func_name "main":
-        0
-    else:
-        2
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 0);

@@ -4,6 +4,7 @@
 #import "core/result" as *
 #import "core/option" as *
 #import "core/math" as *
+#import "alloc/vec" as *
 
 // string: 文字列操作（長さ付きUTF-8）
 //
@@ -132,6 +133,264 @@ fn str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
                 eq ba bb
                 then str_eq_loop a b len add i 1
                 else false
+
+// str_is_space: ASCII 空白文字か判定する
+//
+// 目的:
+// - 空白文字（スペース/タブ/改行/CR）かどうかを返します。
+//
+// 実装(アルゴリズム):
+// - 候補バイト値を if で順に比較します。
+//
+// 注意(重要):
+// - UTF-8 の空白全般は扱いません（ASCII のみ）。
+//
+// 計算量:
+// - O(1)
+fn str_is_space <(i32)->bool> (b):
+    if:
+        eq b 32
+        then true
+        else:
+            if:
+                eq b 9
+                then true
+                else:
+                    if:
+                        eq b 10
+                        then true
+                        else:
+                            if:
+                                eq b 13
+                                then true
+                                else false
+
+// str_starts_with: 先頭一致を判定する
+//
+// 目的:
+// - s が prefix で始まるなら true を返します。
+//
+// 実装(アルゴリズム):
+// - prefix の長さを確認し、前方 len バイトを比較します。
+//
+// 注意(重要):
+// - UTF-8 のバイト列として比較します。
+//
+// 計算量:
+// - O(n)
+fn str_starts_with <(str,str)->bool> (s, prefix):
+    let ls <i32> load_i32 s;
+    let lp <i32> load_i32 prefix;
+    if:
+        lt ls lp
+        then false
+        else str_eq_loop s prefix lp 0
+
+// str_eq_at: 指定位置からの一致判定
+//
+// 目的:
+// - s の start 位置から len バイトが pat と一致するか返します。
+//
+// 実装(アルゴリズム):
+// - インデックスを進めながら 1 バイトずつ比較します。
+//
+// 注意(重要):
+// - 呼び出し側で範囲内であることを保証してください。
+//
+// 計算量:
+// - O(n)
+fn str_eq_at <(str,str,i32,i32,i32)->bool> (s, pat, start, len, i):
+    if:
+        eq i len
+        then true
+        else:
+            let bs <i32> load_u8 add s add 4 add start i;
+            let bp <i32> load_u8 add pat add 4 i;
+            if:
+                eq bs bp
+                then str_eq_at s pat start len add i 1
+                else false
+
+// str_ends_with: 末尾一致を判定する
+//
+// 目的:
+// - s が suffix で終わるなら true を返します。
+//
+// 実装(アルゴリズム):
+// - s の末尾から長さ分を比較します。
+//
+// 注意(重要):
+// - UTF-8 のバイト列として比較します。
+//
+// 計算量:
+// - O(n)
+fn str_ends_with <(str,str)->bool> (s, suffix):
+    let ls <i32> load_i32 s;
+    let lp <i32> load_i32 suffix;
+    if:
+        lt ls lp
+        then false
+        else:
+            let start <i32> sub ls lp;
+            str_eq_at s suffix start lp 0
+
+// str_slice: 部分文字列を切り出す
+//
+// 目的:
+// - [start, end) の範囲を新しい文字列として返します。
+//
+// 実装(アルゴリズム):
+// - start/end を範囲内に収め、該当バイトをコピーします。
+//
+// 注意(重要):
+// - start/end はバイト位置です（UTF-8 の文字境界は考慮しません）。
+// - 範囲外は 0..len に丸めます。
+//
+// 計算量:
+// - O(n)
+fn str_slice <(str,i32,i32)*>str> (s, start, end):
+    let len <i32> load_i32 s;
+    let mut s0 <i32> start;
+    let mut e0 <i32> end;
+    if:
+        lt s0 0
+        then set s0 0
+        else ()
+    if:
+        lt e0 s0
+        then set e0 s0
+        else ()
+    if:
+        lt len e0
+        then set e0 len
+        else ()
+    let out_len <i32> sub e0 s0;
+    let out <i32> alloc add 4 out_len;
+    store_i32 out out_len;
+    let mut i <i32> 0;
+    while lt i out_len:
+        do:
+            let b <i32> load_u8 add s add 4 add s0 i;
+            store_u8 add out add 4 i b;
+            set i add i 1;
+    out
+
+// str_trim: 前後の空白を取り除く
+//
+// 目的:
+// - 先頭と末尾の ASCII 空白を除去した文字列を返します。
+//
+// 実装(アルゴリズム):
+// - 先頭から空白を飛ばし、末尾から空白を削ります。
+// - 最後に str_slice で切り出します。
+//
+// 注意(重要):
+// - 空白判定は ASCII のみです。
+// - UTF-8 の文字境界は考慮しません。
+//
+// 計算量:
+// - O(n)
+fn str_trim <(str)*>str> (s):
+    let len <i32> load_i32 s;
+    let mut start <i32> 0;
+    let mut end <i32> len;
+    let mut done <i32> 0;
+    while eq done 0:
+        do:
+            if:
+                lt start end
+                then:
+                    let b <i32> load_u8 add s add 4 start;
+                    if:
+                        str_is_space b
+                        then set start add start 1
+                        else set done 1
+                else:
+                    set done 1
+    let mut done2 <i32> 0;
+    while eq done2 0:
+        do:
+            if:
+                lt start end
+                then:
+                    let idx <i32> sub end 1;
+                    let b <i32> load_u8 add s add 4 idx;
+                    if:
+                        str_is_space b
+                        then set end sub end 1
+                        else set done2 1
+                else:
+                    set done2 1
+    str_slice s start end
+
+// str_match_at: 位置一致を判定する（split 用）
+//
+// 目的:
+// - s の pos から sep が一致するかを返します。
+//
+// 実装(アルゴリズム):
+// - sep_len 文字分を順に比較します。
+//
+// 注意(重要):
+// - 呼び出し側で pos+sep_len が範囲内であることを保証してください。
+//
+// 計算量:
+// - O(n)
+fn str_match_at <(str,str,i32,i32)*>bool> (s, sep, pos, sep_len):
+    let mut i <i32> 0;
+    let mut ok <i32> 1;
+    while lt i sep_len:
+        do:
+            let bs <i32> load_u8 add s add 4 add pos i;
+            let bp <i32> load_u8 add sep add 4 i;
+            if:
+                eq bs bp
+                then set i add i 1
+                else:
+                    set ok 0
+                    set i sep_len
+    eq ok 1
+
+// str_split: 区切り文字で分割する
+//
+// 目的:
+// - s を sep で分割し、部分文字列の Vec を返します。
+//
+// 実装(アルゴリズム):
+// - 走査しながら sep 一致位置で区切り、str_slice を積み上げます。
+//
+// 注意(重要):
+// - sep が空文字列の場合は s だけを返します。
+// - UTF-8 の文字境界は考慮しません。
+//
+// 計算量:
+// - O(n * m)（n=文字列長, m=sep長）
+fn str_split <(str,str)*>Vec<str>> (s, sep):
+    let sep_len <i32> load_i32 sep;
+    let mut out <Vec<str>> vec_new<str>;
+    if:
+        eq sep_len 0
+        then:
+            set out vec_push<str> out s
+            out
+        else:
+            let s_len <i32> load_i32 s;
+            let mut i <i32> 0;
+            let mut start <i32> 0;
+            while le add i sep_len s_len:
+                do:
+                    if:
+                        str_match_at s sep i sep_len
+                        then:
+                            let part <str> str_slice s start i;
+                            set out vec_push<str> out part;
+                            set i add i sep_len;
+                            set start i;
+                        else:
+                            set i add i 1;
+            let tail <str> str_slice s start s_len;
+            set out vec_push<str> out tail;
+            out
 
 // from_i32: i32 を文字列へ変換する
 //

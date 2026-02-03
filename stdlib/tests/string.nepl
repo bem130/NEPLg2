@@ -3,6 +3,8 @@
 #target wasi
 
 #import "alloc/string" as *
+#import "alloc/vec" as *
+#import "core/option" as *
 #import "std/test" as *
 
 fn main <()*> ()> ():
@@ -41,5 +43,43 @@ fn main <()*> ()> ():
     let empty "";
     let test concat empty "test";
     assert_eq_i32 4 len test;
+
+    // Test trim
+    let src "  fn main(a: i32)  ";
+    let trimmed str_trim src;
+    assert_str_eq "fn main(a: i32)" trimmed;
+
+    // Test starts_with/ends_with
+    assert str_starts_with trimmed "fn";
+    assert str_ends_with trimmed ")";
+    assert_ne true str_starts_with trimmed "let";
+
+    // Test slice
+    let fname str_slice trimmed 3 7;
+    assert_str_eq "main" fname;
+
+    // Test split (single char)
+    let parts str_split trimmed "(";
+    assert_eq_i32 2 vec_len<str> parts;
+    let parts0 str_split trimmed "(";
+    let p0 unwrap<str> vec_get<str> parts0 0;
+    let parts1 str_split trimmed "(";
+    let p1 unwrap<str> vec_get<str> parts1 1;
+    assert_str_eq "fn main" p0;
+    assert_str_eq "a: i32)" p1;
+
+    // Test split (multi char)
+    let parts2 str_split "a--b--c" "--";
+    assert_eq_i32 3 vec_len<str> parts2;
+    let parts2_0 str_split "a--b--c" "--";
+    let p2_0 unwrap<str> vec_get<str> parts2_0 0;
+    let parts2_2 str_split "a--b--c" "--";
+    let p2_2 unwrap<str> vec_get<str> parts2_2 2;
+    assert_str_eq "a" p2_0;
+    assert_str_eq "c" p2_2;
+
+    // Test split (empty delimiter)
+    let parts3 str_split "abc" "";
+    assert_eq_i32 1 vec_len<str> parts3;
 
     ()

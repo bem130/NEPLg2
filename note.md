@@ -1,4 +1,10 @@
 # 状況メモ (2026-01-22)
+# 2026-02-03 作業メモ (selfhost string utils)
+- stdlib/alloc/string.nepl に trim/starts_with/ends_with/slice/split を追加し、ASCII 空白判定や split 用の補助関数を実装した。
+- stdlib/tests/string.nepl を拡充して trim/starts_with/ends_with/slice/split のテストを追加した。
+- nepl-core/tests/selfhost_req.rs の文字列ユーティリティ要件テストを解禁し、Option unwrap と len 呼び出しに合わせて内容を調整した。
+- doc/testing.md の stdlib スコープ一覧を更新し、alloc/string の追加関数を反映した。
+- 未対応: file I/O (WASI の path_open 等) と u8/バイト配列は型・実行環境の整備が必要なため未着手。string-keyed map/trait 拡張も後続で対応予定。
 # 2026-02-03 作業メモ (block ルール更新対応)
 - block: がブロック式、`:` が引数レイアウトという新ルールに合わせ、パーサの `:` 処理を整理。`block` は末尾ならマーカー扱い、`cond/then/else/do` は単独（型注釈のみ許可）でマーカー扱いにし、`if cond:` のような通常識別子を誤判定しないようにした。
 - `if`/`while` のレイアウト展開で `ExprSemi` を許可し、`while` 本体に `;` を書いたテストが panic しないよう修正。
