@@ -23,8 +23,7 @@ use crate::span::FileId;
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::fs;
-#[cfg(not(target_arch = "wasm32"))]
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// 識別用ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
