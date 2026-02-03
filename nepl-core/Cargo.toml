@@ -13,3 +13,4 @@ wasmparser = "0.244"
 [dev-dependencies]
 wasmi.workspace = true
 tempfile.workspace = true
+rand.workspace = true

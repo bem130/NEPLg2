@@ -19,11 +19,17 @@ struct Sha256:
     buffer <Vec<i32>>
 
 // new_sha256: ハッシャーを初期化する
-fn new_sha256 <()->Sha256> ():
-    Sha256 vec_new<i32> ()
+//
+// 注意(重要):
+// - 内部バッファを確保するため副作用があります。
+fn new_sha256 <()*>Sha256> ():
+    Sha256 vec_new<i32>
 
 // sha256_update: バイトで状態を更新する
-fn sha256_update <(Sha256, i32)->Sha256> (ctx, byte):
+//
+// 注意(重要):
+// - 内部バッファを更新するため副作用があります。
+fn sha256_update <(Sha256, i32)*>Sha256> (ctx, byte):
     let new_vec <Vec<i32>> vec_push<i32> ctx.buffer byte
     Sha256 new_vec
 

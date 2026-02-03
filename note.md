@@ -1,4 +1,8 @@
 # 状況メモ (2026-01-22)
+# 2026-02-03 作業メモ (依存更新/online cargo test)
+- workspace 依存を最新安定版へ更新（thiserror 2.0.18、anyhow 1.0.100、clap 4.5.56、wasm-bindgen 0.2.108、assert_cmd 2.1.2、tempfile 3.24.0 など）。rand は最新安定の 0.8.5 のまま。
+- wasmi 1.0.8 への更新を試したが、rustc 1.83.0 では 1.86 以上が必要で不可。wasmi は 0.31.2 に戻して Cargo.lock を更新。
+- テスト: オンライン `cargo test` を実行。`nepl-core/tests/overload.rs` の `test_overload_cast_like` と `test_explicit_type_annotation_prefix` が "ambiguous overload" で失敗。他のテストは成功。
 # 2026-02-03 作業メモ (trait/overload 修正の根本対応)
 - overload の重複削除が `type_to_string` の "func" 返却で全て同一扱いになっていたため、関数シグネチャ文字列を導入し、重複判定と impl メソッド署名一致判定をシグネチャ比較に変更。
 - trait method の呼び出しで `Self` ラベルと型パラメータが不一致になる問題を、`Self` ラベルは任意型と統一可能にすることで解消。

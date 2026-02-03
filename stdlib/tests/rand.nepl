@@ -9,9 +9,14 @@ fn test_rand <()*>i32> ():
     let rng0 new_xorshift32 42
 
     // Test 2: generate multiple values
-    let (rng1, v1) xorshift32_next rng0
-    let (rng2, v2) xorshift32_next rng1
-    let (rng3, v3) xorshift32_next rng2
+    let rng1 xorshift32_next rng0
+    let v1 rng1.state
+
+    let rng2 xorshift32_next rng1
+    let v2 rng2.state
+
+    let rng3 xorshift32_next rng2
+    let v3 rng3.state
 
     // Check values are not 0 (xorshift property)
     // and ideally different (probabilistic)
@@ -21,7 +26,8 @@ fn test_rand <()*>i32> ():
 
     // Test 3: init with 0 should be corrected
     let rng_z new_xorshift32 0
-    let (rng_z1, vz1) xorshift32_next rng_z
+    let rng_z1 xorshift32_next rng_z
+    let vz1 rng_z1.state
     assert_ne (eq vz1 0) true
 
     test_checked "rand tests passed"
