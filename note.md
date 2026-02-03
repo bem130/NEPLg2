@@ -1,4 +1,14 @@
 # 状況メモ (2026-01-22)
+# 2026-02-03 作業メモ (import/resolve テスト拡充)
+- nepl-core/tests/resolve.rs に default alias（相対/パッケージ）、selective 欠落名の扱い、merge open、visible map 優先順位（local/ selective/ open）を追加。
+- nepl-core/src/module_graph.rs の unit テストに missing dependency/invalid import/duplicate export/non-pub import/ selective+glob re-export を追加。
+- テスト: `cargo test` と `cargo run -p nepl-cli -- test` が成功。
+
+# 2026-02-03 作業メモ (rpn 実行 + std/test 修正 + テスト実行)
+- examples/rpn.nepl を `printf "3 4 +\n" | cargo run -p nepl-cli -- -i examples/rpn.nepl --target wasi --run` で実行し、REPL が結果を返して終了することを確認。
+- stdlib/std/test.nepl の `assert_str_eq` を `if:` ブロック形式に修正し、`(trap; ())` の inline 1行式を排除してパーサエラーを解消。
+- テスト: `cargo test` と `cargo run -p nepl-cli -- test` が成功。
+
 # 2026-02-03 作業メモ (rpn import + diagnostics)
 - examples/rpn.nepl の import を新仕様（`#import "..." as *`）へ更新。
 - loader の parse でエラー診断がある場合は CoreError を返すようにし、構文エラーが型エラーに埋もれないよう修正。

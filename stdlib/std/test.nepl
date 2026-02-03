@@ -69,7 +69,11 @@ fn assert_ne <(bool,bool)->()> (a, b):
                     trap;
 
 fn assert_str_eq <(str,str)->()> (expected, actual):
-    if test_str_eq expected actual () (trap; ())
+    if:
+        test_str_eq expected actual
+        then ()
+        else:
+            trap;
 
 fn assert_ok_i32 <(Result<i32,i32>)->()> (r):
     match r:
