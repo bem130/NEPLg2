@@ -14,7 +14,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use crate::ast::{Directive, Module, Visibility};
+use crate::ast::{Directive, ImportClause, Module, Visibility};
 use crate::diagnostic::Severity;
 use crate::error::CoreError;
 use crate::lexer;
@@ -43,14 +43,29 @@ pub struct ModuleNode {
     pub spec: ModuleSpec,
     pub path: PathBuf,
     pub module: Module,
-    pub imports: Vec<(ModuleSpec, crate::ast::Visibility)>,
-    pub deps: Vec<(ModuleSpec, ModuleId, crate::ast::Visibility)>,
+    pub imports: Vec<ImportDecl>,
+    pub deps: Vec<DepDecl>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ModuleGraph {
     pub nodes: Vec<ModuleNode>,
     pub topo: Vec<ModuleId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportDecl {
+    pub spec: ModuleSpec,
+    pub clause: ImportClause,
+    pub vis: Visibility,
+}
+
+#[derive(Debug, Clone)]
+pub struct DepDecl {
+    pub spec: ModuleSpec,
+    pub id: ModuleId,
+    pub clause: ImportClause,
+    pub vis: Visibility,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,13 +188,47 @@ impl ModuleGraphBuilder {
             }
 
             // pub import の再エクスポート
-            for (_, dep_id, vis) in &node.deps {
-                if *vis != crate::ast::Visibility::Pub {
+            for dep in &node.deps {
+                let dep_id = dep.id;
+                let vis = dep.vis;
+                if vis != crate::ast::Visibility::Pub {
                     continue;
                 }
-                if let Some(child_exports) = table.get(dep_id) {
-                    for (name, entry) in child_exports {
-                        Self::insert_export(&mut exports, name, entry.kind, entry.source)?;
+                if let Some(child_exports) = table.get(&dep_id) {
+                    match &dep.clause {
+                        ImportClause::Selective(items) => {
+                            let mut export_all = false;
+                            for item in items {
+                                if item.glob {
+                                    export_all = true;
+                                    continue;
+                                }
+                                if let Some(entry) = child_exports.get(&item.name) {
+                                    let out_name = item.alias.as_ref().unwrap_or(&item.name);
+                                    Self::insert_export(
+                                        &mut exports,
+                                        out_name,
+                                        entry.kind,
+                                        entry.source,
+                                    )?;
+                                }
+                            }
+                            if export_all {
+                                for (name, entry) in child_exports {
+                                    Self::insert_export(
+                                        &mut exports,
+                                        name,
+                                        entry.kind,
+                                        entry.source,
+                                    )?;
+                                }
+                            }
+                        }
+                        _ => {
+                            for (name, entry) in child_exports {
+                                Self::insert_export(&mut exports, name, entry.kind, entry.source)?;
+                            }
+                        }
                     }
                 }
             }
@@ -249,18 +298,34 @@ impl ModuleGraphBuilder {
         // collect imports
         let mut import_specs = Vec::new();
         for d in &module.directives {
-            if let Directive::Import { path: p, vis, .. } = d {
+            if let Directive::Import { path: p, clause, vis, .. } = d {
                 let spec = self.resolve_import(p, package, path)?;
-                import_specs.push((spec, *vis));
+                import_specs.push(ImportDecl {
+                    spec,
+                    clause: clause.clone(),
+                    vis: *vis,
+                });
             }
         }
 
         // Load children
         let mut deps = Vec::new();
-        for (spec, vis) in &import_specs {
-            let target_path = self.to_path(spec, path)?;
-            let cid = self.load_recursive(&target_path, &spec.package, cache, nodes, topo, stack)?;
-            deps.push((spec.clone(), cid, *vis));
+        for import in &import_specs {
+            let target_path = self.to_path(&import.spec, path)?;
+            let cid = self.load_recursive(
+                &target_path,
+                &import.spec.package,
+                cache,
+                nodes,
+                topo,
+                stack,
+            )?;
+            deps.push(DepDecl {
+                spec: import.spec.clone(),
+                id: cid,
+                clause: import.clause.clone(),
+                vis: import.vis,
+            });
         }
 
         stack.pop();
@@ -387,5 +452,31 @@ mod tests {
         let root_id = g.nodes.iter().find(|n| n.path == root).unwrap().id;
         let root_exports = exports.map.get(&root_id).unwrap();
         assert!(root_exports.contains_key("foo"));
+    }
+
+    #[test]
+    fn pub_selective_reexport_respects_alias() {
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("main.nepl");
+        let dep = dir.path().join("lib.nepl");
+        fs::write(
+            &root,
+            "pub #import \"./lib\" as { foo as bar }\nfn main <()*> ()> ():\n    ()\n",
+        )
+        .unwrap();
+        fs::write(
+            &dep,
+            "pub fn foo <()*> ()> ():\n    ()\npub fn baz <()*> ()> ():\n    ()\n",
+        )
+        .unwrap();
+
+        let builder = ModuleGraphBuilder::new(dir.path().to_path_buf());
+        let g = builder.build(&root).unwrap();
+        let exports = ModuleGraphBuilder::build_exports(&g).unwrap();
+        let root_id = g.nodes.iter().find(|n| n.path == root).unwrap().id;
+        let root_exports = exports.map.get(&root_id).unwrap();
+        assert!(root_exports.contains_key("bar"));
+        assert!(!root_exports.contains_key("foo"));
+        assert!(!root_exports.contains_key("baz"));
     }
 }

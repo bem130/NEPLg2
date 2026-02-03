@@ -1,4 +1,17 @@
 # 状況メモ (2026-01-22)
+# 2026-02-03 作業メモ (selective re-export test)
+- module_graph の pub selective re-export の挙動を確認するテストを追加（alias のみ公開され、元名や未選択の公開項目は再エクスポートされないことを検証）。
+- テスト: `cargo test` と `cargo run -p nepl-cli -- test` がどちらも成功。
+
+# 2026-02-03 作業メモ (pub import selective re-export)
+- build_exports が ImportClause::Selective を考慮し、pub import の再エクスポート範囲を selective に限定できるようにした（glob は全件再エクスポート扱い）。
+- テスト: `cargo test` と `cargo run -p nepl-cli -- test` がどちらも成功。
+
+# 2026-02-03 作業メモ (module_graph import clause)
+- module_graph の import/deps に ImportClause を保持するようにし、resolve が AST ではなく ModuleGraph の情報から import 句を参照する形へ変更。
+- resolve の import 走査を整理し、deps の clause を直接使って alias/open/selective/merge を構築。
+- テスト: `cargo test` と `cargo run -p nepl-cli -- test` がどちらも成功。
+
 # 2026-02-03 作業メモ (pub #import / pub item)
 - lexer で `pub #import` を認識し、`#import pub ...` へ書き換える処理を追加（`pub` 前置のディレクティブは #import のみ許可）。
 - parser で `pub fn/struct/enum/trait/impl` をトップレベルで解釈できるようにし、`pub` が先頭に来ても正しく定義を読めるようにした。

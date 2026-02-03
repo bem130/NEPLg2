@@ -151,57 +151,37 @@ pub fn resolve_imports(
         let mut alias_map = BTreeMap::new();
         let mut open_modules = Vec::new();
         let mut selective = BTreeMap::new();
-        for (spec, dep_id, _vis) in &node.deps {
-            let dep_exports = exports.get(dep_id);
-            let default_alias = last_segment(&spec.module);
-            match &node
-                .imports
-                .iter()
-                .find(|(s, _)| s == spec)
-                .map(|(_, v)| v)
-            {
-                Some(_) => {
-                    // matched import; inspect clause from AST
-                    if let Some(dir) = node
-                        .module
-                        .directives
-                        .iter()
-                        .find(|d| matches!(d, crate::ast::Directive::Import { path, .. } if path == &spec.module || path.ends_with(&spec.module)))
-                    {
-                        if let crate::ast::Directive::Import { clause, .. } = dir {
-                            match clause {
-                                ImportClause::DefaultAlias => {
-                                    alias_map.insert(default_alias.to_string(), *dep_id);
-                                }
-                                ImportClause::Alias(a) => {
-                                    alias_map.insert(a.clone(), *dep_id);
-                                }
-                                ImportClause::Open => {
-                                    open_modules.push(*dep_id);
-                                }
-                                ImportClause::Selective(list) => {
-                                    if let Some(e) = dep_exports {
-                                        for ImportItem { name, alias, glob } in list {
-                                            if *glob {
-                                                // name::* : open that namespace
-                                                open_modules.push(*dep_id);
-                                                continue;
-                                            }
-                                            if let Some(def) = e.get(name) {
-                                                selective.insert(alias.clone().unwrap_or(name.clone()), def.clone());
-                                            }
-                                        }
-                                    }
-                                }
-                                ImportClause::Merge => {
-                                    // merge は open と同等に扱い、解決時に同一モジュール扱いにする
-                                    open_modules.push(*dep_id);
-                                }
+        for dep in &node.deps {
+            let dep_exports = exports.get(&dep.id);
+            let default_alias = last_segment(&dep.spec.module);
+            match &dep.clause {
+                ImportClause::DefaultAlias => {
+                    alias_map.insert(default_alias.to_string(), dep.id);
+                }
+                ImportClause::Alias(a) => {
+                    alias_map.insert(a.clone(), dep.id);
+                }
+                ImportClause::Open => {
+                    open_modules.push(dep.id);
+                }
+                ImportClause::Selective(list) => {
+                    if let Some(e) = dep_exports {
+                        for ImportItem { name, alias, glob } in list {
+                            if *glob {
+                                // name::* : open that namespace
+                                open_modules.push(dep.id);
+                                continue;
+                            }
+                            if let Some(def) = e.get(name) {
+                                selective.insert(alias.clone().unwrap_or(name.clone()), def.clone());
                             }
                         }
                     }
                 }
-                None => {}
+                ImportClause::Merge => {
+                    // merge は open と同等に扱い、解決時に同一モジュール扱いにする
+                    open_modules.push(dep.id);
+                }
             }
         }
         let exports_map = exports
