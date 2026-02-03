@@ -67,5 +67,50 @@ export class NeplLanguageProvider {
     async getOccurrences(index) { return []; }
     async getBracketMatch(index) { return []; }
     async getCompletions(index) { return []; }
-    async getHoverInfo(index) { return null; }
+
+    async getHoverInfo(index, text) {
+        const word = this.getWordAt(index, text);
+        if (!word) return null;
+
+        if (word === 'print' || word === 'println') {
+            return {
+                content: `**Function: ${word}**\n\nPrints text to stdout.`,
+                startIndex: index,
+                endIndex: index + word.length
+            };
+        }
+        if (this.keywords.has(word)) {
+            return { content: `**Keyword: ${word}**\n\nBuilt-in keyword.` };
+        }
+        if (this.types.has(word)) {
+            return { content: `**Type: ${word}**\n\nBuilt-in type.` };
+        }
+        return null;
+    }
+
+    async getDefinition(index, text) {
+        const word = this.getWordAt(index, text);
+        if (word) {
+            // Mock: jump to "fn [word]"
+            const defPattern = new RegExp(`fn\\s+${word}`);
+            const match = text.match(defPattern);
+            if (match) {
+                return { targetIndex: match.index + 3 }; // Jump to name
+            }
+        }
+        return null;
+    }
+
+    getWordAt(index, text) {
+        // Simple word boundary check
+        // Expand left
+        let start = index;
+        while (start > 0 && /\w/.test(text[start - 1])) start--;
+        // Expand right
+        let end = index;
+        while (end < text.length && /\w/.test(text[end])) end++;
+
+        if (start === end) return null;
+        return text.slice(start, end);
+    }
 }

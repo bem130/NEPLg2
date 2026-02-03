@@ -71,6 +71,7 @@ const terminal = new CanvasTerminal(terminalCanvas, terminalTextarea, {
     completionList: null // No completion in terminal for now
 });
 terminal.shell.vfs = vfs; // Inject VFS
+terminal.shell.editor = editor; // Inject Editor for source access
 
 
 // --- UI Logic ---

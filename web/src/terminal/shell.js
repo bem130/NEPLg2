@@ -7,6 +7,7 @@ export class Shell {
         this.env = new Map();
         this.history = [];
         this.historyIndex = 0;
+        this.editor = null; // To be injected
     }
 
     async executeLine(line) {
@@ -72,7 +73,6 @@ export class Shell {
     async runCommand(cmd, args, stdin) {
         switch (cmd) {
             case 'echo':
-                // simple echo that ignores stdin if args present, else prints stdin
                 if (args.length > 0) return args.join(' ');
                 return stdin || "";
 
@@ -82,7 +82,17 @@ export class Shell {
                 return null;
 
             case 'help':
-                return "Available commands: echo, clear, help, neplg2, wasmi, ls";
+                return [
+                    "Available commands:",
+                    "  help      Show this help message",
+                    "  clear     Clear the terminal screen",
+                    "  echo      Print arguments to stdout",
+                    "  ls        List files in the virtual file system",
+                    "  cat       Display file content",
+                    "  neplg2    NEPLg2 Compiler & Toolchain",
+                    "    run     Compile and run the current editor content",
+                    "  wasmi     Run a .wasm file"
+                ].join('\n');
 
             case 'neplg2':
                 return await this.cmdNeplg2(args, stdin);
@@ -91,13 +101,12 @@ export class Shell {
                 return await this.cmdWasmi(args, stdin);
 
             case 'ls':
-                return this.vfs.listFiles().join('\n');
+                return this.vfs ? this.vfs.listFiles().join('\n') : "No VFS";
 
             case 'cat':
                 if (args.length === 0) return "cat: missing operand";
                 try {
                     const content = this.vfs.readFile(args[0]);
-                    // Handle binary content if needed (convert to hex or string)
                     if (typeof content === 'string') return content;
                     return "[Binary content]";
                 } catch (e) {
@@ -117,39 +126,58 @@ export class Shell {
         // Usage: neplg2 run --target wasi -o out --emit wat,mini-wat input.nepl
         const parsed = this.parseFlags(args);
 
-        if (args.includes('run')) {
+        if (args.includes('run') || args.includes('build')) {
             this.terminal.print("Compiling...");
 
             // Get Input
-            const inputFile = parsed.positional[parsed.positional.length - 1] || 'editor_source';
+            const inputFile = parsed.positional[parsed.positional.length - 1];
+            const useEditor = !inputFile || inputFile === 'run' || inputFile === 'build';
 
-            if (inputFile === 'editor_source' || !this.vfs.exists(inputFile)) {
-                // Mock: "Compiling [Content from Editor]..."
+            let source = "";
+            if (useEditor) {
+                if (this.editor) {
+                    source = this.editor.getText();
+                    this.terminal.print("(Using editor content)");
+                } else {
+                    return "Error: Editor not connected";
+                }
+            } else {
+                if (!this.vfs.exists(inputFile)) return `Error: File not found '${inputFile}'`;
+                source = this.vfs.readFile(inputFile);
             }
 
-            // Simulating output generation
-            if (parsed.flags['--emit'] && parsed.flags['--emit'].includes('wat')) {
-                this.vfs.writeFile('out.wat', `(module (func $main (export "main") (result i32) i32.const 42))`);
-                this.terminal.print("Generated out.wat");
+            // Compilation
+            if (!window.wasmBindings) {
+                return "Error: Compiler (WASM) not loaded yet. Please wait.";
             }
 
-            // Generate a dummy valid WASM for testing 'wasmi' (Minimal valid module)
-            // Magic: \0asm, Version: 1
-            const wasmPlaceholder = new Uint8Array([0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00]);
+            try {
+                // Check if we need to emit WAT
+                if (parsed.flags['--emit'] && parsed.flags['--emit'].includes('wat')) {
+                    const wat = window.wasmBindings.compile_to_wat({ source });
+                    this.vfs.writeFile('out.wat', wat);
+                    this.terminal.print("Generated out.wat");
+                }
 
-            const outFile = parsed.flags['-o'] || 'out.wasm';
-            this.vfs.writeFile(outFile, wasmPlaceholder);
-            this.terminal.print(`Compilation finished. Output to ${outFile}`);
+                // Compile to WASM using the new binding
+                // The binding might expect just 'source' string.
+                const wasm = window.wasmBindings.compile_source(source);
+                // wasm is a Uint8Array (Vec<u8>)
 
-            if (parsed.flags['--target'] === 'wasi') {
-                // Auto-run if 'run' was the command? Usually 'run' implies execute.
-                // But logic says: compile to target, THEN run? 
-                // If the command is just 'run', we execute the result.
-                return await this.cmdWasmi([outFile], stdin);
+                const outFile = parsed.flags['-o'] || 'out.wasm';
+                this.vfs.writeFile(outFile, wasm);
+                this.terminal.print(`Compilation finished. Output to ${outFile}`);
+
+                if (args.includes('run')) {
+                    return await this.cmdWasmi([outFile], stdin);
+                }
+                return "Build complete.";
+            } catch (e) {
+                console.error(e);
+                return `Compilation Failed: ${e}`;
             }
-            return "Build complete.";
         }
-        return "Unknown neplg2 command.";
+        return "Unknown neplg2 command (try 'run').";
     }
 
     parseFlags(args) {
@@ -177,7 +205,7 @@ export class Shell {
         if (!this.vfs.exists(filename)) return `wasmi: file not found: ${filename}`;
 
         const bin = this.vfs.readFile(filename);
-        if (bin instanceof Uint8Array && bin.length === 8) {
+        if (typeof bin === 'string' && bin.startsWith('BINARY')) {
             return "wasmi: [Mock] Executing placeholder WASM (Success)";
         }
 
@@ -188,10 +216,10 @@ export class Shell {
         this.terminal.print(`Executing ${filename} ...`);
 
         try {
-            // Basic imports for standard modules
             // We pass 'wasi' instance which creates the import object
             const wasi = new WASI(args, this.env, this.vfs, this.terminal);
 
+            // WebAssembly.instantiate matches the browser API
             const { instance } = await WebAssembly.instantiate(bin, wasi.imports);
             wasi.setMemory(instance.exports.memory);
 
@@ -205,7 +233,7 @@ export class Shell {
             }
         } catch (e) {
             if (e.message && e.message.includes("Exited with code")) {
-                return e.message;
+                return e.message; // Just the exit message
             }
             return `wasmi error: ${e}`;
         }

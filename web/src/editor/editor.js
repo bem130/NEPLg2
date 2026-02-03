@@ -9,34 +9,30 @@ export class CanvasEditor {
         this.textarea = textarea;
         this.ctx = canvas.getContext('2d', { alpha: false }); // Optimize
 
-        this.font = '14px "JetBrains Mono", "Space Mono", monospace';
-        this.geom = {
-            padding: 10,
-            lineHeight: 22,
-            gutterWidth: 50,
-            h_width: 8.4, // Will be calculated dynamically usually, but hardcoding for now based on 14px mono
-            z_width: 16.8
-        };
+        // Geometry and Styling
+        this.font = '22px "Space Mono", "Noto Sans JP", monospace';
+        this.geom = { padding: 10, lineHeight: 30, gutterWidth: 60, h_width: 13, z_width: 26 };
 
-        // Theme - Rich Dark
         this.colors = {
-            background: '#1e2229',
-            text: '#e6edf3',
-            cursor: '#58a6ff',
-            selection: 'rgba(88, 166, 255, 0.3)',
-            imeUnderline: '#58a6ff',
-            gutterBackground: '#161b22',
-            lineNumber: '#484f58',
-            lineNumberActive: '#e6edf3',
-            cursorLineBorder: '#30363d',
+            background: '#050a0cff', text: '#abb2bf', cursor: '#528bff',
+            selection: 'rgba(58, 67, 88, 0.8)', imeUnderline: '#abb2bf',
+            occurrenceHighlight: 'rgba(92, 99, 112, 0.5)',
+            indentation: ['rgba(255, 255, 255, 0.07)', 'rgba(255, 255, 255, 0.04)'],
+            trailingSpace: 'rgba(255, 82, 82, 0.4)',
+            fullWidthSpace: 'rgba(100, 150, 200, 0.2)',
+            tab: 'rgba(100, 150, 200, 0.2)',
+            whitespaceSymbol: '#4a505e', overwriteCursor: 'rgba(82, 139, 255, 0.5)',
+            errorUnderline: 'red', warningUnderline: '#d19a66',
+            gutterBackground: '#171a22ff', lineNumber: '#41454eff', lineNumberActive: '#bfc9daff',
+            cursorLineBorder: 'rgba(255, 255, 255, 0.49)',
             tokenColors: {
-                'keyword': '#ff7b72', // Red/Pink
-                'string': '#a5d6ff', // Light Blue
-                'comment': '#8b949e', // Grey
-                'function': '#d2a8ff', // Purple
-                'number': '#79c0ff', // Blue
-                'operator': '#ff7b72',
-                'variable': '#e6edf3'
+                'keyword': '#c678dd', 'string': '#98c379', 'comment': '#5c6370',
+                'function': '#61afef', 'number': '#d19a66', 'boolean': '#d19a66',
+                'operator': '#56b6c2', 'regex': '#d19a66', 'property': '#e06c75',
+                'punctuation': '#b3a5b0ff', 'variable': '#7da5f0ff',
+                'heading': '#e06c75', 'bold': '#d19a66', 'italic': '#c678dd',
+                'list': '#56b6c2', 'link': '#61afef', 'inline-code': '#98c379',
+                'code-block': '#5c6370', 'default': '#b5b7bbff'
             }
         };
 
@@ -60,6 +56,13 @@ export class CanvasEditor {
         this.tokens = [];
         this.diagnostics = [];
         this.languageProvider = null;
+
+        // New configs for features
+        this.langConfig = { highlightWhitespace: false, highlightIndent: true }; // Enabled Indent by default for NEPL
+        this.highlightedOccurrences = [];
+        this.bracketHighlights = [];
+        this.foldingRanges = [];
+        this.foldedLines = new Set();
 
         // Components
         this.utils = new EditorUtils(this.geom);

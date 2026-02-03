@@ -83,6 +83,20 @@ export class EditorInputHandler {
         const offsetX = e.clientX - rect.left;
         const offsetY = e.clientY - rect.top;
 
+        // Definition Jump (Ctrl + Click)
+        if (e.ctrlKey || e.metaKey) {
+            const pos = this.editor.utils.getCursorIndexFromCoords(offsetX, offsetY, this.editor.lines, this.editor.lineYPositions, this.editor.scrollX, this.editor.scrollY);
+            if (this.editor.languageProvider && this.editor.languageProvider.getDefinition) {
+                this.editor.languageProvider.getDefinition(pos, this.editor.text).then(def => {
+                    if (def) {
+                        this.editor.setCursor(def.targetIndex);
+                        this.editor.centerCursor(); // TODO: Implement centerCursor or ensure visibility
+                    }
+                });
+            }
+            return;
+        }
+
         if (offsetX < this.editor.geom.gutterWidth) {
             // Fold click logic (simplified for now)
             return;
@@ -117,6 +131,8 @@ export class EditorInputHandler {
             // Hover logic
             if (pos !== this.lastHoverIndex) {
                 this.lastHoverIndex = pos;
+                // this.editor.domUI.hidePopup(); // Don't hide immediately to allow moving to popup?
+                // Actually usually we hide old one
                 this.editor.domUI.hidePopup();
                 clearTimeout(this.hoverTimeout);
                 this.hoverTimeout = setTimeout(() => this.handleHover(e, pos), 500);
@@ -125,7 +141,18 @@ export class EditorInputHandler {
     }
 
     async handleHover(e, pos) {
-        // Implement hover tooltips if needed
+        if (!this.editor.languageProvider) return;
+        
+        // Ensure mouse is still there? 
+        // For now just show
+        const hover = await this.editor.languageProvider.getHoverInfo(pos, this.editor.text);
+        
+        if (hover) {
+             const rect = this.canvas.getBoundingClientRect();
+             const mouseX = e.clientX - rect.left;
+             const mouseY = e.clientY - rect.top;
+             this.editor.domUI.showHover(hover, mouseX, mouseY);
+        }
     }
 
     onMouseUp() {
