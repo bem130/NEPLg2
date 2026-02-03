@@ -1,10 +1,10 @@
 #indent 4
 #target wasi
-#import "std/mem" as *
-#import "std/math" as *
+#import "core/mem" as *
+#import "core/math" as *
 #import "std/stdio" as *
-#import "std/string" as *
-#import "std/vec" as *
+#import "alloc/string" as *
+#import "alloc/vec" as *
 
 fn scanner_new <()*>i32> ():
     let mut cap <i32> 65536;
@@ -184,17 +184,17 @@ fn scanner_read_i32 <(i32)*>i32> (sc):
             mul val sign
 
 fn scanner_read_vec_i32 <(i32, i32)*>Vec<i32>> (sc, n):
-    let mut v <Vec<i32>> vec_new <i32>;
+    let mut v <Vec<i32>> vec_new<i32>;
     let mut i <i32> 0;
     while lt i n:
-        set v vec_push <i32> v scanner_read_i32 sc;
+        set v vec_push<i32> v scanner_read_i32 sc;
         set i add i 1;
     v
 
 fn scanner_read_matrix_i32 <(i32, i32, i32)*>Vec<Vec<i32>>> (sc, h, w):
-    let mut res <Vec<Vec<i32>>> vec_new <Vec<i32>>;
+    let mut res <Vec<Vec<i32>>> vec_new<Vec<i32>>;
     let mut i <i32> 0;
     while lt i h:
-        set res vec_push <Vec<i32>> res scanner_read_vec_i32 sc w;
+        set res vec_push<Vec<i32>> res scanner_read_vec_i32 sc w;
         set i add i 1;
     res

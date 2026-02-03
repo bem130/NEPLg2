@@ -2089,9 +2089,9 @@ impl<'a> BlockChecker<'a> {
                 }
             }
             if let Some(base_len) = pending_base {
-                self.reduce_calls_guarded(stack, base_len);
+                self.reduce_calls_guarded(stack, base_len, pending_ascription);
             } else {
-                self.reduce_calls(stack);
+                self.reduce_calls(stack, pending_ascription);
             }
                         // std::eprintln!("  Stack after reduce: {:?}", stack.iter().map(|e| self.ctx.type_to_string(e.ty)).collect::<Vec<_>>());
 
@@ -2099,7 +2099,7 @@ impl<'a> BlockChecker<'a> {
             try_apply_pending_ascription(self, stack, &mut pending_ascription);
 
             if pending_base.is_some() && pending_ascription.is_none() && !pipe_guard {
-                self.reduce_calls(stack);
+                self.reduce_calls(stack, pending_ascription);
             }
         }
 
@@ -2205,7 +2205,11 @@ impl<'a> BlockChecker<'a> {
         }
     }
 
-    fn reduce_calls(&mut self, stack: &mut Vec<StackEntry>) {
+    fn reduce_calls(
+        &mut self,
+        stack: &mut Vec<StackEntry>,
+        expected: Option<(TypeId, usize)>,
+    ) {
         let max_iterations = 1000; // Safety limit to prevent infinite loops
         let mut iterations = 0;
         loop {
@@ -2244,6 +2248,14 @@ impl<'a> BlockChecker<'a> {
             if stack.len() < func_pos + 1 + params.len() {
                 break;
             }
+            let expected_ret = expected.and_then(|(target, base_len)| {
+                let new_len = stack.len().saturating_sub(params.len());
+                if new_len == base_len + 1 {
+                    Some(target)
+                } else {
+                    None
+                }
+            });
             let mut args = Vec::new();
             for _ in 0..params.len() {
                 args.push(stack.remove(func_pos + 1));
@@ -2255,7 +2267,15 @@ impl<'a> BlockChecker<'a> {
                 if crate::log::is_verbose() {
                     std::eprintln!("    Reducing: {} at pos {} with {} args, assign={:?}", self.ctx.type_to_string(inst_ty), func_pos, params.len(), func_entry.assign);
                 }
-            let applied = self.apply_function(func_entry, params, result, effect, args, fresh_args);
+            let applied = self.apply_function(
+                func_entry,
+                params,
+                result,
+                effect,
+                args,
+                fresh_args,
+                expected_ret,
+            );
             if let Some(val) = applied {
                 stack.insert(func_pos, val);
             } else {
@@ -2264,7 +2284,12 @@ impl<'a> BlockChecker<'a> {
         }
     }
 
-    fn reduce_calls_guarded(&mut self, stack: &mut Vec<StackEntry>, min_func_pos: usize) {
+    fn reduce_calls_guarded(
+        &mut self,
+        stack: &mut Vec<StackEntry>,
+        min_func_pos: usize,
+        expected: Option<(TypeId, usize)>,
+    ) {
         let max_iterations = 1000; // Safety limit to prevent infinite loops
         let mut iterations = 0;
         loop {
@@ -2307,6 +2332,14 @@ impl<'a> BlockChecker<'a> {
             if stack.len() < func_pos + 1 + params.len() {
                 break;
             }
+            let expected_ret = expected.and_then(|(target, base_len)| {
+                let new_len = stack.len().saturating_sub(params.len());
+                if new_len == base_len + 1 {
+                    Some(target)
+                } else {
+                    None
+                }
+            });
             let mut args = Vec::new();
             for _ in 0..params.len() {
                 args.push(stack.remove(func_pos + 1));
@@ -2315,7 +2348,15 @@ impl<'a> BlockChecker<'a> {
             let mut func_entry = stack.remove(func_pos);
             func_entry.ty = inst_ty;
             func_entry.expr.ty = inst_ty;
-            let applied = self.apply_function(func_entry, params, result, effect, args, fresh_args);
+            let applied = self.apply_function(
+                func_entry,
+                params,
+                result,
+                effect,
+                args,
+                fresh_args,
+                expected_ret,
+            );
             if let Some(val) = applied {
                 stack.insert(func_pos, val);
             } else {
@@ -2588,6 +2629,7 @@ impl<'a> BlockChecker<'a> {
         effect: Effect,
         args: Vec<StackEntry>,
         type_args: Vec<TypeId>,
+        expected_ret: Option<TypeId>,
     ) -> Option<StackEntry> {
         let mut check_effect_now = true;
         if let HirExprKind::Var(name) = &func.expr.kind {
@@ -2846,6 +2888,7 @@ impl<'a> BlockChecker<'a> {
                     }
                 } else {
                     let explicit_type_args = type_args.clone();
+                    let use_expected = expected_ret.is_some() && bindings.len() > 1;
                     let mut candidates: Vec<&Binding> = Vec::new();
                     let mut mismatch_count = false;
                     for binding in &bindings {
@@ -2885,7 +2928,7 @@ impl<'a> BlockChecker<'a> {
                         };
 
                         let func_ty = tmp_ctx.get(inst_ty);
-                        let (c_params, _c_result, _c_effect) = match func_ty {
+                        let (c_params, c_result, _c_effect) = match func_ty {
                             TypeKind::Function {
                                 params,
                                 result,
@@ -2902,6 +2945,13 @@ impl<'a> BlockChecker<'a> {
                             if tmp_ctx.unify(arg.ty, *pty).is_err() {
                                 ok = false;
                                 break;
+                            }
+                        }
+                        if ok && use_expected {
+                            if let Some(expected) = expected_ret {
+                                if tmp_ctx.unify(c_result, expected).is_err() {
+                                    ok = false;
+                                }
                             }
                         }
                         if ok {

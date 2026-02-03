@@ -934,6 +934,12 @@ impl Parser {
                     let mut type_args = Vec::new();
                     loop {
                         if self.check(TokenKind::LAngle) {
+                            let next_span = self.peek_span().unwrap_or(end_span);
+                            if next_span.file_id != end_span.file_id
+                                || next_span.start != end_span.end
+                            {
+                                break;
+                            }
                             let saved = self.pos;
                             let saved_diags = self.diagnostics.len();
                             self.next(); // consume <
@@ -1266,17 +1272,23 @@ impl Parser {
 
                     // Handle type arguments: vec_new<.i32>
                     let mut type_args = Vec::new();
-                    if self.consume_if(TokenKind::LAngle) {
-                        loop {
-                            if let Some(ty) = self.parse_type_expr() {
-                                type_args.push(ty);
+                    if self.check(TokenKind::LAngle) {
+                        let next_span = self.peek_span().unwrap_or(end_span);
+                        if next_span.file_id == end_span.file_id
+                            && next_span.start == end_span.end
+                        {
+                            self.next();
+                            loop {
+                                if let Some(ty) = self.parse_type_expr() {
+                                    type_args.push(ty);
+                                }
+                                if self.consume_if(TokenKind::Comma) {
+                                    continue;
+                                }
+                                break;
                             }
-                            if self.consume_if(TokenKind::Comma) {
-                                continue;
-                            }
-                            break;
+                            self.expect(TokenKind::RAngle)?;
                         }
-                        self.expect(TokenKind::RAngle)?;
                     }
 
                     items.push(PrefixItem::Symbol(Symbol::Ident(
@@ -1447,17 +1459,23 @@ impl Parser {
 
                     // Handle type arguments: vec_new<.i32>
                     let mut type_args = Vec::new();
-                    if self.consume_if(TokenKind::LAngle) {
-                        loop {
-                            if let Some(ty) = self.parse_type_expr() {
-                                type_args.push(ty);
+                    if self.check(TokenKind::LAngle) {
+                        let next_span = self.peek_span().unwrap_or(span);
+                        if next_span.file_id == span.file_id
+                            && next_span.start == span.end
+                        {
+                            self.next();
+                            loop {
+                                if let Some(ty) = self.parse_type_expr() {
+                                    type_args.push(ty);
+                                }
+                                if self.consume_if(TokenKind::Comma) {
+                                    continue;
+                                }
+                                break;
                             }
-                            if self.consume_if(TokenKind::Comma) {
-                                continue;
-                            }
-                            break;
+                            self.expect(TokenKind::RAngle)?;
                         }
-                        self.expect(TokenKind::RAngle)?;
                     }
 
                     items.push(PrefixItem::Symbol(Symbol::Ident(
