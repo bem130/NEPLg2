@@ -164,6 +164,10 @@ pub enum Directive {
         target: String,
         span: Span,
     },
+    IfProfile {
+        profile: String,
+        span: Span,
+    },
     IndentWidth {
         width: usize,
         span: Span,

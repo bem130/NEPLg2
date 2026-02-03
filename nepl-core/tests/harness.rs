@@ -15,6 +15,7 @@ pub fn compile_src(src: &str) -> Vec<u8> {
         CompileOptions {
             target: Some(CompileTarget::Wasm),
             verbose: false,
+            profile: None,
         },
     )
     .expect("compile failure");
@@ -253,6 +254,7 @@ pub fn run_main_wasi_i32(src: &str) -> i32 {
         CompileOptions {
             target: Some(CompileTarget::Wasi),
             verbose: false,
+            profile: None,
         },
     );
     let engine = Engine::default();
@@ -481,6 +483,7 @@ pub fn run_main_capture_stdout(src: &str) -> String {
         CompileOptions {
             target: Some(CompileTarget::Wasi),
             verbose: false,
+            profile: None,
         },
     );
     let engine = Engine::default();
@@ -743,6 +746,7 @@ pub fn run_main_capture_stdout_with_stdin(src: &str, stdin: &[u8]) -> String {
         CompileOptions {
             target: Some(CompileTarget::Wasi),
             verbose: false,
+            profile: None,
         },
     );
     let engine = Engine::default();

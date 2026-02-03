@@ -27,6 +27,14 @@ nepl-cli --input examples/counter.nepl --output target/counter --emit wat
 nepl-cli --input examples/counter.nepl --output target/counter --emit wasm,wat,wat-min
 ```
 
+## Profile
+
+`--profile` controls `#if[profile=...]` gates in source:
+- `--profile debug` enables `#if[profile=debug]`
+- `--profile release` enables `#if[profile=release]`
+
+If omitted, the compiler uses the build profile it was compiled with.
+
 ## WAT generation
 
 - Pretty WAT uses the default formatting from `wasmprinter`.

@@ -32,12 +32,30 @@ impl CompileTarget {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildProfile {
+    Debug,
+    Release,
+}
+
+impl BuildProfile {
+    pub fn detect() -> Self {
+        if cfg!(debug_assertions) {
+            BuildProfile::Debug
+        } else {
+            BuildProfile::Release
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct CompileOptions {
     /// Explicit target override (e.g., CLI flag). If None, #target or default is used.
     pub target: Option<CompileTarget>,
     /// Emit verbose compiler logs for debugging.
     pub verbose: bool,
+    /// Explicit profile override for conditional compilation.
+    pub profile: Option<BuildProfile>,
 }
 
 impl Default for CompileOptions {
@@ -45,6 +63,7 @@ impl Default for CompileOptions {
         Self {
             target: None,
             verbose: false,
+            profile: None,
         }
     }
 }
@@ -60,7 +79,8 @@ pub fn compile_module(
 ) -> Result<CompilationArtifact, CoreError> {
     crate::log::set_verbose(options.verbose);
     let target = resolve_target(&module, options)?;
-    let tc = typecheck::typecheck(&module, target);
+    let profile = options.profile.unwrap_or(BuildProfile::detect());
+    let tc = typecheck::typecheck(&module, target, profile);
     if tc.module.is_none() {
         return Err(CoreError::from_diagnostics(tc.diagnostics));
     }

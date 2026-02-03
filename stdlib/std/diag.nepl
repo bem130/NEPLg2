@@ -73,3 +73,13 @@ fn diag_print <(Error)*>()> (e):
 fn diag_println <(Error)*>()> (e):
     let s <str> diag_to_string e;
     println s
+
+#if[target=wasi]
+fn diag_debug_print <(Error)*>()> (e):
+    let s <str> diag_to_string e;
+    debug s
+
+#if[target=wasi]
+fn diag_debug_println <(Error)*>()> (e):
+    let s <str> diag_to_string e;
+    debugln s

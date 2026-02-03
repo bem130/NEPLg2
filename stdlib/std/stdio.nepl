@@ -143,3 +143,21 @@ fn print_i32 <(i32)*>()> (v):
 fn println_i32 <(i32)*>()> (v):
     print_i32 v;
     print "\n";
+
+#if[profile=debug]
+fn debug <(str)*>()> (s):
+    print s;
+    ()
+
+#if[profile=release]
+fn debug <(str)*>()> (_s):
+    ()
+
+#if[profile=debug]
+fn debugln <(str)*>()> (s):
+    println s;
+    ()
+
+#if[profile=release]
+fn debugln <(str)*>()> (_s):
+    ()

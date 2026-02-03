@@ -17,6 +17,7 @@ fn compile_move_test(source: &str) -> Result<Vec<u8>, Vec<Diagnostic>> {
         CompileOptions {
             target: Some(CompileTarget::Wasi),
             verbose: false,
+            profile: None,
         },
     ) {
         Ok(artifact) => Ok(artifact.wasm),

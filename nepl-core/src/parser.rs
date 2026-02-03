@@ -190,6 +190,19 @@ impl Parser {
                 };
                 Some(Stmt::Directive(Directive::IfTarget { target, span }))
             }
+            TokenKind::DirIfProfile(_) => {
+                let (profile, span) = match self.next() {
+                    Some(tok) => {
+                        if let TokenKind::DirIfProfile(p) = tok.kind.clone() {
+                            (p, tok.span)
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    None => return None,
+                };
+                Some(Stmt::Directive(Directive::IfProfile { profile, span }))
+            }
             TokenKind::DirIndentWidth(width) => {
                 let span = self.next().unwrap().span;
                 Some(Stmt::Directive(Directive::IndentWidth { width, span }))
@@ -1905,6 +1918,7 @@ impl Parser {
                 Directive::Import { span, .. } => *span,
                 Directive::Use { span, .. } => *span,
                 Directive::IfTarget { span, .. } => *span,
+                Directive::IfProfile { span, .. } => *span,
                 Directive::IndentWidth { span, .. } => *span,
                 Directive::Extern { span, .. } => *span,
                 Directive::Include { span, .. } => *span,

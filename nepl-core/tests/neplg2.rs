@@ -1,5 +1,5 @@
 use nepl_core::span::FileId;
-use nepl_core::{compile_wasm, CompileOptions, CompileTarget};
+use nepl_core::{compile_wasm, BuildProfile, CompileOptions, CompileTarget};
 mod harness;
 use harness::{compile_src_with_options, run_main_i32, run_main_wasi_i32};
 
@@ -10,6 +10,7 @@ fn compile_ok(src: &str) {
         CompileOptions {
             target: Some(CompileTarget::Wasm),
             verbose: false,
+            profile: None,
         },
     );
     assert!(result.is_ok(), "expected success, got {:?}", result);
@@ -22,6 +23,7 @@ fn compile_err(src: &str) {
         CompileOptions {
             target: Some(CompileTarget::Wasm),
             verbose: false,
+            profile: None,
         },
     );
     assert!(result.is_err(), "expected error, got {:?}", result);
@@ -34,6 +36,7 @@ fn compile_ok_target(src: &str, target: CompileTarget) {
         CompileOptions {
             target: Some(target),
             verbose: false,
+            profile: None,
         },
     );
     assert!(result.is_ok(), "expected success, got {:?}", result);
@@ -46,6 +49,33 @@ fn compile_err_target(src: &str, target: CompileTarget) {
         CompileOptions {
             target: Some(target),
             verbose: false,
+            profile: None,
+        },
+    );
+    assert!(result.is_err(), "expected error, got {:?}", result);
+}
+
+fn compile_ok_profile(src: &str, profile: BuildProfile) {
+    let result = compile_wasm(
+        FileId(0),
+        src,
+        CompileOptions {
+            target: Some(CompileTarget::Wasm),
+            verbose: false,
+            profile: Some(profile),
+        },
+    );
+    assert!(result.is_ok(), "expected success, got {:?}", result);
+}
+
+fn compile_err_profile(src: &str, profile: BuildProfile) {
+    let result = compile_wasm(
+        FileId(0),
+        src,
+        CompileOptions {
+            target: Some(CompileTarget::Wasm),
+            verbose: false,
+            profile: Some(profile),
         },
     );
     assert!(result.is_err(), "expected error, got {:?}", result);
@@ -129,6 +159,38 @@ fn main <() -> i32> ():
     1
 "#;
     compile_ok(src);
+}
+
+#[test]
+fn ifprofile_debug_gate() {
+    let src = r#"
+#entry main
+
+#if[profile=debug]
+fn only_debug <() -> i32> ():
+    123
+
+fn main <() -> i32> ():
+    only_debug
+"#;
+    compile_ok_profile(src, BuildProfile::Debug);
+    compile_err_profile(src, BuildProfile::Release);
+}
+
+#[test]
+fn ifprofile_release_skips_in_debug() {
+    let src = r#"
+#entry main
+
+#if[profile=release]
+fn only_release <() -> i32> ():
+    unknown_symbol
+
+fn main <() -> i32> ():
+    0
+"#;
+    compile_ok_profile(src, BuildProfile::Debug);
+    compile_err_profile(src, BuildProfile::Release);
 }
 
 #[test]
@@ -412,6 +474,7 @@ fn main <()* >()> ():
         CompileOptions {
             target: None,
             verbose: false,
+            profile: None,
         },
     );
     assert!(!wasm.is_empty());
@@ -432,6 +495,7 @@ fn main <()->i32> ():
         CompileOptions {
             target: None,
             verbose: false,
+            profile: None,
         },
     );
     assert!(result.is_err(), "expected error, got {:?}", result);

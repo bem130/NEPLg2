@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 
 use crate::ast::*;
 use crate::builtins::BuiltinKind;
-use crate::compiler::CompileTarget;
+use crate::compiler::{BuildProfile, CompileTarget};
 use crate::diagnostic::Diagnostic;
 use crate::hir::*;
 use crate::span::Span;
@@ -87,7 +87,11 @@ struct ImplInfo {
     methods: BTreeMap<String, (String, TypeId)>, // name -> (mangled_name, type)
 }
 
-pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeCheckResult {
+pub fn typecheck(
+    module: &crate::ast::Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+) -> TypeCheckResult {
     let mut ctx = TypeCtx::new();
     let mut label_env = LabelEnv::new();
     let mut env = Env::new();
@@ -103,8 +107,8 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
     let mut instantiations: BTreeMap<String, Vec<Vec<TypeId>>> = BTreeMap::new();
     let mut pending_if: Option<bool> = None;
     for d in &module.directives {
-        if let Directive::IfTarget { target: gate, .. } = d {
-            pending_if = Some(target_allows(gate.as_str(), target));
+        if let Some(allowed) = gate_allows(d, target, profile) {
+            pending_if = Some(allowed);
             continue;
         }
         let allowed = pending_if.unwrap_or(true);
@@ -173,9 +177,11 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
     // Also hoist struct/enum definitions
     let mut pending_if: Option<bool> = None;
     for item in &module.root.items {
-        if let Stmt::Directive(Directive::IfTarget { target: gate, .. }) = item {
-            pending_if = Some(target_allows(gate.as_str(), target));
-            continue;
+        if let Stmt::Directive(d) = item {
+            if let Some(allowed) = gate_allows(d, target, profile) {
+                pending_if = Some(allowed);
+                continue;
+            }
         }
         let allowed = pending_if.unwrap_or(true);
         pending_if = None;
@@ -396,9 +402,11 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
     // Doing it here simplifies pending_if logic.
     pending_if = None;
     for item in &module.root.items {
-        if let Stmt::Directive(Directive::IfTarget { target: gate, .. }) = item {
-            pending_if = Some(target_allows(gate.as_str(), target));
-            continue;
+        if let Stmt::Directive(d) = item {
+            if let Some(allowed) = gate_allows(d, target, profile) {
+                pending_if = Some(allowed);
+                continue;
+            }
         }
         let allowed = pending_if.unwrap_or(true);
         pending_if = None;
@@ -451,9 +459,11 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
 
     let mut pending_if: Option<bool> = None;
     for item in &module.root.items {
-        if let Stmt::Directive(Directive::IfTarget { target: gate, .. }) = item {
-            pending_if = Some(target_allows(gate.as_str(), target));
-            continue;
+        if let Stmt::Directive(d) = item {
+            if let Some(allowed) = gate_allows(d, target, profile) {
+                pending_if = Some(allowed);
+                continue;
+            }
         }
         let allowed = pending_if.unwrap_or(true);
         pending_if = None;
@@ -527,9 +537,11 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
     let mut functions = Vec::new();
     let mut pending_if = None;
     for item in &module.root.items {
-        if let Stmt::Directive(Directive::IfTarget { target: gate, .. }) = item {
-            pending_if = Some(target_allows(gate.as_str(), target));
-            continue;
+        if let Stmt::Directive(d) = item {
+            if let Some(allowed) = gate_allows(d, target, profile) {
+                pending_if = Some(allowed);
+                continue;
+            }
         }
         let allowed = pending_if.unwrap_or(true);
         pending_if = None;
@@ -580,9 +592,11 @@ pub fn typecheck(module: &crate::ast::Module, target: CompileTarget) -> TypeChec
     let mut final_impls = Vec::new();
     pending_if = None;
     for item in &module.root.items {
-        if let Stmt::Directive(Directive::IfTarget { target: gate, .. }) = item {
-            pending_if = Some(target_allows(gate.as_str(), target));
-            continue;
+        if let Stmt::Directive(d) = item {
+            if let Some(allowed) = gate_allows(d, target, profile) {
+                pending_if = Some(allowed);
+                continue;
+            }
         }
         let allowed = pending_if.unwrap_or(true);
         pending_if = None;
@@ -2898,6 +2912,28 @@ fn target_allows(target: &str, active: CompileTarget) -> bool {
         "wasm" => true,
         "wasi" => matches!(active, CompileTarget::Wasi),
         _ => false,
+    }
+}
+
+fn profile_allows(profile: &str, active: BuildProfile) -> bool {
+    match profile {
+        "debug" => matches!(active, BuildProfile::Debug),
+        "release" => matches!(active, BuildProfile::Release),
+        _ => false,
+    }
+}
+
+fn gate_allows(
+    d: &Directive,
+    target: CompileTarget,
+    active_profile: BuildProfile,
+) -> Option<bool> {
+    match d {
+        Directive::IfTarget { target: gate, .. } => Some(target_allows(gate.as_str(), target)),
+        Directive::IfProfile { profile, .. } => {
+            Some(profile_allows(profile.as_str(), active_profile))
+        }
+        _ => None,
     }
 }
 

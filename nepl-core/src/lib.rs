@@ -30,6 +30,6 @@ pub mod typecheck;
 pub mod types;
 
 pub use compiler::{
-    compile_module, compile_wasm, CompilationArtifact, CompileOptions, CompileTarget,
+    compile_module, compile_wasm, BuildProfile, CompilationArtifact, CompileOptions, CompileTarget,
 };
 pub use error::CoreError;

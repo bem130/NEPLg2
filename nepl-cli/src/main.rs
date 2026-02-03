@@ -10,7 +10,7 @@ use nepl_core::{
     diagnostic::{Diagnostic, Severity},
     error::CoreError,
     loader::{Loader, SourceMap},
-    CompilationArtifact, CompileOptions, CompileTarget,
+    BuildProfile, CompilationArtifact, CompileOptions, CompileTarget,
 };
 use wasmi::{Caller, Engine, Linker, Module, Store};
 use wasmprinter::print_bytes;
@@ -59,6 +59,9 @@ struct Cli {
 
     #[arg(short, long, global = true, help = "Enable verbose compiler logging")]
     verbose: bool,
+
+    #[arg(long, value_enum, value_name = "PROFILE", help = "Compile profile: debug or release")]
+    profile: Option<ProfileArg>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, ValueEnum)]
@@ -68,6 +71,12 @@ enum Emit {
     #[value(name = "wat-min")]
     WatMin,
     All,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ProfileArg {
+    Debug,
+    Release,
 }
 
 #[derive(Subcommand, Debug)]
@@ -161,9 +170,14 @@ fn execute(cli: Cli) -> Result<()> {
     let run_target = target_override
         .or(module_decl_target)
         .unwrap_or(CompileTarget::Wasm);
+    let profile = cli.profile.map(|p| match p {
+        ProfileArg::Debug => BuildProfile::Debug,
+        ProfileArg::Release => BuildProfile::Release,
+    });
     let options = CompileOptions {
         target: target_override,
         verbose: cli.verbose,
+        profile,
     };
 
     let artifact = match compile_module(module, options) {
@@ -258,6 +272,7 @@ fn run_test_file(path: &Path, std_root: &Path, verbose: bool) -> Result<()> {
         CompileOptions {
             target: Some(CompileTarget::Wasi),
             verbose,
+            profile: None,
         },
     ) {
         Ok(a) => a,
@@ -932,6 +947,12 @@ mod tests {
     fn cli_parses_emit_list() {
         let cli = Cli::parse_from(["nepl-cli", "--run", "--emit", "wasm,wat-min"]);
         assert_eq!(cli.emit, vec![Emit::Wasm, Emit::WatMin]);
+    }
+
+    #[test]
+    fn cli_parses_profile() {
+        let cli = Cli::parse_from(["nepl-cli", "--run", "--profile", "debug"]);
+        assert_eq!(cli.profile, Some(ProfileArg::Debug));
     }
 
     #[test]

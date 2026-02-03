@@ -38,11 +38,15 @@ cargo run -p nepl-cli -- --input examples/counter.nepl --target wasi --output ta
 
 # emit multiple outputs (wasm + pretty wat + minified wat)
 cargo run -p nepl-cli -- -i examples/counter.nepl -o target/counter --emit wasm,wat,wat-min
+
+# compile with explicit profile (debug|release)
+cargo run -p nepl-cli -- -i examples/counter.nepl -o target/counter --profile debug
 ```
 
 Notes:
 - `--output` is treated as a base path; extensions are added per `--emit`.
 - `--emit` can be repeated or comma-separated; `all` expands to `wasm, wat, wat-min`.
+- `--profile` controls `#if[profile=...]` conditional compilation.
 
 ### Running with external WASI runtimes
 
@@ -76,6 +80,10 @@ No built-in functions. Use std modules explicitly:
 - `std/math` – i32 arithmetic/comparison (pure)
 - `std/stdio` – `print` / `println` / `print_i32` / `println_i32` via WASI `fd_write`
 - `std/test` – `assert` / `assert_eq_i32` / `assert_str_eq` helpers for stdlib tests
+- `std/diag` – `diag_print` / `diag_println` and debug-only `diag_debug_print` helpers
+
+Debug-only output:
+- `std/stdio::debug` / `debugln` print only when compiled with `#if[profile=debug]` (release builds are no-op).
 
 ## Tests
 ```bash

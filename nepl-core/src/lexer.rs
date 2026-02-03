@@ -64,6 +64,7 @@ pub enum TokenKind {
     DirImport(String),
     DirUse(String),
     DirIfTarget(String),
+    DirIfProfile(String),
     DirWasm,
     DirIndentWidth(usize),
     DirInclude(String),
@@ -381,6 +382,19 @@ impl<'a> LexState<'a> {
                 );
                 self.tokens.push(Token {
                     kind: TokenKind::DirIfTarget(target.to_string()),
+                    span,
+                });
+            }
+        } else if body.starts_with("if[profile=") {
+            if let Some(end) = body.find(']') {
+                let profile = &body[11..end];
+                let span = Span::new(
+                    self.file_id,
+                    line_offset as u32,
+                    (line_offset + end + 1) as u32,
+                );
+                self.tokens.push(Token {
+                    kind: TokenKind::DirIfProfile(profile.to_string()),
                     span,
                 });
             }

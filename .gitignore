@@ -4,3 +4,4 @@
 /tmp
 /*.wasm
 /*.wat
+/examples/*.tmp.nepl

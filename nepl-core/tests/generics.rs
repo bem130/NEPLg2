@@ -11,6 +11,7 @@ fn compile_err(src: &str) {
         CompileOptions {
             target: Some(CompileTarget::Wasm),
             verbose: false,
+            profile: None,
         },
     );
     assert!(result.is_err(), "expected error, got {:?}", result);

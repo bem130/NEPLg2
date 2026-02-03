@@ -300,3 +300,28 @@
 
 ## plan.md との差分メモ (追加)
 - `--emit` の複数指定と `wat-min` 出力、`--output` のベースパス運用が plan.md に未記載。
+
+# 2026-02-03 作業メモ (kpread/abc086_a)
+## 修正内容
+- `kp/kpread` の Scanner を i32 ポインタベースに変更し、buf/len/pos を固定オフセットで `load_i32`/`store_i32` する実装に変更。
+- `scanner_*` の引数型を `(i32)` に統一し、`scanner_new` は 12 バイトのヘッダ領域に buf/len/pos を格納する形式に変更。
+- `examples/abc086_a.nepl` の Scanner 型注釈を i32 に更新。
+
+## テスト実行結果
+- `printf "1 3" | cargo run -p nepl-cli -- -i examples/abc086_a.nepl --run`
+
+# 2026-02-03 作業メモ (if[profile])
+## 修正内容
+- `#if[profile=debug|release]` を lexer/parser/AST/typecheck に追加し、コンパイル時プロファイルに応じてゲートするようにした。
+- `nepl-core/tests/neplg2.rs` に profile ゲートのテストを追加。
+
+# 2026-02-03 作業メモ (profile オプション/デバッグ出力)
+## 修正内容
+- コンパイラの `CompileOptions` に `profile` を追加し、`#if[profile=debug|release]` を CLI から制御できるように拡張。
+- CLI に `--profile debug|release` を追加し、未指定時はビルド時のプロファイルを使用。
+- `std/stdio` に `debug`/`debugln` を追加（debug では出力、release では no-op）。
+- `std/diag` に `diag_debug_print`/`diag_debug_println` を追加。
+- `README.md` と `doc/cli.md`/`doc/debug.md` を更新。
+
+## テスト実行結果
+- `cargo test -p nepl-core --test neplg2`

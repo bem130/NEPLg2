@@ -35,6 +35,7 @@ fn main <()* >()> ():
         nepl_core::CompileOptions {
             target: None,
             verbose: false,
+            profile: None,
         },
     ) {
         Ok(artifact) => println!("compiled ok, wasm len {}", artifact.wasm.len()),
