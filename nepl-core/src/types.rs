@@ -64,7 +64,7 @@ pub struct EnumVariantInfo {
 }
 
 /// Arena-based type context with simple unification.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeCtx {
     arena: Vec<TypeKind>,
     unit: TypeId,
@@ -265,6 +265,8 @@ impl TypeCtx {
         let bk = self.get(b);
 
         match (ak, bk) {
+            (TypeKind::Var(_), TypeKind::Never) => Ok(a),
+            (TypeKind::Never, TypeKind::Var(_)) => Ok(b),
             (TypeKind::Var(va), TypeKind::Var(vb)) => {
                 if let (Some(la), Some(lb)) = (&va.label, &vb.label) {
                     if la != lb {

@@ -2,6 +2,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -139,6 +140,11 @@ pub enum HirExprKind {
 pub enum FuncRef {
     Builtin(String),
     User(String, Vec<TypeId>), // new: added type_args
+    Trait {
+        trait_name: String,
+        method: String,
+        self_ty: TypeId,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -160,6 +166,12 @@ pub struct HirImpl {
     pub trait_name: String,
     pub type_args: Vec<TypeId>,
     pub target_ty: TypeId,
-    pub methods: Vec<HirFunction>,
+    pub methods: Vec<HirImplMethod>,
     pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct HirImplMethod {
+    pub name: String,
+    pub func: HirFunction,
 }

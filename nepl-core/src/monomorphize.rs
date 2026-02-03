@@ -10,11 +10,22 @@ use crate::hir::*;
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
 pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
+    let mut impl_map: BTreeMap<(String, String, String), String> = BTreeMap::new();
+    for imp in &module.impls {
+        let ty_name = ctx.type_to_string(imp.target_ty);
+        for m in &imp.methods {
+            impl_map.insert(
+                (imp.trait_name.clone(), m.name.clone(), ty_name.clone()),
+                m.func.name.clone(),
+            );
+        }
+    }
     let mut mono = Monomorphizer {
         ctx,
         funcs: BTreeMap::new(),
         specialized: BTreeMap::new(),
         worklist: Vec::new(),
+        impl_map,
     };
 
     for f in module.functions {
@@ -44,9 +55,21 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
 
     // Ensure runtime-required helpers are retained even if not explicitly referenced.
     // Enum/struct/tuple codegen depends on alloc being present.
-    for name in ["alloc", "dealloc", "realloc"] {
-        if mono.funcs.contains_key(name) && !initial.iter().any(|n| n == name) {
-            initial.push(String::from(name));
+    for base in ["alloc", "dealloc", "realloc"] {
+        let mut keep: Option<String> = None;
+        if mono.funcs.contains_key(base) {
+            keep = Some(String::from(base));
+        } else {
+            let mut prefix = String::from(base);
+            prefix.push_str("__");
+            if let Some(found) = mono.funcs.keys().find(|name| name.starts_with(&prefix)) {
+                keep = Some(found.clone());
+            }
+        }
+        if let Some(name) = keep {
+            if !initial.iter().any(|n| n == &name) {
+                initial.push(name);
+            }
         }
     }
 
@@ -81,6 +104,7 @@ struct Monomorphizer<'a> {
     funcs: BTreeMap<String, HirFunction>,
     specialized: BTreeMap<String, HirFunction>,
     worklist: Vec<(String, Vec<TypeId>)>,
+    impl_map: BTreeMap<(String, String, String), String>,
 }
 
 impl<'a> Monomorphizer<'a> {
@@ -184,13 +208,32 @@ impl<'a> Monomorphizer<'a> {
                 for arg in args {
                     self.substitute_expr(arg, mapping);
                 }
-                if let FuncRef::User(name, type_args) = callee {
-                    for arg in type_args.iter_mut() {
-                        *arg = self.ctx.substitute(*arg, mapping);
+                match callee {
+                    FuncRef::User(name, type_args) => {
+                        for arg in type_args.iter_mut() {
+                            *arg = self.ctx.substitute(*arg, mapping);
+                        }
+                        // Request instantiation of the callee with concrete types
+                        *name = self.request_instantiation(name.clone(), type_args.clone());
+                        type_args.clear(); // Call site in WASM doesn't need type_args anymore
                     }
-                    // Request instantiation of the callee with concrete types
-                    *name = self.request_instantiation(name.clone(), type_args.clone());
-                    type_args.clear(); // Call site in WASM doesn't need type_args anymore
+                    FuncRef::Trait {
+                        trait_name,
+                        method,
+                        self_ty,
+                    } => {
+                        *self_ty = self.ctx.substitute(*self_ty, mapping);
+                        let resolved = self.ctx.resolve_id(*self_ty);
+                        let key = (
+                            trait_name.clone(),
+                            method.clone(),
+                            self.ctx.type_to_string(resolved),
+                        );
+                        if let Some(func_name) = self.impl_map.get(&key) {
+                            *callee = FuncRef::User(func_name.clone(), Vec::new());
+                        }
+                    }
+                    FuncRef::Builtin(_) => {}
                 }
             }
             HirExprKind::If {

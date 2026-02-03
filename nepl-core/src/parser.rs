@@ -1801,7 +1801,7 @@ impl Parser {
         Some(arms)
     }
 
-    fn parse_generic_params(&mut self) -> Vec<Ident> {
+    fn parse_generic_params(&mut self) -> Vec<TypeParam> {
         let mut params = Vec::new();
         if self.consume_if(TokenKind::LAngle) {
             loop {
@@ -1816,7 +1816,30 @@ impl Parser {
                             span,
                         ));
                     }
-                    params.push(Ident { name, span });
+                    let mut bounds = Vec::new();
+                    if self.consume_if(TokenKind::Colon) {
+                        if let Some((bound, _bspan)) = self.parse_path_ident() {
+                            bounds.push(bound);
+                        } else {
+                            let sp = self.peek_span().unwrap_or(span);
+                            self.diagnostics
+                                .push(Diagnostic::error("expected trait name after ':'", sp));
+                        }
+                        while self.consume_if(TokenKind::Ampersand) {
+                            if let Some((bound, _bspan)) = self.parse_path_ident() {
+                                bounds.push(bound);
+                            } else {
+                                let sp = self.peek_span().unwrap_or(span);
+                                self.diagnostics
+                                    .push(Diagnostic::error("expected trait name after '&'", sp));
+                                break;
+                            }
+                        }
+                    }
+                    params.push(TypeParam {
+                        name: Ident { name, span },
+                        bounds,
+                    });
                 } else {
                     break;
                 }
@@ -1827,6 +1850,20 @@ impl Parser {
             self.expect(TokenKind::RAngle);
         }
         params
+    }
+
+    fn parse_path_ident(&mut self) -> Option<(String, Span)> {
+        let (mut name, mut span) = self.expect_ident()?;
+        while self.consume_if(TokenKind::PathSep) {
+            if let Some((seg, sspan)) = self.expect_ident() {
+                name.push_str("::");
+                name.push_str(&seg);
+                span = span.join(sspan).unwrap_or(span);
+            } else {
+                break;
+            }
+        }
+        Some((name, span))
     }
 
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {

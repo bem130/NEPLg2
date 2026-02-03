@@ -392,6 +392,16 @@ fn valtype(kind: &TypeKind) -> Option<ValType> {
     }
 }
 
+fn find_alloc_index(name_map: &BTreeMap<String, u32>) -> Option<u32> {
+    if let Some(idx) = name_map.get("alloc") {
+        return Some(*idx);
+    }
+    name_map
+        .iter()
+        .find(|(name, _)| name.starts_with("alloc__"))
+        .map(|(_, idx)| *idx)
+}
+
 fn lower_body(
     ctx: &TypeCtx,
     func: &FuncLower,
@@ -581,10 +591,23 @@ fn gen_expr(
             }
             if let Some(idx) = match callee {
                 FuncRef::Builtin(n) | FuncRef::User(n, _) => name_map.get(n),
+                FuncRef::Trait { .. } => None,
             } {
                 insts.push(Instruction::Call(*idx));
             } else {
-                diags.push(Diagnostic::error("unknown function", expr.span));
+                let missing = match callee {
+                    FuncRef::Builtin(n) | FuncRef::User(n, _) => n.clone(),
+                    FuncRef::Trait { trait_name, method, .. } => {
+                        let mut s = trait_name.clone();
+                        s.push_str("::");
+                        s.push_str(method);
+                        s
+                    }
+                };
+                diags.push(Diagnostic::error(
+                    format!("unknown function {missing}"),
+                    expr.span,
+                ));
             }
             valtype(&ctx.get(expr.ty))
         }
@@ -710,8 +733,8 @@ fn gen_expr(
             } else if name == "callsite_span" {
                 let size = 12;
                 insts.push(Instruction::I32Const(size));
-                if let Some(idx) = name_map.get("alloc") {
-                    insts.push(Instruction::Call(*idx));
+                if let Some(idx) = find_alloc_index(name_map) {
+                    insts.push(Instruction::Call(idx));
                 } else {
                     diags.push(Diagnostic::error(
                         "alloc function not found (import std/mem)",
@@ -798,8 +821,8 @@ fn gen_expr(
                 .unwrap_or(ValType::I32);
             let size = if payload.is_some() { 8 } else { 4 };
             insts.push(Instruction::I32Const(size));
-            if let Some(idx) = name_map.get("alloc") {
-                insts.push(Instruction::Call(*idx));
+            if let Some(idx) = find_alloc_index(name_map) {
+                insts.push(Instruction::Call(idx));
             } else {
                 diags.push(Diagnostic::error(
                     "alloc function not found (import std/mem)",
@@ -855,8 +878,8 @@ fn gen_expr(
         } => {
             let size = (fields.len() as i32) * 4;
             insts.push(Instruction::I32Const(size));
-            if let Some(idx) = name_map.get("alloc") {
-                insts.push(Instruction::Call(*idx));
+            if let Some(idx) = find_alloc_index(name_map) {
+                insts.push(Instruction::Call(idx));
             } else {
                 diags.push(Diagnostic::error(
                     "alloc function not found (import std/mem)",
@@ -907,8 +930,8 @@ fn gen_expr(
         HirExprKind::TupleConstruct { items } => {
             let size = (items.len() as i32) * 4;
             insts.push(Instruction::I32Const(size));
-            if let Some(idx) = name_map.get("alloc") {
-                insts.push(Instruction::Call(*idx));
+            if let Some(idx) = find_alloc_index(name_map) {
+                insts.push(Instruction::Call(idx));
             } else {
                 diags.push(Diagnostic::error(
                     "alloc function not found (import std/mem)",

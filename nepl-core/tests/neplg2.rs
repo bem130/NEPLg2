@@ -504,3 +504,179 @@ fn main <()->i32> ():
     );
     assert!(result.is_err(), "expected error, got {:?}", result);
 }
+
+#[test]
+fn overloads_by_param_type_are_allowed() {
+    let src = r#"
+#entry main
+#indent 4
+
+fn id <(i32)->i32> (x):
+    x
+
+fn id <(f32)->f32> (x):
+    x
+
+fn main <()->i32> ():
+    let tmp id 1.0;
+    id 1
+"#;
+    compile_ok(src);
+}
+
+#[test]
+fn overloads_with_different_arity_are_error() {
+    let src = r#"
+#entry main
+#indent 4
+
+fn foo <(i32)->i32> (x):
+    x
+
+fn foo <(i32,i32)->i32> (a,b):
+    a
+
+fn main <()->i32> ():
+    foo 1
+"#;
+    compile_err(src);
+}
+
+#[test]
+fn overloads_ambiguous_return_type_is_error() {
+    let src = r#"
+#entry main
+#indent 4
+
+fn foo <(i32)->i32> (x):
+    x
+
+fn foo <(i32)->f32> (x):
+    1.0
+
+fn main <()->i32> ():
+    foo 1
+"#;
+    compile_err(src);
+}
+
+#[test]
+fn trait_method_call_with_impl_compiles() {
+    let src = r#"
+#entry main
+#indent 4
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        x
+
+impl Show for i32:
+    fn show <(i32)->i32> (x):
+        x
+
+fn main <()->i32> ():
+    Show::show 1
+"#;
+    compile_ok(src);
+}
+
+#[test]
+fn trait_bound_satisfied_in_generic() {
+    let src = r#"
+#entry main
+#indent 4
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        x
+
+impl Show for i32:
+    fn show <(i32)->i32> (x):
+        x
+
+fn call_show <.T: Show> <(.T)->i32> (x):
+    Show::show x
+
+fn main <()->i32> ():
+    call_show 5
+"#;
+    compile_ok(src);
+}
+
+#[test]
+fn trait_bound_missing_impl_is_error() {
+    let src = r#"
+#entry main
+#indent 4
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        x
+
+fn call_show <.T: Show> <(.T)->i32> (x):
+    Show::show x
+
+fn main <()->i32> ():
+    call_show 1
+"#;
+    compile_err(src);
+}
+
+#[test]
+fn trait_method_arity_mismatch_is_error() {
+    let src = r#"
+#entry main
+#indent 4
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        x
+
+impl Show for i32:
+    fn show <(i32)->i32> (x):
+        x
+
+fn main <()->i32> ():
+    Show::show 1 2
+"#;
+    compile_err(src);
+}
+
+#[test]
+fn unknown_trait_bound_is_error() {
+    let src = r#"
+#entry main
+#indent 4
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        x
+
+fn call_show <.T: Missing> <(.T)->i32> (x):
+    0
+
+fn main <()->i32> ():
+    0
+"#;
+    compile_err(src);
+}
+
+#[test]
+fn unreachable_does_not_force_never_in_generic() {
+    let src = r#"
+#entry main
+#indent 4
+
+fn pick <.T> <(.T)->.T> (x):
+    if:
+        true
+        then:
+            x
+        else:
+            #intrinsic "unreachable" <> ()
+
+fn main <()->i32> ():
+    pick 1
+"#;
+    compile_ok(src);
+}

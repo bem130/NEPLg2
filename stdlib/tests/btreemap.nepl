@@ -9,12 +9,18 @@
 fn main <()*> ()> ():
     let m0 <i32> btreemap_new<i32>
     assert_eq_i32 0 btreemap_len<i32> m0
+    assert btreemap_is_empty<i32> m0
+    assert_ne true btreemap_contains<i32> m0 1
     test_checked "new"
 
     assert is_none<i32> btreemap_insert<i32> m0 5 50
     assert is_none<i32> btreemap_insert<i32> m0 1 10
     assert is_none<i32> btreemap_insert<i32> m0 3 30
     assert_eq_i32 3 btreemap_len<i32> m0
+    assert btreemap_contains<i32> m0 1
+    assert btreemap_contains<i32> m0 3
+    assert btreemap_contains<i32> m0 5
+    assert_ne true btreemap_contains<i32> m0 2
     test_checked "insert"
 
     match btreemap_get<i32> m0 1:
@@ -43,5 +49,10 @@ fn main <()*> ()> ():
     test_checked "remove"
 
     assert is_none<i32> btreemap_remove<i32> m0 42
+    btreemap_clear<i32> m0
+    assert_eq_i32 0 btreemap_len<i32> m0
+    assert btreemap_is_empty<i32> m0
+    assert_ne true btreemap_contains<i32> m0 5
+    test_checked "clear"
     btreemap_free<i32> m0
     ()

@@ -77,6 +77,7 @@ struct TraitInfo {
     name: String,
     type_params: Vec<TypeId>,
     methods: BTreeMap<String, TypeId>,
+    self_ty: TypeId,
     span: Span,
 }
 
@@ -85,6 +86,39 @@ struct ImplInfo {
     trait_name: Option<String>,
     target_ty: TypeId,
     methods: BTreeMap<String, (String, TypeId)>, // name -> (mangled_name, type)
+}
+
+fn collect_type_params(
+    ctx: &mut TypeCtx,
+    labels: &mut LabelEnv,
+    params: &[TypeParam],
+    traits: &BTreeMap<String, TraitInfo>,
+    diags: &mut Vec<Diagnostic>,
+) -> (Vec<TypeId>, Vec<Vec<String>>, BTreeMap<TypeId, Vec<String>>) {
+    let mut tps = Vec::new();
+    let mut bounds_vec = Vec::new();
+    let mut bounds_map = BTreeMap::new();
+    for p in params {
+        let id = ctx.fresh_var(Some(p.name.name.clone()));
+        labels.insert(p.name.name.clone(), id);
+        let mut bounds = Vec::new();
+        for b in &p.bounds {
+            if !traits.contains_key(b) {
+                diags.push(Diagnostic::error(
+                    format!("unknown trait bound '{}'", b),
+                    p.name.span,
+                ));
+            } else {
+                bounds.push(b.clone());
+            }
+        }
+        if !bounds.is_empty() {
+            bounds_map.insert(id, bounds.clone());
+        }
+        bounds_vec.push(bounds);
+        tps.push(id);
+    }
+    (tps, bounds_vec, bounds_map)
 }
 
 pub fn typecheck(
@@ -148,9 +182,11 @@ pub fn typecheck(
                     defined: true,
                     moved: false,
                     kind: BindingKind::Func {
+                        symbol: func.name.clone(),
                         effect,
                         arity: params.len(),
                         builtin: None,
+                        type_param_bounds: Vec::new(),
                     },
                 });
                 externs.push(HirExtern {
@@ -200,11 +236,19 @@ pub fn typecheck(
                     ));
                     continue;
                 }
+                for p in &e.type_params {
+                    if !p.bounds.is_empty() {
+                        diagnostics.push(Diagnostic::error(
+                            "enum type parameter bounds are not supported yet",
+                            p.name.span,
+                        ));
+                    }
+                }
                 let mut e_labels = LabelEnv::new();
                 let mut tps = Vec::new();
                 for p in &e.type_params {
-                    let id = ctx.fresh_var(Some(p.name.clone()));
-                    e_labels.insert(p.name.clone(), id);
+                    let id = ctx.fresh_var(Some(p.name.name.clone()));
+                    e_labels.insert(p.name.name.clone(), id);
                     tps.push(id);
                 }
                 let mut vars = Vec::new();
@@ -257,9 +301,11 @@ pub fn typecheck(
                         defined: true,
                         moved: false,
                         kind: BindingKind::Func {
+                            symbol: v.name.clone(),
                             effect: Effect::Pure,
                             arity: params.len(),
                             builtin: None,
+                            type_param_bounds: Vec::new(),
                         },
                     });
                     
@@ -271,9 +317,11 @@ pub fn typecheck(
                         defined: true,
                         moved: false,
                         kind: BindingKind::Func {
+                            symbol: format!("{}::{}", e.name.name, v.name),
                             effect: Effect::Pure,
                             arity: params.len(),
                             builtin: None,
+                            type_param_bounds: Vec::new(),
                         },
                     });
                 }
@@ -289,11 +337,19 @@ pub fn typecheck(
                     ));
                     continue;
                 }
+                for p in &s.type_params {
+                    if !p.bounds.is_empty() {
+                        diagnostics.push(Diagnostic::error(
+                            "struct type parameter bounds are not supported yet",
+                            p.name.span,
+                        ));
+                    }
+                }
                 let mut s_labels = LabelEnv::new();
                 let mut tps = Vec::new();
                 for p in &s.type_params {
-                    let id = ctx.fresh_var(Some(p.name.clone()));
-                    s_labels.insert(p.name.clone(), id);
+                    let id = ctx.fresh_var(Some(p.name.name.clone()));
+                    s_labels.insert(p.name.name.clone(), id);
                     tps.push(id);
                 }
                 let mut fs = Vec::new();
@@ -326,9 +382,11 @@ pub fn typecheck(
                     defined: true,
                     moved: false,
                     kind: BindingKind::Func {
+                        symbol: s.name.name.clone(),
                         effect: Effect::Pure,
                         arity: fs.len(),
                         builtin: None,
+                        type_param_bounds: Vec::new(),
                     },
                 });
 
@@ -345,14 +403,25 @@ pub fn typecheck(
             }
             Stmt::Trait(t) => {
                 let mut f_labels = LabelEnv::new();
-                let mut tps = Vec::new();
-                for p in &t.type_params {
-                    let id = ctx.fresh_var(Some(p.name.clone()));
-                    f_labels.insert(p.name.clone(), id);
-                    tps.push(id);
+                let (tps, _bounds_vec, _bounds_map) =
+                    collect_type_params(&mut ctx, &mut f_labels, &t.type_params, &traits, &mut diagnostics);
+                if !t.type_params.is_empty() {
+                    diagnostics.push(Diagnostic::error(
+                        "trait type parameters are not supported yet",
+                        t.name.span,
+                    ));
                 }
+                let self_ty = ctx.fresh_var(Some(String::from("Self")));
+                f_labels.insert(String::from("Self"), self_ty);
                 let mut methods = BTreeMap::new();
                 for m in &t.methods {
+                    if !m.type_params.is_empty() {
+                        diagnostics.push(Diagnostic::error(
+                            "trait methods cannot have type parameters yet",
+                            m.name.span,
+                        ));
+                        continue;
+                    }
                     let sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
                     methods.insert(m.name.name.clone(), sig);
                 }
@@ -362,6 +431,7 @@ pub fn typecheck(
                         name: t.name.name.clone(),
                         type_params: tps,
                         methods,
+                        self_ty,
                         span: t.name.span,
                     },
                 );
@@ -383,18 +453,22 @@ pub fn typecheck(
                 Effect::Pure,
             );
             let vname = format!("{}::{}", name, var.name);
-            env.insert_global(Binding {
-                name: vname.clone(),
-                ty: func_ty,
-                mutable: false,
-                defined: true,
-                moved: false,
-                kind: BindingKind::Func {
-                    effect: Effect::Pure,
-                    arity: params.len(),
-                    builtin: None,
-                },
-            });
+            if env.lookup(&vname).is_none() {
+                env.insert_global(Binding {
+                    name: vname.clone(),
+                    ty: func_ty,
+                    mutable: false,
+                    defined: true,
+                    moved: false,
+                    kind: BindingKind::Func {
+                        symbol: vname.clone(),
+                        effect: Effect::Pure,
+                        arity: params.len(),
+                        builtin: None,
+                        type_param_bounds: Vec::new(),
+                    },
+                });
+            }
         }
     }
 
@@ -414,15 +488,42 @@ pub fn typecheck(
             continue;
         }
         if let Stmt::Impl(i) = item {
-            let mut f_labels = LabelEnv::new();
-            let mut tps = Vec::new();
-            for p in &i.type_params {
-                let id = ctx.fresh_var(Some(p.name.clone()));
-                f_labels.insert(p.name.clone(), id);
-                tps.push(id);
+            if i.trait_name.is_none() {
+                diagnostics.push(Diagnostic::error(
+                    "inherent impl is not supported yet",
+                    i.span,
+                ));
+                continue;
             }
+            if !i.type_params.is_empty() {
+                diagnostics.push(Diagnostic::error(
+                    "impl type parameters are not supported yet",
+                    i.span,
+                ));
+                continue;
+            }
+            let mut f_labels = LabelEnv::new();
+            let (tps, _bounds_vec, _bounds_map) =
+                collect_type_params(&mut ctx, &mut f_labels, &i.type_params, &traits, &mut diagnostics);
             let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
+            f_labels.insert(String::from("Self"), target_ty);
             let trait_name = i.trait_name.as_ref().map(|tn| tn.name.clone());
+            if let Some(tn) = &trait_name {
+                if !traits.contains_key(tn) {
+                    diagnostics.push(Diagnostic::error(
+                        format!("unknown trait '{}'", tn),
+                        i.span,
+                    ));
+                    continue;
+                }
+            }
+            if type_contains_unbound_var(&ctx, target_ty) {
+                diagnostics.push(Diagnostic::error(
+                    "impl target type must be concrete",
+                    i.target_ty.span(),
+                ));
+                continue;
+            }
 
             let mut methods = BTreeMap::new();
             for m in &i.methods {
@@ -443,18 +544,22 @@ pub fn typecheck(
             info.ty,
             Effect::Pure,
         );
-        env.insert_global(Binding {
-            name: name.clone(),
-            ty: func_ty,
-            mutable: false,
-            defined: true,
-            moved: false,
-            kind: BindingKind::Func {
-                effect: Effect::Pure,
-                arity: info.fields.len(),
-                builtin: None,
-            },
-        });
+        if env.lookup(name).is_none() {
+            env.insert_global(Binding {
+                name: name.clone(),
+                ty: func_ty,
+                mutable: false,
+                defined: true,
+                moved: false,
+                kind: BindingKind::Func {
+                    symbol: name.clone(),
+                    effect: Effect::Pure,
+                    arity: info.fields.len(),
+                    builtin: None,
+                    type_param_bounds: Vec::new(),
+                },
+            });
+        }
     }
 
     let mut pending_if: Option<bool> = None;
@@ -472,12 +577,8 @@ pub fn typecheck(
         }
         if let Stmt::FnDef(f) = item {
             let mut f_labels = LabelEnv::new();
-            let mut tps = Vec::new();
-            for p in &f.type_params {
-                let id = ctx.fresh_var(Some(p.name.clone()));
-                f_labels.insert(p.name.clone(), id);
-                tps.push(id);
-            }
+            let (mut tps, bounds_vec, _bounds_map) =
+                collect_type_params(&mut ctx, &mut f_labels, &f.type_params, &traits, &mut diagnostics);
 
             let mut ty = type_from_expr(&mut ctx, &mut f_labels, &f.signature);
             // If it's a function type, we need to inject the type parameters
@@ -500,8 +601,15 @@ pub fn typecheck(
                 effect,
             } = ctx.get(ty)
             {
-                if env.lookup(&f.name.name).is_some() {
-                    continue;
+                env.remove_duplicate_func(&f.name.name, ty, &ctx);
+                if let Some(existing) = env.lookup(&f.name.name) {
+                    if !matches!(existing.kind, BindingKind::Func { .. }) {
+                        diagnostics.push(Diagnostic::error(
+                            "name already used by another item",
+                            f.name.span,
+                        ));
+                        continue;
+                    }
                 }
                 if enums.contains_key(&f.name.name) || structs.contains_key(&f.name.name) {
                     diagnostics.push(Diagnostic::error(
@@ -513,6 +621,7 @@ pub fn typecheck(
                 if crate::log::is_verbose() {
                     std::eprintln!("typecheck: registering global func {}", f.name.name);
                 }
+                let symbol = mangle_function_symbol(&f.name.name, ty, &ctx);
                 env.insert_global(Binding {
                     name: f.name.name.clone(),
                     ty,
@@ -520,9 +629,11 @@ pub fn typecheck(
                     defined: true,
                     moved: false,
                     kind: BindingKind::Func {
+                        symbol,
                         effect,
                         arity: params.len(),
                         builtin: None,
+                        type_param_bounds: bounds_vec.clone(),
                     },
                 });
             } else {
@@ -557,9 +668,13 @@ pub fn typecheck(
                     continue;
                 }
             };
+            let mut type_param_bounds = BTreeMap::new();
             if let TypeKind::Function { type_params, .. } = ctx.get(f_ty) {
                 for (p_node, p_id) in f.type_params.iter().zip(type_params.iter()) {
-                    label_env.insert(p_node.name.clone(), *p_id);
+                    label_env.insert(p_node.name.name.clone(), *p_id);
+                    if !p_node.bounds.is_empty() {
+                        type_param_bounds.insert(*p_id, p_node.bounds.clone());
+                    }
                 }
             }
             match check_function(
@@ -572,6 +687,9 @@ pub fn typecheck(
                 &enums,
                 &structs,
                 &mut instantiations,
+                type_param_bounds,
+                &traits,
+                &impls,
             ) {
                 Ok(func) => functions.push(func),
                 Err(mut diags) => diagnostics.append(&mut diags),
@@ -580,11 +698,11 @@ pub fn typecheck(
     }
 
     let mut final_traits = Vec::new();
-    for (name, info) in traits {
+    for (name, info) in traits.iter() {
         final_traits.push(HirTrait {
-            name,
-            type_params: info.type_params,
-            methods: info.methods,
+            name: name.clone(),
+            type_params: info.type_params.clone(),
+            methods: info.methods.clone(),
             span: info.span,
         });
     }
@@ -604,35 +722,89 @@ pub fn typecheck(
             continue;
         }
         if let Stmt::Impl(i) = item {
-            let mut impl_methods = Vec::new();
-            // We need to re-find the ImplInfo or just re-typecheck
-            // Actually, we can just check the methods here.
-            let mut f_labels = LabelEnv::new();
-            let mut tps = Vec::new();
-            for p in &i.type_params {
-                let id = ctx.fresh_var(Some(p.name.clone()));
-                f_labels.insert(p.name.clone(), id);
-                tps.push(id);
-            }
-            let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
-
-            for m in &i.methods {
-                let mut m_sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
-                if !tps.is_empty() {
-                    if let TypeKind::Function {
-                        params,
-                        result,
-                        effect,
-                        ..
-                    } = ctx.get(m_sig)
-                    {
-                        m_sig = ctx.function(tps.clone(), params, result, effect);
-                    }
+            let trait_name = match &i.trait_name {
+                Some(tn) => tn.name.clone(),
+                None => {
+                    diagnostics.push(Diagnostic::error(
+                        "inherent impl is not supported yet",
+                        i.span,
+                    ));
+                    continue;
                 }
+            };
+            let trait_info = match traits.get(&trait_name) {
+                Some(info) => info,
+                None => {
+                    diagnostics.push(Diagnostic::error(
+                        format!("unknown trait '{}'", trait_name),
+                        i.span,
+                    ));
+                    continue;
+                }
+            };
+            if !i.type_params.is_empty() {
+                diagnostics.push(Diagnostic::error(
+                    "impl type parameters are not supported yet",
+                    i.span,
+                ));
+                continue;
+            }
 
-                match check_function(
+            let mut impl_methods = Vec::new();
+            let mut f_labels = LabelEnv::new();
+            let (tps, _bounds_vec, _bounds_map) =
+                collect_type_params(&mut ctx, &mut f_labels, &i.type_params, &traits, &mut diagnostics);
+            let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
+            if type_contains_unbound_var(&ctx, target_ty) {
+                diagnostics.push(Diagnostic::error(
+                    "impl target type must be concrete",
+                    i.target_ty.span(),
+                ));
+                continue;
+            }
+            f_labels.insert(String::from("Self"), target_ty);
+            let prev_self = label_env.insert(String::from("Self"), target_ty);
+
+            let mut seen_methods = BTreeSet::new();
+            for m in &i.methods {
+                if !seen_methods.insert(m.name.name.clone()) {
+                    diagnostics.push(Diagnostic::error(
+                        "duplicate method in impl",
+                        m.name.span,
+                    ));
+                    continue;
+                }
+                if !m.type_params.is_empty() {
+                    diagnostics.push(Diagnostic::error(
+                        "impl methods cannot have type parameters yet",
+                        m.name.span,
+                    ));
+                    continue;
+                }
+                let trait_sig = match trait_info.methods.get(&m.name.name) {
+                    Some(sig) => *sig,
+                    None => {
+                        diagnostics.push(Diagnostic::error(
+                            format!("method '{}' not found in trait '{}'", m.name.name, trait_name),
+                            m.name.span,
+                        ));
+                        continue;
+                    }
+                };
+                let mut mapping = BTreeMap::new();
+                mapping.insert(ctx.resolve_id(trait_info.self_ty), ctx.resolve_id(target_ty));
+                let expected_sig = ctx.substitute(trait_sig, &mapping);
+                let actual_sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
+                if !type_signature_matches(&ctx, expected_sig, actual_sig) {
+                    diagnostics.push(Diagnostic::error(
+                        "impl method signature does not match trait",
+                        m.name.span,
+                    ));
+                    continue;
+                }
+                let mut func = match check_function(
                     m,
-                    m_sig,
+                    expected_sig,
                     &mut ctx,
                     &mut env,
                     &mut label_env,
@@ -640,29 +812,70 @@ pub fn typecheck(
                     &enums,
                     &structs,
                     &mut instantiations,
+                    BTreeMap::new(),
+                    &traits,
+                    &impls,
                 ) {
-                    Ok(mut func) => {
-                        // Mangle method name? For now just keep it.
-                        // Ideally "Trait::method" or "Type::method"
-                        impl_methods.push(func);
+                    Ok(func) => func,
+                    Err(mut diags) => {
+                        diagnostics.append(&mut diags);
+                        continue;
                     }
-                    Err(mut diags) => diagnostics.append(&mut diags),
+                };
+                let mangled = mangle_impl_method(&trait_name, &m.name.name, target_ty, &ctx);
+                func.name = mangled.clone();
+                functions.push(func.clone());
+                impl_methods.push(HirImplMethod {
+                    name: m.name.name.clone(),
+                    func,
+                });
+            }
+
+            for trait_method in trait_info.methods.keys() {
+                if !seen_methods.contains(trait_method) {
+                    diagnostics.push(Diagnostic::error(
+                        format!("missing method '{}' for trait '{}'", trait_method, trait_name),
+                        i.span,
+                    ));
                 }
             }
 
+            if let Some(prev) = prev_self {
+                label_env.insert(String::from("Self"), prev);
+            } else {
+                label_env.remove("Self");
+            }
+
             final_impls.push(HirImpl {
-                trait_name: i
-                    .trait_name
-                    .as_ref()
-                    .map(|tn| tn.name.clone())
-                    .unwrap_or_else(|| String::from("")),
+                trait_name,
                 type_args: tps,
                 target_ty,
                 methods: impl_methods,
-                span: i.target_ty.span(), // or some span
+                span: i.target_ty.span(),
             });
         }
     }
+
+    let resolved_entry = if let Some(name) = entry {
+        let bindings = env.lookup_all(&name);
+        let mut func_symbols = Vec::new();
+        for b in bindings {
+            if let BindingKind::Func { symbol, .. } = &b.kind {
+                func_symbols.push(symbol.clone());
+            }
+        }
+        if func_symbols.len() == 1 {
+            Some(func_symbols.remove(0))
+        } else {
+            diagnostics.push(Diagnostic::error(
+                "entry function is missing or ambiguous",
+                Span::dummy(),
+            ));
+            None
+        }
+    } else {
+        None
+    };
 
     let has_error = diagnostics
         .iter()
@@ -677,7 +890,7 @@ pub fn typecheck(
         } else {
             Some(HirModule {
                 functions,
-                entry,
+                entry: resolved_entry,
                 externs,
                 string_literals: strings.into_vec(),
                 traits: final_traits,
@@ -703,6 +916,9 @@ fn check_function(
     enums: &BTreeMap<String, EnumInfo>,
     structs: &BTreeMap<String, StructInfo>,
     instantiations: &mut BTreeMap<String, Vec<Vec<TypeId>>>,
+    type_param_bounds: BTreeMap<TypeId, Vec<String>>,
+    traits: &BTreeMap<String, TraitInfo>,
+    impls: &Vec<ImplInfo>,
 ) -> Result<HirFunction, Vec<Diagnostic>> {
     let mut diags = Vec::new();
     let (params_ty, result_ty, effect) = match ctx.get(func_ty) {
@@ -751,6 +967,9 @@ fn check_function(
             enums,
             structs,
             instantiations,
+            type_param_bounds: type_param_bounds.clone(),
+            traits,
+            impls,
         };
 
         let body_res = match &f.body {
@@ -776,7 +995,7 @@ fn check_function(
     env.pop_scope();
     if diag_out.is_empty() {
         Ok(HirFunction {
-            name: f.name.name.clone(),
+            name: mangle_function_symbol(&f.name.name, func_ty, ctx),
             func_ty, // assigned here
             params: f
                 .params
@@ -812,9 +1031,37 @@ struct BlockChecker<'a> {
     enums: &'a BTreeMap<String, EnumInfo>,
     structs: &'a BTreeMap<String, StructInfo>,
     instantiations: &'a mut BTreeMap<String, Vec<Vec<TypeId>>>, // new
+    type_param_bounds: BTreeMap<TypeId, Vec<String>>,
+    traits: &'a BTreeMap<String, TraitInfo>,
+    impls: &'a Vec<ImplInfo>,
 }
 
 impl<'a> BlockChecker<'a> {
+    fn is_concrete_type(&self, ty: TypeId) -> bool {
+        let resolved = self.ctx.resolve_id(ty);
+        !matches!(self.ctx.get(resolved), TypeKind::Var(v) if v.binding.is_none())
+    }
+
+    fn type_param_has_bound(&self, ty: TypeId, trait_name: &str) -> bool {
+        let resolved = self.ctx.resolve_id(ty);
+        if let Some(bounds) = self.type_param_bounds.get(&resolved) {
+            bounds.iter().any(|b| b == trait_name)
+        } else {
+            false
+        }
+    }
+
+    fn trait_bound_satisfied(&self, trait_name: &str, ty: TypeId) -> bool {
+        if !self.is_concrete_type(ty) {
+            return self.type_param_has_bound(ty, trait_name);
+        }
+        let ty_name = self.ctx.type_to_string(self.ctx.resolve_id(ty));
+        self.impls.iter().any(|imp| {
+            imp.trait_name.as_deref() == Some(trait_name)
+                && self.ctx.type_to_string(self.ctx.resolve_id(imp.target_ty)) == ty_name
+        })
+    }
+
     fn check_block(
         &mut self,
         block: &Block,
@@ -847,6 +1094,13 @@ impl<'a> BlockChecker<'a> {
                     dump!("typecheck: hoisted binding {}", name.name);
                 }
             } else if let Stmt::FnDef(f) = stmt {
+                if !f.type_params.is_empty() {
+                    self.diagnostics.push(Diagnostic::error(
+                        "nested generic functions are not supported yet",
+                        f.name.span,
+                    ));
+                    continue;
+                }
                 let ty = type_from_expr(self.ctx, self.labels, &f.signature);
                 if let TypeKind::Function { params, effect, .. } = self.ctx.get(ty) {
                     let _ = self.env.insert_local(Binding {
@@ -856,9 +1110,11 @@ impl<'a> BlockChecker<'a> {
                         defined: true,
                         moved: false,
                         kind: BindingKind::Func {
+                            symbol: f.name.name.clone(),
                             effect,
                             arity: params.len(),
                             builtin: None,
+                            type_param_bounds: Vec::new(),
                         },
                     });
                 }
@@ -1191,67 +1447,19 @@ impl<'a> BlockChecker<'a> {
                                 self.diagnostics.push(Diagnostic::error(format!("undefined variable: {}", base_name), id.span));
                                 return None;
                             }
-                        } else if let Some(binding) = self.env.lookup(&id.name) {
-                            let mut ty = binding.ty;
-                            let mut fresh_args = Vec::new();
-                            
-                            // If explicit type arguments are provided, use them.
-                            if !type_args.is_empty() {
-                                let mut args = Vec::new();
-                                for arg_expr in type_args {
-                                    args.push(type_from_expr(self.ctx, self.labels, arg_expr));
-                                }
-                                
-                                let func_data = if let TypeKind::Function { type_params, params, result, effect } = self.ctx.get(ty) {
-                                    Some((type_params.clone(), params.clone(), result, effect))
-                                } else {
-                                    None
-                                };
-
-                                if let Some((type_params, params, result, effect)) = func_data {
-                                    if type_params.len() == args.len() {
-                                        let mut mapping = BTreeMap::new();
-                                        for (p, a) in type_params.iter().zip(args.iter()) {
-                                            mapping.insert(self.ctx.resolve_id(*p), self.ctx.resolve_id(*a));
-                                        }
-                                        ty = self.ctx.substitute(result, &mapping);
-                                        let substituted_params = params.iter().map(|p| self.ctx.substitute(*p, &mapping)).collect();
-                                        ty = self.ctx.function(Vec::new(), substituted_params, ty, effect);
-                                        fresh_args = args;
-                                    } else {
+                        } else {
+                            let bindings = self.env.lookup_all(&id.name);
+                            if !bindings.is_empty() {
+                                if let Some(binding) =
+                                    bindings.iter().find(|b| matches!(b.kind, BindingKind::Var))
+                                {
+                                    if !type_args.is_empty() {
                                         self.diagnostics.push(Diagnostic::error(
-                                            format!("expected {} type arguments, got {}", type_params.len(), args.len()),
-                                            id.span
+                                            "type arguments are not allowed for variables",
+                                            id.span,
                                         ));
                                     }
-                                }
-                            } else {
-                                // If NO explicit type arguments, instantiate with fresh vars.
-                                let (inst_ty, args) = self.ctx.instantiate(ty);
-                                ty = inst_ty;
-                                fresh_args = args;
-                            }
-
-                            match &binding.kind {
-                                BindingKind::Func {
-                                    effect: _,
-                                    arity: _,
-                                    builtin: _,
-                                } => {
-                                    stack.push(StackEntry {
-                                        ty,
-                                        expr: HirExpr {
-                                            ty,
-                                            kind: HirExprKind::Var(id.name.clone()),
-                                            span: id.span,
-                                        },
-                                        type_args: fresh_args,
-                                        assign: None,
-                                    });
-                                    // defer applying ascription until the expression is complete
-                                    last_expr = Some(stack.last().unwrap().expr.clone());
-                                }
-                                BindingKind::Var => {
+                                    let ty = binding.ty;
                                     stack.push(StackEntry {
                                         ty,
                                         expr: HirExpr {
@@ -1262,13 +1470,105 @@ impl<'a> BlockChecker<'a> {
                                         type_args: Vec::new(),
                                         assign: None,
                                     });
-                                    // defer applying ascription until the expression is complete
+                                    last_expr = Some(stack.last().unwrap().expr.clone());
+                                } else {
+                                    let mut effect = None;
+                                    let mut arity = None;
+                                    for b in &bindings {
+                                        if let BindingKind::Func {
+                                            effect: e,
+                                            arity: a,
+                                            ..
+                                        } = b.kind
+                                        {
+                                            if effect.is_none() {
+                                                effect = Some(e);
+                                            } else if effect != Some(e) {
+                                                self.diagnostics.push(Diagnostic::error(
+                                                    "overloaded functions must have the same effect",
+                                                    id.span,
+                                                ));
+                                            }
+                                            if arity.is_none() {
+                                                arity = Some(a);
+                                            } else if arity != Some(a) {
+                                                self.diagnostics.push(Diagnostic::error(
+                                                    "overloaded functions must have the same arity",
+                                                    id.span,
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    let arity = arity.unwrap_or(0);
+                                    let effect = effect.unwrap_or(Effect::Pure);
+                                    let mut explicit_args = Vec::new();
+                                    if !type_args.is_empty() {
+                                        for arg_expr in type_args {
+                                            explicit_args
+                                                .push(type_from_expr(self.ctx, self.labels, arg_expr));
+                                        }
+                                    }
+                                    let mut params = Vec::new();
+                                    for _ in 0..arity {
+                                        params.push(self.ctx.fresh_var(None));
+                                    }
+                                    let result = self.ctx.fresh_var(None);
+                                    let ty = self
+                                        .ctx
+                                        .function(Vec::new(), params, result, effect);
+                                    stack.push(StackEntry {
+                                        ty,
+                                        expr: HirExpr {
+                                            ty,
+                                            kind: HirExprKind::Var(id.name.clone()),
+                                            span: id.span,
+                                        },
+                                        type_args: explicit_args,
+                                        assign: None,
+                                    });
                                     last_expr = Some(stack.last().unwrap().expr.clone());
                                 }
+                            } else if let Some((trait_name, method_name)) = parse_variant_name(&id.name)
+                            {
+                                if let Some(trait_info) = self.traits.get(trait_name) {
+                                    if !type_args.is_empty() {
+                                        self.diagnostics.push(Diagnostic::error(
+                                            "type arguments are not supported for trait methods yet",
+                                            id.span,
+                                        ));
+                                        return None;
+                                    }
+                                    if let Some(sig) = trait_info.methods.get(method_name) {
+                                        let (inst_ty, args) = self.ctx.instantiate(*sig);
+                                        stack.push(StackEntry {
+                                            ty: inst_ty,
+                                            expr: HirExpr {
+                                                ty: inst_ty,
+                                                kind: HirExprKind::Var(id.name.clone()),
+                                                span: id.span,
+                                            },
+                                            type_args: args,
+                                            assign: None,
+                                        });
+                                        last_expr = Some(stack.last().unwrap().expr.clone());
+                                    } else {
+                                        self.diagnostics.push(Diagnostic::error(
+                                            format!(
+                                                "unknown method '{}' for trait '{}'",
+                                                method_name, trait_name
+                                            ),
+                                            id.span,
+                                        ));
+                                        return None;
+                                    }
+                                } else {
+                                    self.diagnostics
+                                        .push(Diagnostic::error("undefined identifier", id.span));
+                                }
+                            } else {
+                                self.diagnostics
+                                    .push(Diagnostic::error("undefined identifier", id.span));
                             }
-                        } else {
-                            self.diagnostics
-                                .push(Diagnostic::error("undefined identifier", id.span));
                         }
                     }
                     Symbol::Let { name, mutable } => {
@@ -2249,8 +2549,21 @@ impl<'a> BlockChecker<'a> {
         args: Vec<StackEntry>,
         type_args: Vec<TypeId>,
     ) -> Option<StackEntry> {
-        // Effect check
-        if matches!(self.current_effect, Effect::Pure) && matches!(effect, Effect::Impure) {
+        let mut check_effect_now = true;
+        if let HirExprKind::Var(name) = &func.expr.kind {
+            let bindings = self.env.lookup_all(name);
+            if !bindings.is_empty()
+                && bindings
+                    .iter()
+                    .all(|b| matches!(b.kind, BindingKind::Func { .. }))
+            {
+                check_effect_now = false;
+            }
+        }
+        if check_effect_now
+            && matches!(self.current_effect, Effect::Pure)
+            && matches!(effect, Effect::Impure)
+        {
             self.diagnostics.push(Diagnostic::error(
                 "pure context cannot call impure function",
                 func.expr.span,
@@ -2480,160 +2793,364 @@ impl<'a> BlockChecker<'a> {
 
         // General call or let/set
         if let HirExprKind::Var(name) = &func.expr.kind {
-            if let Some(binding) = self.env.lookup(name) {
-                match &binding.kind {
-                    BindingKind::Var => {
-                        if !matches!(self.ctx.get(func.ty), TypeKind::Function { .. }) {
+            let bindings = self.env.lookup_all(name);
+            if !bindings.is_empty() {
+                if let Some(_binding) = bindings.iter().find(|b| matches!(b.kind, BindingKind::Var))
+                {
+                    if !matches!(self.ctx.get(func.ty), TypeKind::Function { .. }) {
+                        self.diagnostics.push(Diagnostic::error(
+                            "variable is not callable",
+                            func.expr.span,
+                        ));
+                        return None;
+                    }
+                } else {
+                    let explicit_type_args = type_args.clone();
+                    let mut candidates: Vec<&Binding> = Vec::new();
+                    let mut mismatch_count = false;
+                    for binding in &bindings {
+                        let mut tmp_ctx = self.ctx.clone();
+                        let inst_ty = if !explicit_type_args.is_empty() {
+                            let func_data = if let TypeKind::Function {
+                                type_params,
+                                params,
+                                result,
+                                effect,
+                            } = tmp_ctx.get(binding.ty)
+                            {
+                                Some((type_params, params, result, effect))
+                            } else {
+                                None
+                            };
+                            let Some((type_params, params, result, effect)) = func_data else {
+                                continue;
+                            };
+                            if type_params.len() != explicit_type_args.len() {
+                                mismatch_count = true;
+                                continue;
+                            }
+                            let mut mapping = BTreeMap::new();
+                            for (p, a) in type_params.iter().zip(explicit_type_args.iter()) {
+                                mapping.insert(tmp_ctx.resolve_id(*p), tmp_ctx.resolve_id(*a));
+                            }
+                            let substituted_params = params
+                                .iter()
+                                .map(|p| tmp_ctx.substitute(*p, &mapping))
+                                .collect::<Vec<_>>();
+                            let substituted_result = tmp_ctx.substitute(result, &mapping);
+                            tmp_ctx.function(Vec::new(), substituted_params, substituted_result, effect)
+                        } else {
+                            let (inst_ty, _args) = tmp_ctx.instantiate(binding.ty);
+                            inst_ty
+                        };
+
+                        let func_ty = tmp_ctx.get(inst_ty);
+                        let (c_params, _c_result, _c_effect) = match func_ty {
+                            TypeKind::Function {
+                                params,
+                                result,
+                                effect,
+                                ..
+                            } => (params, result, effect),
+                            _ => continue,
+                        };
+                        if c_params.len() != args.len() {
+                            continue;
+                        }
+                        let mut ok = true;
+                        for (arg, pty) in args.iter().zip(c_params.iter()) {
+                            if tmp_ctx.unify(arg.ty, *pty).is_err() {
+                                ok = false;
+                                break;
+                            }
+                        }
+                        if ok {
+                            candidates.push(binding);
+                        }
+                    }
+
+                    if candidates.is_empty() {
+                        if mismatch_count {
                             self.diagnostics.push(Diagnostic::error(
-                                "variable is not callable",
+                                "type arguments do not match any overload",
+                                func.expr.span,
+                            ));
+                        } else {
+                            self.diagnostics.push(Diagnostic::error(
+                                "no matching overload found",
+                                func.expr.span,
+                            ));
+                        }
+                        return None;
+                    }
+                    if candidates.len() > 1 {
+                        self.diagnostics.push(Diagnostic::error(
+                            "ambiguous overload",
+                            func.expr.span,
+                        ));
+                        return None;
+                    }
+
+                    let binding = candidates[0];
+                    let (inst_ty, mut resolved_args) = if !explicit_type_args.is_empty() {
+                        let func_data = if let TypeKind::Function {
+                            type_params,
+                            params,
+                            result,
+                            effect,
+                        } = self.ctx.get(binding.ty)
+                        {
+                            Some((type_params.clone(), params.clone(), result, effect))
+                        } else {
+                            None
+                        };
+                        let Some((type_params, params, result, effect)) = func_data else {
+                            return None;
+                        };
+                        if type_params.len() != explicit_type_args.len() {
+                            self.diagnostics.push(Diagnostic::error(
+                                "type arguments do not match overload",
                                 func.expr.span,
                             ));
                             return None;
                         }
+                        let mut mapping = BTreeMap::new();
+                        for (p, a) in type_params.iter().zip(explicit_type_args.iter()) {
+                            mapping.insert(self.ctx.resolve_id(*p), self.ctx.resolve_id(*a));
+                        }
+                        let substituted_params = params
+                            .iter()
+                            .map(|p| self.ctx.substitute(*p, &mapping))
+                            .collect::<Vec<_>>();
+                        let substituted_result = self.ctx.substitute(result, &mapping);
+                        (
+                            self.ctx
+                                .function(Vec::new(), substituted_params, substituted_result, effect),
+                            explicit_type_args.clone(),
+                        )
+                    } else {
+                        self.ctx.instantiate(binding.ty)
+                    };
+
+                    let (c_params, c_result, c_effect) = match self.ctx.get(inst_ty) {
+                        TypeKind::Function {
+                            params,
+                            result,
+                            effect,
+                            ..
+                        } => (params, result, effect),
+                        _ => return None,
+                    };
+                    if c_params.len() != args.len() {
+                        self.diagnostics.push(Diagnostic::error(
+                            "argument count mismatch",
+                            func.expr.span,
+                        ));
+                        return None;
                     }
-                    BindingKind::Func { builtin, .. } => {
-                        // Enum/struct constructors
-                        if let Some((enm, var)) = parse_variant_name(name) {
-                            if let Some(info) = self.enums.get(enm) {
-                                if let Some(_vinfo) = info.variants.iter().find(|v| v.name == var)
-                                {
-                                    // arity check
-                                    if params.len() == 1 && args.len() != 1 {
+                    for (arg, param_ty) in args.iter().zip(c_params.iter()) {
+                        if self.ctx.unify(arg.ty, *param_ty).is_err() {
+                            self.diagnostics.push(Diagnostic::error(
+                                "argument type mismatch",
+                                arg.expr.span,
+                            ));
+                        }
+                    }
+                    if matches!(self.current_effect, Effect::Pure) && matches!(c_effect, Effect::Impure)
+                    {
+                        self.diagnostics.push(Diagnostic::error(
+                            "pure context cannot call impure function",
+                            func.expr.span,
+                        ));
+                        return None;
+                    }
+
+                    resolved_args = resolved_args
+                        .into_iter()
+                        .map(|t| self.ctx.resolve_id(t))
+                        .collect();
+
+                    if let BindingKind::Func {
+                        type_param_bounds,
+                        ..
+                    } = &binding.kind
+                    {
+                        if !type_param_bounds.is_empty()
+                            && type_param_bounds.len() == resolved_args.len()
+                        {
+                            for (bounds, arg) in type_param_bounds.iter().zip(resolved_args.iter())
+                            {
+                                for b in bounds {
+                                    if !self.trait_bound_satisfied(b, *arg) {
                                         self.diagnostics.push(Diagnostic::error(
-                                            "constructor expects one argument",
+                                            format!("type does not satisfy trait bound '{}'", b),
                                             func.expr.span,
                                         ));
-                                        return None;
                                     }
-                                    if params.is_empty() && !args.is_empty() {
-                                        self.diagnostics.push(Diagnostic::error(
-                                            "constructor takes no arguments",
-                                            func.expr.span,
-                                        ));
-                                        return None;
-                                    }
-                                    let payload_expr = if params.len() == 1 {
-                                        if let Some(a0) = args.first() {
-                                            if let Err(_) = self.ctx.unify(a0.ty, params[0]) {
-                                                self.diagnostics.push(Diagnostic::error(
-                                                    "constructor payload type mismatch",
-                                                    func.expr.span,
-                                                ));
-                                            }
-                                            Some(Box::new(a0.expr.clone()))
-                                        } else {
-                                            None
-                                        }
+                                }
+                            }
+                        }
+                    }
+
+                    // Enum constructors
+                    if let Some((enm, var)) = parse_variant_name(name) {
+                        if let Some(info) = self.enums.get(enm) {
+                            if let Some(_vinfo) = info.variants.iter().find(|v| v.name == var) {
+                                if c_params.len() == 1 && args.len() != 1 {
+                                    self.diagnostics.push(Diagnostic::error(
+                                        "constructor expects one argument",
+                                        func.expr.span,
+                                    ));
+                                    return None;
+                                }
+                                if c_params.is_empty() && !args.is_empty() {
+                                    self.diagnostics.push(Diagnostic::error(
+                                        "constructor takes no arguments",
+                                        func.expr.span,
+                                    ));
+                                    return None;
+                                }
+                                let payload_expr = if c_params.len() == 1 {
+                                    if let Some(a0) = args.first() {
+                                        Some(Box::new(a0.expr.clone()))
                                     } else {
                                         None
-                                    };
-                                    let mut resolved_args = Vec::new();
-                                    for arg in &type_args {
-                                        resolved_args.push(self.ctx.resolve_id(*arg));
                                     }
-                                    let applied_ty = if resolved_args.is_empty() {
-                                        info.ty
-                                    } else {
-                                        self.ctx.apply(info.ty, resolved_args.clone())
-                                    };
-                                    return Some(StackEntry {
-                                        ty: applied_ty,
-                                        expr: HirExpr {
-                                            ty: applied_ty,
-                                            kind: HirExprKind::EnumConstruct {
-                                                name: enm.to_string(),
-                                                variant: var.to_string(),
-                                                type_args: resolved_args.clone(),
-                                                payload: payload_expr,
-                                            },
-                                            span: func.expr.span,
-                                        },
-                                        type_args: Vec::new(),
-                                        assign: None,
-                                    });
-                                }
-                            }
-                        }
-                        if let Some(s) = self.structs.get(name) {
-                            if args.len() != params.len() {
-                                self.diagnostics.push(Diagnostic::error(
-                                    "struct constructor arity mismatch",
-                                    func.expr.span,
-                                ));
-                                return None;
-                            }
-                            for (arg, pty) in args.iter().zip(params.iter()) {
-                                if let Err(_) = self.ctx.unify(arg.ty, *pty) {
-                                    self.diagnostics.push(Diagnostic::error(
-                                        "struct field type mismatch",
-                                        arg.expr.span,
-                                    ));
-                                }
-                            }
-                            let mut resolved_args = Vec::new();
-                            for arg in &type_args {
-                                resolved_args.push(self.ctx.resolve_id(*arg));
-                            }
-                            let applied_ty = if resolved_args.is_empty() {
-                                s.ty
-                            } else {
-                                self.ctx.apply(s.ty, resolved_args.clone())
-                            };
-                            return Some(StackEntry {
-                                ty: applied_ty,
-                                expr: HirExpr {
+                                } else {
+                                    None
+                                };
+                                let applied_ty = if resolved_args.is_empty() {
+                                    info.ty
+                                } else {
+                                    self.ctx.apply(info.ty, resolved_args.clone())
+                                };
+                                return Some(StackEntry {
                                     ty: applied_ty,
-                                    kind: HirExprKind::StructConstruct {
-                                        name: name.clone(),
-                                        type_args: resolved_args.clone(),
-                                        fields: args.into_iter().map(|a| a.expr).collect(),
+                                    expr: HirExpr {
+                                        ty: applied_ty,
+                                        kind: HirExprKind::EnumConstruct {
+                                            name: enm.to_string(),
+                                            variant: var.to_string(),
+                                            type_args: resolved_args.clone(),
+                                            payload: payload_expr,
+                                        },
+                                        span: func.expr.span,
                                     },
-                                    span: func.expr.span,
-                                },
-                                type_args: Vec::new(),
-                                assign: None,
-                            });
+                                    type_args: Vec::new(),
+                                    assign: None,
+                                });
+                            }
                         }
-                        // General call (builtin or user)
-                        for (arg, param_ty) in args.iter().zip(params.iter()) {
-                            if let Err(_) = self.ctx.unify(arg.ty, *param_ty) {
-                                if crate::log::is_verbose() {
-                                    std::eprintln!(
-                                        "apply_function: mismatch for arg {} type {:?} vs param type {:?}",
-                                        name,
-                                        self.ctx.get(arg.ty),
-                                        self.ctx.get(*param_ty)
-                                    );
-                                }
+                    }
+                    if let Some(s) = self.structs.get(name) {
+                        if args.len() != c_params.len() {
+                            self.diagnostics.push(Diagnostic::error(
+                                "struct constructor arity mismatch",
+                                func.expr.span,
+                            ));
+                            return None;
+                        }
+                        let applied_ty = if resolved_args.is_empty() {
+                            s.ty
+                        } else {
+                            self.ctx.apply(s.ty, resolved_args.clone())
+                        };
+                        return Some(StackEntry {
+                            ty: applied_ty,
+                            expr: HirExpr {
+                                ty: applied_ty,
+                                kind: HirExprKind::StructConstruct {
+                                    name: name.clone(),
+                                    type_args: resolved_args.clone(),
+                                    fields: args.into_iter().map(|a| a.expr).collect(),
+                                },
+                                span: func.expr.span,
+                            },
+                            type_args: Vec::new(),
+                            assign: None,
+                        });
+                    }
+
+                    let (callee_name, builtin) = match &binding.kind {
+                        BindingKind::Func { symbol, builtin, .. } => (symbol.clone(), builtin),
+                        _ => (name.clone(), &None),
+                    };
+                    let callee = if builtin.is_some() {
+                        FuncRef::Builtin(callee_name.clone())
+                    } else {
+                        if !resolved_args.is_empty() {
+                            self.instantiations
+                                .entry(callee_name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(resolved_args.clone());
+                        }
+                        FuncRef::User(callee_name.clone(), resolved_args.clone())
+                    };
+                    let resolved_result = self.ctx.resolve_id(c_result);
+                    return Some(StackEntry {
+                        ty: resolved_result,
+                        expr: HirExpr {
+                            ty: resolved_result,
+                            kind: HirExprKind::Call {
+                                callee,
+                                args: args.into_iter().map(|a| a.expr).collect(),
+                            },
+                            span: func.expr.span,
+                        },
+                        type_args: Vec::new(),
+                        assign: None,
+                    });
+                }
+            } else if let Some((trait_name, method_name)) = parse_variant_name(name) {
+                if let Some(trait_info) = self.traits.get(trait_name) {
+                    if let Some(sig) = trait_info.methods.get(method_name) {
+                        let c_params = params;
+                        let c_result = result;
+                        let c_effect = effect;
+                        if c_params.len() != args.len() {
+                            self.diagnostics.push(Diagnostic::error(
+                                "trait method arity mismatch",
+                                func.expr.span,
+                            ));
+                            return None;
+                        }
+                        for (arg, pty) in args.iter().zip(c_params.iter()) {
+                            if self.ctx.unify(arg.ty, *pty).is_err() {
                                 self.diagnostics.push(Diagnostic::error(
                                     "argument type mismatch",
                                     arg.expr.span,
                                 ));
                             }
                         }
-                        let callee = if builtin.is_some() {
-                            FuncRef::Builtin(name.clone())
-                        } else {
-                            let mut resolved_args = Vec::new();
-                            for arg in &type_args {
-                                resolved_args.push(self.ctx.resolve_id(*arg));
-                            }
-                            // Register instantiation for monomorphization
-                            if !resolved_args.is_empty() {
-                                self.instantiations
-                                    .entry(name.clone())
-                                    .or_insert_with(Vec::new)
-                                    .push(resolved_args.clone());
-                            }
-                            FuncRef::User(name.clone(), resolved_args.clone())
-                        };
-                        let resolved_result = self.ctx.resolve_id(result);
+                        if matches!(self.current_effect, Effect::Pure)
+                            && matches!(c_effect, Effect::Impure)
+                        {
+                            self.diagnostics.push(Diagnostic::error(
+                                "pure context cannot call impure function",
+                                func.expr.span,
+                            ));
+                            return None;
+                        }
+                        let self_ty = args
+                            .first()
+                            .map(|a| self.ctx.resolve_id(a.ty))
+                            .unwrap_or(self.ctx.never());
+                        if !self.trait_bound_satisfied(trait_name, self_ty) {
+                            self.diagnostics.push(Diagnostic::error(
+                                format!("type does not satisfy trait '{}'", trait_name),
+                                func.expr.span,
+                            ));
+                        }
                         return Some(StackEntry {
-                            ty: resolved_result,
+                            ty: self.ctx.resolve_id(c_result),
                             expr: HirExpr {
-                                ty: resolved_result,
+                                ty: self.ctx.resolve_id(c_result),
                                 kind: HirExprKind::Call {
-                                    callee,
+                                    callee: FuncRef::Trait {
+                                        trait_name: trait_name.to_string(),
+                                        method: method_name.to_string(),
+                                        self_ty,
+                                    },
                                     args: args.into_iter().map(|a| a.expr).collect(),
                                 },
                                 span: func.expr.span,
@@ -2681,9 +3198,11 @@ struct Binding {
 enum BindingKind {
     Var,
     Func {
+        symbol: String,
         effect: Effect,
         arity: usize,
         builtin: Option<BuiltinKind>,
+        type_param_bounds: Vec<Vec<String>>,
     },
 }
 
@@ -2713,10 +3232,33 @@ impl Env {
         }
     }
 
+    fn remove_duplicate_func(&mut self, name: &str, ty: TypeId, ctx: &TypeCtx) {
+        let target = ctx.type_to_string(ctx.resolve_id(ty));
+        if let Some(scope) = self.scopes.first_mut() {
+            scope.retain(|b| {
+                if b.name != name {
+                    return true;
+                }
+                if let BindingKind::Func { .. } = b.kind {
+                    let existing = ctx.type_to_string(ctx.resolve_id(b.ty));
+                    existing != target
+                } else {
+                    true
+                }
+            });
+        }
+    }
+
     fn insert_local(&mut self, binding: Binding) -> Result<(), ()> {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.iter().any(|b| b.name == binding.name) {
-                return Err(());
+                let has_var = scope
+                    .iter()
+                    .any(|b| b.name == binding.name && matches!(b.kind, BindingKind::Var));
+                let new_is_var = matches!(binding.kind, BindingKind::Var);
+                if has_var || new_is_var {
+                    return Err(());
+                }
             }
             scope.push(binding);
         }
@@ -2745,6 +3287,19 @@ impl Env {
             }
         }
         None
+    }
+
+    fn lookup_all(&self, name: &str) -> Vec<&Binding> {
+        for scope in self.scopes.iter().rev() {
+            let mut items: Vec<&Binding> = scope
+                .iter()
+                .filter(|b| b.name == name && b.defined)
+                .collect();
+            if !items.is_empty() {
+                return items;
+            }
+        }
+        Vec::new()
     }
 
     fn lookup_mut(&mut self, name: &str) -> Option<&mut Binding> {
@@ -2883,6 +3438,88 @@ fn parse_variant_name(name: &str) -> Option<(&str, &str)> {
     let a = parts.next()?;
     let b = parts.next()?;
     Some((a, b))
+}
+
+fn mangle_function_symbol(base: &str, func_ty: TypeId, ctx: &TypeCtx) -> String {
+    let mut s = String::new();
+    s.push_str(base);
+    if let TypeKind::Function {
+        params,
+        result,
+        effect,
+        ..
+    } = ctx.get(func_ty)
+    {
+        s.push_str("__");
+        if params.is_empty() {
+            s.push_str("unit");
+        } else {
+            for (i, p) in params.iter().enumerate() {
+                if i > 0 {
+                    s.push('_');
+                }
+                s.push_str(&ctx.type_to_string(*p));
+            }
+        }
+        s.push_str("__");
+        s.push_str(&ctx.type_to_string(result));
+        match effect {
+            Effect::Pure => s.push_str("__pure"),
+            Effect::Impure => s.push_str("__imp"),
+        }
+    }
+    s
+}
+
+fn mangle_impl_method(trait_name: &str, method: &str, target_ty: TypeId, ctx: &TypeCtx) -> String {
+    let mut name = String::new();
+    name.push_str(trait_name);
+    name.push_str("::");
+    name.push_str(method);
+    name.push_str("__");
+    name.push_str(&ctx.type_to_string(target_ty));
+    name
+}
+
+fn type_signature_matches(ctx: &TypeCtx, a: TypeId, b: TypeId) -> bool {
+    ctx.type_to_string(ctx.resolve_id(a)) == ctx.type_to_string(ctx.resolve_id(b))
+}
+
+fn type_contains_unbound_var(ctx: &TypeCtx, ty: TypeId) -> bool {
+    let ty = ctx.resolve_id(ty);
+    match ctx.get(ty) {
+        TypeKind::Unit
+        | TypeKind::I32
+        | TypeKind::F32
+        | TypeKind::Bool
+        | TypeKind::Str
+        | TypeKind::Never
+        | TypeKind::Named(_) => false,
+        TypeKind::Var(tv) => tv.binding.is_none(),
+        TypeKind::Enum { type_params, .. } | TypeKind::Struct { type_params, .. } => {
+            !type_params.is_empty()
+        }
+        TypeKind::Function {
+            type_params,
+            params,
+            result,
+            ..
+        } => {
+            if !type_params.is_empty() {
+                return true;
+            }
+            params
+                .iter()
+                .any(|p| type_contains_unbound_var(ctx, *p))
+                || type_contains_unbound_var(ctx, result)
+        }
+        TypeKind::Tuple { items } => items.iter().any(|t| type_contains_unbound_var(ctx, *t)),
+        TypeKind::Apply { base: _, args } => {
+            args.iter().any(|t| type_contains_unbound_var(ctx, *t))
+        }
+        TypeKind::Box(inner) => type_contains_unbound_var(ctx, inner),
+        TypeKind::Reference(inner, _) => type_contains_unbound_var(ctx, inner),
+    }
 }
 
 fn parse_i32_literal(text: &str) -> Option<i32> {

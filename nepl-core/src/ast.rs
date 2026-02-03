@@ -106,24 +106,30 @@ pub struct Block {
 pub struct FnDef {
     pub vis: Visibility,
     pub name: Ident,
-    pub type_params: Vec<Ident>,
+    pub type_params: Vec<TypeParam>,
     pub signature: TypeExpr,
     pub params: Vec<Ident>,
     pub body: FnBody,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TypeParam {
+    pub name: Ident,
+    pub bounds: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct TraitDef {
     pub vis: Visibility,
     pub name: Ident,
-    pub type_params: Vec<Ident>,
+    pub type_params: Vec<TypeParam>,
     pub methods: Vec<FnDef>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImplDef {
-    pub type_params: Vec<Ident>,
+    pub type_params: Vec<TypeParam>,
     pub trait_name: Option<Ident>, // None for inherent impl
     pub target_ty: TypeExpr,
     pub methods: Vec<FnDef>,
@@ -253,7 +259,7 @@ pub struct ImportItem {
 pub struct StructDef {
     pub vis: Visibility,
     pub name: Ident,
-    pub type_params: Vec<Ident>,
+    pub type_params: Vec<TypeParam>,
     pub fields: Vec<(Ident, TypeExpr)>,
 }
 
@@ -268,7 +274,7 @@ pub struct EnumVariant {
 pub struct EnumDef {
     pub vis: Visibility,
     pub name: Ident,
-    pub type_params: Vec<Ident>,
+    pub type_params: Vec<TypeParam>,
     pub variants: Vec<EnumVariant>,
 }
 

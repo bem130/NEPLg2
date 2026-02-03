@@ -8,6 +8,7 @@
 fn main <()*> ()> ():
     let s0 <i32> btreeset_new
     assert_eq_i32 0 btreeset_len s0
+    assert btreeset_is_empty s0
     test_checked "new"
 
     assert btreeset_insert s0 5
@@ -32,5 +33,10 @@ fn main <()*> ()> ():
     test_checked "remove"
 
     assert_ne true btreeset_remove s0 42
+    btreeset_clear s0
+    assert_eq_i32 0 btreeset_len s0
+    assert btreeset_is_empty s0
+    assert_ne true btreeset_contains s0 3
+    test_checked "clear"
     btreeset_free s0
     ()
