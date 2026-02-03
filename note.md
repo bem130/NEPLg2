@@ -1,4 +1,10 @@
 # 状況メモ (2026-01-22)
+# 2026-02-03 作業メモ (rpn import + diagnostics)
+- examples/rpn.nepl の import を新仕様（`#import "..." as *`）へ更新。
+- loader の parse でエラー診断がある場合は CoreError を返すようにし、構文エラーが型エラーに埋もれないよう修正。
+- CLI の診断表示でキャレット長を行末に収め、巨大な ^ の出力を抑制。
+- typecheck の簡易サマリ出力は verbose 時のみ表示するように変更。
+
 # 2026-02-03 作業メモ (Windows path canonicalization for tests)
 - module_graph の lib テストで path 比較が Windows の canonicalize 差分で失敗するため、root path を canonicalize して比較するよう修正。
 - resolve.rs 側の ModuleGraph 参照テストも同様に canonicalize を適用し、クロスプラットフォームで一致するようにした。

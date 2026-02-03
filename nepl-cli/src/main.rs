@@ -905,11 +905,19 @@ fn render_diagnostics(diags: &[Diagnostic], sm: &SourceMap) {
                 line_num = line + 1,
                 text = line_str
             );
-            let caret_pos = col;
+            let line_len = line_str.len();
+            let caret_start = col.min(line_len);
+            let max_len = line_len.saturating_sub(caret_start);
+            let mut caret_len = primary.span.len().max(1) as usize;
+            if max_len > 0 {
+                caret_len = caret_len.min(max_len);
+            } else {
+                caret_len = 1;
+            }
             eprintln!(
                 "       | {spaces}{carets}",
-                spaces = " ".repeat(caret_pos),
-                carets = "^".repeat(primary.span.len().max(1) as usize)
+                spaces = " ".repeat(caret_start),
+                carets = "^".repeat(caret_len)
             );
         }
         for label in &d.secondary {

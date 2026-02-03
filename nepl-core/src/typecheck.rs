@@ -667,8 +667,7 @@ pub fn typecheck(
     let has_error = diagnostics
         .iter()
         .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error));
-    if has_error {
-        // Print a concise summary of why typechecking failed for easier debugging
+    if has_error && crate::log::is_verbose() {
         print_diagnostics_summary(&diagnostics);
     }
 

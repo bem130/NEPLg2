@@ -128,14 +128,20 @@ impl Loader {
         let mut cache: BTreeMap<PathBuf, Module> = BTreeMap::new();
         let mut processing: BTreeSet<PathBuf> = BTreeSet::new();
         let mut imported: BTreeSet<PathBuf> = BTreeSet::new();
-        let module = self.load_from_contents(
+        let module = match self.load_from_contents(
             path,
             src,
             &mut sm,
             &mut cache,
             &mut processing,
             &mut imported,
-        )?;
+        ) {
+            Ok(m) => m,
+            Err(e) => {
+                self.source_map = sm.clone();
+                return Err(e);
+            }
+        };
         self.source_map = sm.clone();
         Ok(LoadResult {
             module,
@@ -153,7 +159,7 @@ impl Loader {
         let mut cache: BTreeMap<PathBuf, Module> = BTreeMap::new();
         let mut processing: BTreeSet<PathBuf> = BTreeSet::new();
         let mut imported: BTreeSet<PathBuf> = BTreeSet::new();
-        let module = self.load_from_contents_with(
+        let module = match self.load_from_contents_with(
             path,
             src,
             &mut sm,
@@ -161,7 +167,13 @@ impl Loader {
             &mut processing,
             &mut imported,
             provider,
-        )?;
+        ) {
+            Ok(m) => m,
+            Err(e) => {
+                self.source_map = sm.clone();
+                return Err(e);
+            }
+        };
         self.source_map = sm.clone();
         Ok(LoadResult {
             module,
@@ -174,13 +186,19 @@ impl Loader {
         let mut cache: BTreeMap<PathBuf, Module> = BTreeMap::new();
         let mut processing: BTreeSet<PathBuf> = BTreeSet::new();
         let mut imported: BTreeSet<PathBuf> = BTreeSet::new();
-        let module = self.load_file(
+        let module = match self.load_file(
             entry,
             &mut sm,
             &mut cache,
             &mut processing,
             &mut imported,
-        )?;
+        ) {
+            Ok(m) => m,
+            Err(e) => {
+                self.source_map = sm.clone();
+                return Err(e);
+            }
+        };
         self.source_map = sm.clone();
         Ok(LoadResult {
             module,
@@ -508,10 +526,18 @@ impl Loader {
             return Err(CoreError::from_diagnostics(lex.diagnostics));
         }
         let parse = parser::parse_tokens(file_id, lex);
-        if parse.module.is_none() {
+        if parse
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
+        {
             return Err(CoreError::from_diagnostics(parse.diagnostics));
         }
-        Ok(parse.module.unwrap())
+        if let Some(module) = parse.module {
+            Ok(module)
+        } else {
+            Err(CoreError::from_diagnostics(parse.diagnostics))
+        }
     }
 
     fn resolve_path(&self, base: &PathBuf, spec: &str) -> PathBuf {
