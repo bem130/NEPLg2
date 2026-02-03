@@ -14,3 +14,6 @@ wasmparser = "0.244"
 wasmi.workspace = true
 tempfile.workspace = true
 rand.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+getrandom = { version = "0.2.17", features = ["js"] }

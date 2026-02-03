@@ -1,4 +1,8 @@
 # 状況メモ (2026-01-22)
+# 2026-02-03 作業メモ (wasm32 build)
+- wasm32-unknown-unknown での `cargo test --no-run` が getrandom の js feature なしで失敗していたため、`nepl-core` の wasm32 用 dev-dependencies に `getrandom` (features=["js"]) を追加した。
+- `cargo test --target wasm32-unknown-unknown --no-run --all --all-features` を実行し、Cargo.lock を更新してビルドが通ることを確認。
+- `cargo test --target wasm32-unknown-unknown --no-run --all --all-features --locked` も成功。
 # 2026-02-03 作業メモ (selfhost string utils)
 - stdlib/alloc/string.nepl に trim/starts_with/ends_with/slice/split を追加し、ASCII 空白判定や split 用の補助関数を実装した。
 - stdlib/tests/string.nepl を拡充して trim/starts_with/ends_with/slice/split のテストを追加した。
