@@ -2,7 +2,6 @@
 /nepl-web/target
 /dist
 /web/dist
-/web/vendor
 /tmp
 /*.wasm
 /*.wat
