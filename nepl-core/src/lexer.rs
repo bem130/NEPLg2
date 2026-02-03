@@ -589,6 +589,29 @@ impl<'a> LexState<'a> {
                             }
                             b'\\' if i + 1 < bytes.len() => {
                                 let esc = bytes[i + 1];
+                                if esc == b'x' {
+                                    if i + 3 < bytes.len() {
+                                        if let (Some(h1), Some(h2)) =
+                                            (hex_val(bytes[i + 2]), hex_val(bytes[i + 3]))
+                                        {
+                                            let value = (h1 << 4) | h2;
+                                            buf.push(value as char);
+                                            i += 4;
+                                            continue;
+                                        }
+                                    }
+                                    self.diagnostics.push(Diagnostic::error(
+                                        "invalid escape in string literal",
+                                        Span::new(
+                                            self.file_id,
+                                            (offset + i) as u32,
+                                            (offset + i + 2) as u32,
+                                        ),
+                                    ));
+                                    buf.push('x');
+                                    i += 2;
+                                    continue;
+                                }
                                 let ch = match esc {
                                     b'n' => '\n',
                                     b'r' => '\r',
@@ -729,4 +752,13 @@ fn is_ident_start(b: u8) -> bool {
 
 fn is_ident_continue(b: u8) -> bool {
     (b as char).is_ascii_alphanumeric() || b == b'_'
+}
+
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }

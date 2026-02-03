@@ -47,3 +47,25 @@ fn stdout_japanese_utf8() {
     let out = run_main_capture_stdout(&src);
     assert_eq!(out, "こんにちは世界!\n");
 }
+
+#[test]
+fn stdout_ansi_escape() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("stdout_ansi.nepl");
+    let src = fs::read_to_string(path).expect("read stdout_ansi fixture");
+    let out = run_main_capture_stdout(&src);
+    assert_eq!(out, "\x1b[31mred\x1b[0m\n");
+}
+
+#[test]
+fn stdout_ansi_helpers() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("stdout_color.nepl");
+    let src = fs::read_to_string(path).expect("read stdout_color fixture");
+    let out = run_main_capture_stdout(&src);
+    assert_eq!(out, "\x1b[31mred\x1b[0m \x1b[32mgreen\x1b[0m\n");
+}

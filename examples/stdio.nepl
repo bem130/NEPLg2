@@ -11,7 +11,7 @@
 
 
 fn main <()*> ()> ():
-    println "accepting input...";
+    println_color ansi_green "accepting input...";
     print "> ";
     let input <str> read_line;
     println "input:";

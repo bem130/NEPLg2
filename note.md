@@ -215,6 +215,14 @@
 - `nepl-cli --run` の WASI `fd_write` が `print!` のみで flush しておらず、プロンプト `"> "` が入力後に表示される問題を確認。
 - `fd_write` を raw bytes で `stdout.write_all` し、最後に `flush` するよう修正。
 - 動作確認: `printf "3 5 3\n" | cargo run -p nepl-cli -- -i examples/stdio.nepl --run -o a`
+
+# 2026-02-03 作業メモ (ANSI エスケープ出力)
+- 文字列リテラルのエスケープに `\xNN` (hex) を追加し、`"\x1b[31m"` など ANSI エスケープを直接書けるようにした。
+- 回帰テストとして `nepl-core/tests/fixtures/stdout_ansi.nepl` と `stdout_ansi_escape` を追加。
+
+# 2026-02-03 作業メモ (std/stdio の ANSI 色ヘルパー)
+- `std/stdio` に `ansi_red` などの色コード関数と `print_color` / `println_color` を追加。
+- 回帰テストとして `nepl-core/tests/fixtures/stdout_color.nepl` と `stdout_ansi_helpers` を追加。
 - 後方互換性のため、i32 のみの alias 関数（add/sub/mul/div_s/lt/eq など）を提供。
 
 # 2026-01-31 作業メモ (stdlib テストの充実化)

@@ -78,12 +78,15 @@ cargo run -p nepl-cli -- test
 ## Imports
 No built-in functions. Use std modules explicitly:
 - `std/math` – i32 arithmetic/comparison (pure)
-- `std/stdio` – `print` / `println` / `print_i32` / `println_i32` via WASI `fd_write`
+- `std/stdio` – `print` / `println` / `print_i32` / `println_i32`, plus ANSI helpers (`ansi_red` etc) and `print_color` / `println_color`
 - `std/test` – `assert` / `assert_eq_i32` / `assert_str_eq` helpers for stdlib tests
 - `std/diag` – `diag_print` / `diag_println` and debug-only `diag_debug_print` helpers
 
 Debug-only output:
 - `std/stdio::debug` / `debugln` print only when compiled with `#if[profile=debug]` (release builds are no-op).
+
+String literals:
+- Escapes: `\n` `\r` `\t` `\\` `\"` `\0` `\xNN` (hex byte, e.g. `\x1b[31m` for ANSI colors).
 
 ## Tests
 ```bash
