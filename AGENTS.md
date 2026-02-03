@@ -59,3 +59,15 @@ fn unwrap_err <.T, .E> <(Result<.T, .E>)->.E> (r):
         Result::Err e:
             e
 ```
+
+## NEPLg2 Compiler
+
+/src/につくるセルフホストのコンパイラです
+CLIはWASIです
+CoreはWASI無しのただのWASMにします
+
+/nepl-cli/src/main.rsではstdを使っているけど、/nepl-core/*.rsではno_stdなのと同じような感じでいきます
+
+### コメントの付け方
+
+NEPLg2 Compiler には日本語でコメントを付けます
