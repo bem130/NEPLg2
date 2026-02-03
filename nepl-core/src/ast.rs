@@ -104,6 +104,7 @@ pub struct Block {
 /// Function definition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
+    pub vis: Visibility,
     pub name: Ident,
     pub type_params: Vec<Ident>,
     pub signature: TypeExpr,
@@ -113,6 +114,7 @@ pub struct FnDef {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TraitDef {
+    pub vis: Visibility,
     pub name: Ident,
     pub type_params: Vec<Ident>,
     pub methods: Vec<FnDef>,
@@ -152,8 +154,11 @@ pub enum Directive {
         target: String,
         span: Span,
     },
+    /// Module import with visibility and clause.
     Import {
         path: String,
+        clause: ImportClause,
+        vis: Visibility,
         span: Span,
     },
     Use {
@@ -183,6 +188,13 @@ pub enum Directive {
         path: String,
         span: Span,
     },
+    Prelude {
+        path: String,
+        span: Span,
+    },
+    NoPrelude {
+        span: Span,
+    },
 }
 
 /// A single statement inside a block.
@@ -207,9 +219,39 @@ pub struct Module {
     pub root: Block,
 }
 
+/// Visibility for items/imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Visibility {
+    Pub,
+    Private,
+}
+
+/// Import clause detail.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImportClause {
+    /// No clause: default alias = last path segment.
+    DefaultAlias,
+    /// `as name`
+    Alias(String),
+    /// `as *`
+    Open,
+    /// `as { ... }`
+    Selective(Vec<ImportItem>),
+    /// `as @merge`
+    Merge,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportItem {
+    pub name: String,
+    pub alias: Option<String>,
+    pub glob: bool,
+}
+
 /// Struct definition (simple positional fields).
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructDef {
+    pub vis: Visibility,
     pub name: Ident,
     pub type_params: Vec<Ident>,
     pub fields: Vec<(Ident, TypeExpr)>,
@@ -224,6 +266,7 @@ pub struct EnumVariant {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDef {
+    pub vis: Visibility,
     pub name: Ident,
     pub type_params: Vec<Ident>,
     pub variants: Vec<EnumVariant>,

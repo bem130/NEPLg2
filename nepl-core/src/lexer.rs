@@ -3,6 +3,7 @@
 #![no_std]
 extern crate alloc;
 
+use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -57,6 +58,7 @@ pub enum TokenKind {
     KwTrait,
     KwImpl,
     KwFor,
+    KwPub,
 
     // directives
     DirEntry(String),
@@ -75,6 +77,8 @@ pub enum TokenKind {
         signature: String,
     },
     DirIntrinsic,
+    DirPrelude(String),
+    DirNoPrelude,
 
     // wasm text line (inside #wasm: block)
     WasmText(String),
@@ -220,7 +224,46 @@ impl<'a> LexState<'a> {
             }
         }
 
-        let is_directive = !in_wasm && rest.trim_start().starts_with('#');
+        let rest_trim = rest.trim_start();
+        let mut directive_text: Option<String> = None;
+        if !in_wasm {
+            if rest_trim.starts_with('#') {
+                directive_text = Some(rest_trim.to_string());
+            } else if let Some(after_pub) = rest_trim.strip_prefix("pub") {
+                if after_pub
+                    .chars()
+                    .next()
+                    .map(|c| c.is_whitespace())
+                    .unwrap_or(false)
+                {
+                    let after_pub_trim = after_pub.trim_start();
+                    if after_pub_trim.starts_with('#') {
+                        if after_pub_trim.starts_with("#import") {
+                            let tail = after_pub_trim
+                                .trim_start_matches("#import")
+                                .trim_start();
+                            if tail.is_empty() {
+                                directive_text = Some("#import pub".to_string());
+                            } else {
+                                directive_text = Some(format!("#import pub {}", tail));
+                            }
+                        } else {
+                            let span = Span::new(
+                                self.file_id,
+                                line_start as u32,
+                                (line_start + content.len()) as u32,
+                            );
+                            self.diagnostics.push(Diagnostic::error(
+                                "pub prefix is only allowed for #import",
+                                span,
+                            ));
+                            directive_text = Some(after_pub_trim.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        let is_directive = !in_wasm && directive_text.is_some();
         if is_directive && !allow_indent {
             let current_indent = *self.indent_stack.last().unwrap();
             if actual_indent > current_indent {
@@ -238,7 +281,11 @@ impl<'a> LexState<'a> {
             let end = line_start + content.len();
             self.push_token(TokenKind::WasmText(text), line_offset, end);
         } else if is_directive {
-            self.lex_directive(rest.trim_start(), line_offset, content.len());
+            self.lex_directive(
+                directive_text.as_deref().unwrap_or(rest_trim),
+                line_offset,
+                content.len(),
+            );
         } else {
             self.lex_regular(rest, line_offset);
         }
@@ -321,11 +368,7 @@ impl<'a> LexState<'a> {
                     .push(Diagnostic::error("invalid #indent argument", span));
             }
         } else if body.starts_with("import") {
-            let arg = body
-                .strip_prefix("import")
-                .unwrap()
-                .trim()
-                .trim_matches('"');
+            let arg = body.strip_prefix("import").unwrap().trim();
             let span = Span::new(
                 self.file_id,
                 line_offset as u32,
@@ -333,6 +376,27 @@ impl<'a> LexState<'a> {
             );
             self.tokens.push(Token {
                 kind: TokenKind::DirImport(arg.to_string()),
+                span,
+            });
+        } else if body.starts_with("prelude") {
+            let arg = body.strip_prefix("prelude").unwrap().trim();
+            let span = Span::new(
+                self.file_id,
+                line_offset as u32,
+                (line_offset + body.len()) as u32,
+            );
+            self.tokens.push(Token {
+                kind: TokenKind::DirPrelude(arg.to_string()),
+                span,
+            });
+        } else if body.starts_with("no_prelude") {
+            let span = Span::new(
+                self.file_id,
+                line_offset as u32,
+                (line_offset + body.len()) as u32,
+            );
+            self.tokens.push(Token {
+                kind: TokenKind::DirNoPrelude,
                 span,
             });
         } else if body.starts_with("target") {
@@ -704,6 +768,7 @@ impl<'a> LexState<'a> {
                             "trait" => self.push_token(TokenKind::KwTrait, span_start, span_end),
                             "impl" => self.push_token(TokenKind::KwImpl, span_start, span_end),
                             "for" => self.push_token(TokenKind::KwFor, span_start, span_end),
+                            "pub" => self.push_token(TokenKind::KwPub, span_start, span_end),
                             "true" => {
                                 self.push_token(TokenKind::BoolLiteral(true), span_start, span_end)
                             }

@@ -54,6 +54,37 @@ struct Parser {
 }
 
 impl Parser {
+    fn peek_kind_at(&self, offset: usize) -> Option<&TokenKind> {
+        self.tokens.get(self.pos + offset).map(|t| &t.kind)
+    }
+    fn parse_visibility(&mut self) -> Visibility {
+        if self.consume_if(TokenKind::KwPub) {
+            Visibility::Pub
+        } else {
+            Visibility::Private
+        }
+    }
+
+    fn expect_with_span(&mut self, kind: TokenKind) -> Option<Span> {
+        if self.consume_if(kind.clone()) {
+            if let Some(tok) = self.tokens.get(self.pos.saturating_sub(1)) {
+                Some(tok.span)
+            } else {
+                Some(Span::dummy())
+            }
+        } else {
+            let (span, found) = if let Some(tok) = self.peek() {
+                (tok.span, alloc::format!("{:?}", tok.kind))
+            } else {
+                (Span::dummy(), "EOF".to_string())
+            };
+            self.diagnostics.push(Diagnostic::error(
+                alloc::format!("expected {:?}, found {}", kind, found),
+                span,
+            ));
+            None
+        }
+    }
     fn parse_module(&mut self) -> Option<Module> {
         let root = self.parse_block_until(TokenEnd::Eof)?;
         Some(Module {
@@ -121,6 +152,84 @@ impl Parser {
         })
     }
 
+    fn parse_import_directive(&mut self, text: &str, span: Span) -> Directive {
+        let mut rest = text.trim();
+        let mut vis = Visibility::Private;
+        if let Some(r) = rest.strip_prefix("pub") {
+            vis = Visibility::Pub;
+            rest = r.trim();
+        }
+        // path
+        let mut path = String::new();
+        if rest.starts_with('"') {
+            if let Some(end) = rest[1..].find('"') {
+                path = rest[1..1 + end].to_string();
+                rest = &rest[1 + end + 1..];
+            }
+        } else {
+            let mut parts = rest.splitn(2, char::is_whitespace);
+            path = parts.next().unwrap_or("").to_string();
+            rest = parts.next().unwrap_or("");
+        }
+        rest = rest.trim();
+        let clause = if rest.is_empty() {
+            ImportClause::DefaultAlias
+        } else if let Some(r) = rest.strip_prefix("as") {
+            let mut c = r.trim();
+            if c.starts_with('*') {
+                ImportClause::Open
+            } else if c.starts_with("@merge") {
+                ImportClause::Merge
+            } else if c.starts_with('{') {
+                let mut items = Vec::new();
+                if let Some(end) = c.find('}') {
+                    let inner = &c[1..end];
+                    for part in inner.split(',') {
+                        let p = part.trim();
+                        if p.is_empty() {
+                            continue;
+                        }
+                        let glob = p.ends_with("::*");
+                        if glob {
+                            let name = p.trim_end_matches("::*").to_string();
+                            items.push(ImportItem {
+                                name,
+                                alias: None,
+                                glob: true,
+                            });
+                            continue;
+                        }
+                        let mut segs = p.split_whitespace();
+                        let first = segs.next().unwrap_or("").to_string();
+                        let mut alias = None;
+                        if let Some("as") = segs.next() {
+                            alias = segs.next().map(|s| s.to_string());
+                        }
+                        items.push(ImportItem {
+                            name: first,
+                            alias,
+                            glob: false,
+                        });
+                    }
+                    ImportClause::Selective(items)
+                } else {
+                    ImportClause::DefaultAlias
+                }
+            } else {
+                let alias = c.split_whitespace().next().unwrap_or("").to_string();
+                ImportClause::Alias(alias)
+            }
+        } else {
+            ImportClause::DefaultAlias
+        };
+        Directive::Import {
+            path,
+            clause,
+            vis,
+            span,
+        }
+    }
+
     fn parse_stmt(&mut self) -> Option<Stmt> {
         match self.peek_kind()? {
             TokenKind::DirEntry(_) => {
@@ -139,7 +248,7 @@ impl Parser {
                 }))
             }
             TokenKind::DirImport(_) => {
-                let (path, span) = match self.next() {
+                let (text, span) = match self.next() {
                     Some(tok) => {
                         if let TokenKind::DirImport(p) = tok.kind.clone() {
                             (p, tok.span)
@@ -149,7 +258,7 @@ impl Parser {
                     }
                     None => return None,
                 };
-                Some(Stmt::Directive(Directive::Import { path, span }))
+                Some(Stmt::Directive(self.parse_import_directive(&text, span)))
             }
             TokenKind::DirTarget(_) => {
                 let (target, span) = match self.next() {
@@ -232,6 +341,30 @@ impl Parser {
                 let span = self.next().unwrap().span;
                 Some(Stmt::Directive(Directive::Include { path, span }))
             }
+            TokenKind::DirPrelude(p) => {
+                let span = self.next().unwrap().span;
+                Some(Stmt::Directive(Directive::Prelude { path: p, span }))
+            }
+            TokenKind::DirNoPrelude => {
+                let span = self.next().unwrap().span;
+                Some(Stmt::Directive(Directive::NoPrelude { span }))
+            }
+            TokenKind::KwPub => match self.peek_kind_at(1) {
+                Some(TokenKind::KwStruct) => self.parse_struct(),
+                Some(TokenKind::KwEnum) => self.parse_enum(),
+                Some(TokenKind::KwFn) => self.parse_fn(),
+                Some(TokenKind::KwTrait) => self.parse_trait(),
+                Some(TokenKind::KwImpl) => self.parse_impl(),
+                _ => {
+                    let span = self.peek_span().unwrap_or_else(Span::dummy);
+                    self.diagnostics.push(Diagnostic::error(
+                        "unexpected token after pub",
+                        span,
+                    ));
+                    self.next();
+                    None
+                }
+            },
             TokenKind::KwStruct => self.parse_struct(),
             TokenKind::KwEnum => self.parse_enum(),
             TokenKind::KwFn => self.parse_fn(),
@@ -255,7 +388,8 @@ impl Parser {
     }
 
     fn parse_struct(&mut self) -> Option<Stmt> {
-        let kw_span = self.next()?.span;
+        let vis = self.parse_visibility();
+        let kw_span = self.expect_with_span(TokenKind::KwStruct)?;
         let (name, nspan) = self.expect_ident()?;
         let type_params = self.parse_generic_params();
         self.expect(TokenKind::Colon)?;
@@ -287,6 +421,7 @@ impl Parser {
         }
         self.expect(TokenKind::Dedent)?;
         Some(Stmt::StructDef(StructDef {
+            vis,
             name: Ident { name, span: nspan },
             type_params,
             fields,
@@ -294,7 +429,8 @@ impl Parser {
     }
 
     fn parse_enum(&mut self) -> Option<Stmt> {
-        let kw_span = self.next()?.span;
+        let vis = self.parse_visibility();
+        let kw_span = self.expect_with_span(TokenKind::KwEnum)?;
         let (name, nspan) = self.expect_ident()?;
         let type_params = self.parse_generic_params();
         self.expect(TokenKind::Colon)?;
@@ -330,6 +466,7 @@ impl Parser {
         }
         self.expect(TokenKind::Dedent)?;
         Some(Stmt::EnumDef(EnumDef {
+            vis,
             name: Ident { name, span: nspan },
             type_params,
             variants,
@@ -337,7 +474,8 @@ impl Parser {
     }
 
     fn parse_fn(&mut self) -> Option<Stmt> {
-        let fn_span = self.next()?.span;
+        let vis = self.parse_visibility();
+        let fn_span = self.expect_with_span(TokenKind::KwFn)?;
         let name_tok = self.expect_ident()?;
         let name = Ident {
             name: name_tok.0,
@@ -396,6 +534,7 @@ impl Parser {
         };
 
         Some(Stmt::FnDef(FnDef {
+            vis,
             name,
             type_params,
             signature,
@@ -450,7 +589,8 @@ impl Parser {
     }
 
     fn parse_trait(&mut self) -> Option<Stmt> {
-        let kw_span = self.next()?.span;
+        let vis = self.parse_visibility();
+        let kw_span = self.expect_with_span(TokenKind::KwTrait)?;
         let (name, nspan) = self.expect_ident()?;
         let type_params = self.parse_generic_params();
         self.expect(TokenKind::Colon)?;
@@ -470,6 +610,7 @@ impl Parser {
         self.expect(TokenKind::Dedent)?;
         let end_span = self.peek_span().unwrap_or(nspan);
         Some(Stmt::Trait(TraitDef {
+            vis,
             name: Ident { name, span: nspan },
             type_params,
             methods,
@@ -478,7 +619,8 @@ impl Parser {
     }
 
     fn parse_impl(&mut self) -> Option<Stmt> {
-        let kw_span = self.next()?.span;
+        let _vis = self.parse_visibility(); // impl の公開可視性は現状未使用
+        let kw_span = self.expect_with_span(TokenKind::KwImpl)?;
         let type_params = self.parse_generic_params();
 
         let first_ty = self.parse_type_expr()?;
@@ -1922,6 +2064,8 @@ impl Parser {
                 Directive::IndentWidth { span, .. } => *span,
                 Directive::Extern { span, .. } => *span,
                 Directive::Include { span, .. } => *span,
+                Directive::Prelude { span, .. } => *span,
+                Directive::NoPrelude { span } => *span,
             },
             Stmt::FnDef(f) => f.name.span,
             Stmt::StructDef(s) => s.name.span,

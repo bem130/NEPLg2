@@ -10,6 +10,8 @@
 //!     -> codegen_wasm
 
 extern crate alloc;
+#[cfg(not(target_arch = "wasm32"))]
+extern crate std;
 
 pub mod diagnostic;
 pub mod error;
@@ -24,8 +26,10 @@ pub mod lexer;
 pub mod loader;
 pub mod log;
 pub mod monomorphize;
+pub mod module_graph;
 pub mod parser;
 pub mod passes;
+pub mod resolve;
 pub mod typecheck;
 pub mod types;
 
