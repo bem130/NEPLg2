@@ -103,6 +103,7 @@ jobs:
               env:
                   CARGO_TEST_EXIT: ${{ steps.cargo_tests.outputs.exit_code }}
                   TRUNK_EXIT: ${{ steps.trunk_build.outputs.exit_code }}
+                  TRUNK_OUTCOME: ${{ steps.trunk_build.outcome }}
               shell: bash
               run: |
                   set -euo pipefail
@@ -111,74 +112,20 @@ jobs:
                   mkdir -p target/ci-logs
 
                   # Copy logs (if they exist); otherwise create empty files
-                  if [ -f target/ci-logs/cargo-test.log ]; then
-                      cp target/ci-logs/cargo-test.log dist/tests/cargo-test.log
-                  else
-                      : > dist/tests/cargo-test.log
-                  fi
+                  cp -f target/ci-logs/cargo-test.log dist/tests/cargo-test.log 2>/dev/null || : > dist/tests/cargo-test.log
+                  cp -f target/ci-logs/trunk-build.log dist/tests/trunk-build.log 2>/dev/null || : > dist/tests/trunk-build.log
 
-                  if [ -f target/ci-logs/trunk-build.log ]; then
-                      cp target/ci-logs/trunk-build.log dist/tests/trunk-build.log
-                  else
-                      : > dist/tests/trunk-build.log
-                  fi
+                  # One-line plain text status
+                  printf 'cargo_test_exit=%s trunk_exit=%s trunk_outcome=%s\n' \
+                      "${CARGO_TEST_EXIT:-unknown}" "${TRUNK_EXIT:-unknown}" "${TRUNK_OUTCOME:-unknown}" \
+                      > dist/tests/status.txt
 
-                  # tests index
-                  cat > dist/tests/index.html <<'HTML'
-                  <!doctype html>
-                  <html lang="en">
-                  <head>
-                      <meta charset="utf-8" />
-                      <meta name="viewport" content="width=device-width, initial-scale=1" />
-                      <title>CI Logs</title>
-                      <style>
-                          body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
-                          code { background: #f2f2f2; padding: 0.1rem 0.3rem; border-radius: 4px; }
-                          ul { line-height: 1.8; }
-                      </style>
-                  </head>
-                  <body>
-                      <h1>CI Logs</h1>
-                      <p>Artifacts published to GitHub Pages.</p>
-                      <ul>
-                          <li><a href="./cargo-test.log">cargo test log</a></li>
-                          <li><a href="./trunk-build.log">trunk build log</a></li>
-                      </ul>
-                      <p>Exit codes: <code>cargo test</code>=CARGO_TEST_EXIT, <code>trunk</code>=TRUNK_EXIT</p>
-                  </body>
-                  </html>
-                  HTML
+                  # Keep /tests/ reachable; content is intentionally plain, single line
+                  printf 'Open: cargo-test.log | trunk-build.log | status.txt\n' > dist/tests/index.html
 
-                  # Replace placeholders with actual exit codes
-                  sed -i \
-                      -e "s/CARGO_TEST_EXIT/${CARGO_TEST_EXIT:-unknown}/g" \
-                      -e "s/TRUNK_EXIT/${TRUNK_EXIT:-unknown}/g" \
-                      dist/tests/index.html
-
-                  # If trunk build failed and dist/index.html doesn't exist, create a fallback
+                  # If trunk build failed and dist/index.html doesn't exist, create a fallback (single line)
                   if [ ! -f dist/index.html ]; then
-                      cat > dist/index.html <<'HTML'
-                      <!doctype html>
-                      <html lang="en">
-                      <head>
-                          <meta charset="utf-8" />
-                          <meta name="viewport" content="width=device-width, initial-scale=1" />
-                          <title>NEPLg2 - Fallback</title>
-                          <style>
-                              body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
-                              .warn { padding: 1rem; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; }
-                          </style>
-                      </head>
-                      <body>
-                          <h1>NEPLg2</h1>
-                          <div class="warn">
-                              <p><strong>Fallback page</strong></p>
-                              <p>The WASM build may have failed, but this site was deployed so you can inspect logs.</p>
-                          </div>
-                          <p><a href="./tests/">See CI logs</a></p>
-                      </body>
-                      </html>
-                      HTML
+                      printf 'Build fallback. See /tests/status.txt and /tests/trunk-build.log\n' > dist/index.html
                   fi
 
             - name: Upload GitHub Pages artifact (always)
