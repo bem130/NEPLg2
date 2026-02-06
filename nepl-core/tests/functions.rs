@@ -50,6 +50,7 @@ fn add_nums <(i32, i32)->i32> (a, b):
     add a b
 
 fn plus add_nums;
+fn plus @add_nums;
 
 fn main <()->i32> ():
     plus 10 20
@@ -74,6 +75,7 @@ fn apply <(i32, (i32)->i32)->i32> (val, func):
 
 fn main <()->i32> ():
     apply 5 square
+    apply 5 @square
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 25);
@@ -96,8 +98,10 @@ fn sub_op <(i32, i32)->i32> (a, b):
 fn get_op <(bool)->(i32, i32)->i32> (cond):
     if cond:
         add_op
+        @add_op
     else:
         sub_op
+        @sub_op
 
 fn main <()->i32> ():
     let f get_op true
