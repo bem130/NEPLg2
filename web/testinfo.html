@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Results</title>
+    <style>
+        body {
+            overflow-y: auto; /* Allow scrolling for the full page */
+        }
+        .test-dashboard {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .summary-card {
+            background-color: var(--bg-pane);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 24px;
+            display: flex;
+            gap: 32px;
+        }
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+        
+        .suite-card {
+            background-color: var(--bg-pane);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .suite-header {
+            padding: 12px 16px;
+            background-color: var(--bg-header);
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .suite-header:hover {
+            background-color: var(--bg-hover);
+        }
+        .suite-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .suite-status {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: bold;
+        }
+        .status-badge-ok { background-color: rgba(87, 171, 90, 0.2); color: #57ab5a; }
+        .status-badge-fail { background-color: rgba(229, 83, 75, 0.2); color: #e5534b; }
+        
+        .test-list {
+            display: none; /* Hidden by default if collapsed */
+        }
+        .test-list.expanded {
+            display: block;
+        }
+        
+        .test-item {
+            padding: 8px 16px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+        .test-item:last-child { border-bottom: none; }
+        .test-item:hover { background-color: var(--bg-hover); }
+        
+        .test-name { color: var(--text-primary); }
+        .test-result { font-weight: bold; }
+        .result-ok { color: #57ab5a; }
+        .result-failed { color: #e5534b; }
+        .result-ignored { color: #8b949e; }
+
+        .failure-log {
+            background-color: #0d1117;
+            padding: 12px;
+            margin: 8px 16px;
+            border-radius: 4px;
+            border: 1px solid #30363d;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            color: #c9d1d9;
+        }
+
+        /* ANSI Colors mapping */
+        .ansi-1 { font-weight: bold; }
+        .ansi-31 { color: #ff7b72; } /* Red */
+        .ansi-32 { color: #7ee787; } /* Green */
+        .ansi-92 { color: #7ee787; } /* Bright Green */
+        .ansi-91 { color: #ff7b72; } /* Bright Red */
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-text">NEPLg2 Test Results</span>
+            </div>
+            <div class="controls">
+                <button onclick="loadLogs()" style="background:var(--bg-active); border:1px solid var(--border-subtle); color:var(--text-primary); padding:6px 12px; border-radius:4px; cursor:pointer;">Reload Log</button>
+            </div>
+        </header>
+        
+        <div class="workspace" style="overflow-y: auto;">
+            <div class="test-dashboard" id="dashboard">
+                <div style="text-align: center; padding: 40px; color: var(--text-secondary);">Loading test results...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadLogs() {
+            const dashboard = document.getElementById('dashboard');
+            try {
+                // Assuming the log file is placed in tests/ relative to web root or copied there
+                const response = await fetch('./tests/cargo-test.log');
+                if (!response.ok) throw new Error(`Failed to fetch log: ${response.statusText}`);
+                const text = await response.text();
+                console.log('Fetched log:', text);
+                renderResults(parseCargoLog(text));
+            } catch (e) {
+                dashboard.innerHTML = `<div style="color: #e5534b; padding: 20px;">Error: ${e.message}<br><br>Make sure <code>./tests/cargo-test.log</code> exists relative to this HTML file.</div>`;
+            }
+        }
+
+        function parseCargoLog(text) {
+            const lines = text.split('\n');
+            const suites = [];
+            let currentSuite = null;
+            let state = 'IDLE'; // IDLE, TESTS, FAILURES, FAILURE_SUMMARY
+            let currentFailureName = null;
+
+            // Helper to strip ANSI for logic checks
+            const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+            for (let line of lines) {
+                const cleanLine = stripAnsi(line).trim();
+
+                // Detect Suite Start
+                if (cleanLine.startsWith('Running ') && (cleanLine.includes('tests/') || cleanLine.includes('src/') || cleanLine.includes('target/'))) {
+                    if (currentSuite) suites.push(currentSuite);
+                    currentSuite = {
+                        name: cleanLine.replace('Running ', ''),
+                        tests: [],
+                        failures: {},
+                        stats: { passed: 0, failed: 0, ignored: 0 }
+                    };
+                    state = 'TESTS';
+                    continue;
+                }
+
+                // Detect Suite End
+                if (cleanLine.startsWith('test result:')) {
+                    if (currentSuite) {
+                        // Parse stats from result line
+                        // "test result: ok. 6 passed; 0 failed; 0 ignored; ..."
+                        const passed = cleanLine.match(/(\d+) passed/);
+                        const failed = cleanLine.match(/(\d+) failed/);
+                        const ignored = cleanLine.match(/(\d+) ignored/);
+                        if (passed) currentSuite.stats.passed = parseInt(passed[1]);
+                        if (failed) currentSuite.stats.failed = parseInt(failed[1]);
+                        if (ignored) currentSuite.stats.ignored = parseInt(ignored[1]);
+                        
+                        suites.push(currentSuite);
+                        currentSuite = null;
+                    }
+                    state = 'IDLE';
+                    continue;
+                }
+
+                if (state === 'TESTS' || state === 'FAILURES') {
+                    if (cleanLine === 'failures:') {
+                        state = state === 'TESTS' ? 'FAILURES' : 'FAILURE_SUMMARY';
+                        continue;
+                    }
+
+                    if (state === 'TESTS') {
+                        const match = cleanLine.match(/^test\s+(.+)\s+\.\.\.\s+(ok|FAILED|ignored)/);
+                        if (match && currentSuite) {
+                            currentSuite.tests.push({ name: match[1], status: match[2] });
+                        }
+                    } else if (state === 'FAILURES') {
+                        const headerMatch = cleanLine.match(/^----\s+(.+)\s+stdout\s+----$/);
+                        if (headerMatch) {
+                            currentFailureName = headerMatch[1];
+                            if (currentSuite) currentSuite.failures[currentFailureName] = [];
+                        } else if (currentFailureName && currentSuite) {
+                            // Store line with ANSI codes for display
+                            currentSuite.failures[currentFailureName].push(line);
+                        }
+                    }
+                }
+            }
+            if (currentSuite) suites.push(currentSuite);
+            return suites;
+        }
+
+        function ansiToHtml(text) {
+            // Basic ANSI to HTML converter
+            return text
+                .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                .replace(/\x1b\[1m/g, '<span class="ansi-1">')
+                .replace(/\x1b\[31m/g, '<span class="ansi-31">')
+                .replace(/\x1b\[32m/g, '<span class="ansi-32">')
+                .replace(/\x1b\[92m/g, '<span class="ansi-92">')
+                .replace(/\x1b\[91m/g, '<span class="ansi-91">')
+                .replace(/\x1b\[0m/g, '</span>'); // Simple reset
+        }
+
+        function renderResults(suites) {
+            const dashboard = document.getElementById('dashboard');
+            let totalTests = 0, totalPassed = 0, totalFailed = 0;
+            
+            let html = '';
+            
+            suites.forEach((suite, idx) => {
+                totalTests += suite.tests.length;
+                totalPassed += suite.stats.passed;
+                totalFailed += suite.stats.failed;
+
+                const isFail = suite.stats.failed > 0;
+                const badgeClass = isFail ? 'status-badge-fail' : 'status-badge-ok';
+                const badgeText = isFail ? 'FAILED' : 'OK';
+                const expandedClass = isFail ? 'expanded' : '';
+
+                html += `
+                <div class="suite-card">
+                    <div class="suite-header" onclick="this.nextElementSibling.classList.toggle('expanded')">
+                        <div class="suite-title">
+                            <span class="suite-status ${badgeClass}">${badgeText}</span>
+                            ${suite.name}
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">
+                            ${suite.stats.passed} passed, ${suite.stats.failed} failed
+                        </div>
+                    </div>
+                    <div class="test-list ${expandedClass}">
+                        ${suite.tests.map(test => {
+                            let statusClass = 'result-ok';
+                            if (test.status === 'FAILED') statusClass = 'result-failed';
+                            if (test.status === 'ignored') statusClass = 'result-ignored';
+                            
+                            let failureHtml = '';
+                            if (test.status === 'FAILED' && suite.failures[test.name]) {
+                                const log = suite.failures[test.name].join('\n');
+                                failureHtml = `<div class="failure-log">${ansiToHtml(log)}</div>`;
+                            }
+
+                            return `
+                            <div>
+                                <div class="test-item">
+                                    <span class="test-name">${test.name}</span>
+                                    <span class="test-result ${statusClass}">${test.status}</span>
+                                </div>
+                                ${failureHtml}
+                            </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>`;
+            });
+
+            const summaryHtml = `
+            <div class="summary-card">
+                <div class="stat-item">
+                    <span class="stat-value">${suites.length}</span>
+                    <span class="stat-label">Suites</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">${totalTests}</span>
+                    <span class="stat-label">Total Tests</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" style="color: #57ab5a;">${totalPassed}</span>
+                    <span class="stat-label">Passed</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" style="color: ${totalFailed > 0 ? '#e5534b' : 'var(--text-primary)'};">${totalFailed}</span>
+                    <span class="stat-label">Failed</span>
+                </div>
+            </div>`;
+
+            dashboard.innerHTML = summaryHtml + html;
+        }
+
+        // Auto load on start
+        loadLogs();
+    </script>
+</body>
+</html>
