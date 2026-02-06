@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
@@ -144,21 +143,27 @@
 
     <script>
         async function loadLogs() {
+            console.log("Starting loadLogs...");
             const dashboard = document.getElementById('dashboard');
             const encoding = document.getElementById('encoding-select').value;
             try {
+                console.log(`Fetching ./tests/cargo-test.log with encoding ${encoding}...`);
                 // Assuming the log file is placed in tests/ relative to web root or copied there
                 const response = await fetch('./tests/cargo-test.log');
+                console.log("Fetch status:", response.status, response.statusText);
                 if (!response.ok) throw new Error(`Failed to fetch log: ${response.statusText}`);
 
                 const buffer = await response.arrayBuffer();
                 const decoder = new TextDecoder(encoding);
                 const text = decoder.decode(buffer);
                 console.log('Loaded log text:', text);
+                console.log('Loaded log text length:', text.length);
 
                 renderResults(parseCargoLog(text));
             } catch (e) {
                 dashboard.innerHTML = `<div style="color: #e5534b; padding: 20px;">Error: ${e.message}<br><br>Make sure <code>./tests/cargo-test.log</code> exists relative to this HTML file.</div>`;
+                console.error("loadLogs failed:", e);
+                dashboard.innerHTML = `<div style="color: #e5534b; padding: 20px;">Error: ${e.message}<br><br>Make sure <code>./tests/cargo-test.log</code> exists relative to this HTML file.<br>If using Chrome with local files (file://), fetch is blocked. Use a local server or Firefox.</div>`;
             }
         }
 
@@ -323,6 +328,7 @@
         }
 
         // Auto load on start
+        console.log("Initializing test log viewer...");
         loadLogs();
     </script>
 </body>
