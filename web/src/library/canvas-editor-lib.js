@@ -73,7 +73,7 @@
         BaseLanguageProvider,
         JavaScriptLanguageProvider,
         MarkdownLanguageProvider,
-        NeplLanguageProvider,
+        NEPLg2LanguageProvider,
         createCanvasEditor,
         createWorkerLanguageProvider
     };

@@ -1,6 +1,3 @@
-//import init, * as nepl_web from '/nepl-web.js';
-import { NeplLanguageProvider } from './src/language/neplg2/neplg2-provider.js';
-
 addEventListener("TrunkApplicationStarted", () => {
     // wasm-bindgen の export がここに入る（Trunk のデフォルト）
     const wasm = window.wasmBindings;
@@ -20,7 +17,7 @@ addEventListener("TrunkApplicationStarted", () => {
     const terminalStatus = document.getElementById('terminal-status');
     const exampleSelect = document.getElementById('example-select');
     // --- Editor Setup ---
-    const neplProvider = new NeplLanguageProvider();
+    const neplProvider = new NEPLg2LanguageProvider();
     //neplProvider.setCompiler(wasm);
     const { editor } = CanvasEditorLibrary.createCanvasEditor({
         canvas: editorCanvas,
