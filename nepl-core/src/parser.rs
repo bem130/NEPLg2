@@ -348,7 +348,7 @@ impl Parser {
             }
             TokenKind::DirIndentWidth(width) => {
                 let span = self.next().unwrap().span;
-                Some(Stmt::Directive(Directive::IndentWidth { width: *width, span }))
+                Some(Stmt::Directive(Directive::IndentWidth { width: width, span }))
             }
             TokenKind::DirExtern {
                 module,
@@ -1050,9 +1050,10 @@ impl Parser {
                     items.push(PrefixItem::Match(m, sp));
                     break;
                 }
-                TokenKind::Ident(name) => {
+                TokenKind::Ident(_) => {
                     let tok = self.next().unwrap();
-                    let mut full = name.clone();
+                    let name = if let TokenKind::Ident(n) = tok.kind { n } else { unreachable!() };
+                    let mut full = name;
                     let mut end_span = tok.span;
                     let mut type_args = Vec::new();
                     loop {
@@ -1410,9 +1411,10 @@ impl Parser {
                     items.push(PrefixItem::Match(m, sp));
                     break;
                 }
-                TokenKind::Ident(name) => {
+                TokenKind::Ident(_) => {
                     let tok = self.next().unwrap();
-                    let mut full = name.clone();
+                    let name = if let TokenKind::Ident(n) = tok.kind { n } else { unreachable!() };
+                    let mut full = name;
                     let mut end_span = tok.span;
                     // Path separators: mod::item
                     while self.check(&TokenKind::PathSep) {
@@ -2493,11 +2495,11 @@ impl Parser {
     }
 
     fn check(&self, kind: &TokenKind) -> bool {
-        matches!(self.peek_kind(), Some(k) if token_kind_eq(k, kind))
+        matches!(self.peek_kind(), Some(k) if token_kind_eq(&k, kind))
     }
 
-    fn peek_kind(&self) -> Option<&TokenKind> {
-        self.tokens.get(self.pos).map(|t| &t.kind)
+    fn peek_kind(&self) -> Option<TokenKind> {
+        self.tokens.get(self.pos).map(|t| t.kind.clone())
     }
 
     fn peek_span(&self) -> Option<Span> {
@@ -2545,7 +2547,7 @@ impl Parser {
     }
 
     fn is_pipe_continuation(&self) -> bool {
-        if self.peek_kind() == Some(&TokenKind::Newline) {
+        if self.peek_kind() == Some(TokenKind::Newline) {
             if let Some(tok) = self.tokens.get(self.pos + 1) {
                 return matches!(tok.kind, TokenKind::Pipe);
             }
