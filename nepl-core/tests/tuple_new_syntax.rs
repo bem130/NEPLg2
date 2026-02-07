@@ -12,7 +12,7 @@ fn main <()->i32> ():
     let t Tuple:
         10
         20
-    t.0
+    get t 0
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 10);
@@ -29,7 +29,7 @@ fn main <()->i32> ():
     let t Tuple:
         100
         true
-    if t.1 t.0 0
+    if get t 1 get t 0 0
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 100);
@@ -48,8 +48,8 @@ fn main <()->i32> ():
         Tuple:
             2
             3
-    let inner t.1
-    inner.1
+    let inner get t 1
+    get inner 1
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 3);
@@ -67,7 +67,7 @@ fn main <()->i32> ():
     let t Tuple:
         add 1 2
         sub 10 5
-    add t.0 t.1
+    add get t 0 get t 1
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 8);
@@ -88,7 +88,7 @@ fn main <()->i32> ():
         block:
             let y 20
             y
-    t.1
+    get t 1
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 20);
@@ -107,7 +107,7 @@ fn main <()->i32> ():
     let t Tuple:
         x
         y
-    t.0
+    get t 0
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 5);
@@ -121,7 +121,7 @@ fn tuple_as_function_arg() {
 #target wasm
 
 fn take <((i32,i32))->i32> (t):
-    t.1
+    get t 1
 
 fn main <()->i32> ():
     take Tuple:
@@ -146,7 +146,7 @@ fn make <()->(i32,i32)> ():
 
 fn main <()->i32> ():
     let t make
-    t.0
+    get t 0
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 3);
@@ -167,7 +167,7 @@ fn main <()->i32> ():
         3
         4
         5
-    add t.0 t.4
+    add get t 0 get t 4
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 6);
@@ -185,7 +185,7 @@ fn main <()->i32> ():
         ()
         10
         ()
-    t.1
+    get t 1
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 10);
@@ -203,7 +203,7 @@ fn main <()->i32> ():
     let t Tuple:
         "hello"
         "world"
-    len t.0
+    len get t 0
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 5);
@@ -223,7 +223,7 @@ fn main <()->i32> ():
     let t Tuple:
         S 1
         S 2
-    let s t.1
+    let s get t 1
     s.val
 "#;
     let v = run_main_i32(src);
@@ -245,7 +245,7 @@ fn main <()->i32> ():
         10
         20
     let p w.pair
-    p.1
+    get p 1
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 20);
@@ -265,7 +265,7 @@ fn main <()->i32> ():
     let t id Tuple:
         1
         2
-    t.0
+    get t 0
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 1);
@@ -282,7 +282,7 @@ fn main <()->i32> ():
     let t <(i32,i32)> Tuple:
         5
         6
-    t.1
+    get t 1
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 6);
@@ -301,7 +301,7 @@ fn main <()->i32> ():
             1
             else 0
         2
-    t.0
+    get t 0
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 1);
@@ -320,7 +320,7 @@ fn main <()->i32> ():
         1
         // second element
         2
-    t.1
+    get t 1
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 2);
@@ -338,7 +338,7 @@ fn main <()->i32> ():
         1
         2
 
-    t.0
+    get t 0
 "#;
     let v = run_main_i32(src);
     assert_eq!(v, 1);
@@ -355,8 +355,8 @@ fn main <()->i32> ():
     let t Tuple:
         10
         20
-    let a t.0
-    let b t.1
+    let a get t 0
+    let b get t 1
     a
 "#;
     let v = run_main_i32(src);
