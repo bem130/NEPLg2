@@ -29,12 +29,12 @@ class EditorInputHandler {
         });
         window.addEventListener('mouseup', this.onMouseUp.bind(this));
         this.canvas.addEventListener('wheel', this.onWheel.bind(this));
-        
+
         document.addEventListener('click', (e) => {
             const editorContainer = this.canvas.parentElement;
             const problemsContainer = this.editor.domUI.problemsPanel ? this.editor.domUI.problemsPanel.parentElement : null;
             const isClickInside = (editorContainer && editorContainer.contains(e.target)) ||
-                                  (problemsContainer && problemsContainer.contains(e.target));
+                (problemsContainer && problemsContainer.contains(e.target));
             if (!isClickInside) {
                 this.editor.blur();
             }
@@ -87,7 +87,7 @@ class EditorInputHandler {
     onMouseDown(e) {
         e.preventDefault();
         this.editor.focus();
-    
+
         if (e.offsetX < this.editor.geom.gutterWidth) {
             const clickedRow = this.editor.utils.getPosFromIndex(
                 this.editor.utils.getCursorIndexFromCoords(e.offsetX, e.offsetY, this.editor.lines, this.editor.lineYPositions, this.editor.scrollX, this.editor.scrollY, true),
@@ -99,7 +99,7 @@ class EditorInputHandler {
             }
             return;
         }
-    
+
         this.isDragging = true;
         const pos = this.editor.utils.getCursorIndexFromCoords(e.offsetX, e.offsetY, this.editor.lines, this.editor.lineYPositions, this.editor.scrollX, this.editor.scrollY);
         this.editor.setCursor(pos);
@@ -107,7 +107,7 @@ class EditorInputHandler {
         this.editor.selectionEnd = this.editor.cursor;
         this.editor.domUI.hideCompletion();
     }
-    
+
     onMouseMove(e) {
         const pos = this.editor.utils.getCursorIndexFromCoords(e.offsetX, e.offsetY, this.editor.lines, this.editor.lineYPositions, this.editor.scrollX, this.editor.scrollY);
         if (this.isDragging) {
@@ -140,21 +140,31 @@ class EditorInputHandler {
             this.editor.domUI.showPopup(hoverInfo.content, e.clientX, e.clientY);
         }
     }
-    
+
     onMouseUp() {
         this.isDragging = false;
         this.editor.preferredCursorX = -1;
         this.editor.updateOccurrencesHighlight();
     }
-    
+
     onWheel(e) {
         e.preventDefault();
         this.editor.domUI.hideCompletion();
-        const newScrollY = this.editor.scrollY + e.deltaY;
-        const maxScrollY = Math.max(0, this.editor.lines.length * this.editor.geom.lineHeight - this.canvas.height + this.editor.geom.padding * 2);
-        this.editor.scrollY = Math.max(0, Math.min(newScrollY, maxScrollY));
+
+        if (e.shiftKey) {
+            // Treat vertical wheel as horizontal scroll when shift is held
+            this.editor.scrollX += e.deltaY;
+            this.editor.scrollX = Math.max(0, this.editor.scrollX);
+        } else {
+            const newScrollY = this.editor.scrollY + e.deltaY;
+            const maxScrollY = Math.max(0, this.editor.lines.length * this.editor.geom.lineHeight - this.canvas.height + this.editor.geom.padding * 2);
+            this.editor.scrollY = Math.max(0, Math.min(newScrollY, maxScrollY));
+            // Standard horizontal scroll if device supports it
+            this.editor.scrollX += e.deltaX;
+            this.editor.scrollX = Math.max(0, this.editor.scrollX);
+        }
     }
-    
+
     onInput(e) {
         if (this.editor.isComposing) return;
         const newText = e.target.value;
@@ -164,7 +174,7 @@ class EditorInputHandler {
             this.editor.triggerCompletion();
         }
     }
-    
+
     async onKeydown(e) {
         if (this.editor.isComposing) return;
 
@@ -218,7 +228,7 @@ class EditorInputHandler {
                     return;
             }
         }
-        
+
         if (e.key === 'F12') {
             e.preventDefault();
             if (this.editor.languageProvider) {
@@ -254,7 +264,7 @@ class EditorInputHandler {
                     this.editor.updateOccurrencesHighlight();
                     return;
                 }
-                // Fallthrough for non-ctrl movement
+            // Fallthrough for non-ctrl movement
             case 'ArrowUp':
             case 'ArrowDown':
                 this.editor.domUI.hideCompletion();
