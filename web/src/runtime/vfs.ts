@@ -55,25 +55,17 @@ export class VFS {
         return this.files;
     }
 
-    serialize(): Record<string, any> {
-        const obj: Record<string, any> = {};
+    serialize(): Record<string, string | Uint8Array> {
+        const obj: Record<string, string | Uint8Array> = {};
         for (const [path, content] of this.files.entries()) {
-            if (content instanceof Uint8Array) {
-                obj[path] = Array.from(content);
-            } else {
-                obj[path] = content;
-            }
+            obj[path] = content;
         }
         return obj;
     }
 
-    deserialize(data: Record<string, any>) {
+    deserialize(data: Record<string, string | Uint8Array>) {
         for (const [path, content] of Object.entries(data)) {
-            if (Array.isArray(content)) {
-                this.files.set(path, new Uint8Array(content));
-            } else {
-                this.files.set(path, content);
-            }
+            this.files.set(path, content);
         }
     }
 

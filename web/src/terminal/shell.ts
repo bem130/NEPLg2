@@ -217,7 +217,7 @@ export class Shell {
                     this.terminal.print("Generated out.wat");
                 }
 
-                const wasm = window.wasmBindings.compile_source(source);
+                const wasm = window.wasmBindings.compile_source_with_vfs(inputPath, source, this.vfs.serialize());
                 const outFile = (parsed.flags['-o'] as string) || 'out.wasm';
                 this.vfs.writeFile(outFile, wasm);
                 this.terminal.print(`Compilation finished. Output to ${outFile}`);
@@ -226,7 +226,10 @@ export class Shell {
                     return await this.cmdWasmi([outFile], stdin);
                 }
                 return "Build complete.";
-            } catch (e) {
+            } catch (e: any) {
+                if (e.message && (e.message.includes("wasmi") || e.message.includes("Worker") || e.message.includes("Program") || e.message.includes("Execution"))) {
+                    return `Execution Failed: ${e.message}`;
+                }
                 return `Compilation Failed: ${e}`;
             }
         }
@@ -258,6 +261,7 @@ export class Shell {
 
     interrupt() {
         if (this.activeWorker) {
+            console.log("Interrupting worker...");
             this.activeWorker.terminate();
             this.activeWorker = null;
             this.terminal.printError("\nProcess interrupted.");
@@ -280,11 +284,18 @@ export class Shell {
 
         if (!this.sab) {
             try {
-                this.sab = new SharedArrayBuffer(1024 * 64); // 64KB stdin buffer
-                this.stdinBuffer = new Int32Array(this.sab, 0, 1);
-                this.stdinData = new Uint8Array(this.sab, 4);
+                if (typeof SharedArrayBuffer !== 'undefined') {
+                    console.log("Creating SharedArrayBuffer for stdin...");
+                    this.sab = new SharedArrayBuffer(1024 * 64);
+                    this.stdinBuffer = new Int32Array(this.sab, 0, 1);
+                    this.stdinData = new Uint8Array(this.sab, 4);
+                    console.log("crossOriginIsolated:", window.crossOriginIsolated);
+                } else {
+                    console.warn("SharedArrayBuffer is UNDEFINED.");
+                }
             } catch (e) {
-                console.warn("SharedArrayBuffer not supported, falling back to non-blocking (stdin will not work)");
+                console.warn("SharedArrayBuffer restriction:", e);
+                this.sab = null;
             }
         }
 
@@ -306,7 +317,7 @@ export class Shell {
                     case 'exit':
                         this.activeWorker = null;
                         worker.terminate();
-                        resolve(`Program exited with code ${code}`);
+                        resolve(code === 0 ? null : `Program exited with code ${code}`);
                         break;
                     case 'error':
                         this.activeWorker = null;
@@ -333,12 +344,21 @@ export class Shell {
         });
     }
 
-    handleStdin(text: string) {
+    handleStdin(text: string | null) {
         if (this.stdinBuffer && this.stdinData) {
-            const encoded = new TextEncoder().encode(text);
-            this.stdinData.set(encoded);
-            Atomics.store(this.stdinBuffer, 0, encoded.length);
-            Atomics.notify(this.stdinBuffer, 0);
+            if (text === null) {
+                console.log("Sending EOF to stdin");
+                Atomics.store(this.stdinBuffer, 0, -1);
+            } else {
+                console.log("Sending to stdin:", text);
+                const encoded = new TextEncoder().encode(text);
+                this.stdinData.set(encoded);
+                Atomics.store(this.stdinBuffer, 0, encoded.length);
+            }
+            const wakeCount = Atomics.notify(this.stdinBuffer, 0);
+            console.log("Notified worker, wakeCount:", wakeCount);
+        } else {
+            console.warn("handleStdin called but stdinBuffer is not available");
         }
     }
 

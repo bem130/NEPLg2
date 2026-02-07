@@ -216,7 +216,9 @@ fn execute(cli: Cli) -> Result<()> {
         wasm_args.push(program_name);
         wasm_args.extend(cli.run_args.clone());
         let result = run_wasm(&artifact, run_target, wasm_args)?;
-        println!("Program exited with {result}");
+        if result != 0 {
+            println!("Program exited with {result}");
+        }
     }
 
     if cli.lib {

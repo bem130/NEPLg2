@@ -5,11 +5,15 @@ import { VFS } from './vfs.js';
 class WorkerWASI extends WASI {
     stdinBuffer: Int32Array | null = null;
     stdinData: Uint8Array | null = null;
+    private stdinOffset = 0;
+    private stdinTotal = 0;
 
     constructor(args: string[], env: Map<string, string>, vfs: VFS, buffer: SharedArrayBuffer) {
         super(args, env, vfs, null as any); // Terminal is null here, we use postMessage
-        this.stdinBuffer = new Int32Array(buffer, 0, 1);
-        this.stdinData = new Uint8Array(buffer, 4);
+        if (buffer) {
+            this.stdinBuffer = new Int32Array(buffer, 0, 1);
+            this.stdinData = new Uint8Array(buffer, 4);
+        }
     }
 
     fd_write(fd: number, iovs: number, iovs_len: number, nwritten: number): number {
@@ -33,40 +37,62 @@ class WorkerWASI extends WASI {
 
     fd_read(fd: number, iovs: number, iovs_len: number, nread: number): number {
         if (fd !== 0) return super.fd_read(fd, iovs, iovs_len, nread);
-        if (!this.memory || !this.stdinBuffer || !this.stdinData) return 5;
-
-        // Signal that we are waiting for input
-        self.postMessage({ type: 'stdin_request' });
-
-        // Wait for main thread to signal input
-        // Atomics.wait returns 'ok', 'not-equal', or 'timed-out'
-        Atomics.wait(this.stdinBuffer, 0, 0);
-
-        const available = this.stdinBuffer[0];
-        if (available < 0) return 0; // Interrupted or EOF
+        if (!this.memory || !this.stdinBuffer || !this.stdinData) {
+            // console.warn("stdin not available");
+            return 5;
+        }
 
         const view = new DataView(this.memory.buffer);
-        let totalRead = 0;
-        let bufferOffset = 0;
 
-        for (let i = 0; i < iovs_len; i++) {
-            const ptr = view.getUint32(iovs + i * 8, true);
-            const len = view.getUint32(iovs + i * 8 + 4, true);
-            const remainingInStdin = available - bufferOffset;
-            const toRead = Math.min(len, remainingInStdin);
+        // If no data is currently in our local offset, wait for more
+        if (this.stdinOffset >= this.stdinTotal) {
+            this.stdinOffset = 0;
+            this.stdinTotal = 0;
+            // Signal that we are waiting
+            self.postMessage({ type: 'stdin_request' });
 
-            if (toRead > 0) {
-                const mem = new Uint8Array(this.memory.buffer, ptr, toRead);
-                mem.set(this.stdinData.subarray(bufferOffset, bufferOffset + toRead));
-                totalRead += toRead;
-                bufferOffset += toRead;
+            try {
+                // Wait while the value at index 0 is 0
+                // console.log("Worker waiting for stdin (Atomics.wait)...");
+                const res = Atomics.wait(this.stdinBuffer, 0, 0);
+                // console.log("Atomics.wait returned:", res);
+            } catch (e) {
+                console.error("Atomics.wait failed (isolation might be missing):", e);
+                view.setUint32(nread, 0, true);
+                return 0; // EOF fallback
+            }
+
+            this.stdinTotal = Atomics.load(this.stdinBuffer, 0);
+            // console.log("Worker woke up, stdinTotal:", this.stdinTotal);
+            if (this.stdinTotal < 0) {
+                // Interrupted
+                view.setUint32(nread, 0, true);
+                return 0;
             }
         }
 
-        // Reset buffer signal
-        Atomics.store(this.stdinBuffer, 0, 0);
-        view.setUint32(nread, totalRead, true);
+        let bytesRead = 0;
+        for (let i = 0; i < iovs_len; i++) {
+            const ptr = view.getUint32(iovs + i * 8, true);
+            const len = view.getUint32(iovs + i * 8 + 4, true);
 
+            const remaining = this.stdinTotal - this.stdinOffset;
+            const toRead = Math.min(len, remaining);
+
+            if (toRead > 0) {
+                const mem = new Uint8Array(this.memory.buffer, ptr, toRead);
+                mem.set(this.stdinData.subarray(this.stdinOffset, this.stdinOffset + toRead));
+                this.stdinOffset += toRead;
+                bytesRead += toRead;
+            }
+        }
+
+        // If we consumed everything, reset the buffer signal for the main thread
+        if (this.stdinOffset >= this.stdinTotal) {
+            Atomics.store(this.stdinBuffer, 0, 0);
+        }
+
+        view.setUint32(nread, bytesRead, true);
         return 0;
     }
 }

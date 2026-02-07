@@ -220,11 +220,36 @@ export class CanvasTerminal {
                             { text: this.currentInput + "^C", color: this.colors.input }
                         ];
                         this.history.push(cancelledState);
+                        this.lastLineEndedWithNewline = true;
                         this.currentInput = "";
                         this.cursorIndex = 0;
                         this.updateScrollTopToBottom();
                         this.render();
                     }
+                    e.preventDefault();
+                }
+                break;
+            case 'z':
+                if (e.ctrlKey) {
+                    if (this.shell.isRunning) {
+                        this.write("^Z\n");
+                        this.shell.handleStdin(null);
+                    }
+                    e.preventDefault();
+                }
+                break;
+            case 'd':
+                if (e.ctrlKey) {
+                    if (this.shell.isRunning) {
+                        this.write("^D\n");
+                        this.shell.handleStdin(null);
+                    }
+                    e.preventDefault();
+                }
+                break;
+            case 'l':
+                if (e.ctrlKey) {
+                    this.clear();
                     e.preventDefault();
                 }
                 break;
@@ -290,8 +315,15 @@ export class CanvasTerminal {
     async execute() {
         const cmd = this.currentInput;
         if (this.shell.isRunning) {
-            // Interactive stdin
-            this.history.push([{ text: cmd, color: this.colors.input }]);
+            // Echo input correctly: if we are at the end of a line (prompt), append to it.
+            if (!this.lastLineEndedWithNewline && this.history.length > 0) {
+                const lastLine = this.history.pop()!;
+                lastLine.push({ text: cmd + '\n', color: this.colors.input });
+                this.history.push(lastLine);
+            } else {
+                this.history.push([{ text: cmd + '\n', color: this.colors.input }]);
+            }
+            this.lastLineEndedWithNewline = true;
             this.shell.handleStdin(cmd + '\n');
             this.currentInput = "";
             this.cursorIndex = 0;
@@ -304,6 +336,7 @@ export class CanvasTerminal {
             { text: cmd, color: this.colors.input }
         ];
         this.history.push(cmdLine);
+        this.lastLineEndedWithNewline = true;
 
         this.currentInput = "";
         this.cursorIndex = 0;
@@ -322,6 +355,7 @@ export class CanvasTerminal {
             this.write(content + (content.endsWith('\n') ? '' : '\n'));
         } else if (Array.isArray(content)) {
             this.history.push(content);
+            this.lastLineEndedWithNewline = true;
         }
         this.updateScrollTopToBottom();
         this.render();
@@ -395,15 +429,14 @@ export class CanvasTerminal {
         } else if (code === 1) {
             this.ansiState.bold = true;
         } else if (code >= 30 && code <= 37) {
-            const colors = ['#000000', '#ff5555', '#55ff55', '#ffff55', '#5555ff', '#ff55ff', '#55ffff', '#ffffff'];
+            const colors = ['#000000', '#ff7b72', '#7ee787', '#d29922', '#58a6ff', '#bc8cff', '#39c5cf', '#ffffff'];
             this.ansiState.fg = colors[code - 30];
         } else if (code === 39) {
             this.ansiState.fg = this.colors.foreground;
         } else if (code >= 90 && code <= 97) {
-            const colors = ['#666666', '#ff7b72', '#7ee787', '#d29922', '#58a6ff', '#bc8cff', '#39c5cf', '#ffffff'];
+            const colors = ['#666666', '#ffa198', '#aff5b4', '#e3b341', '#79c0ff', '#d2a8ff', '#56d4dd', '#ffffff'];
             this.ansiState.fg = colors[code - 90];
         }
-        // Backgrounds omitted for brevity but can be added similarly
     }
 
     updateScrollTopToBottom() {
@@ -421,6 +454,7 @@ export class CanvasTerminal {
         this.history = [];
         this.scrollTop = 0;
         this.maxScrollTop = 0;
+        this.lastLineEndedWithNewline = true;
         this.render();
     }
 
@@ -455,14 +489,24 @@ export class CanvasTerminal {
             return x;
         };
 
-        for (let i = startLine; i < this.history.length; i++) {
+        const renderHistoryLimit = (!this.lastLineEndedWithNewline && this.history.length > 0) ? this.history.length - 1 : this.history.length;
+
+        for (let i = startLine; i < renderHistoryLimit; i++) {
             if (y + this.charHeight > this.canvas.height - this.padding) break;
             drawLine(this.history[i], this.padding);
             y += this.charHeight;
         }
 
-        if (this.history.length >= startLine && y + this.charHeight <= this.canvas.height - this.padding) {
-            let x = drawLine(this.promptSpans, this.padding);
+        if (y + this.charHeight <= this.canvas.height - this.padding) {
+            let x = this.padding;
+            if (this.shell.isRunning) {
+                if (!this.lastLineEndedWithNewline && this.history.length > 0) {
+                    x = drawLine(this.history[this.history.length - 1], this.padding);
+                }
+            } else {
+                x = drawLine(this.promptSpans, this.padding);
+            }
+
             const preInput = this.currentInput.slice(0, this.cursorIndex);
             this.ctx.fillStyle = this.colors.input;
             this.ctx.fillText(preInput, x, y);
@@ -501,18 +545,28 @@ export class CanvasTerminal {
     }
 
     updateInputPosition() {
-        let promptWidth = 0;
+        let prefixWidth = 0;
         this.ctx.font = `${this.fontSize}px ${this.fontFamily}`;
-        for (const span of this.promptSpans) {
-            promptWidth += this.ctx.measureText(span.text).width;
+
+        if (this.shell.isRunning) {
+            if (!this.lastLineEndedWithNewline && this.history.length > 0) {
+                const lastLine = this.history[this.history.length - 1];
+                for (const span of lastLine) {
+                    prefixWidth += this.ctx.measureText(span.text).width;
+                }
+            }
+        } else {
+            for (const span of this.promptSpans) {
+                prefixWidth += this.ctx.measureText(span.text).width;
+            }
         }
 
         const preText = this.currentInput.slice(0, this.cursorIndex) + (this.isComposing ? this.composingText : "");
         const inputWidth = this.ctx.measureText(preText).width;
-        const x = this.padding + promptWidth + inputWidth;
+        const x = this.padding + prefixWidth + inputWidth;
 
         const maxVisibleLines = Math.floor((this.canvas.height - this.padding * 2) / this.charHeight);
-        let visualRow = this.history.length - this.scrollTop;
+        let visualRow = (this.lastLineEndedWithNewline ? this.history.length : this.history.length - 1) - this.scrollTop;
         if (visualRow >= maxVisibleLines) visualRow = maxVisibleLines - 1;
 
         const y = this.padding + visualRow * this.charHeight;
