@@ -5,9 +5,10 @@ cast関連の実装中 fnのalias用法
 複数行文字列リテラルの実装
 plan.mdの文字列の項を参照
 
-stdlib/nmの実装
+examples/nm.nepl, stdlib/nmの実装
 ドキュメントコメントのパーサーとしても使えるよう、行頭の`//: `や`//:|`を扱うかのフラグを用意しておいて
 parserでは、Resultを用い、エラーメッセージを適切に提供すること
+stdlib/nm/README.n.mdを確認し、stdlib/nm/README.n.mdがhtmlに変換できるようにする
 
 ドキュメントコメントの整備
 `//: `によるドキュメントコメントを追加

@@ -7,8 +7,8 @@
 #import "core/math" as *
 #import "std/stdio" as *
 
-#import "./parser" as *
-#import "./html_gen" as *
+#import "nm/parser" as *
+#import "nm/html_gen" as *
 
 fn print_usage <()*> ()> ():
     println "Neknaj Markdown (Neknaj Prefix Language) CLI";
