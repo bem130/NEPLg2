@@ -4,3 +4,8 @@ public_url = "/web/dist/"
 
 [watch]
 ignore = []
+
+[[hooks]]
+stage = "pre_build"
+command = "npm"
+command_arguments = ["run", "build:ts"]

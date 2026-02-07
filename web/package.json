@@ -3,14 +3,16 @@
   "version": "0.1.0",
   "description": "Web playground for NEPLg2 programming language",
   "scripts": {
-    "start": "npm run copy && npx serve .",
-    "copy": "mkdir -p examples && cp ../examples/*.nepl examples/",
-    "build": "npm run copy && trunk build --release"
+    "start": "trunk serve",
+    "build:ts": "tsc",
+    "build": "trunk build --release"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "serve": "^14.2.0"
+    "@types/node": "^25.2.1",
+    "serve": "^14.2.0",
+    "typescript": "^5.9.3"
   }
 }

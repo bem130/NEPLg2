@@ -2,8 +2,10 @@
 /nepl-web/target
 /dist
 /web/dist
+/web/dist_ts
 /tmp
 /*.wasm
 /*.wat
 /examples/*.tmp.nepl
 /web/examples
+/web/node_modules

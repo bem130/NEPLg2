@@ -1,7 +1,10 @@
-import { CanvasTerminal } from './src/terminal/terminal.js';
-import { VFS } from './src/runtime/vfs.js';
+import { CanvasTerminal } from './terminal/terminal.js';
+import { VFS } from './runtime/vfs.js';
 
-console.log("[Playground] main.js loaded (VFS-FIX-2)");
+declare const NEPLg2LanguageProvider: any;
+declare const CanvasEditorLibrary: any;
+
+console.log("[Playground] main.js loaded (TS-MIGRATION)");
 let start_flag = false;
 
 window.addEventListener("TrunkApplicationStarted", start_app);
@@ -15,9 +18,9 @@ function start_app() {
     console.log("[Playground] Initializing VFS...");
     const vfs = new VFS();
 
-    let wasm;
+    let wasm: any;
     try {
-        wasm = window.wasmBindings
+        wasm = (window as any).wasmBindings
     }
     catch (e) {
         console.error("[Playground] WASM bindings not found, retrying in 1 second...", e);
@@ -67,14 +70,14 @@ function start_app() {
     }
 
     // --- DOM Elements ---
-    const editorCanvas = document.getElementById('editor-canvas');
-    const editorTextarea = document.getElementById('editor-hidden-input');
+    const editorCanvas = document.getElementById('editor-canvas') as HTMLCanvasElement;
+    const editorTextarea = document.getElementById('editor-hidden-input') as HTMLTextAreaElement;
     const editorStatus = document.getElementById('editor-status');
-    const completionList = document.getElementById('completion-list');
-    const generalPopup = document.getElementById('general-popup');
-    const terminalCanvas = document.getElementById('terminal-canvas');
-    const terminalTextarea = document.getElementById('terminal-hidden-input');
-    const exampleSelect = document.getElementById('example-select');
+    const completionList = document.getElementById('completion-list') as HTMLElement;
+    const generalPopup = document.getElementById('general-popup') as HTMLElement;
+    const terminalCanvas = document.getElementById('terminal-canvas') as HTMLCanvasElement;
+    const terminalTextarea = document.getElementById('terminal-hidden-input') as HTMLTextAreaElement;
+    const exampleSelect = document.getElementById('example-select') as HTMLSelectElement;
 
     // --- Editor Setup ---
     console.log("[Playground] Setting up CanvasEditor...");
@@ -102,7 +105,7 @@ function start_app() {
     }
 
     // --- Simple Commands for Buttons ---
-    function executeCommand(cmd) {
+    function executeCommand(cmd: string) {
         console.log(`[Playground] Executing command: ${cmd}`);
         terminal.currentInput = cmd;
         terminal.execute();
@@ -130,7 +133,7 @@ function start_app() {
         }
     }
 
-    async function loadExample(filename) {
+    async function loadExample(filename: string) {
         console.log(`[Playground] Loading example from VFS: ${filename}`);
         try {
             const path = '/examples/' + filename;
@@ -138,9 +141,9 @@ function start_app() {
                 console.error(`[Playground] File not found in VFS: ${path}`);
                 return;
             }
-            const text = vfs.readFile(path);
+            const text = vfs.readFile(path) as string;
             editor.setText(text);
-            editorStatus.textContent = path.substring(1); // "examples/..."
+            if (editorStatus) editorStatus.textContent = path.substring(1); // "examples/..."
             terminal.print([
                 { text: "Loaded ", color: "#56d364" },
                 { text: filename, color: "#58a6ff" }
@@ -170,9 +173,9 @@ function start_app() {
     loadExamples();
 
     // Make globally available
-    window.editor = editor;
-    window.terminal = terminal;
-    window.executeCommand = executeCommand;
+    (window as any).editor = editor;
+    (window as any).terminal = terminal;
+    (window as any).executeCommand = executeCommand;
 
     // Initial resize and focus
     setTimeout(() => {
