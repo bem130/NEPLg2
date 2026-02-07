@@ -78,6 +78,7 @@ function start_app() {
     const terminalCanvas = document.getElementById('terminal-canvas') as HTMLCanvasElement;
     const terminalTextarea = document.getElementById('terminal-hidden-input') as HTMLTextAreaElement;
     const exampleSelect = document.getElementById('example-select') as HTMLSelectElement;
+    const fontSizeSelect = document.getElementById('font-size-select') as HTMLSelectElement;
 
     // --- Editor Setup ---
     console.log("[Playground] Setting up CanvasEditor...");
@@ -161,8 +162,16 @@ function start_app() {
         await loadExample(selectedFile);
     }
 
+    function updateFontSize() {
+        const size = parseInt(fontSizeSelect.value);
+        console.log(`[Playground] Updating font size to ${size}px`);
+        editor.setFontSize(size);
+        terminal.setFontSize(size);
+    }
+
     // --- Event Listeners ---
     exampleSelect.addEventListener('change', loadSelectedExample);
+    fontSizeSelect.addEventListener('change', updateFontSize);
 
     window.addEventListener('resize', () => {
         editor.resizeEditor();

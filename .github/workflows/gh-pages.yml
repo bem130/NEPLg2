@@ -81,6 +81,10 @@ jobs:
                   set -o pipefail
                   cargo test --no-fail-fast 2>&1 | tee cargo-test.log
 
+            - name: Fix Trunk.toml for Linux (npm.cmd -> npm)
+              run: |
+                  sed -i 's/npm.cmd/npm/g' Trunk.toml
+
             - name: Build wasm app with trunk (do not stop deploy, but fail workflow later if needed)
               id: trunk_build
               continue-on-error: true

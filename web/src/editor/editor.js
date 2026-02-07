@@ -48,6 +48,7 @@
  */
 class CanvasEditor {
     constructor(canvas, textarea, domElements, options = {}) {
+        console.log("[CanvasEditor] Initializing v2 (with setFontSize)");
         // Core components
         this.canvas = canvas;
         this.textarea = textarea;
@@ -60,8 +61,22 @@ class CanvasEditor {
         };
 
         // Geometry and Styling
-        this.font = '22px  "HackGenConsoleNF", "Space Mono", "Noto Sans JP", monospace';
-        this.geom = { padding: 10, lineHeight: 30, gutterWidth: 60, h_width: 13, z_width: 26 };
+        this.fontSize = options.fontSize || 14;
+        this.fontFamily = options.fontFamily || '"HackGenConsoleNF", "JetBrains Mono", Consolas, monospace';
+        this.font = `${this.fontSize}px ${this.fontFamily}`;
+
+        // Initial measurement
+        this.ctx.font = this.font;
+        const metrics = this.ctx.measureText('M');
+        const h_width = metrics.width;
+
+        this.geom = {
+            padding: 10,
+            lineHeight: Math.round(this.fontSize * 1.4),
+            gutterWidth: Math.round(h_width * 4.5),
+            h_width: h_width,
+            z_width: h_width * 2
+        };
         this.colors = {
             background: '#050a0cff', text: '#abb2bf', cursor: '#528bff',
             selection: 'rgba(58, 67, 88, 0.8)', imeUnderline: '#abb2bf',
@@ -185,6 +200,23 @@ class CanvasEditor {
         this.ctx.font = this.font; this.ctx.textBaseline = 'middle';
         this.visibleLines = Math.floor((rect.height - this.geom.padding * 2) / this.geom.lineHeight);
         this.scrollToCursor();
+    }
+
+    setFontSize(size) {
+        this.fontSize = size;
+        this.font = `${this.fontSize}px ${this.fontFamily}`;
+        this.ctx.font = this.font;
+
+        const metrics = this.ctx.measureText('M');
+        const h_width = metrics.width;
+
+        this.geom.h_width = h_width;
+        this.geom.z_width = h_width * 2;
+        this.geom.lineHeight = Math.round(this.fontSize * 1.4);
+        this.geom.gutterWidth = Math.round(h_width * 4.5);
+
+        this.utils.clearCache();
+        this.resizeEditor();
     }
 
     focus() { if (this.isFocused) return; this.isFocused = true; this.textarea.focus(); this.resetCursorBlink(); }

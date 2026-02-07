@@ -21,10 +21,14 @@ class EditorUtils {
             return this.charWidthCache.get(char);
         }
         const isHalfWidth = (char.charCodeAt(0) >= 0x0020 && char.charCodeAt(0) <= 0x007e) ||
-                            (char.charCodeAt(0) >= 0xff61 && char.charCodeAt(0) <= 0xff9f);
+            (char.charCodeAt(0) >= 0xff61 && char.charCodeAt(0) <= 0xff9f);
         const width = isHalfWidth ? this.geom.h_width : this.geom.z_width;
         this.charWidthCache.set(char, width);
         return width;
+    }
+
+    clearCache() {
+        this.charWidthCache.clear();
     }
 
     /**

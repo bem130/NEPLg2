@@ -35,6 +35,17 @@
                     </select>
                 </div>
                 <div class="control-group">
+                    <label for="font-size-select">Size:</label>
+                    <select id="font-size-select">
+                        <option value="12">12px</option>
+                        <option value="14" selected>14px</option>
+                        <option value="16">16px</option>
+                        <option value="18">18px</option>
+                        <option value="20">20px</option>
+                        <option value="24">24px</option>
+                    </select>
+                </div>
+                <div class="control-group">
                     <button id="run-button" class="btn"
                         onclick="window.executeCommand?.('neplg2 run -i ' + document.getElementById('editor-status').textContent)"
                         title="Run the program">▶ Run</button>
@@ -83,19 +94,19 @@
     </div>
 
     <!-- Editor Components -->
-    <script src="./src/editor/editor-utils.js"></script>
-    <script src="./src/editor/editor-dom-ui.js"></script>
-    <script src="./src/editor/editor-renderer.js"></script>
-    <script src="./src/editor/editor-input-handler.js"></script>
-    <script src="./src/editor/editor.js"></script>
+    <script data-trunk rel="js" src="./src/editor/editor-utils.js"></script>
+    <script data-trunk rel="js" src="./src/editor/editor-dom-ui.js"></script>
+    <script data-trunk rel="js" src="./src/editor/editor-renderer.js"></script>
+    <script data-trunk rel="js" src="./src/editor/editor-input-handler.js"></script>
+    <script data-trunk rel="js" src="./src/editor/editor.js"></script>
 
-    <!-- Language Providers -->
-    <script src="./src/language/language-provider.js"></script>
-    <script src="./src/language/javascript/js-provider.js"></script>
-    <script src="./src/language/markdown/md-provider.js"></script>
-    <script src="./src/language/neplg2/neplg2-provider.js"></script>
+    <!-- Language Providers (Global Scripts) -->
+    <script data-trunk rel="js" src="./src/language/language-provider.js"></script>
+    <script data-trunk rel="js" src="./src/language/javascript/js-provider.js"></script>
+    <script data-trunk rel="js" src="./src/language/markdown/md-provider.js"></script>
+    <script data-trunk rel="js" src="./src/language/neplg2/neplg2-provider.js"></script>
 
-    <script src="./src/library/canvas-editor-lib.js"></script>
+    <script data-trunk rel="js" src="./src/library/canvas-editor-lib.js"></script>
 
     <link data-trunk rel="copy-dir" href="dist_ts">
     <!-- Main Entry Point -->

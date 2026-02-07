@@ -73,7 +73,7 @@ export class CanvasTerminal {
         this.isComposing = false;
         this.composingText = "";
         this.fontSize = 14;
-        this.fontFamily = '"JetBrains Mono", Consolas, monospace';
+        this.fontFamily = '"HackGenConsoleNF", "JetBrains Mono", Consolas, monospace';
         this.lineHeight = 1.4;
         this.padding = 10;
         this.charWidth = 0;
@@ -157,6 +157,12 @@ export class CanvasTerminal {
     }
 
     resizeEditor() {
+        this.resize();
+    }
+
+    setFontSize(size: number) {
+        this.fontSize = size;
+        this.updateMetrics();
         this.resize();
     }
 
