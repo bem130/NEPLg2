@@ -1,4 +1,4 @@
-#indent 4
+#import "core/mem" as *
 
 // get: フィールドの値を取得します
 fn get <.T,.I,.R> <(.T,.I)->.R> (obj,idx):

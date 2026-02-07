@@ -3046,6 +3046,99 @@ impl<'a> BlockChecker<'a> {
             }
             _ => {}
         }
+        
+        // Specialized inlining for get/put
+        if let HirExprKind::Var(name) = &func.expr.kind {
+            if (name == "get" || name == "put") && args.len() >= 2 {
+                let obj = args[0].expr.clone();
+                let idx = &args[1].expr;
+                let field_idx = match &idx.kind {
+                    HirExprKind::LiteralI32(v) => Some(FieldIdx::Index(*v as usize)),
+                    HirExprKind::LiteralStr(sid) => {
+                        let name = self.string_table.get(*sid).unwrap().clone();
+                        Some(FieldIdx::Name(name))
+                    }
+                    _ => None,
+                };
+                if let Some(f_idx) = field_idx {
+                    if let Some((f_ty, offset)) = self.resolve_field_access(obj.ty, f_idx, func.expr.span) {
+                        if name == "get" && args.len() == 2 {
+                            let addr_expr = if offset == 0 {
+                                obj
+                            } else {
+                                HirExpr {
+                                    ty: self.ctx.i32(),
+                                    kind: HirExprKind::Intrinsic {
+                                        name: "add".to_string(),
+                                        type_args: vec![self.ctx.i32()],
+                                        args: vec![
+                                            obj,
+                                            HirExpr {
+                                                ty: self.ctx.i32(),
+                                                kind: HirExprKind::LiteralI32(offset as i32),
+                                                span: idx.span,
+                                            }
+                                        ],
+                                    },
+                                    span: func.expr.span,
+                                }
+                            };
+                            return Some(StackEntry {
+                                ty: f_ty,
+                                expr: HirExpr {
+                                    ty: f_ty,
+                                    kind: HirExprKind::Intrinsic {
+                                        name: "load".to_string(),
+                                        type_args: vec![f_ty],
+                                        args: vec![addr_expr],
+                                    },
+                                    span: func.expr.span,
+                                },
+                                type_args: Vec::new(),
+                                assign: None,
+                            });
+                        } else if name == "put" && args.len() == 3 {
+                            let val = args[2].expr.clone();
+                            let _ = self.ctx.unify(val.ty, f_ty);
+                            let addr_expr = if offset == 0 {
+                                obj
+                            } else {
+                                HirExpr {
+                                    ty: self.ctx.i32(),
+                                    kind: HirExprKind::Intrinsic {
+                                        name: "add".to_string(),
+                                        type_args: vec![self.ctx.i32()],
+                                        args: vec![
+                                            obj,
+                                            HirExpr {
+                                                ty: self.ctx.i32(),
+                                                kind: HirExprKind::LiteralI32(offset as i32),
+                                                span: idx.span,
+                                            }
+                                        ],
+                                    },
+                                    span: func.expr.span,
+                                }
+                            };
+                            return Some(StackEntry {
+                                ty: self.ctx.unit(),
+                                expr: HirExpr {
+                                    ty: self.ctx.unit(),
+                                    kind: HirExprKind::Intrinsic {
+                                        name: "store".to_string(),
+                                        type_args: vec![f_ty],
+                                        args: vec![addr_expr, val],
+                                    },
+                                    span: func.expr.span,
+                                },
+                                type_args: Vec::new(),
+                                assign: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
 
         // General call or let/set
         if let HirExprKind::Var(name) = &func.expr.kind {
@@ -3368,98 +3461,6 @@ impl<'a> BlockChecker<'a> {
             }
         }
 
-        // Specialized inlining for get/put
-        if let HirExprKind::Var(name) = &func.expr.kind {
-            if (name == "get" || name == "put") && args.len() >= 2 {
-                let obj = args[0].expr.clone();
-                let idx = &args[1].expr;
-                let field_idx = match &idx.kind {
-                    HirExprKind::LiteralI32(v) => Some(FieldIdx::Index(*v as usize)),
-                    HirExprKind::LiteralStr(sid) => {
-                        let name = self.string_table.get(*sid).unwrap().clone();
-                        Some(FieldIdx::Name(name))
-                    }
-                    _ => None,
-                };
-                if let Some(f_idx) = field_idx {
-                    if let Some((f_ty, offset)) = self.resolve_field_access(obj.ty, f_idx, func.expr.span) {
-                        if name == "get" && args.len() == 2 {
-                            let addr_expr = if offset == 0 {
-                                obj
-                            } else {
-                                HirExpr {
-                                    ty: self.ctx.i32(),
-                                    kind: HirExprKind::Intrinsic {
-                                        name: "add".to_string(),
-                                        type_args: vec![self.ctx.i32()],
-                                        args: vec![
-                                            obj,
-                                            HirExpr {
-                                                ty: self.ctx.i32(),
-                                                kind: HirExprKind::LiteralI32(offset as i32),
-                                                span: idx.span,
-                                            }
-                                        ],
-                                    },
-                                    span: func.expr.span,
-                                }
-                            };
-                            return Some(StackEntry {
-                                ty: f_ty,
-                                expr: HirExpr {
-                                    ty: f_ty,
-                                    kind: HirExprKind::Intrinsic {
-                                        name: "load".to_string(),
-                                        type_args: vec![f_ty],
-                                        args: vec![addr_expr],
-                                    },
-                                    span: func.expr.span,
-                                },
-                                type_args: Vec::new(),
-                                assign: None,
-                            });
-                        } else if name == "put" && args.len() == 3 {
-                            let val = args[2].expr.clone();
-                            let _ = self.ctx.unify(val.ty, f_ty);
-                            let addr_expr = if offset == 0 {
-                                obj
-                            } else {
-                                HirExpr {
-                                    ty: self.ctx.i32(),
-                                    kind: HirExprKind::Intrinsic {
-                                        name: "add".to_string(),
-                                        type_args: vec![self.ctx.i32()],
-                                        args: vec![
-                                            obj,
-                                            HirExpr {
-                                                ty: self.ctx.i32(),
-                                                kind: HirExprKind::LiteralI32(offset as i32),
-                                                span: idx.span,
-                                            }
-                                        ],
-                                    },
-                                    span: func.expr.span,
-                                }
-                            };
-                            return Some(StackEntry {
-                                ty: self.ctx.unit(),
-                                expr: HirExpr {
-                                    ty: self.ctx.unit(),
-                                    kind: HirExprKind::Intrinsic {
-                                        name: "store".to_string(),
-                                        type_args: vec![f_ty],
-                                        args: vec![addr_expr, val],
-                                    },
-                                    span: func.expr.span,
-                                },
-                                type_args: Vec::new(),
-                                assign: None,
-                            });
-                        }
-                    }
-                }
-            }
-        }
 
         // Fallback: function value call
         Some(StackEntry {
