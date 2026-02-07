@@ -428,7 +428,6 @@ impl Parser {
         let vis = self.parse_visibility();
         let kw_span = self.expect_with_span(TokenKind::KwStruct)?;
         let (name, nspan) = self.expect_ident()?;
-        std::eprintln!("[Parser] parse_struct: {}", name);
         let type_params = self.parse_generic_params();
         self.expect(TokenKind::Colon)?;
         let mut fields = Vec::new();
@@ -470,7 +469,6 @@ impl Parser {
         let vis = self.parse_visibility();
         let kw_span = self.expect_with_span(TokenKind::KwEnum)?;
         let (name, nspan) = self.expect_ident()?;
-        std::eprintln!("[Parser] parse_enum: {}", name);
         let type_params = self.parse_generic_params();
         self.expect(TokenKind::Colon)?;
         if !self.consume_if(TokenKind::Newline) {
@@ -520,7 +518,6 @@ impl Parser {
             name: name_tok.0.clone(),
             span: name_tok.1,
         };
-        std::eprintln!("[Parser] parse_fn: {}", name.name);
 
 
         if matches!(self.peek_kind(), Some(TokenKind::Ident(_)))
