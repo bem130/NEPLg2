@@ -3,7 +3,7 @@ target = "web/index.html"
 public_url = "/web/dist/"
 
 [watch]
-ignore = []
+ignore = ["web/dist_ts"]
 
 [[hooks]]
 stage = "pre_build"
