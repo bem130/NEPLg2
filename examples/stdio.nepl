@@ -1,14 +1,22 @@
+//: main: 1行読み取り、受け取った文字列をそのまま表示するサンプル
+//:
+//: neplg2:test[stdio, normalize_newlines, strip_ansi]
+//: stdin: ./tests/a.in
+//: stdout: ./tests/a.out
+//:
+//: neplg2:test[stdio, normalize_newlines, strip_ansi]
+//: stdin: "hello\n"
+//: stdout: mlstr:
+//:     ##: accepting input...
+//:     ##: > input:
+//:     ##: hello
 #entry main
 #indent 4
 #target wasi
 
-#import "core/mem"
-#use std::mem::*
-#import "core/math"
-#use std::math::*
-#import "std/stdio"
-#use std::stdio::*
-
+#import "core/mem" as *
+#import "core/math" as *
+#import "std/stdio" as *
 
 fn main <()*> ()> ():
     println_color ansi_green "accepting input...";

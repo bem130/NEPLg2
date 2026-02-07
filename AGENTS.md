@@ -41,22 +41,34 @@ stdlib/nmでサポートする拡張markdownの形式で書きます
 
 (例)
 ```neplg2
-//: unwrap_err: Err の[中身/なかみ]を[取/と]り[出/だ]す（[不一致/ふいっち]なら[到達/とうたつ][不能/ふのう]）
+//: unwrap_err: Err の[中身/なかみ]を[取/と]り[出/だ]す（Ok なら[到達/とうたつ][不能/ふのう]）
 //:
 //: [目的/もくてき]:
 //: - r が Err(e) なら e を[返/かえ]します。
+//: - r が Ok(v) なら unreachable により「異常終了」します。
 //:
-//: [実装/じっそう](アルゴリズム):
-//: - match で Ok/Err を[分岐/ぶんき]し、
-//:   - Err: [中身/なかみ] e をそのまま[返/かえ]す
-//:   - Ok : unreachable を[呼/よ]ぶ
+//:| #import "std/test" as *
+//:| #import "core/result" as *
 //:
-//: [注意/ちゅうい]([重要/じゅうよう]):
-//: - r が Ok の[可能性/かのうせい]がある[場面/ばめん]で[呼/よ]ぶと[終了/しゅうりょう]します（[安全/あんぜん]ではありません）。
-//: - [事前/じぜん]に is_err で[確認/かくにん]するか、[必要/ひつよう]なら map_err などで[処理/しょり]してください。
+//: neplg2:test
+//: ```neplg2
+//: let r Result::Err "oops";
+//: assert_str_eq "oops" unwrap_err r;
+//: ```
 //:
-//: [計算量/けいさんりょう]:
-//: - O(1)
+//: neplg2:test[should_panic]
+//: ```neplg2
+//: // Ok を渡すと unreachable が呼ばれ、落ちることを期待
+//: let r Result::Ok 123;
+//: unwrap_err r;
+//: ```
+//:
+//: neplg2:test[compile_fail]
+//: ```neplg2
+//: // E が i32 の Result に文字列 Err を入れているので型エラーを期待
+//: let r <Result<i32, i32>> Result::Err "text";
+//: unwrap_err r;
+//: ```
 fn unwrap_err <.T, .E> <(Result<.T, .E>)->.E> (r):
     match r:
         Result::Ok v:
