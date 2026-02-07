@@ -271,6 +271,7 @@ impl Loader {
         Ok(module)
     }
 
+
     fn load_file(
         &self,
         path: &PathBuf,
@@ -289,11 +290,15 @@ impl Loader {
                 canon
             )));
         }
+        std::eprintln!("[Loader] Loading file: {:?}", canon);
         let src = read_file_to_string(&canon)?;
         let file_id = sm.add(canon.clone(), src.clone());
+        std::eprintln!("[Loader] Parsing module: {:?}", canon);
         let module = self.parse_module(file_id, src)?;
+        std::eprintln!("[Loader] Processing directives for: {:?}", canon);
         let module =
             self.process_directives(canon.clone(), module, sm, cache, processing, imported_once)?;
+        std::eprintln!("[Loader] Finished loading: {:?}", canon);
         processing.remove(&canon);
         cache.insert(canon.clone(), module.clone());
         Ok(module)

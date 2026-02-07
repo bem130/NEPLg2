@@ -126,10 +126,16 @@ fn execute(cli: Cli) -> Result<()> {
         .unwrap_or_else(|| "<stdin>".to_string());
     let (module, source_map) = match cli.input {
         Some(path) => {
+            eprintln!("DEBUG: Creating Loader for path: {}", path);
             let mut loader = Loader::new(stdlib_root()?);
+            eprintln!("DEBUG: Loader created, starting load");
             match loader.load(&PathBuf::from(path)) {
-                Ok(res) => (res.module, loader.source_map().clone()),
+                Ok(res) => {
+                    eprintln!("DEBUG: Load successful");
+                    (res.module, loader.source_map().clone())
+                },
                 Err(e) => {
+                    eprintln!("DEBUG: Load failed: {:?}", e);
                     if let nepl_core::loader::LoaderError::Core(CoreError::Diagnostics(diags)) = &e {
                         render_diagnostics(diags, loader.source_map());
                         std::process::exit(1);
@@ -141,10 +147,16 @@ fn execute(cli: Cli) -> Result<()> {
         None => {
             let mut buffer = String::new();
             io::stdin().read_to_string(&mut buffer)?;
+            eprintln!("DEBUG: Creating Loader for stdin");
             let mut loader = Loader::new(stdlib_root()?);
+            eprintln!("DEBUG: Loader created, starting load_inline");
             match loader.load_inline(PathBuf::from("<stdin>"), buffer) {
-                Ok(res) => (res.module, loader.source_map().clone()),
+                Ok(res) => {
+                    eprintln!("DEBUG: Load inline successful");
+                    (res.module, loader.source_map().clone())
+                },
                 Err(e) => {
+                    eprintln!("DEBUG: Load inline failed: {:?}", e);
                     if let nepl_core::loader::LoaderError::Core(CoreError::Diagnostics(diags)) = &e {
                         render_diagnostics(diags, loader.source_map());
                         std::process::exit(1);
@@ -199,13 +211,21 @@ fn execute(cli: Cli) -> Result<()> {
         profile,
     };
 
+    eprintln!("DEBUG: Calling compile_module");
     let artifact = match compile_module(module, options) {
-        Ok(a) => a,
+        Ok(a) => {
+            eprintln!("DEBUG: compile_module returned Ok");
+            a
+        },
         Err(CoreError::Diagnostics(diags)) => {
+            eprintln!("DEBUG: compile_module returned Diagnostics");
             render_diagnostics(&diags, &source_map);
             return Err(anyhow::anyhow!("compilation failed"));
         }
-        Err(e) => return Err(anyhow::anyhow!(e.to_string())),
+        Err(e) => {
+            eprintln!("DEBUG: compile_module returned Err: {:?}", e);
+            return Err(anyhow::anyhow!(e.to_string()));
+        },
     };
     if let Some(out) = &cli.output {
         let base = output_base_from_arg(out);

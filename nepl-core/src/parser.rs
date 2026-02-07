@@ -41,6 +41,7 @@ pub fn parse_tokens(file_id: FileId, lex: LexResult) -> ParseResult {
         diagnostics: lex.diagnostics,
         directives: Vec::new(),
         indent_width: lex.indent_width,
+        depth: 0,
     };
 
     let module = parser.parse_module();
@@ -57,6 +58,7 @@ struct Parser {
     diagnostics: Vec<Diagnostic>,
     directives: Vec<Directive>,
     indent_width: usize,
+    depth: usize,
 }
 
 impl Parser {
@@ -101,6 +103,18 @@ impl Parser {
     }
 
     fn parse_block_until(&mut self, end: TokenEnd) -> Option<Block> {
+        self.depth += 1;
+        if self.depth % 10 == 0 {
+            std::eprintln!("[Parser] Depth: {} (FileID: {:?}, Pos: {})", self.depth, self.file_id, self.pos);
+        }
+        let res = self.parse_block_until_internal(end);
+        if self.depth > 0 {
+            self.depth -= 1;
+        }
+        res
+    }
+
+    fn parse_block_until_internal(&mut self, end: TokenEnd) -> Option<Block> {
         let mut items = Vec::new();
         let mut start_span = self.peek_span().unwrap_or_else(Span::dummy);
 
@@ -152,6 +166,7 @@ impl Parser {
         } else {
             start_span
         };
+        
         Some(Block {
             items,
             span: start_span.join(end_span).unwrap_or(start_span),
@@ -355,20 +370,25 @@ impl Parser {
                 let span = self.next().unwrap().span;
                 Some(Stmt::Directive(Directive::NoPrelude { span }))
             }
-            TokenKind::KwPub => match self.peek_kind_at(1) {
-                Some(TokenKind::KwStruct) => self.parse_struct(),
-                Some(TokenKind::KwEnum) => self.parse_enum(),
-                Some(TokenKind::KwFn) => self.parse_fn(),
-                Some(TokenKind::KwTrait) => self.parse_trait(),
-                Some(TokenKind::KwImpl) => self.parse_impl(),
-                _ => {
-                    let span = self.peek_span().unwrap_or_else(Span::dummy);
-                    self.diagnostics.push(Diagnostic::error(
-                        "unexpected token after pub",
-                        span,
-                    ));
-                    self.next();
-                    None
+            TokenKind::KwPub => {
+                if let Some(tok) = self.peek() {
+                    std::eprintln!("[Parser] parse_stmt pub at pos {} (token: {:?})", self.pos, tok.kind);
+                }
+                match self.peek_kind_at(1) {
+                    Some(TokenKind::KwStruct) => self.parse_struct(),
+                    Some(TokenKind::KwEnum) => self.parse_enum(),
+                    Some(TokenKind::KwFn) => self.parse_fn(),
+                    Some(TokenKind::KwTrait) => self.parse_trait(),
+                    Some(TokenKind::KwImpl) => self.parse_impl(),
+                    _ => {
+                        let span = self.peek_span().unwrap_or_else(Span::dummy);
+                        self.diagnostics.push(Diagnostic::error(
+                            "unexpected token after pub",
+                            span,
+                        ));
+                        self.next();
+                        None
+                    }
                 }
             },
             TokenKind::KwStruct => self.parse_struct(),
@@ -397,6 +417,7 @@ impl Parser {
         let vis = self.parse_visibility();
         let kw_span = self.expect_with_span(TokenKind::KwStruct)?;
         let (name, nspan) = self.expect_ident()?;
+        std::eprintln!("[Parser] parse_struct: {}", name);
         let type_params = self.parse_generic_params();
         self.expect(TokenKind::Colon)?;
         let mut fields = Vec::new();
@@ -438,6 +459,7 @@ impl Parser {
         let vis = self.parse_visibility();
         let kw_span = self.expect_with_span(TokenKind::KwEnum)?;
         let (name, nspan) = self.expect_ident()?;
+        std::eprintln!("[Parser] parse_enum: {}", name);
         let type_params = self.parse_generic_params();
         self.expect(TokenKind::Colon)?;
         if !self.consume_if(TokenKind::Newline) {
@@ -484,9 +506,11 @@ impl Parser {
         let fn_span = self.expect_with_span(TokenKind::KwFn)?;
         let name_tok = self.expect_ident()?;
         let name = Ident {
-            name: name_tok.0,
+            name: name_tok.0.clone(),
             span: name_tok.1,
         };
+        std::eprintln!("[Parser] parse_fn: {}", name.name);
+
 
         if matches!(self.peek_kind(), Some(TokenKind::Ident(_)))
             && matches!(self.peek_kind_at(1), Some(TokenKind::Semicolon))
@@ -2247,6 +2271,17 @@ impl Parser {
     }
 
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {
+        self.depth += 1;
+        if self.depth > 1000 { panic!("STAY AWAY FROM INFINITE RECURSION"); }
+        if self.depth % 10 == 0 {
+             std::eprintln!("[Parser] parse_type_expr depth={} pos={}", self.depth, self.pos);
+        }
+        let res = self.parse_type_expr_internal();
+        self.depth -= 1;
+        res
+    }
+
+    fn parse_type_expr_internal(&mut self) -> Option<TypeExpr> {
         match self.peek_kind()? {
             TokenKind::UnitLiteral => {
                 self.next();
