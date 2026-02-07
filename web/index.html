@@ -63,11 +63,23 @@
         </header>
 
         <main class="workspace">
-            <section class="pane editor-pane">
+            <section class="pane explorer-pane" id="explorer-pane">
                 <div class="pane-header">
-                    <span class="pane-title">Editor</span>
-                    <span class="file-status" id="editor-status">examples/rpn.nepl</span>
+                    <span class="pane-title">Explorer</span>
+                    <button class="icon-btn" id="refresh-explorer" title="Refresh Explorer">🔄</button>
                 </div>
+                <div class="explorer-content" id="explorer-content">
+                    <!-- VFS Tree will be rendered here -->
+                </div>
+            </section>
+
+            <div class="resizer" id="explorer-resizer"></div>
+
+            <section class="pane editor-pane">
+                <div class="tabs-container" id="tabs-container">
+                    <!-- Tabs will be rendered here -->
+                </div>
+                <!-- Removed old pane-header from here as tabs replace it -->
                 <div class="canvas-container" id="editor-container">
                     <canvas id="editor-canvas"></canvas>
                     <textarea id="editor-hidden-input" class="hidden-input" autocomplete="off" autocorrect="off"

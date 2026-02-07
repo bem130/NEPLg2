@@ -50,9 +50,6 @@ export class CanvasTerminal {
         this.textarea = textarea;
         this.options = options;
 
-        // Dependencies
-        this.shell = new Shell(this, null as any);
-
         // State
         this.colors = {
             background: '#0d1117',
@@ -90,6 +87,9 @@ export class CanvasTerminal {
         this.scrollTop = 0;
         this.maxScrollTop = 0;
         this.cursorVisible = true;
+
+        // Dependencies - initialize Shell last
+        this.shell = new Shell(this, (options as any).vfs || null);
 
         this.blinkInterval = setInterval(() => {
             this.cursorVisible = !this.cursorVisible;
@@ -315,7 +315,6 @@ export class CanvasTerminal {
     async execute() {
         const cmd = this.currentInput;
         if (this.shell.isRunning) {
-            // Echo input correctly: if we are at the end of a line (prompt), append to it.
             if (!this.lastLineEndedWithNewline && this.history.length > 0) {
                 const lastLine = this.history.pop()!;
                 lastLine.push({ text: cmd + '\n', color: this.colors.input });

@@ -1,5 +1,7 @@
 import { CanvasTerminal } from './terminal/terminal.js';
 import { VFS } from './runtime/vfs.js';
+import { TabManager } from './library/tabs.js';
+import { FileExplorer } from './library/explorer.js';
 
 declare const NEPLg2LanguageProvider: any;
 declare const CanvasEditorLibrary: any;
@@ -30,7 +32,6 @@ function start_app() {
     }
     console.log("[Playground] Trunk application started. Initializing...");
 
-    console.log("[Playground] WASM bindings:", wasm);
     if (wasm && wasm.initSync) {
         try {
             wasm.initSync();
@@ -40,7 +41,6 @@ function start_app() {
             if (wasm.get_stdlib_files) {
                 const stdlibFiles = wasm.get_stdlib_files();
                 if (stdlibFiles && Array.isArray(stdlibFiles)) {
-                    console.log(`[Playground] Mounting ${stdlibFiles.length} stdlib files...`);
                     for (const [path, content] of stdlibFiles) {
                         vfs.writeFile('/stdlib/' + path, content);
                     }
@@ -51,7 +51,6 @@ function start_app() {
             if (wasm.get_example_files) {
                 const exampleFiles = wasm.get_example_files();
                 if (exampleFiles && Array.isArray(exampleFiles)) {
-                    console.log(`[Playground] Mounting ${exampleFiles.length} example files into /examples/`);
                     for (const [path, content] of exampleFiles) {
                         vfs.writeFile('/examples/' + path, content);
                     }
@@ -62,7 +61,6 @@ function start_app() {
             if (wasm.get_readme) {
                 const readme = wasm.get_readme();
                 vfs.writeFile('/README', readme);
-                console.log("[Playground] README mounted to VFS.");
             }
         } catch (e) {
             console.error("[Playground] WASM initSync failed:", e);
@@ -72,16 +70,17 @@ function start_app() {
     // --- DOM Elements ---
     const editorCanvas = document.getElementById('editor-canvas') as HTMLCanvasElement;
     const editorTextarea = document.getElementById('editor-hidden-input') as HTMLTextAreaElement;
-    const editorStatus = document.getElementById('editor-status');
     const completionList = document.getElementById('completion-list') as HTMLElement;
     const generalPopup = document.getElementById('general-popup') as HTMLElement;
     const terminalCanvas = document.getElementById('terminal-canvas') as HTMLCanvasElement;
     const terminalTextarea = document.getElementById('terminal-hidden-input') as HTMLTextAreaElement;
-    const exampleSelect = document.getElementById('example-select') as HTMLSelectElement;
     const fontSizeSelect = document.getElementById('font-size-select') as HTMLSelectElement;
 
+    const explorerContent = document.getElementById('explorer-content') as HTMLElement;
+    const tabsContainer = document.getElementById('tabs-container') as HTMLElement;
+    const refreshExplorerBtn = document.getElementById('refresh-explorer') as HTMLElement;
+
     // --- Editor Setup ---
-    console.log("[Playground] Setting up CanvasEditor...");
     const neplProvider = new NEPLg2LanguageProvider();
     const { editor } = CanvasEditorLibrary.createCanvasEditor({
         canvas: editorCanvas,
@@ -94,84 +93,72 @@ function start_app() {
         initialLanguage: 'nepl'
     });
 
+    // --- Tab & Explorer Setup ---
+    const tabManager = new TabManager(tabsContainer, editor, vfs);
+    const fileExplorer = new FileExplorer(explorerContent, vfs, (path) => {
+        tabManager.openFile(path);
+    });
+
     // --- Terminal Setup ---
-    console.log("[Playground] Setting up CanvasTerminal...");
-    const terminal = new CanvasTerminal(terminalCanvas, terminalTextarea, null, {});
+    const terminal = new CanvasTerminal(terminalCanvas, terminalTextarea, null, { vfs });
 
     // Inject dependencies into shell
     if (terminal.shell) {
         terminal.shell.editor = editor;
         terminal.shell.vfs = vfs;
-        console.log("[Playground] Shell dependencies injected.");
+        (terminal.shell as any).tabManager = tabManager;
     }
 
-    // --- Simple Commands for Buttons ---
+    // --- Resizer Logic ---
+    const setupResizer = (resizerId: string, leftPaneId: string, isHorizontal: boolean) => {
+        const resizer = document.getElementById(resizerId);
+        const leftPane = document.getElementById(leftPaneId);
+        if (!resizer || !leftPane) return;
+
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = isHorizontal ? 'col-resize' : 'row-resize';
+            resizer.classList.add('dragging');
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            if (isHorizontal) {
+                const width = e.clientX - leftPane.getBoundingClientRect().left;
+                leftPane.style.width = width + 'px';
+            }
+            editor.resizeEditor();
+            terminal.resizeEditor();
+        });
+
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+            document.body.style.cursor = 'default';
+            resizer.classList.remove('dragging');
+        });
+    };
+
+    setupResizer('explorer-resizer', 'explorer-pane', true);
+    setupResizer('workspace-resizer', 'editor-pane', true);
+
+    // --- Simple Commands ---
     function executeCommand(cmd: string) {
-        console.log(`[Playground] Executing command: ${cmd}`);
+        tabManager.saveCurrentTab(); // Sync before execution
         terminal.currentInput = cmd;
         terminal.execute();
     }
 
-    // --- Example Loading Logic ---
-    async function loadExamples() {
-        console.log("[Playground] Scanning VFS for examples...");
-        const examples = vfs.listDir('/examples');
-        console.log("[Playground] Examples listed from VFS:", examples);
-
-        exampleSelect.innerHTML = '<option value="" disabled selected>Select an example...</option>';
-
-        for (const file of examples) {
-            const option = document.createElement('option');
-            option.value = file;
-            option.textContent = file;
-            exampleSelect.appendChild(option);
-        }
-
-        if (examples.includes('rpn.nepl')) {
-            await loadExample('rpn.nepl');
-        } else if (examples.length > 0) {
-            await loadExample(examples[0]);
-        }
-    }
-
-    async function loadExample(filename: string) {
-        console.log(`[Playground] Loading example from VFS: ${filename}`);
-        try {
-            const path = '/examples/' + filename;
-            if (!vfs.exists(path)) {
-                console.error(`[Playground] File not found in VFS: ${path}`);
-                return;
-            }
-            const text = vfs.readFile(path) as string;
-            editor.setText(text);
-            if (editorStatus) editorStatus.textContent = path.substring(1); // "examples/..."
-            terminal.print([
-                { text: "Loaded ", color: "#56d364" },
-                { text: filename, color: "#58a6ff" }
-            ]);
-            exampleSelect.value = filename;
-        } catch (error) {
-            console.error(`[Playground] Error loading example ${filename}:`, error);
-            terminal.printError(`Error loading ${filename}: ${error}`);
-        }
-    }
-
-    async function loadSelectedExample() {
-        const selectedFile = exampleSelect.value;
-        if (!selectedFile) return;
-        await loadExample(selectedFile);
-    }
-
     function updateFontSize() {
         const size = parseInt(fontSizeSelect.value);
-        console.log(`[Playground] Updating font size to ${size}px`);
         editor.setFontSize(size);
         terminal.setFontSize(size);
     }
 
     // --- Event Listeners ---
-    exampleSelect.addEventListener('change', loadSelectedExample);
     fontSizeSelect.addEventListener('change', updateFontSize);
+    refreshExplorerBtn.addEventListener('click', () => fileExplorer.refresh());
 
     window.addEventListener('resize', () => {
         editor.resizeEditor();
@@ -179,14 +166,15 @@ function start_app() {
     });
 
     // --- Initialization ---
-    loadExamples();
+    fileExplorer.render();
+    tabManager.openFile('/examples/rpn.nepl');
 
     // Make globally available
     (window as any).editor = editor;
     (window as any).terminal = terminal;
     (window as any).executeCommand = executeCommand;
+    (window as any).tabManager = tabManager;
 
-    // Initial resize and focus
     setTimeout(() => {
         editor.resizeEditor();
         terminal.resizeEditor();

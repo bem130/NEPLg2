@@ -1,172 +1,114 @@
-import { WASI } from '../runtime/wasi.js';
-import { CanvasTerminal } from './terminal.js';
 import { VFS } from '../runtime/vfs.js';
 
 export class Shell {
-    terminal: CanvasTerminal;
+    terminal: any;
+    editor: any;
     vfs: VFS;
     env: Map<string, string>;
     history: string[];
     historyIndex: number;
-    editor: any;
 
-    constructor(terminal: CanvasTerminal, vfs: VFS) {
+    constructor(terminal: any, vfs: VFS) {
         this.terminal = terminal;
-        this.vfs = vfs;
-        this.env = new Map();
+        this.vfs = vfs || new VFS();
+        this.editor = null;
+        this.env = new Map([
+            ["USER", "nepl"],
+            ["PATH", "/usr/bin:/bin"],
+            ["SHELL", "nepl-shell"]
+        ]);
         this.history = [];
         this.historyIndex = 0;
-        this.editor = null;
     }
 
     async executeLine(line: string) {
-        if (!line.trim()) return;
-        this.history.push(line);
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        this.history.push(trimmed);
         this.historyIndex = this.history.length;
 
-        const segments = line.split('|').map(s => s.trim());
-        let inputData: any = null;
+        const parts = trimmed.split(/\s+/);
+        const cmd = parts[0];
+        const args = parts.slice(1);
 
-        for (let i = 0; i < segments.length; i++) {
-            const segment = segments[i];
-            const args = this.parseArgs(segment);
-            if (args.length === 0) continue;
-
-            const cmd = args[0];
-            const cmdArgs = args.slice(1);
-
-            try {
-                const isLast = (i === segments.length - 1);
-                const output = await this.runCommand(cmd, cmdArgs, inputData);
-
-                if (isLast) {
-                    if (output) this.terminal.print(output);
-                } else {
-                    inputData = output;
-                }
-            } catch (e: any) {
-                this.terminal.printError(`Error: ${e.message}`);
-                break;
+        let result: any;
+        try {
+            switch (cmd) {
+                case 'help':
+                    result = this.cmdHelp();
+                    break;
+                case 'ls':
+                    result = this.cmdLs(args);
+                    break;
+                case 'cat':
+                    result = this.cmdCat(args);
+                    break;
+                case 'pwd':
+                    result = "/";
+                    break;
+                case 'echo':
+                    result = args.join(' ');
+                    break;
+                case 'clear':
+                    this.terminal.clear();
+                    return;
+                case 'neplg2':
+                    result = await this.cmdNeplg2(args, null);
+                    break;
+                case 'wasmi':
+                    result = await this.cmdWasmi(args, null);
+                    break;
+                case 'tree':
+                    result = this.renderTree(args[0] || '/');
+                    break;
+                default:
+                    result = `Command not found: ${cmd}`;
             }
+        } catch (e: any) {
+            result = `Error: ${e.message}`;
+        }
+
+        if (result !== undefined && result !== null) {
+            this.terminal.print(result);
         }
     }
 
-    parseArgs(segment: string) {
-        const args: string[] = [];
-        let current = '';
-        let inQuote = false;
-
-        for (let i = 0; i < segment.length; i++) {
-            const char = segment[i];
-            if (char === '"') {
-                inQuote = !inQuote;
-            } else if (char === ' ' && !inQuote) {
-                if (current) {
-                    args.push(current);
-                    current = '';
-                }
-            } else {
-                current += char;
-            }
-        }
-        if (current) args.push(current);
-        return args;
+    cmdHelp() {
+        return `Available commands:
+  help          - Show this help
+  ls [path]     - List directory contents
+  cat <file>    - Display file contents
+  pwd           - Print working directory
+  clear         - Clear the terminal
+  neplg2 [run|build] [-i input] [-o output] [--emit wat]
+                - Compile and run NEPLg2 code
+  wasmi <file>  - Run a WASM file using the wasmi runtime
+  tree [path]   - Show directory tree structure
+  echo [text]   - Display text`;
     }
 
-    async runCommand(cmd: string, args: string[], stdin: any): Promise<any> {
-        switch (cmd) {
-            case 'echo':
-                if (args.length > 0) return args.join(' ');
-                return stdin || "";
+    cmdLs(args: string[]) {
+        const path = args[0] || '/';
+        try {
+            const entries = this.vfs.listDir(path);
+            return entries.join('  ');
+        } catch (e: any) {
+            return `ls: ${path}: ${e.message}`;
+        }
+    }
 
-            case 'clear':
-            case 'cls':
-                this.terminal.clear();
-                return null;
-
-            case 'help':
-                return [
-                    "Available commands:",
-                    "  help      Show this help message",
-                    "  clear     Clear the terminal screen",
-                    "  echo      Print arguments to stdout",
-                    "  ls        List files in the virtual file system",
-                    "  tree      Recursive directory listing",
-                    "  cat       Display file content",
-                    "  copy      Copy terminal buffer to clipboard",
-                    "  neplg2    NEPLg2 Compiler & Toolchain",
-                    "    run     Compile and run the current editor content",
-                    "    build   Compile the editor or a file",
-                    "  run       Alias for 'neplg2 run'",
-                    "  compile   Alias for 'neplg2 build --emit wat'",
-                    "  test      Alias for 'neplg2 run stdlib/test.nepl' (if applicable)",
-                    "  wasmi     Run a .wasm file"
-                ].join('\n');
-
-            case 'run':
-                return await this.cmdNeplg2(['run'], stdin);
-
-            case 'build':
-                return await this.cmdNeplg2(['build'], stdin);
-
-            case 'compile':
-                return await this.cmdNeplg2(['build', '--emit', 'wat'], stdin);
-
-            case 'test':
-                return await this.cmdNeplg2(['run', 'stdlib/std/test.nepl'], stdin);
-
-            case 'neplg2':
-                return await this.cmdNeplg2(args, stdin);
-
-            case 'wasmi':
-                return await this.cmdWasmi(args, stdin);
-
-            case 'ls':
-                const lsPath = args[0] || '/';
-                try {
-                    if (this.vfs.isDir(lsPath)) {
-                        const entries = this.vfs.listDir(lsPath);
-                        const mapped = entries.map(entry => {
-                            const fullPath = (lsPath.endsWith('/') ? lsPath : lsPath + '/') + entry;
-                            return this.vfs.isDir(fullPath) ? entry + '/' : entry;
-                        });
-                        return mapped.join('\n');
-                    }
-                    return this.vfs.exists(lsPath) ? args[0] : `ls: no such file or directory: ${lsPath}`;
-                } catch (e: any) {
-                    return `ls: ${e.message}`;
-                }
-
-            case 'tree':
-                const treePath = args[0] || '/';
-                try {
-                    return this.renderTree(treePath);
-                } catch (e: any) {
-                    return `tree: ${e.message}`;
-                }
-
-            case 'cat':
-                if (args.length === 0) return "cat: missing operand";
-                const catPath = args[0];
-                try {
-                    if (this.vfs.isDir(catPath)) return `cat: ${catPath}: Is a directory`;
-                    const content = this.vfs.readFile(catPath);
-                    if (typeof content === 'string') return content;
-                    return "[Binary content]";
-                } catch (e: any) {
-                    return `cat: ${catPath}: No such file`;
-                }
-
-            case 'copy':
-                this.terminal.copyAll();
-                return null;
-
-            case 'vfs_debug':
-                console.log(this.vfs);
-                return "Dumped to console";
-
-            default:
-                throw new Error(`Unknown command: ${cmd}`);
+    cmdCat(args: string[]) {
+        if (args.length === 0) return "cat: missing file";
+        const path = args[0];
+        try {
+            const content = this.vfs.readFile(path);
+            if (content instanceof Uint8Array) {
+                return `cat: ${path}: Binary file`;
+            }
+            return content;
+        } catch (e: any) {
+            return `cat: ${path}: ${e.message}`;
         }
     }
 
@@ -176,48 +118,79 @@ export class Shell {
         if (args.includes('run') || args.includes('build')) {
             this.terminal.print("Compiling...");
 
-            let inputFile = parsed.flags['-i'] || parsed.flags['--input'];
-            if (!inputFile) {
+            // Sync current editor state to VFS via TabManager if available
+            if ((this as any).tabManager) {
+                (this as any).tabManager.saveCurrentTab();
+            }
+
+            let inputFile: string | boolean | undefined = parsed.flags['-i'] || parsed.flags['--input'];
+            if (!inputFile || inputFile === true) {
                 const lastPos = parsed.positional[parsed.positional.length - 1];
                 if (lastPos && lastPos !== 'run' && lastPos !== 'build') {
                     inputFile = lastPos;
+                } else {
+                    inputFile = undefined;
                 }
             }
 
             let source = "";
             let inputPath = "editor";
 
-            if (inputFile) {
-                if (typeof inputFile !== 'string') return "Error: Invalid input file path";
-                if (!this.vfs.exists(inputFile)) return `Error: File not found '${inputFile}'`;
-                source = this.vfs.readFile(inputFile) as string;
-                inputPath = inputFile;
-            } else {
-                if (this.editor) {
-                    if (typeof this.editor.getText === 'function') {
-                        source = this.editor.getText();
-                    } else if (this.editor.text !== undefined) {
-                        source = this.editor.text;
-                    } else {
-                        return "Error: Could not retrieve text from editor";
+            // If we have an active editor, try to use its content if it matches the input file or no input file given
+            if (this.editor) {
+                const editorPath = (this.editor as any).path;
+                const editorText = typeof this.editor.getText === 'function' ? this.editor.getText() : (this.editor as any).text;
+                
+                if (editorText !== undefined) {
+                    const isTargetFile = typeof inputFile === 'string' && (inputFile === editorPath || (inputFile.startsWith('/') && inputFile === (editorPath.startsWith('/') ? editorPath : '/' + editorPath)));
+                    
+                    if (!inputFile || isTargetFile) {
+                        source = editorText;
+                        inputPath = editorPath || "editor";
+                        if (editorPath) {
+                            this.vfs.writeFile(editorPath, editorText);
+                            this.terminal.print(`(Using synced editor content for ${editorPath})`);
+                        } else {
+                            this.terminal.print("(Using editor content)");
+                        }
                     }
-                    this.terminal.print("(Using editor content)");
-                } else {
-                    return "Error: Editor not connected";
                 }
             }
+
+            if (!source) {
+                if (typeof inputFile === 'string') {
+                    if (!this.vfs.exists(inputFile)) {
+                        const slashed = inputFile.startsWith('/') ? inputFile : '/' + inputFile;
+                        if (this.vfs.exists(slashed)) {
+                            inputFile = slashed;
+                        } else {
+                            return `Error: File not found '${inputFile}'`;
+                        }
+                    }
+                    source = this.vfs.readFile(inputFile) as string;
+                    inputPath = inputFile;
+                } else if (this.editor) {
+                    // Fallback to editor if source still not found and editor exists
+                    source = typeof this.editor.getText === 'function' ? this.editor.getText() : (this.editor as any).text;
+                    inputPath = (this.editor as any).path || "editor";
+                } else {
+                    return "Error: No input file and editor not connected";
+                }
+            }
+
             this.terminal.print(`Source: ${inputPath}`);
 
-            if (!window.wasmBindings) return "Error: Compiler (WASM) not loaded yet.";
+            if (!(window as any).wasmBindings) return "Error: Compiler (WASM) not loaded yet.";
+            const wasmBindings = (window as any).wasmBindings;
 
             try {
                 if (parsed.flags['--emit'] && (parsed.flags['--emit'] as string).includes('wat')) {
-                    const wat = window.wasmBindings.compile_to_wat(source);
+                    const wat = wasmBindings.compile_to_wat(source);
                     this.vfs.writeFile('out.wat', wat);
                     this.terminal.print("Generated out.wat");
                 }
 
-                const wasm = window.wasmBindings.compile_source_with_vfs(inputPath, source, this.vfs.serialize());
+                const wasm = wasmBindings.compile_source_with_vfs(inputPath, source, this.vfs.serialize());
                 const outFile = (parsed.flags['-o'] as string) || 'out.wasm';
                 this.vfs.writeFile(outFile, wasm);
                 this.terminal.print(`Compilation finished. Output to ${outFile}`);
@@ -289,9 +262,6 @@ export class Shell {
                     this.sab = new SharedArrayBuffer(1024 * 64);
                     this.stdinBuffer = new Int32Array(this.sab, 0, 1);
                     this.stdinData = new Uint8Array(this.sab, 4);
-                    console.log("crossOriginIsolated:", window.crossOriginIsolated);
-                } else {
-                    console.warn("SharedArrayBuffer is UNDEFINED.");
                 }
             } catch (e) {
                 console.warn("SharedArrayBuffer restriction:", e);
@@ -309,10 +279,6 @@ export class Shell {
                     case 'stdout':
                         const text = new TextDecoder().decode(new Uint8Array(data));
                         this.terminal.write(text);
-                        break;
-                    case 'stdin_request':
-                        // In a real terminal, we might switch mode here
-                        // For now we assume terminal handles input and calls handleStdin
                         break;
                     case 'exit':
                         this.activeWorker = null;
@@ -347,18 +313,13 @@ export class Shell {
     handleStdin(text: string | null) {
         if (this.stdinBuffer && this.stdinData) {
             if (text === null) {
-                console.log("Sending EOF to stdin");
                 Atomics.store(this.stdinBuffer, 0, -1);
             } else {
-                console.log("Sending to stdin:", text);
                 const encoded = new TextEncoder().encode(text);
                 this.stdinData.set(encoded);
                 Atomics.store(this.stdinBuffer, 0, encoded.length);
             }
-            const wakeCount = Atomics.notify(this.stdinBuffer, 0);
-            console.log("Notified worker, wakeCount:", wakeCount);
-        } else {
-            console.warn("handleStdin called but stdinBuffer is not available");
+            Atomics.notify(this.stdinBuffer, 0);
         }
     }
 
