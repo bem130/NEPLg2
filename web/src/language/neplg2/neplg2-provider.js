@@ -3,3 +3,5 @@ class NEPLg2LanguageProvider extends BaseLanguageProvider {
         super('src/language/neplg2/neplg2-worker.js'); // 対応するWorkerのパスを指定
     }
 }
+
+window.NEPLg2LanguageProvider = NEPLg2LanguageProvider;

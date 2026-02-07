@@ -3,3 +3,5 @@ class MarkdownLanguageProvider extends BaseLanguageProvider {
         super('src/language/markdown/md-worker.js'); // 対応するWorkerのパスを指定
     }
 }
+
+window.MarkdownLanguageProvider = MarkdownLanguageProvider;

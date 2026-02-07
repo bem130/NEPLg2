@@ -9,7 +9,7 @@ class BaseLanguageProvider {
     constructor(workerPath) {
         this.worker = new Worker(workerPath);
         this.callbacks = new Map();
-        this.updateCallback = () => {};
+        this.updateCallback = () => { };
 
         this.worker.onmessage = (event) => {
             const { type, payload, requestId } = event.data;
@@ -43,3 +43,5 @@ class BaseLanguageProvider {
     adjustIndentation(selectionStart, selectionEnd, isOutdent) { return this._postMessageAndWaitForResult('adjustIndentation', { selectionStart, selectionEnd, isOutdent }); }
     getBracketMatch(index) { return this._postMessageAndWaitForResult('getBracketMatch', { index }); }
 }
+
+window.BaseLanguageProvider = BaseLanguageProvider;

@@ -69,11 +69,11 @@
     }
 
     global.CanvasEditorLibrary = {
-        CanvasEditor,
-        BaseLanguageProvider,
-        JavaScriptLanguageProvider,
-        MarkdownLanguageProvider,
-        NEPLg2LanguageProvider,
+        CanvasEditor: global.CanvasEditor,
+        BaseLanguageProvider: global.BaseLanguageProvider,
+        JavaScriptLanguageProvider: global.JavaScriptLanguageProvider,
+        MarkdownLanguageProvider: global.MarkdownLanguageProvider,
+        NEPLg2LanguageProvider: global.NEPLg2LanguageProvider,
         createCanvasEditor,
         createWorkerLanguageProvider
     };

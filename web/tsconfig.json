@@ -8,6 +8,7 @@
         "checkJs": false,
         "outDir": "./dist_ts",
         "rootDir": "./src",
+        "baseUrl": "./src",
         "sourceMap": true,
         "skipLibCheck": true,
         "esModuleInterop": true,
