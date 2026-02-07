@@ -6,7 +6,15 @@
 }
 
 body {
-    font-family: "HackGenConsoleNF", 'Space Mono', 'Noto Sans JP', monospace;
+    font-family: var(--font-ui);
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 :root {
@@ -36,16 +44,6 @@ body {
 * {
     box-sizing: border-box;
     color-scheme: dark;
-}
-
-body {
-    margin: 0;
-    padding: 0;
-    font-family: var(--font-ui);
-    background-color: var(--bg-app);
-    color: var(--text-primary);
-    height: 100vh;
-    overflow: hidden;
 }
 
 .app-container {
@@ -296,6 +294,10 @@ canvas {
     border-top: 2px solid var(--border-accent);
 }
 
+.tab.provisional .tab-title {
+    font-style: italic;
+}
+
 .tab-close {
     font-size: 14px;
     opacity: 0.5;
@@ -318,7 +320,45 @@ canvas {
     border-radius: 4px;
 }
 
+.btn-danger {
+    background-color: #e06c75 !important;
+    color: white !important;
+}
+
+.btn-danger:hover {
+    background-color: #be5046 !important;
+}
+
 .icon-btn:hover {
     background-color: var(--bg-hover);
     color: var(--text-primary);
+}
+
+/* --- Status Bar --- */
+.status-bar {
+    height: 22px;
+    background-color: var(--bg-pane);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    user-select: none;
+    z-index: 100;
+}
+
+.status-left,
+.status-right {
+    display: flex;
+    gap: 15px;
+}
+
+#cursor-pos {
+    min-width: 100px;
+}
+
+.status-right span {
+    padding: 0 5px;
 }

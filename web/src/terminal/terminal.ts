@@ -449,6 +449,10 @@ export class CanvasTerminal {
         this.print([{ text: text, color: '#ff7b72' }]);
     }
 
+    printWarning(text: string) {
+        this.print([{ text: text, color: '#e3b341' }]);
+    }
+
     clear() {
         this.history = [];
         this.scrollTop = 0;

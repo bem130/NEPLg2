@@ -124,6 +124,7 @@ class CanvasEditor {
         this.inputHandler = new EditorInputHandler(this);
         this.domUI = new EditorDOMUI(this, domElements);
 
+        this.onCursorChange = options.onCursorChange || null;
         this.init();
     }
 
@@ -255,6 +256,7 @@ class CanvasEditor {
         if (resetX) { this.preferredCursorX = -1; }
         this.scrollToCursor(); this.resetCursorBlink();
         this.updateOccurrencesHighlight(); this.updateBracketMatching();
+        if (this.onCursorChange) this.onCursorChange(this.cursor);
     }
 
     updateLines() { this.lines = this.text.split('\n'); }

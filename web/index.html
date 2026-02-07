@@ -31,12 +31,6 @@
             </div>
             <div class="controls">
                 <div class="control-group">
-                    <label for="example-select">Example:</label>
-                    <select id="example-select">
-                        <option value="" disabled selected>Select an example...</option>
-                    </select>
-                </div>
-                <div class="control-group">
                     <label for="font-size-select">Size:</label>
                     <select id="font-size-select">
                         <option value="12">12px</option>
@@ -48,16 +42,11 @@
                     </select>
                 </div>
                 <div class="control-group">
-                    <button id="run-button" class="btn"
-                        onclick="window.executeCommand?.('neplg2 run -i ' + document.getElementById('editor-status').textContent)"
-                        title="Run the program">▶ Run</button>
-                    <button id="compile-button" class="btn"
-                        onclick="window.executeCommand?.('neplg2 build --emit wat -i ' + document.getElementById('editor-status').textContent)"
-                        title="Compile to WAT">🔧 Compile</button>
-                    <button id="test-button" class="btn" onclick="window.executeCommand?.('help')" title="Show help">🧪
-                        Help</button>
-                    <button id="clear-button" class="btn" onclick="window.executeCommand?.('clear')"
-                        title="Clear terminal">🗑 Clear</button>
+                    <button id="run-button" class="btn" title="Run the program">▶ Run</button>
+                    <button id="compile-button" class="btn" title="Compile to WAT">🔧 Compile</button>
+                    <button id="help-button" class="btn" title="Show help">🧪 Help</button>
+                    <button id="clear-button" class="btn" title="Clear terminal">🗑 Clear</button>
+                    <button id="stop-button" class="btn btn-danger" title="Stop execution">🛑 Stop</button>
                 </div>
             </div>
         </header>
@@ -105,6 +94,17 @@
         </main>
 
         <div id="general-popup" class="popup-tooltip hidden"></div>
+
+        <footer id="status-bar" class="status-bar">
+            <div class="status-left">
+                <span id="cursor-pos">Ln 1, Col 1</span>
+            </div>
+            <div class="status-right">
+                <span id="editor-lang">NEPLg2</span>
+                <span id="editor-encoding">UTF-8</span>
+                <span id="editor-indent">Spaces: 4</span>
+            </div>
+        </footer>
     </div>
 
     <!-- Editor Components -->
@@ -123,7 +123,7 @@
     <script data-trunk rel="js" src="./src/library/canvas-editor-lib.js"></script>
 
     <link data-trunk rel="copy-dir" href="dist_ts">
-    <!-- Main Entry Point -->
+    <!-- Scripts -->
     <script type="module" src="dist_ts/main.js"></script>
 </body>
 
