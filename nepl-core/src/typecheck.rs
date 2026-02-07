@@ -1943,9 +1943,6 @@ impl<'a> BlockChecker<'a> {
                     } else if intrin.name == "reinterpret_f32_i32" {
                         self.ctx.i32()
                     } else if intrin.name == "get_field" {
-                        // Return a fresh variable if we can't resolve yet.
-                        // If it's used in a context like `get[T, I, R] -> .R`,
-                        // this will be unified with .R.
                         self.ctx.fresh_var(None)
                     } else if intrin.name == "set_field" {
                         self.ctx.unit()
@@ -1955,9 +1952,6 @@ impl<'a> BlockChecker<'a> {
                     };
 
                     if intrin.name == "get_field" {
-                        if args.len() != 2 {
-                             self.diagnostics.push(Diagnostic::error("get_field expects 2 arguments", *sp));
-                        } else {
                             let obj = args[0].clone();
                             let idx = &args[1];
                             let res = match &idx.kind {
@@ -1968,10 +1962,7 @@ impl<'a> BlockChecker<'a> {
                                     let name = self.string_table.get(*sid).unwrap().clone();
                                     self.resolve_field_access(obj.ty, FieldIdx::Name(name), *sp)
                                 }
-                                _ => {
-                                    self.diagnostics.push(Diagnostic::error("get_field index must be a literal (i32 or str)", idx.span));
-                                    None
-                                }
+                                _ => None,
                             };
                             if let Some((f_ty, offset)) = res {
                                  // Unify our determined ty (fresh var) with the actual field type
@@ -2016,13 +2007,8 @@ impl<'a> BlockChecker<'a> {
                                  last_expr = Some(hexpr);
                                  continue;
                             }
-                            // If resolution fails (e.g. generic), fall through to default intrinsic handling
                             // which pushes HirExprKind::Intrinsic and uses the fresh variable 'ty'.
-                        }
                     } else if intrin.name == "set_field" {
-                        if args.len() != 3 {
-                            self.diagnostics.push(Diagnostic::error("set_field expects 3 arguments", *sp));
-                        } else {
                             let obj = args[0].clone();
                             let idx = &args[1];
                             let val = args[2].clone();
@@ -2034,10 +2020,7 @@ impl<'a> BlockChecker<'a> {
                                     let name = self.string_table.get(*sid).unwrap().clone();
                                     self.resolve_field_access(obj.ty, FieldIdx::Name(name), *sp)
                                 }
-                                _ => {
-                                    self.diagnostics.push(Diagnostic::error("set_field index must be a literal (i32 or str)", idx.span));
-                                    None
-                                }
+                                _ => None,
                             };
                             if let Some((f_ty, offset)) = res {
                                 // Unify value type with field type
@@ -2084,8 +2067,7 @@ impl<'a> BlockChecker<'a> {
                                 last_expr = Some(hexpr);
                                 continue;
                             }
-                        }
-                    } 
+                    }
 
                     
                     // Validate intrinsic argument types for known cast/bitcast intrinsics
@@ -3383,63 +3365,97 @@ impl<'a> BlockChecker<'a> {
                         assign: None,
                     });
                 }
-            } else if let Some((trait_name, method_name)) = parse_variant_name(name) {
-                if let Some(trait_info) = self.traits.get(trait_name) {
-                    if let Some(sig) = trait_info.methods.get(method_name) {
-                        let c_params = params;
-                        let c_result = result;
-                        let c_effect = effect;
-                        if c_params.len() != args.len() {
-                            self.diagnostics.push(Diagnostic::error(
-                                "trait method arity mismatch",
-                                func.expr.span,
-                            ));
-                            return None;
-                        }
-                        for (arg, pty) in args.iter().zip(c_params.iter()) {
-                            if self.ctx.unify(arg.ty, *pty).is_err() {
-                                self.diagnostics.push(Diagnostic::error(
-                                    "argument type mismatch",
-                                    arg.expr.span,
-                                ));
-                            }
-                        }
-                        if matches!(self.current_effect, Effect::Pure)
-                            && matches!(c_effect, Effect::Impure)
-                        {
-                            self.diagnostics.push(Diagnostic::error(
-                                "pure context cannot call impure function",
-                                func.expr.span,
-                            ));
-                            return None;
-                        }
-                        let self_ty = args
-                            .first()
-                            .map(|a| self.ctx.resolve_id(a.ty))
-                            .unwrap_or(self.ctx.never());
-                        if !self.trait_bound_satisfied(trait_name, self_ty) {
-                            self.diagnostics.push(Diagnostic::error(
-                                format!("type does not satisfy trait '{}'", trait_name),
-                                func.expr.span,
-                            ));
-                        }
-                        return Some(StackEntry {
-                            ty: self.ctx.resolve_id(c_result),
-                            expr: HirExpr {
-                                ty: self.ctx.resolve_id(c_result),
-                                kind: HirExprKind::Call {
-                                    callee: FuncRef::Trait {
-                                        trait_name: trait_name.to_string(),
-                                        method: method_name.to_string(),
-                                        self_ty,
+            }
+        }
+
+        // Specialized inlining for get/put
+        if let HirExprKind::Var(name) = &func.expr.kind {
+            if (name == "get" || name == "put") && args.len() >= 2 {
+                let obj = args[0].expr.clone();
+                let idx = &args[1].expr;
+                let field_idx = match &idx.kind {
+                    HirExprKind::LiteralI32(v) => Some(FieldIdx::Index(*v as usize)),
+                    HirExprKind::LiteralStr(sid) => {
+                        let name = self.string_table.get(*sid).unwrap().clone();
+                        Some(FieldIdx::Name(name))
+                    }
+                    _ => None,
+                };
+                if let Some(f_idx) = field_idx {
+                    if let Some((f_ty, offset)) = self.resolve_field_access(obj.ty, f_idx, func.expr.span) {
+                        if name == "get" && args.len() == 2 {
+                            let addr_expr = if offset == 0 {
+                                obj
+                            } else {
+                                HirExpr {
+                                    ty: self.ctx.i32(),
+                                    kind: HirExprKind::Intrinsic {
+                                        name: "add".to_string(),
+                                        type_args: vec![self.ctx.i32()],
+                                        args: vec![
+                                            obj,
+                                            HirExpr {
+                                                ty: self.ctx.i32(),
+                                                kind: HirExprKind::LiteralI32(offset as i32),
+                                                span: idx.span,
+                                            }
+                                        ],
                                     },
-                                    args: args.into_iter().map(|a| a.expr).collect(),
+                                    span: func.expr.span,
+                                }
+                            };
+                            return Some(StackEntry {
+                                ty: f_ty,
+                                expr: HirExpr {
+                                    ty: f_ty,
+                                    kind: HirExprKind::Intrinsic {
+                                        name: "load".to_string(),
+                                        type_args: vec![f_ty],
+                                        args: vec![addr_expr],
+                                    },
+                                    span: func.expr.span,
                                 },
-                                span: func.expr.span,
-                            },
-                            type_args: Vec::new(),
-                            assign: None,
-                        });
+                                type_args: Vec::new(),
+                                assign: None,
+                            });
+                        } else if name == "put" && args.len() == 3 {
+                            let val = args[2].expr.clone();
+                            let _ = self.ctx.unify(val.ty, f_ty);
+                            let addr_expr = if offset == 0 {
+                                obj
+                            } else {
+                                HirExpr {
+                                    ty: self.ctx.i32(),
+                                    kind: HirExprKind::Intrinsic {
+                                        name: "add".to_string(),
+                                        type_args: vec![self.ctx.i32()],
+                                        args: vec![
+                                            obj,
+                                            HirExpr {
+                                                ty: self.ctx.i32(),
+                                                kind: HirExprKind::LiteralI32(offset as i32),
+                                                span: idx.span,
+                                            }
+                                        ],
+                                    },
+                                    span: func.expr.span,
+                                }
+                            };
+                            return Some(StackEntry {
+                                ty: self.ctx.unit(),
+                                expr: HirExpr {
+                                    ty: self.ctx.unit(),
+                                    kind: HirExprKind::Intrinsic {
+                                        name: "store".to_string(),
+                                        type_args: vec![f_ty],
+                                        args: vec![addr_expr, val],
+                                    },
+                                    span: func.expr.span,
+                                },
+                                type_args: Vec::new(),
+                                assign: None,
+                            });
+                        }
                     }
                 }
             }
