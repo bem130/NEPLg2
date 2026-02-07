@@ -231,6 +231,7 @@ export class Shell {
     private sab: SharedArrayBuffer | null = null;
     private stdinBuffer: Int32Array | null = null;
     private stdinData: Uint8Array | null = null;
+    private currentProcessReject: ((reason?: any) => void) | null = null;
 
     interrupt() {
         if (this.activeWorker) {
@@ -241,6 +242,10 @@ export class Shell {
             if (this.stdinBuffer) {
                 Atomics.store(this.stdinBuffer, 0, -1);
                 Atomics.notify(this.stdinBuffer, 0);
+            }
+            if (this.currentProcessReject) {
+                this.currentProcessReject(new Error("Process interrupted"));
+                this.currentProcessReject = null;
             }
         }
     }
@@ -269,9 +274,14 @@ export class Shell {
             }
         }
 
+        if (this.stdinBuffer) {
+            Atomics.store(this.stdinBuffer, 0, 0);
+        }
+
         return new Promise((resolve, reject) => {
             const worker = new Worker(new URL('../runtime/worker.js', import.meta.url), { type: 'module' });
             this.activeWorker = worker;
+            this.currentProcessReject = reject;
 
             worker.onmessage = (e) => {
                 const { type, data, code, message } = e.data;
@@ -282,11 +292,13 @@ export class Shell {
                         break;
                     case 'exit':
                         this.activeWorker = null;
+                        this.currentProcessReject = null;
                         worker.terminate();
                         resolve(code === 0 ? null : `Program exited with code ${code}`);
                         break;
                     case 'error':
                         this.activeWorker = null;
+                        this.currentProcessReject = null;
                         worker.terminate();
                         reject(new Error(message));
                         break;
@@ -295,6 +307,7 @@ export class Shell {
 
             worker.onerror = (e) => {
                 this.activeWorker = null;
+                this.currentProcessReject = null;
                 worker.terminate();
                 reject(new Error("Worker error: " + e.message));
             };
