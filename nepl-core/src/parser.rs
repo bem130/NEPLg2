@@ -2530,24 +2530,26 @@ impl Parser {
     }
 
     fn is_eof(&self) -> bool {
-        matches!(self.peek_kind(), Some(TokenKind::Eof))
+        self.peek_kind().map_or(true, |k| matches!(k, TokenKind::Eof))
     }
 
     fn is_end(&self, end: &TokenEnd) -> bool {
         match end {
             TokenEnd::Eof => self.is_eof(),
-            TokenEnd::Dedent => matches!(
-                self.peek_kind(),
-                Some(TokenKind::Dedent) | Some(TokenKind::Eof)
-            ),
+            TokenEnd::Dedent => {
+                self.peek_kind()
+                    .map_or(true, |k| matches!(k, TokenKind::Dedent | TokenKind::Eof))
+            }
             TokenEnd::Line => {
                 if self.is_pipe_continuation() {
                     false
                 } else {
-                    matches!(
-                        self.peek_kind(),
-                        Some(TokenKind::Newline) | Some(TokenKind::Dedent) | Some(TokenKind::Eof)
-                    )
+                    self.peek_kind().map_or(true, |k| {
+                        matches!(
+                            k,
+                            TokenKind::Newline | TokenKind::Dedent | TokenKind::Eof
+                        )
+                    })
                 }
             }
         }
@@ -2588,12 +2590,18 @@ impl Parser {
         })
     }
 
-    fn parse_mlstr_layout(&mut self, span: Span) -> Option<String> {
+    fn parse_mlstr_layout(&mut self, _span: Span) -> Option<String> {
         let mut text = String::new();
         let mut first = true;
+        
+        // Skip optional newline before block
+        while self.consume_if(TokenKind::Newline) {}
+        
         self.expect(TokenKind::Indent)?;
-        while self.peek_kind() != Some(TokenKind::Dedent) && !self.is_eof() {
-            match self.next() {
+        
+        while !self.is_end(&TokenEnd::Dedent) {
+            let next_tok = self.next();
+            match next_tok {
                 Some(Token {
                     kind: TokenKind::MlstrLine(line),
                     ..
@@ -2608,11 +2616,24 @@ impl Parser {
                 Some(Token {
                     kind: TokenKind::Newline,
                     ..
-                }) => {}
-                _ => {
-                    // unexpected token in mlstr layout, but let's just skip
-                    self.next();
+                }) => {
+                    // empty line or extra newline, ignore
                 }
+                Some(Token {
+                    kind: TokenKind::Dedent,
+                    ..
+                }) | Some(Token {
+                    kind: TokenKind::Eof,
+                    ..
+                }) => {
+                    // should be handled by is_end, but just in case
+                    break;
+                }
+                Some(_) => {
+                    // unexpected token in mlstr layout, but let's just skip it
+                    // and continue until we find a Dedent or EOF
+                }
+                None => break,
             }
         }
         self.consume_if(TokenKind::Dedent);

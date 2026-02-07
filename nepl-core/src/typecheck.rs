@@ -1487,72 +1487,88 @@ impl<'a> BlockChecker<'a> {
 
                                 for field_name in &parts[1..] {
                                     let resolved_ty = self.ctx.resolve(current_ty);
-                                    let (name, fields, field_names) = match self.ctx.get(resolved_ty) {
-                                        TypeKind::Struct { name, fields, field_names, .. } => (name, fields, field_names),
+                                    let (f_ty, offset) = match self.ctx.get(resolved_ty) {
+                                        TypeKind::Struct { fields, field_names, .. } => {
+                                            if let Some(idx) = field_names.iter().position(|n| *n == *field_name) {
+                                                (fields[idx], idx * 4)
+                                            } else {
+                                                self.diagnostics.push(Diagnostic::error(format!("struct has no field {}", field_name), id.span));
+                                                return None;
+                                            }
+                                        }
+                                        TypeKind::Tuple { items } => {
+                                            if let Ok(idx) = field_name.parse::<usize>() {
+                                                if idx < items.len() {
+                                                    (items[idx], idx * 4)
+                                                } else {
+                                                    self.diagnostics.push(Diagnostic::error(format!("tuple index out of bounds: {}", idx), id.span));
+                                                    return None;
+                                                }
+                                            } else {
+                                                self.diagnostics.push(Diagnostic::error(format!("invalid tuple field access: {}", field_name), id.span));
+                                                return None;
+                                            }
+                                        }
                                         TypeKind::Apply { base, args } => {
                                             let base_ty = self.ctx.resolve(base);
                                             match self.ctx.get(base_ty) {
-                                                TypeKind::Struct { name, type_params, fields, field_names } => {
+                                                TypeKind::Struct { type_params, fields, field_names, .. } => {
                                                     let mut mapping = BTreeMap::new();
                                                     for (tp, arg) in type_params.iter().zip(args.iter()) {
                                                         mapping.insert(*tp, *arg);
                                                     }
                                                     let substituted_fields = fields.iter().map(|f| self.ctx.substitute(*f, &mapping)).collect::<Vec<_>>();
-                                                    (name, substituted_fields, field_names)
+                                                    if let Some(idx) = field_names.iter().position(|n| *n == *field_name) {
+                                                        (substituted_fields[idx], idx * 4)
+                                                    } else {
+                                                        self.diagnostics.push(Diagnostic::error(format!("generic struct has no field {}", field_name), id.span));
+                                                        return None;
+                                                    }
                                                 }
                                                 _ => {
-                                                    self.diagnostics.push(Diagnostic::error(format!("cannot access field {} on non-struct type", field_name), id.span));
+                                                    self.diagnostics.push(Diagnostic::error(format!("cannot access field {} on non-nominal type", field_name), id.span));
                                                     return None;
                                                 }
                                             }
                                         }
                                         _ => {
-                                            self.diagnostics.push(Diagnostic::error(format!("cannot access field {} on non-struct type", field_name), id.span));
+                                            self.diagnostics.push(Diagnostic::error(format!("cannot access field {} on non-composite type", field_name), id.span));
                                             return None;
                                         }
                                     };
 
-                                    if let Some(idx) = field_names.iter().position(|n| *n == *field_name) {
-                                        let f_ty = fields[idx];
-                                        // Simple offset: 4 bytes per field for now (i32/f32/enum/struct-ptr)
-                                        let offset = idx * 4;
-                                        
-                                        // address = current_expr + offset
-                                        let addr_expr = if offset == 0 {
-                                            current_expr
-                                        } else {
-                                            HirExpr {
-                                                ty: self.ctx.i32(),
-                                                kind: HirExprKind::Intrinsic {
-                                                    name: "add".to_string(), // assuming there is an add intrinsic or use builtins
-                                                    type_args: vec![self.ctx.i32()],
-                                                    args: vec![
-                                                        current_expr,
-                                                        HirExpr {
-                                                            ty: self.ctx.i32(),
-                                                            kind: HirExprKind::LiteralI32(offset as i32),
-                                                            span: id.span,
-                                                        }
-                                                    ],
-                                                },
-                                                span: id.span,
-                                            }
-                                        };
-
-                                        current_ty = f_ty;
-                                        current_expr = HirExpr {
-                                            ty: f_ty,
+                                    // address = current_expr + offset
+                                    let addr_expr = if offset == 0 {
+                                        current_expr
+                                    } else {
+                                        HirExpr {
+                                            ty: self.ctx.i32(),
                                             kind: HirExprKind::Intrinsic {
-                                                name: "load".to_string(),
-                                                type_args: vec![f_ty],
-                                                args: vec![addr_expr],
+                                                name: "add".to_string(),
+                                                type_args: vec![self.ctx.i32()],
+                                                args: vec![
+                                                    current_expr,
+                                                    HirExpr {
+                                                        ty: self.ctx.i32(),
+                                                        kind: HirExprKind::LiteralI32(offset as i32),
+                                                        span: id.span,
+                                                    }
+                                                ],
                                             },
                                             span: id.span,
-                                        };
-                                    } else {
-                                        self.diagnostics.push(Diagnostic::error(format!("struct {} has no field {}", name, field_name), id.span));
-                                        return None;
-                                    }
+                                        }
+                                    };
+
+                                    current_ty = f_ty;
+                                    current_expr = HirExpr {
+                                        ty: f_ty,
+                                        kind: HirExprKind::Intrinsic {
+                                            name: "load".to_string(),
+                                            type_args: vec![f_ty],
+                                            args: vec![addr_expr],
+                                        },
+                                        span: id.span,
+                                    };
                                 }
 
                                 stack.push(StackEntry {

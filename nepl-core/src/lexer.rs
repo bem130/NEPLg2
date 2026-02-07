@@ -269,8 +269,8 @@ impl<'a> LexState<'a> {
                 }
             }
         }
-        let is_directive = !in_wasm && directive_text.is_some();
-        let is_mlstr_line = !in_wasm && !is_directive && rest_trim.starts_with("##:");
+        let is_mlstr_line = !in_wasm && rest_trim.starts_with("##:");
+        let is_directive = !in_wasm && !is_mlstr_line && directive_text.is_some();
 
         if is_directive && !allow_indent {
             let current_indent = *self.indent_stack.last().unwrap();
