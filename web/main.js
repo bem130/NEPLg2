@@ -1,7 +1,7 @@
 import { CanvasTerminal } from './src/terminal/terminal.js';
 import { VFS } from './src/runtime/vfs.js';
 
-console.log("main.js loaded");
+console.log("[Playground] main.js loaded (VFS-FIX-2)");
 let start_flag = false;
 
 window.addEventListener("TrunkApplicationStarted", start_app);
@@ -34,13 +34,32 @@ function start_app() {
             console.log("[Playground] WASM initSync complete.");
 
             // Mount stdlib into VFS
-            const stdlibFiles = wasm.get_stdlib_files();
-            if (stdlibFiles && Array.isArray(stdlibFiles)) {
-                console.log(`[Playground] Mounting ${stdlibFiles.length} stdlib files...`);
-                for (const [path, content] of stdlibFiles) {
-                    vfs.writeFile('/stdlib/' + path, content);
+            if (wasm.get_stdlib_files) {
+                const stdlibFiles = wasm.get_stdlib_files();
+                if (stdlibFiles && Array.isArray(stdlibFiles)) {
+                    console.log(`[Playground] Mounting ${stdlibFiles.length} stdlib files...`);
+                    for (const [path, content] of stdlibFiles) {
+                        vfs.writeFile('/stdlib/' + path, content);
+                    }
                 }
-                console.log("[Playground] stdlib mounting complete.");
+            }
+
+            // Mount examples into VFS
+            if (wasm.get_example_files) {
+                const exampleFiles = wasm.get_example_files();
+                if (exampleFiles && Array.isArray(exampleFiles)) {
+                    console.log(`[Playground] Mounting ${exampleFiles.length} example files into /examples/`);
+                    for (const [path, content] of exampleFiles) {
+                        vfs.writeFile('/examples/' + path, content);
+                    }
+                }
+            }
+
+            // Load README
+            if (wasm.get_readme) {
+                const readme = wasm.get_readme();
+                vfs.writeFile('/README', readme);
+                console.log("[Playground] README mounted to VFS.");
             }
         } catch (e) {
             console.error("[Playground] WASM initSync failed:", e);
@@ -70,7 +89,6 @@ function start_app() {
         },
         initialLanguage: 'nepl'
     });
-    console.log("[Playground] Editor setup complete.");
 
     // --- Terminal Setup ---
     console.log("[Playground] Setting up CanvasTerminal...");
@@ -86,18 +104,15 @@ function start_app() {
     // --- Simple Commands for Buttons ---
     function executeCommand(cmd) {
         console.log(`[Playground] Executing command: ${cmd}`);
-        // This simulates user typing the command
         terminal.currentInput = cmd;
         terminal.execute();
     }
 
     // --- Example Loading Logic ---
     async function loadExamples() {
-        console.log("[Playground] Loading examples list from VFS...");
-
-        // Ensure VFS is populated before listing
+        console.log("[Playground] Scanning VFS for examples...");
         const examples = vfs.listDir('/examples');
-        console.log("[Playground] Examples found in VFS:", examples);
+        console.log("[Playground] Examples listed from VFS:", examples);
 
         exampleSelect.innerHTML = '<option value="" disabled selected>Select an example...</option>';
 
@@ -108,14 +123,10 @@ function start_app() {
             exampleSelect.appendChild(option);
         }
 
-        console.log("[Playground] Setting default example...");
         if (examples.includes('rpn.nepl')) {
             await loadExample('rpn.nepl');
         } else if (examples.length > 0) {
             await loadExample(examples[0]);
-        } else {
-            console.warn("[Playground] No examples found in VFS. Fallback to helloworld?");
-            // If VFS is empty, it might be a mounting issue.
         }
     }
 
@@ -124,22 +135,19 @@ function start_app() {
         try {
             const path = '/examples/' + filename;
             if (!vfs.exists(path)) {
-                console.error(`[Playground] Example ${filename} not found in VFS`);
+                console.error(`[Playground] File not found in VFS: ${path}`);
                 return;
             }
             const text = vfs.readFile(path);
             editor.setText(text);
-            editorStatus.textContent = path.startsWith('/') ? path.substring(1) : path;
+            editorStatus.textContent = path.substring(1); // "examples/..."
             terminal.print([
                 { text: "Loaded ", color: "#56d364" },
                 { text: filename, color: "#58a6ff" }
             ]);
-            // Update select to match
             exampleSelect.value = filename;
-            console.log(`[Playground] Example ${filename} loaded successfully.`);
         } catch (error) {
             console.error(`[Playground] Error loading example ${filename}:`, error);
-            editor.setText(`// Error loading ${filename}: ${error}`);
             terminal.printError(`Error loading ${filename}: ${error}`);
         }
     }
@@ -147,7 +155,6 @@ function start_app() {
     async function loadSelectedExample() {
         const selectedFile = exampleSelect.value;
         if (!selectedFile) return;
-        console.log(`[Playground] User selected example: ${selectedFile}`);
         await loadExample(selectedFile);
     }
 
@@ -168,11 +175,9 @@ function start_app() {
     window.executeCommand = executeCommand;
 
     // Initial resize and focus
-    console.log("[Playground] Performing initial layout...");
     setTimeout(() => {
         editor.resizeEditor();
         terminal.resizeEditor();
         editor.focus();
-        console.log("[Playground] Initial layout and focus complete. Terminal visible?", !!terminalCanvas.offsetParent);
     }, 100);
 }

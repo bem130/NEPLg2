@@ -50,6 +50,10 @@ export class CanvasTerminal {
         this.charWidth = 0;
         this.charHeight = 0;
 
+        // Scrolling
+        this.scrollTop = 0; // In lines
+        this.maxScrollTop = 0;
+
         // Cursor Blinking
         this.cursorVisible = true;
         this.blinkInterval = setInterval(() => {
@@ -110,16 +114,22 @@ export class CanvasTerminal {
             this.focus();
             e.preventDefault();
         });
+
+        this.canvas.addEventListener('wheel', (e) => {
+            const delta = Math.sign(e.deltaY);
+            this.scrollTop += delta;
+            this.scrollTop = Math.max(0, Math.min(this.scrollTop, this.maxScrollTop));
+            this.render();
+            e.preventDefault();
+        }, { passive: false });
     }
 
     resize() {
         const rect = this.canvas.parentElement.getBoundingClientRect();
-        console.log(`[Terminal] Resizing: parentRect=${rect.width}x${rect.height}, canvas=${this.canvas.width}x${this.canvas.height}`);
         this.canvas.width = rect.width;
         this.canvas.height = rect.height;
         this.updateMetrics();
         this.render();
-        console.log(`[Terminal] Resized to: ${this.canvas.width}x${this.canvas.height}`);
     }
 
     resizeEditor() {
@@ -155,6 +165,14 @@ export class CanvasTerminal {
             case 'ArrowRight':
                 if (this.cursorIndex < this.currentInput.length) this.cursorIndex++;
                 break;
+            case 'ArrowUp':
+                this.navigateHistory(-1);
+                e.preventDefault();
+                break;
+            case 'ArrowDown':
+                this.navigateHistory(1);
+                e.preventDefault();
+                break;
             case 'c':
                 if (e.ctrlKey) {
                     // Print ^C with colors
@@ -163,27 +181,36 @@ export class CanvasTerminal {
                         { text: this.currentInput + "^C", color: this.colors.input }
                     ];
                     this.history.push(cancelledState);
-
                     this.currentInput = "";
                     this.cursorIndex = 0;
+                    this.updateScrollTopToBottom();
                     this.render();
                     e.preventDefault();
                 }
                 break;
         }
 
-        // Auto-scroll to bottom on new output
-        this.updateScrollTopToBottom();
         this.restartBlink();
         this.updateInputPosition();
         this.render();
     }
 
-    copyAll() {
-        const text = this.history.map(line => line.map(span => span.text).join('')).join('\n');
-        navigator.clipboard.writeText(text).then(() => {
-            this.print([{ text: "Copied entire buffer to clipboard.", color: this.colors.green }]);
-        });
+    navigateHistory(direction) {
+        if (!this.shell) return;
+        const history = this.shell.history;
+        if (history.length === 0) return;
+
+        let newIndex = this.shell.historyIndex + direction;
+        if (newIndex < 0) newIndex = 0;
+        if (newIndex > history.length) newIndex = history.length;
+
+        if (newIndex === history.length) {
+            this.currentInput = "";
+        } else {
+            this.currentInput = history[newIndex];
+        }
+        this.shell.historyIndex = newIndex;
+        this.cursorIndex = this.currentInput.length;
     }
 
     handleCompositionStart() {
@@ -238,6 +265,7 @@ export class CanvasTerminal {
             await this.shell.executeLine(cmd);
         }
 
+        this.updateScrollTopToBottom();
         this.render();
     }
 
@@ -254,10 +282,17 @@ export class CanvasTerminal {
             }
         } else if (Array.isArray(content)) {
             // content is Span[]. Assume single line for now? 
-            // Or support multiline arrays? Let's assume input is one line if array.
             this.history.push(content);
         }
+        this.updateScrollTopToBottom();
         this.render();
+    }
+
+    updateScrollTopToBottom() {
+        const maxVisibleLines = Math.floor((this.canvas.height - this.padding * 2) / this.charHeight);
+        const totalLines = this.history.length + 1;
+        this.maxScrollTop = Math.max(0, totalLines - maxVisibleLines);
+        this.scrollTop = this.maxScrollTop;
     }
 
     printError(text) {
@@ -266,7 +301,16 @@ export class CanvasTerminal {
 
     clear() {
         this.history = [];
+        this.scrollTop = 0;
+        this.maxScrollTop = 0;
         this.render();
+    }
+
+    copyAll() {
+        const text = this.history.map(line => line.map(span => span.text).join('')).join('\n');
+        navigator.clipboard.writeText(text).then(() => {
+            this.print([{ text: "Copied entire buffer to clipboard.", color: this.colors.green }]);
+        });
     }
 
     // --- Rendering ---
@@ -281,13 +325,9 @@ export class CanvasTerminal {
 
         const maxVisibleLines = Math.floor((this.canvas.height - this.padding * 2) / this.charHeight);
         const totalLines = this.history.length + 1; // +1 input
+        this.maxScrollTop = Math.max(0, totalLines - maxVisibleLines);
 
-        // Auto-scroll
-        let startLine = 0;
-        if (totalLines > maxVisibleLines) {
-            startLine = totalLines - maxVisibleLines;
-        }
-
+        let startLine = this.scrollTop;
         let y = this.padding;
 
         // Helper to draw a line of spans
@@ -303,29 +343,28 @@ export class CanvasTerminal {
 
         // Render History
         for (let i = startLine; i < this.history.length; i++) {
+            if (y + this.charHeight > this.canvas.height - this.padding) break;
             drawLine(this.history[i], this.padding);
             y += this.charHeight;
         }
 
-        // Render Current Input Line
-        if (this.history.length >= startLine) {
+        // Render Current Input Line (if visible)
+        if (this.history.length >= startLine && y + this.charHeight <= this.canvas.height - this.padding) {
             // Draw Prompt
             let x = drawLine(this.promptSpans, this.padding);
 
             // Draw Input Text
             const preInput = this.currentInput.slice(0, this.cursorIndex);
 
-            // Text before cursor
             this.ctx.fillStyle = this.colors.input;
             this.ctx.fillText(preInput, x, y);
             let inputX = x + this.ctx.measureText(preInput).width;
 
-            // Composition Text (if any)
+            // Composition Text
             if (this.isComposing) {
-                this.ctx.fillStyle = this.colors.foreground; // or specific compose color
+                this.ctx.fillStyle = this.colors.foreground;
                 this.ctx.fillText(this.composingText, inputX, y);
 
-                // Underline
                 const compWidth = this.ctx.measureText(this.composingText).width;
                 this.ctx.beginPath();
                 this.ctx.moveTo(inputX, y + this.charHeight - 2);
@@ -336,17 +375,13 @@ export class CanvasTerminal {
                 inputX += compWidth;
             }
 
-            // Post Input (text after cursor)
-            // Cursor is drawn AT inputX (before post input)
-            // Draw Cursor first or on top?
-
-            // Draw Cursor
+            // Cursor
             if (this.cursorVisible && !this.isComposing) {
                 this.ctx.fillStyle = this.colors.cursor;
-                this.ctx.fillRect(inputX, y, 2, this.charHeight); // Thin cursor
+                this.ctx.fillRect(inputX, y, 2, this.charHeight);
             }
 
-            // Text after cursor
+            // Post Input
             const postInput = this.currentInput.slice(this.cursorIndex);
             this.ctx.fillStyle = this.colors.input;
             this.ctx.fillText(postInput, inputX, y);
@@ -363,11 +398,6 @@ export class CanvasTerminal {
     }
 
     updateInputPosition() {
-        // Calculate pixel position for hidden textarea
-        // Needs prompt width + preInput width
-        // Simplified: just render off-screen if we don't need candidate window EXACTLY positioned
-        // But for IME, exact position is nice.
-
         let promptWidth = 0;
         this.ctx.font = `${this.fontSize}px ${this.fontFamily}`;
         for (const span of this.promptSpans) {
@@ -380,9 +410,8 @@ export class CanvasTerminal {
         const x = this.padding + promptWidth + inputWidth;
 
         const maxVisibleLines = Math.floor((this.canvas.height - this.padding * 2) / this.charHeight);
-        const totalLines = this.history.length + 1;
-        let visualRow = totalLines - 1;
-        if (totalLines > maxVisibleLines) visualRow = maxVisibleLines - 1;
+        let visualRow = this.history.length - this.scrollTop;
+        if (visualRow >= maxVisibleLines) visualRow = maxVisibleLines - 1;
 
         const y = this.padding + visualRow * this.charHeight;
 

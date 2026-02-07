@@ -5,7 +5,7 @@ export class Shell {
         this.terminal = terminal;
         this.vfs = vfs; // Virtual File System
         this.env = new Map();
-        this.history = [];
+        this.history = []; // String history for Arrow UP/DOWN
         this.historyIndex = 0;
         this.editor = null; // To be injected
     }
@@ -15,10 +15,8 @@ export class Shell {
         this.history.push(line);
         this.historyIndex = this.history.length;
 
-        // Simple pipe parsing
         const segments = line.split('|').map(s => s.trim());
-
-        let inputData = null; // Stdin for the next command
+        let inputData = null;
 
         for (let i = 0; i < segments.length; i++) {
             const segment = segments[i];
@@ -29,16 +27,13 @@ export class Shell {
             const cmdArgs = args.slice(1);
 
             try {
-                // Determine if this is the last command in chain (stdout goes to terminal)
                 const isLast = (i === segments.length - 1);
-
-                // Execute
                 const output = await this.runCommand(cmd, cmdArgs, inputData);
 
                 if (isLast) {
                     if (output) this.terminal.print(output);
                 } else {
-                    inputData = output; // Pass to next
+                    inputData = output;
                 }
             } catch (e) {
                 this.terminal.printError(`Error: ${e.message}`);
@@ -48,7 +43,6 @@ export class Shell {
     }
 
     parseArgs(segment) {
-        // Very basic quote aware parsing
         const args = [];
         let current = '';
         let inQuote = false;
@@ -110,7 +104,6 @@ export class Shell {
                 return await this.cmdNeplg2(['build', '--emit', 'wat'], stdin);
 
             case 'test':
-                // Assuming test.nepl or similar exists for testing
                 return await this.cmdNeplg2(['run', 'stdlib/std/test.nepl'], stdin);
 
             case 'neplg2':
@@ -123,7 +116,12 @@ export class Shell {
                 const lsPath = args[0] || '/';
                 try {
                     if (this.vfs.isDir(lsPath)) {
-                        return this.vfs.listDir(lsPath).join('\n');
+                        const entries = this.vfs.listDir(lsPath);
+                        const mapped = entries.map(entry => {
+                            const fullPath = (lsPath.endsWith('/') ? lsPath : lsPath + '/') + entry;
+                            return this.vfs.isDir(fullPath) ? entry + '/' : entry;
+                        });
+                        return mapped.join('\n');
                     }
                     return this.vfs.exists(lsPath) ? args[0] : `ls: no such file or directory: ${lsPath}`;
                 } catch (e) {
@@ -150,13 +148,13 @@ export class Shell {
                     return `cat: ${catPath}: No such file`;
                 }
 
-            case 'vfs_debug':
-                console.log(this.vfs);
-                return "Dumped to console";
-
             case 'copy':
                 this.terminal.copyAll();
                 return null;
+
+            case 'vfs_debug':
+                console.log(this.vfs);
+                return "Dumped to console";
 
             default:
                 throw new Error(`Unknown command: ${cmd}`);
@@ -164,16 +162,13 @@ export class Shell {
     }
 
     async cmdNeplg2(args, stdin) {
-        // Usage: neplg2 run --target wasi -o out --emit wat,mini-wat input.nepl
         const parsed = this.parseFlags(args);
 
         if (args.includes('run') || args.includes('build')) {
             this.terminal.print("Compiling...");
 
-            // Get Input
             let inputFile = parsed.flags['-i'] || parsed.flags['--input'];
             if (!inputFile) {
-                // Fallback to last positional if not 'run' or 'build'
                 const lastPos = parsed.positional[parsed.positional.length - 1];
                 if (lastPos && lastPos !== 'run' && lastPos !== 'build') {
                     inputFile = lastPos;
@@ -189,13 +184,12 @@ export class Shell {
                 inputPath = inputFile;
             } else {
                 if (this.editor) {
-                    // Try different ways to get text to be robust
                     if (typeof this.editor.getText === 'function') {
                         source = this.editor.getText();
                     } else if (this.editor.text !== undefined) {
                         source = this.editor.text;
                     } else {
-                        return "Error: Could not retrieve text from editor (getText method missing)";
+                        return "Error: Could not retrieve text from editor";
                     }
                     this.terminal.print("(Using editor content)");
                 } else {
@@ -204,24 +198,16 @@ export class Shell {
             }
             this.terminal.print(`Source: ${inputPath}`);
 
-            // Compilation
-            if (!window.wasmBindings) {
-                return "Error: Compiler (WASM) not loaded yet. Please wait.";
-            }
+            if (!window.wasmBindings) return "Error: Compiler (WASM) not loaded yet.";
 
             try {
-                // Check if we need to emit WAT
                 if (parsed.flags['--emit'] && parsed.flags['--emit'].includes('wat')) {
                     const wat = window.wasmBindings.compile_to_wat(source);
                     this.vfs.writeFile('out.wat', wat);
                     this.terminal.print("Generated out.wat");
                 }
 
-                // Compile to WASM using the new binding
-                // The binding might expect just 'source' string.
                 const wasm = window.wasmBindings.compile_source(source);
-                // wasm is a Uint8Array (Vec<u8>)
-
                 const outFile = parsed.flags['-o'] || 'out.wasm';
                 this.vfs.writeFile(outFile, wasm);
                 this.terminal.print(`Compilation finished. Output to ${outFile}`);
@@ -231,11 +217,10 @@ export class Shell {
                 }
                 return "Build complete.";
             } catch (e) {
-                console.error(e);
                 return `Compilation Failed: ${e}`;
             }
         }
-        return "Unknown neplg2 command (try 'run').";
+        return "Unknown neplg2 command.";
     }
 
     parseFlags(args) {
@@ -247,7 +232,7 @@ export class Shell {
                     flags[args[i]] = args[i + 1];
                     i++;
                 } else {
-                    flags[args[i]] = true; // bool flag
+                    flags[args[i]] = true;
                 }
             } else {
                 positional.push(args[i]);
@@ -259,25 +244,15 @@ export class Shell {
     async cmdWasmi(args, stdin) {
         if (args.length === 0) return "wasmi: missing file";
         const filename = args[0];
-
         if (!this.vfs.exists(filename)) return `wasmi: file not found: ${filename}`;
 
         const bin = this.vfs.readFile(filename);
-        if (typeof bin === 'string' && bin.startsWith('BINARY')) {
-            return "wasmi: [Mock] Executing placeholder WASM (Success)";
-        }
-
-        if (!(bin instanceof Uint8Array)) {
-            return "wasmi: invalid binary format (must be Uint8Array)";
-        }
+        if (!(bin instanceof Uint8Array)) return "wasmi: invalid binary format";
 
         this.terminal.print(`Executing ${filename} ...`);
 
         try {
-            // We pass 'wasi' instance which creates the import object
             const wasi = new WASI(args, this.env, this.vfs, this.terminal);
-
-            // WebAssembly.instantiate matches the browser API
             const { instance } = await WebAssembly.instantiate(bin, wasi.imports);
             wasi.setMemory(instance.exports.memory);
 
@@ -287,15 +262,12 @@ export class Shell {
                 const res = instance.exports.main();
                 return `Exited with ${res}`;
             } else {
-                return "wasmi: no entry point (_start or main) found";
+                return "wasmi: no entry point found";
             }
         } catch (e) {
-            if (e.message && e.message.includes("Exited with code")) {
-                return e.message; // Just the exit message
-            }
+            if (e.message && e.message.includes("Exited with code")) return e.message;
             return `wasmi error: ${e}`;
         }
-
         return "Program exited.";
     }
 
@@ -312,7 +284,7 @@ export class Shell {
                 const fullPath = (path.endsWith('/') ? path : path + '/') + entry;
                 const isDir = this.vfs.isDir(fullPath);
 
-                results.push(`${prefix}${isLast ? '└── ' : '├── '}${entry}`);
+                results.push(`${prefix}${isLast ? '└── ' : '├── '}${(isDir ? entry + '/' : entry)}`);
 
                 if (isDir) {
                     build(fullPath, prefix + (isLast ? '    ' : '│   '));

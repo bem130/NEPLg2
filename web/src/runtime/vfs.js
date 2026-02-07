@@ -1,12 +1,10 @@
 export class VFS {
     constructor() {
         this.files = new Map();
-        // Initial state
-        this.writeFile('/README.txt', 'Welcome to NEPLg2 Playground!\n\nThis is a virtual file system.\nYou can save compiled binaries here.');
+        // Populated by main.js
     }
 
     writeFile(path, content) {
-        // Ensure path starts with /
         if (!path.startsWith('/')) path = '/' + path;
         this.files.set(path, content);
     }
@@ -34,11 +32,6 @@ export class VFS {
         return false;
     }
 
-    /**
-     * Lists files and directories in a given path.
-     * @param {string} dirPath The directory path to list.
-     * @returns {string[]} List of names (files or directories).
-     */
     listDir(dirPath) {
         if (!dirPath.startsWith('/')) dirPath = '/' + dirPath;
         if (!dirPath.endsWith('/')) dirPath += '/';
