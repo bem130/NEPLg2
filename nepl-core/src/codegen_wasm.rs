@@ -104,7 +104,7 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
     // User functions
     for f in &module.functions {
         if let Some(sig) = wasm_sig(ctx, f.result, &f.params) {
-            functions.push(FuncLower::user(f.clone(), sig));
+            functions.push(FuncLower::user(f, sig));
         } else {
             if crate::log::is_verbose() {
                 std::eprintln!(
@@ -137,23 +137,19 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
     let mut sig_map: BTreeMap<(Vec<ValType>, Vec<ValType>), u32> = BTreeMap::new();
     for f in &functions {
         let key = (f.params.clone(), f.results.clone());
-        if !sig_map.contains_key(&key) {
+        sig_map.entry(key).or_insert_with(|| {
             let idx = type_section.len();
-            type_section
-                .ty()
-                .function(f.params.clone(), f.results.clone());
-            sig_map.insert(key.clone(), idx);
-        }
+            type_section.ty().function(f.params.clone(), f.results.clone());
+            idx
+        });
     }
     for imp in &imports {
         let key = (imp.params.clone(), imp.results.clone());
-        if !sig_map.contains_key(&key) {
+        sig_map.entry(key).or_insert_with(|| {
             let idx = type_section.len();
-            type_section
-                .ty()
-                .function(imp.params.clone(), imp.results.clone());
-            sig_map.insert(key.clone(), idx);
-        }
+            type_section.ty().function(imp.params.clone(), imp.results.clone());
+            idx
+        });
     }
 
     let mut import_section = ImportSection::new();
@@ -247,11 +243,11 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
 // ---------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
-struct FuncLower {
+struct FuncLower<'a> {
     name: String,
     params: Vec<ValType>,
     results: Vec<ValType>,
-    body: FuncBodyLower,
+    body: FuncBodyLower<'a>,
 }
 
 #[derive(Debug, Clone)]
@@ -264,12 +260,12 @@ struct ImportLower {
 }
 
 #[derive(Debug, Clone)]
-enum FuncBodyLower {
-    User(HirFunction),
+enum FuncBodyLower<'a> {
+    User(&'a HirFunction),
 }
 
-impl FuncLower {
-    fn user(func: HirFunction, sig: (Vec<ValType>, Vec<ValType>)) -> Self {
+impl<'a> FuncLower<'a> {
+    fn user(func: &'a HirFunction, sig: (Vec<ValType>, Vec<ValType>)) -> Self {
         Self {
             name: func.name.clone(),
             params: sig.0,
@@ -402,13 +398,13 @@ fn find_alloc_index(name_map: &BTreeMap<String, u32>) -> Option<u32> {
         .map(|(_, idx)| *idx)
 }
 
-fn lower_body(
+fn lower_body<'a>(
     ctx: &TypeCtx,
-    func: &FuncLower,
+    func: &FuncLower<'a>,
     name_map: &BTreeMap<String, u32>,
     strings: &StringLower,
 ) -> Result<Function, Vec<Diagnostic>> {
-    match &func.body {
+    match func.body {
         FuncBodyLower::User(f) => lower_user(ctx, f, name_map, strings),
     }
 }

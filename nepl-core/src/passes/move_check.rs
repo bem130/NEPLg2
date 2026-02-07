@@ -3,7 +3,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -29,6 +29,8 @@ struct MoveCheckContext {
     diagnostics: Vec<Diagnostic>,
     /// Scopes for variable cleanup
     scopes: Vec<BTreeSet<String>>,
+    /// History of changes for undoing/merging branches
+    history: Vec<BTreeMap<String, VarState>>,
 }
 
 impl MoveCheckContext {
@@ -37,6 +39,7 @@ impl MoveCheckContext {
             var_stacks: BTreeMap::new(),
             diagnostics: Vec::new(),
             scopes: Vec::new(),
+            history: Vec::new(),
         }
     }
 
@@ -78,7 +81,38 @@ impl MoveCheckContext {
     fn set_state(&mut self, name: &str, state: VarState) {
         if let Some(stack) = self.var_stacks.get_mut(name) {
             if let Some(last) = stack.last_mut() {
+                if *last == state {
+                    return;
+                }
+                if let Some(h) = self.history.last_mut() {
+                    h.entry(name.to_string()).or_insert(*last);
+                }
                 *last = state;
+            }
+        }
+    }
+
+    fn push_history(&mut self) {
+        self.history.push(BTreeMap::new());
+    }
+
+    fn pop_history(&mut self) -> BTreeMap<String, VarState> {
+        self.history.pop().unwrap_or_default()
+    }
+
+    fn apply_history(&mut self, history: BTreeMap<String, VarState>) {
+        for (name, old_state) in history {
+            self.set_state(&name, old_state);
+        }
+    }
+
+    fn undo_history(&mut self, history: &BTreeMap<String, VarState>) {
+        // To undo, we set the state back to the original values recorded in history
+        for (name, old_state) in history {
+            if let Some(stack) = self.var_stacks.get_mut(name) {
+                if let Some(last) = stack.last_mut() {
+                    *last = *old_state;
+                }
             }
         }
     }
@@ -135,19 +169,37 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
                 if args.len() == 3 {
                     visit_expr(&args[0], ctx, tctx);
 
-                    let start_vars = ctx.var_stacks.clone();
+                    ctx.push_history();
                     visit_expr(&args[1], ctx, tctx);
-                    let then_vars = ctx.var_stacks.clone();
+                    let then_diff = ctx.pop_history();
+                    let mut then_final = BTreeMap::new();
+                    for name in then_diff.keys() {
+                        then_final.insert(name.clone(), ctx.get_state(name).unwrap());
+                    }
+                    ctx.undo_history(&then_diff);
 
-                    ctx.var_stacks = start_vars.clone();
+                    ctx.push_history();
                     visit_expr(&args[2], ctx, tctx);
-                    let else_vars = ctx.var_stacks.clone();
+                    let else_diff = ctx.pop_history();
+                    let mut else_final = BTreeMap::new();
+                    for name in else_diff.keys() {
+                        else_final.insert(name.clone(), ctx.get_state(name).unwrap());
+                    }
+                    ctx.undo_history(&else_diff);
 
-                    let keys: Vec<_> = ctx.var_stacks.keys().cloned().collect();
-                    for name in keys {
-                        let start_state = get_top(&start_vars, &name).unwrap_or(VarState::Valid);
-                        let then_state = get_top(&then_vars, &name).unwrap_or(start_state);
-                        let else_state = get_top(&else_vars, &name).unwrap_or(start_state);
+                    let mut all_modified: BTreeSet<String> =
+                        then_diff.keys().cloned().collect();
+                    all_modified.extend(else_diff.keys().cloned());
+
+                    for name in all_modified {
+                        let start_state = then_diff
+                            .get(&name)
+                            .or_else(|| else_diff.get(&name))
+                            .copied()
+                            .unwrap_or_else(|| ctx.get_state(&name).unwrap_or(VarState::Valid));
+
+                        let then_state = then_final.get(&name).copied().unwrap_or(start_state);
+                        let else_state = else_final.get(&name).copied().unwrap_or(start_state);
 
                         let merged = match (then_state, else_state) {
                             (VarState::Valid, VarState::Valid) => VarState::Valid,
@@ -162,12 +214,11 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
                 if args.len() == 2 {
                     visit_expr(&args[0], ctx, tctx);
 
-                    let start_vars = ctx.var_stacks.clone();
+                    ctx.push_history();
                     visit_expr(&args[1], ctx, tctx);
+                    let body_diff = ctx.pop_history();
 
-                    let keys: Vec<_> = ctx.var_stacks.keys().cloned().collect();
-                    for name in keys {
-                        let start_state = get_top(&start_vars, &name).unwrap_or(VarState::Valid);
+                    for (name, start_state) in body_diff {
                         let end_state = ctx.get_state(&name).unwrap_or(start_state);
                         if end_state != start_state && start_state == VarState::Valid {
                             ctx.set_state(&name, VarState::PossiblyMoved);
@@ -192,18 +243,38 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
             else_branch,
         } => {
             visit_expr(cond, ctx, tctx);
-            let start_vars = ctx.var_stacks.clone();
-            visit_expr(then_branch, ctx, tctx);
-            let then_vars = ctx.var_stacks.clone();
-            ctx.var_stacks = start_vars.clone();
-            visit_expr(else_branch, ctx, tctx);
-            let else_vars = ctx.var_stacks.clone();
 
-            let keys: Vec<_> = ctx.var_stacks.keys().cloned().collect();
-            for name in keys {
-                let start_state = get_top(&start_vars, &name).unwrap_or(VarState::Valid);
-                let then_state = get_top(&then_vars, &name).unwrap_or(start_state);
-                let else_state = get_top(&else_vars, &name).unwrap_or(start_state);
+            ctx.push_history();
+            visit_expr(then_branch, ctx, tctx);
+            let then_diff = ctx.pop_history();
+            let mut then_final = BTreeMap::new();
+            for name in then_diff.keys() {
+                then_final.insert(name.clone(), ctx.get_state(name).unwrap());
+            }
+            ctx.undo_history(&then_diff);
+
+            ctx.push_history();
+            visit_expr(else_branch, ctx, tctx);
+            let else_diff = ctx.pop_history();
+            let mut else_final = BTreeMap::new();
+            for name in else_diff.keys() {
+                else_final.insert(name.clone(), ctx.get_state(name).unwrap());
+            }
+            ctx.undo_history(&else_diff);
+
+            let mut all_modified: BTreeSet<String> = then_diff.keys().cloned().collect();
+            all_modified.extend(else_diff.keys().cloned());
+
+            for name in all_modified {
+                let start_state = then_diff
+                    .get(&name)
+                    .or_else(|| else_diff.get(&name))
+                    .copied()
+                    .unwrap_or_else(|| ctx.get_state(&name).unwrap_or(VarState::Valid));
+
+                let then_state = then_final.get(&name).copied().unwrap_or(start_state);
+                let else_state = else_final.get(&name).copied().unwrap_or(start_state);
+
                 let merged = match (then_state, else_state) {
                     (VarState::Valid, VarState::Valid) => VarState::Valid,
                     (VarState::Moved, VarState::Moved) => VarState::Moved,
@@ -214,11 +285,11 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
         }
         HirExprKind::While { cond, body } => {
             visit_expr(cond, ctx, tctx);
-            let start_vars = ctx.var_stacks.clone();
+            ctx.push_history();
             visit_expr(body, ctx, tctx);
-            let keys: Vec<_> = ctx.var_stacks.keys().cloned().collect();
-            for name in keys {
-                let start_state = get_top(&start_vars, &name).unwrap_or(VarState::Valid);
+            let body_diff = ctx.pop_history();
+
+            for (name, start_state) in body_diff {
                 let end_state = ctx.get_state(&name).unwrap_or(start_state);
                 if end_state != start_state && start_state == VarState::Valid {
                     ctx.set_state(&name, VarState::PossiblyMoved);
@@ -232,25 +303,50 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
         }
         HirExprKind::Match { scrutinee, arms } => {
             visit_expr(scrutinee, ctx, tctx);
-            let start_vars = ctx.var_stacks.clone();
-            let mut branch_states = Vec::new();
+
+            let mut all_branch_diffs = Vec::new();
+            let mut all_branch_finals = Vec::new();
+
             for arm in arms {
-                ctx.var_stacks = start_vars.clone();
+                ctx.push_history();
                 ctx.push_scope();
                 if let Some(bind) = &arm.bind_local {
                     ctx.declare_var(bind.clone());
                 }
                 visit_expr(&arm.body, ctx, tctx);
                 ctx.pop_scope();
-                branch_states.push(ctx.var_stacks.clone());
+                let diff = ctx.pop_history();
+                let mut final_states = BTreeMap::new();
+                for name in diff.keys() {
+                    final_states.insert(name.clone(), ctx.get_state(name).unwrap());
+                }
+                ctx.undo_history(&diff);
+                all_branch_diffs.push(diff);
+                all_branch_finals.push(final_states);
             }
-            let keys: Vec<_> = ctx.var_stacks.keys().cloned().collect();
-            for name in keys {
-                let start_state = get_top(&start_vars, &name).unwrap_or(VarState::Valid);
+
+            let mut all_modified = BTreeSet::new();
+            for diff in &all_branch_diffs {
+                for name in diff.keys() {
+                    all_modified.insert(name.clone());
+                }
+            }
+
+            for name in all_modified {
+                let mut start_state = VarState::Valid;
+                for diff in &all_branch_diffs {
+                    if let Some(s) = diff.get(&name) {
+                        start_state = *s;
+                        break;
+                    }
+                }
+
                 let mut all_valid = true;
                 let mut all_moved = true;
-                for branch in &branch_states {
-                    match get_top(branch, &name).unwrap_or(start_state) {
+
+                for branch_final in &all_branch_finals {
+                    let state = branch_final.get(&name).copied().unwrap_or(start_state);
+                    match state {
                         VarState::Valid => all_moved = false,
                         VarState::Moved => all_valid = false,
                         _ => {
@@ -259,6 +355,7 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
                         }
                     }
                 }
+
                 let merged = if all_valid {
                     VarState::Valid
                 } else if all_moved {

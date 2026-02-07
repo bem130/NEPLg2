@@ -271,8 +271,8 @@ impl TypeCtx {
         if self.apply_arity_mismatch(a) || self.apply_arity_mismatch(b) {
             return Err(UnifyError::Mismatch);
         }
-        let ak = self.get(a);
-        let bk = self.get(b);
+        let ak = self.arena[ra.0].clone();
+        let bk = self.arena[rb.0].clone();
 
         match (ak, bk) {
             (TypeKind::Var(_), TypeKind::Never) => Ok(a),
@@ -298,29 +298,31 @@ impl TypeCtx {
                     }
                 }
             }
-            (TypeKind::Var(mut va), other) => {
-                if self.occurs_in(a, b, &mut BTreeSet::new()) {
+            (TypeKind::Var(va), other) => {
+                if self.occurs_in(ra, rb, &mut BTreeSet::new()) {
                     return Err(UnifyError::Mismatch);
                 }
-                if let Some(label) = va.label.take() {
-                    if !label_matches(&label, &other) {
+                if let Some(label) = &va.label {
+                    if !label_matches(label, other) {
                         return Err(UnifyError::Mismatch);
                     }
                 }
-                self.bind_var_value(a, &other);
-                Ok(b)
+                let other_cloned = other.clone();
+                self.bind_var_value(ra, &other_cloned);
+                Ok(rb)
             }
-            (other, TypeKind::Var(mut vb)) => {
-                if self.occurs_in(b, a, &mut BTreeSet::new()) {
+            (other, TypeKind::Var(vb)) => {
+                if self.occurs_in(rb, ra, &mut BTreeSet::new()) {
                     return Err(UnifyError::Mismatch);
                 }
-                if let Some(label) = vb.label.take() {
-                    if !label_matches(&label, &other) {
+                if let Some(label) = &vb.label {
+                    if !label_matches(label, other) {
                         return Err(UnifyError::Mismatch);
                     }
                 }
-                self.bind_var_value(b, &other);
-                Ok(a)
+                let other_cloned = other.clone();
+                self.bind_var_value(rb, &other_cloned);
+                Ok(ra)
             }
             (TypeKind::Unit, TypeKind::Unit) => Ok(self.unit),
             (TypeKind::I32, TypeKind::I32) => Ok(self.i32_ty),
@@ -430,8 +432,8 @@ impl TypeCtx {
                 for (xa, xb) in pa.iter().zip(pb.iter()) {
                     self.unify(*xa, *xb)?;
                 }
-                self.unify(ra, rb)?;
-                Ok(self.function(ta, pa, ra, ea))
+                self.unify(*ra, *rb)?;
+                Ok(self.function(ta.clone(), pa.clone(), *ra, *ea))
             }
             (TypeKind::Named(na), TypeKind::Enum { name: nb, .. })
             | (TypeKind::Enum { name: na, .. }, TypeKind::Named(nb)) => {
@@ -450,14 +452,14 @@ impl TypeCtx {
                 }
             }
             (TypeKind::Box(inner_a), TypeKind::Box(inner_b)) => {
-                self.unify(inner_a, inner_b)?;
+                self.unify(*inner_a, *inner_b)?;
                 Ok(a)
             }
             (TypeKind::Reference(inner_a, mut_a), TypeKind::Reference(inner_b, mut_b)) => {
                 if mut_a != mut_b {
                     return Err(UnifyError::Mismatch);
                 }
-                self.unify(inner_a, inner_b)?;
+                self.unify(*inner_a, *inner_b)?;
                 Ok(a)
             }
             (TypeKind::Tuple { items: ta }, TypeKind::Tuple { items: tb }) => {
@@ -473,7 +475,7 @@ impl TypeCtx {
                 if aa.len() != ab.len() {
                     return Err(UnifyError::Mismatch);
                 }
-                self.unify(ba, bb)?;
+                self.unify(*ba, *bb)?;
                 for (xa, xb) in aa.iter().zip(ab.iter()) {
                     self.unify(*xa, *xb)?;
                 }
@@ -483,15 +485,15 @@ impl TypeCtx {
                 if ta.len() != ab.len() {
                     return Err(UnifyError::Mismatch);
                 }
-                let resolved_base = self.resolve(bb);
-                match self.get(resolved_base) {
+                let resolved_base = self.resolve_id(*bb); // Use resolve_id for simple lookup
+                match &self.arena[resolved_base.0] {
                     TypeKind::Enum { name: nb, .. } => {
-                        if na != nb {
+                        if *na != *nb {
                             return Err(UnifyError::Mismatch);
                         }
                     }
                     TypeKind::Named(nb) => {
-                        if na != nb {
+                        if *na != *nb {
                             return Err(UnifyError::Mismatch);
                         }
                     }
@@ -506,15 +508,15 @@ impl TypeCtx {
                 if aa.len() != tb.len() {
                     return Err(UnifyError::Mismatch);
                 }
-                let resolved_base = self.resolve(ba);
-                match self.get(resolved_base) {
+                let resolved_base = self.resolve_id(*ba);
+                match &self.arena[resolved_base.0] {
                     TypeKind::Enum { name: na, .. } => {
-                        if na != nb {
+                        if *na != *nb {
                             return Err(UnifyError::Mismatch);
                         }
                     }
                     TypeKind::Named(na) => {
-                        if na != nb {
+                        if *na != *nb {
                             return Err(UnifyError::Mismatch);
                         }
                     }
@@ -529,15 +531,15 @@ impl TypeCtx {
                 if ta.len() != ab.len() {
                     return Err(UnifyError::Mismatch);
                 }
-                let resolved_base = self.resolve(bb);
-                match self.get(resolved_base) {
+                let resolved_base = self.resolve_id(*bb);
+                match &self.arena[resolved_base.0] {
                     TypeKind::Struct { name: nb, .. } => {
-                        if na != nb {
+                        if *na != *nb {
                             return Err(UnifyError::Mismatch);
                         }
                     }
                     TypeKind::Named(nb) => {
-                        if na != nb {
+                        if *na != *nb {
                             return Err(UnifyError::Mismatch);
                         }
                     }
@@ -552,15 +554,15 @@ impl TypeCtx {
                 if aa.len() != tb.len() {
                     return Err(UnifyError::Mismatch);
                 }
-                let resolved_base = self.resolve(ba);
-                match self.get(resolved_base) {
+                let resolved_base = self.resolve_id(*ba);
+                match &self.arena[resolved_base.0] {
                     TypeKind::Struct { name: na, .. } => {
-                        if na != nb {
+                        if *na != *nb {
                             return Err(UnifyError::Mismatch);
                         }
                     }
                     TypeKind::Named(na) => {
-                        if na != nb {
+                        if *na != *nb {
                             return Err(UnifyError::Mismatch);
                         }
                     }
@@ -637,7 +639,7 @@ impl TypeCtx {
         if !seen.insert(ty) {
             return ty;
         }
-        match self.get(ty) {
+        match &self.arena[ty.0] {
             TypeKind::Unit
             | TypeKind::I32
             | TypeKind::U8
@@ -654,13 +656,13 @@ impl TypeCtx {
             } => {
                 let mut new_tps = Vec::new();
                 let mut changed = false;
-                for tp in &type_params {
+                for tp in type_params {
                     let nt = self.substitute_inner(*tp, mapping, seen);
                     if nt != *tp { changed = true; }
                     new_tps.push(nt);
                 }
                 let mut new_vars = Vec::new();
-                for v in &variants {
+                for v in variants {
                     let new_payload = v.payload.map(|p| {
                         let np = self.substitute_inner(p, mapping, seen);
                         if np != p { changed = true; }
@@ -673,7 +675,7 @@ impl TypeCtx {
                 }
                 if changed {
                     self.store(TypeKind::Enum {
-                        name,
+                        name: name.clone(),
                         type_params: new_tps,
                         variants: new_vars,
                     })
@@ -689,25 +691,23 @@ impl TypeCtx {
             } => {
                 let mut new_tps = Vec::new();
                 let mut changed = false;
-                for tp in &type_params {
+                for tp in type_params {
                     let nt = self.substitute_inner(*tp, mapping, seen);
-                    // Resolve original to check for trivial "change" (e.g. var -> self resolved)?
-                    // Actually simple equality check is enough if substitute returns resolved.
                     if nt != *tp { changed = true; }
                     new_tps.push(nt);
                 }
                 let mut new_fs = Vec::new();
-                for f in &fields {
+                for f in fields {
                     let nf = self.substitute_inner(*f, mapping, seen);
                     if nf != *f { changed = true; }
                     new_fs.push(nf);
                 }
                 if changed {
                     self.store(TypeKind::Struct {
-                        name,
+                        name: name.clone(),
                         type_params: new_tps,
                         fields: new_fs,
-                        field_names,
+                        field_names: field_names.clone(),
                     })
                 } else {
                     ty
@@ -716,7 +716,7 @@ impl TypeCtx {
             TypeKind::Tuple { items } => {
                 let mut new_items = Vec::new();
                 let mut changed = false;
-                for item in &items {
+                for item in items {
                     let ni = self.substitute_inner(*item, mapping, seen);
                     if ni != *item { changed = true; }
                     new_items.push(ni);
@@ -735,22 +735,22 @@ impl TypeCtx {
             } => {
                 let mut new_tps = Vec::new();
                 let mut changed = false;
-                for tp in &type_params {
+                for tp in type_params {
                     let nt = self.substitute_inner(*tp, mapping, seen);
                     if nt != *tp { changed = true; }
                     new_tps.push(nt);
                 }
                 let mut new_ps = Vec::new();
-                for p in &params {
+                for p in params {
                     let np = self.substitute_inner(*p, mapping, seen);
                     if np != *p { changed = true; }
                     new_ps.push(np);
                 }
-                let new_r = self.substitute_inner(result, mapping, seen);
-                if new_r != result { changed = true; }
+                let new_r = self.substitute_inner(*result, mapping, seen);
+                if new_r != *result { changed = true; }
                 
                 if changed {
-                    self.function(new_tps, new_ps, new_r, effect)
+                    self.function(new_tps, new_ps, new_r, *effect)
                 } else {
                     ty
                 }

@@ -148,11 +148,7 @@ impl ModuleGraphBuilder {
         let mut table: BTreeMap<ModuleId, BTreeMap<String, ExportEntry>> = BTreeMap::new();
         // topo は子→親の順に積まれているので、その順で処理すれば依存先の export が先に揃う。
         for id in &graph.topo {
-            let node = graph
-                .nodes
-                .iter()
-                .find(|n| n.id == *id)
-                .expect("node not found");
+            let node = &graph.nodes[id.0 as usize];
             let mut exports = BTreeMap::new();
 
             // ローカル pub 定義

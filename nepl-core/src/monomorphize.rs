@@ -10,12 +10,12 @@ use crate::hir::*;
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
 pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
-    let mut impl_map: BTreeMap<(String, String, String), String> = BTreeMap::new();
+    let mut impl_map: BTreeMap<(String, String, TypeId), String> = BTreeMap::new();
     for imp in &module.impls {
-        let ty_name = ctx.type_to_string(imp.target_ty);
+        let ty = ctx.resolve_id(imp.target_ty);
         for m in &imp.methods {
             impl_map.insert(
-                (imp.trait_name.clone(), m.name.clone(), ty_name.clone()),
+                (imp.trait_name.clone(), m.name.clone(), ty),
                 m.func.name.clone(),
             );
         }
@@ -104,7 +104,7 @@ struct Monomorphizer<'a> {
     funcs: BTreeMap<String, HirFunction>,
     specialized: BTreeMap<String, HirFunction>,
     worklist: Vec<(String, Vec<TypeId>)>,
-    impl_map: BTreeMap<(String, String, String), String>,
+    impl_map: BTreeMap<(String, String, TypeId), String>,
 }
 
 impl<'a> Monomorphizer<'a> {
@@ -227,7 +227,7 @@ impl<'a> Monomorphizer<'a> {
                         let key = (
                             trait_name.clone(),
                             method.clone(),
-                            self.ctx.type_to_string(resolved),
+                            resolved,
                         );
                         if let Some(func_name) = self.impl_map.get(&key) {
                             let inst = self.request_instantiation(func_name.clone(), Vec::new());
