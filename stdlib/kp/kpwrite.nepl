@@ -1,0 +1,224 @@
+// == kpwrite.nepl ==
+
+#indent 4
+#target wasi
+
+#import "core/mem" as *
+#import "core/math" as *
+#import "std/stdio" as *
+
+//: writer_new: 競プロ向けのバッファ付き stdout writer を作る
+//:
+//: 目的:
+//: - 出力を内部バッファに溜め、fd_write の呼び出し回数を減らします。
+//:
+//: 実装:
+//: - ヒープ上に [buf_ptr, cap, len, iov_ptr, nw_ptr] のヘッダ(20B)を置きます。
+//: - iov(8B) と nw(4B) は 1 回だけ確保して使い回します。
+//:
+//: 計算量:
+//: - O(1)
+fn writer_new <()*>i32> ():
+    let cap <i32> 65536;
+    let buf <i32> alloc cap;
+    let iov <i32> alloc 8;
+    let nw  <i32> alloc 4;
+
+    let w <i32> alloc 20;
+    store_i32 w buf;
+    store_i32 add w 4 cap;
+    store_i32 add w 8 0;
+    store_i32 add w 12 iov;
+    store_i32 add w 16 nw;
+    w
+
+//: writer_free: writer の確保領域を解放する
+//:
+//: 注意:
+//: - 未 flush のデータは捨てられます。必要なら先に writer_flush を呼んでください。
+//:
+//: 計算量:
+//: - O(1)
+fn writer_free <(i32)*>()> (w):
+    let buf <i32> load_i32 w;
+    let cap <i32> load_i32 add w 4;
+    let iov <i32> load_i32 add w 12;
+    let nw  <i32> load_i32 add w 16;
+
+    dealloc buf cap;
+    dealloc iov 8;
+    dealloc nw 4;
+    dealloc w 20;
+    ()
+
+//: writer_flush: バッファ内容を stdout に書き出す
+//:
+//: 実装:
+//: - fd_write は部分書き込みの可能性があるので off を進めるループにします。
+//: - 競プロ用途として、エラー時は打ち切って len=0 にします（簡易）。
+//:
+//: 計算量:
+//: - O(len)
+fn writer_flush <(i32)*>()> (w):
+    let buf <i32> load_i32 w;
+    let len <i32> load_i32 add w 8;
+
+    if:
+        eq len 0
+        then:
+            ()
+        else:
+            let iov <i32> load_i32 add w 12;
+            let nw  <i32> load_i32 add w 16;
+
+            let mut off <i32> 0;
+            let mut done <i32> 0;
+
+            while eq done 0:
+                if:
+                    ge off len
+                    then:
+                        set done 1;
+                        ()
+                    else:
+                        store_i32 iov add buf off;
+                        store_i32 add iov 4 sub len off;
+                        store_i32 nw 0;
+
+                        let errno <i32> fd_write 1 iov 1 nw;
+                        if:
+                            ne errno 0
+                            then:
+                                set done 1;
+                                ()
+                            else:
+                                let n <i32> load_i32 nw;
+                                if:
+                                    eq n 0
+                                    then:
+                                        set done 1;
+                                        ()
+                                    else:
+                                        set off add off n;
+                                        ();
+
+            store_i32 add w 8 0;
+            ()
+
+//: writer_ensure: need バイト分の空きを確保する（足りなければ flush）
+//:
+//: 注意:
+//: - need が cap を超えるケースは呼び出し側で避けてください（この版は最小実装）。
+fn writer_ensure <(i32,i32)*>()> (w, need):
+    let cap <i32> load_i32 add w 4;
+    let len <i32> load_i32 add w 8;
+    if:
+        le add len need cap
+        then:
+            ()
+        else:
+            writer_flush w;
+            ()
+
+//: writer_put_u8: 1 バイト追記する
+//:
+//: 計算量:
+//: - O(1)（flush が入ると O(len)）
+fn writer_put_u8 <(i32,i32)*>()> (w, b):
+    writer_ensure w 1;
+    let buf <i32> load_i32 w;
+    let len <i32> load_i32 add w 8;
+    store_u8 add buf len b;
+    store_i32 add w 8 add len 1;
+    ()
+
+//: writer_writeln: 改行 '\n' を出力する
+fn writer_writeln <(i32)*>()> (w):
+    writer_put_u8 w 10
+
+//: writer_write_str: str を追記する
+//:
+//: 注意:
+//: - str は [len][bytes] 形式なので、bytes 先頭は add s 4 です。
+fn writer_write_str <(i32,str)*>()> (w, s):
+    let n <i32> load_i32 s;
+
+    if:
+        le n 0
+        then:
+            ()
+        else:
+            writer_ensure w n;
+
+            let buf <i32> load_i32 w;
+            let len <i32> load_i32 add w 8;
+            let src <i32> add s 4;
+
+            let mut i <i32> 0;
+            while lt i n:
+                do:
+                    store_u8 add buf add len i load_u8 add src i;
+                    set i add i 1;
+
+            store_i32 add w 8 add len n;
+            ()
+
+//: writer_write_i32: i32 を 10 進で出力する（alloc なし）
+//:
+//: 実装:
+//: - INT_MIN は abs overflow するので定数文字列で処理します。
+//: - それ以外は桁数 d を数えて、バッファ末尾から埋めます（反転不要）。
+//:
+//: 計算量:
+//: - O(桁数)
+fn writer_write_i32 <(i32,i32)*>()> (w, v):
+    if:
+        eq v -2147483648
+        then:
+            writer_write_str w "-2147483648";
+            ()
+        else:
+            if:
+                eq v 0
+                then:
+                    writer_put_u8 w 48;
+                    ()
+                else:
+                    let mut x <i32> v;
+
+                    if:
+                        lt x 0
+                        then:
+                            writer_put_u8 w 45;   // '-'
+                            set x sub 0 x;
+                            ()
+                        else:
+                            ();
+
+                    // 桁数を数える
+                    let mut t <i32> x;
+                    let mut d <i32> 0;
+                    while lt 0 t:
+                        do:
+                            set d add d 1;
+                            set t div_s t 10;
+
+                    writer_ensure w d;
+
+                    let buf <i32> load_i32 w;
+                    let old_len <i32> load_i32 add w 8;
+                    store_i32 add w 8 add old_len d;
+
+                    let mut n <i32> x;
+                    let mut i <i32> 0;
+                    let endm1 <i32> sub add old_len d 1;
+
+                    while lt i d:
+                        do:
+                            let rem <i32> mod_s n 10;
+                            let off <i32> sub endm1 i;
+                            store_u8 add buf off add 48 rem;
+                            set n div_s n 10;
+                            set i add i 1;
+
+                    ()
