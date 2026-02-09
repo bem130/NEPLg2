@@ -65,6 +65,7 @@ if __name__ == '__main__':
     # 例1: ./src ディレクトリを src.txt にまとめる
     merge_directory_files('./nepl-cli', './tmp/cli.txt')
     merge_directory_files('./nepl-core', './tmp/core.txt')
+    merge_directory_files('./nepl-web/src', './tmp/nepl-web.txt')
+    merge_directory_files('./web/src', './tmp/web-src.txt')
     merge_directory_files('./stdlib', './tmp/stdlib.txt')
     merge_directory_files('./examples', './tmp/examples.txt')
-    merge_directory_files('./src', './tmp/src.txt')

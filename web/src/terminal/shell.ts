@@ -81,8 +81,8 @@ export class Shell {
   cat <file>    - Display file contents
   pwd           - Print working directory
   clear         - Clear the terminal
-  neplg2 [run|build] [-i input] [-o output] [--emit wat]
-                - Compile and run NEPLg2 code
+  neplg2 [run|build] [-i input] [-o output] [--emit wasm|wat|wat-min|all] [--attach-source]
+                - Compile NEPLg2 code (WASM/WAT) and optionally run (WASM)
   wasmi <file>  - Run a WASM file using the wasmi runtime
   tree [path]   - Show directory tree structure
   echo [text]   - Display text`;
@@ -184,19 +184,53 @@ export class Shell {
             const wasmBindings = (window as any).wasmBindings;
 
             try {
-                if (parsed.flags['--emit'] && (parsed.flags['--emit'] as string).includes('wat')) {
-                    const wat = wasmBindings.compile_to_wat(source);
-                    this.vfs.writeFile('out.wat', wat);
-                    this.terminal.print("Generated out.wat");
+                // --emit は "wasm,wat,wat-min" のようにカンマ区切りを許可する
+                const wantsRun = args.includes('run');
+                const emitValues = this.normalizeEmit(parsed.flags['--emit']);
+                if (wantsRun && !emitValues.includes('wasm')) {
+                    emitValues.push('wasm');
                 }
 
-                const wasm = wasmBindings.compile_source_with_vfs(inputPath, source, this.vfs.serialize());
-                const outFile = (parsed.flags['-o'] as string) || 'out.wasm';
-                this.vfs.writeFile(outFile, wasm);
-                this.terminal.print(`Compilation finished. Output to ${outFile}`);
+                const attachSource = Boolean(parsed.flags['--attach-source'] || parsed.flags['--attach_source']);
 
-                if (args.includes('run')) {
-                    return await this.cmdWasmi([outFile], stdin);
+                const outArg = (parsed.flags['-o'] as any) || (parsed.flags['--output'] as any);
+                const outBase = this.outputBaseFromArg(typeof outArg === 'string' ? outArg : 'out');
+
+                const emitJs: any = emitValues.length === 1 ? emitValues[0] : emitValues;
+                const outputs = wasmBindings.compile_outputs_with_vfs(
+                    inputPath,
+                    source,
+                    this.vfs.serialize(),
+                    emitJs,
+                    attachSource
+                );
+
+                let wasmOutFile: string | null = null;
+
+                if (outputs.wasm) {
+                    const p = this.outputPath(outBase, 'wasm');
+                    this.vfs.writeFile(p, outputs.wasm);
+                    wasmOutFile = p;
+                    this.terminal.print(`Generated ${p}`);
+                }
+                if (outputs.wat) {
+                    const p = this.outputPath(outBase, 'wat');
+                    this.vfs.writeFile(p, outputs.wat);
+                    this.terminal.print(`Generated ${p}`);
+                }
+                if (outputs['wat-min']) {
+                    const p = this.outputPath(outBase, 'wat-min');
+                    this.vfs.writeFile(p, outputs['wat-min']);
+                    this.terminal.print(`Generated ${p}`);
+                }
+
+                this.terminal.print("Compilation finished.");
+
+                if (wantsRun) {
+                    if (!wasmOutFile) {
+                        return "Error: --emit does not include wasm, so it cannot be run.";
+                    }
+                    return await this.cmdWasmi([wasmOutFile], stdin);
                 }
                 return "Build complete.";
             } catch (e: any) {
@@ -207,6 +241,52 @@ export class Shell {
             }
         }
         return "Unknown neplg2 command.";
+    }
+
+
+    normalizeEmit(flagValue: any): string[] {
+        const raw: string[] = [];
+        if (typeof flagValue === 'string') raw.push(flagValue);
+        if (Array.isArray(flagValue)) raw.push(...flagValue.map((v) => String(v)));
+        if (raw.length === 0) raw.push('wasm');
+
+        const expanded: string[] = [];
+        for (const item of raw) {
+            for (const part of item.split(',')) {
+                const v = part.trim();
+                if (!v) continue;
+                if (v === 'all') {
+                    expanded.push('wasm', 'wat', 'wat-min');
+                } else {
+                    expanded.push(v);
+                }
+            }
+        }
+
+        // 重複除去（順序は維持）
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const v of expanded) {
+            if (!seen.has(v)) {
+                seen.add(v);
+                out.push(v);
+            }
+        }
+        return out;
+    }
+
+    outputBaseFromArg(output: string): string {
+        if (output.endsWith('.min.wat')) return output.slice(0, -'.min.wat'.length);
+        if (output.endsWith('.wasm')) return output.slice(0, -'.wasm'.length);
+        if (output.endsWith('.wat')) return output.slice(0, -'.wat'.length);
+        return output;
+    }
+
+    outputPath(base: string, emit: 'wasm' | 'wat' | 'wat-min'): string {
+        if (emit === 'wasm') return `${base}.wasm`;
+        if (emit === 'wat') return `${base}.wat`;
+        // wat-min
+        return `${base}.min.wat`;
     }
 
     parseFlags(args: string[]) {

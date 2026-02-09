@@ -1,9 +1,39 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    // NEPLg2 コンパイラ（このリポジトリ）のコミットハッシュをビルド時に埋め込む。
+    // 既に環境変数 NEPLG2_COMPILER_COMMIT が指定されている場合はそれを優先する。
+    let commit = env::var("NEPLG2_COMPILER_COMMIT")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .or_else(|| {
+            Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .current_dir(&manifest_dir)
+                .output()
+                .ok()
+                .and_then(|o| {
+                    if o.status.success() {
+                        Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+                    } else {
+                        None
+                    }
+                })
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
+    println!("cargo:rustc-env=NEPLG2_COMPILER_COMMIT={}", commit);
+
+    // コミットが変わったときに build.rs を再実行したい（環境によっては効かない場合もある）。
+    let git_dir = manifest_dir.join("..").join(".git");
+    println!("cargo:rerun-if-changed={}", git_dir.join("HEAD").display());
+    println!("cargo:rerun-if-changed={}", git_dir.join("refs").display());
+
     let stdlib_root = manifest_dir.join("../stdlib");
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let dest = out_dir.join("stdlib_entries.rs");
