@@ -54,6 +54,10 @@ struct Cli {
     )]
     emit: Vec<Emit>,
 
+    // WAT 出力の先頭に入力ソース（-i）をコメントとして付加する
+    #[arg(long, help = "Attach the input source as WAT comments at the top of wat/wat-min outputs")]
+    attach_source: bool,
+
     #[arg(long, help = "Run the code if the output format is wasm")]
     run: bool,
     #[arg(
@@ -120,11 +124,11 @@ fn execute(cli: Cli) -> Result<()> {
         return Err(anyhow::anyhow!("Either --run or --output is required"));
     }
     let emits = expand_emits(&cli.emit);
-    let program_name = cli
-        .input
+    let input_path = cli.input.clone();
+    let program_name = input_path
         .clone()
         .unwrap_or_else(|| "<stdin>".to_string());
-    let (module, source_map) = match cli.input {
+    let (module, source_map) = match &cli.input {
         Some(path) => {
             eprintln!("DEBUG: Creating Loader for path: {}", path);
             let mut loader = Loader::new(stdlib_root()?);
@@ -227,9 +231,18 @@ fn execute(cli: Cli) -> Result<()> {
             return Err(anyhow::anyhow!(e.to_string()));
         },
     };
+    let attached_source = if cli.attach_source {
+        match &input_path {
+            Some(p) => Some(read_attached_source(Path::new(p))?),
+            None => None,
+        }
+    } else {
+        None
+    };
+
     if let Some(out) = &cli.output {
         let base = output_base_from_arg(out);
-        write_outputs(&base, &artifact.wasm, &emits)?;
+        write_outputs(&base, &artifact.wasm, &emits, attached_source.as_ref())?;
     }
     if cli.run {
         let mut wasm_args = Vec::new();
@@ -383,6 +396,48 @@ fn expand_emits(emits: &[Emit]) -> BTreeSet<Emit> {
     set
 }
 
+
+struct AttachedSource {
+    path: PathBuf,
+    text: String,
+}
+
+fn read_attached_source(path: &Path) -> Result<AttachedSource> {
+    // 入力ファイル（-i）の内容を読み込み、WAT のコメントとして埋め込める形にする
+    let bytes = fs::read(path)
+        .with_context(|| format!("failed to read input file {}", path.display()))?;
+    let text = String::from_utf8_lossy(&bytes).to_string();
+    Ok(AttachedSource {
+        path: path.to_path_buf(),
+        text,
+    })
+}
+
+fn prepend_attached_source_as_wat_comment(wat: &str, attached: &AttachedSource) -> String {
+    // WAT の行コメント ";;" を使って、任意のテキストを安全にコメント化する
+    // 仕様上、コメントはトークン間の空白として扱われるため、(module ...) の前に置ける
+    let mut out = String::new();
+    out.push_str(";; ---- BEGIN ATTACHED SOURCE ----\n");
+    out.push_str(";; path: ");
+    out.push_str(&attached.path.display().to_string());
+    out.push('\n');
+
+    for (idx, chunk) in attached.text.split_inclusive('\n').enumerate() {
+        let line = chunk.strip_suffix('\n').unwrap_or(chunk);
+        out.push_str(";; ");
+        out.push_str(&format!("{:04}: ", idx + 1));
+        out.push_str(line);
+        out.push('\n');
+    }
+    if !attached.text.ends_with('\n') {
+        // split_inclusive が末尾行に改行を含めない場合があるので、見た目を揃える
+        out.push('\n');
+    }
+    out.push_str(";; ---- END ATTACHED SOURCE ----\n\n");
+    out.push_str(wat);
+    out
+}
+
 fn output_path(base: &Path, emit: Emit) -> PathBuf {
     match emit {
         Emit::Wasm => base.with_extension("wasm"),
@@ -392,19 +447,26 @@ fn output_path(base: &Path, emit: Emit) -> PathBuf {
     }
 }
 
-fn write_outputs(base: &Path, wasm: &[u8], emits: &BTreeSet<Emit>) -> Result<()> {
+fn write_outputs(base: &Path, wasm: &[u8], emits: &BTreeSet<Emit>, attached_source: Option<&AttachedSource>) -> Result<()> {
     if emits.contains(&Emit::Wasm) {
         let path = output_path(base, Emit::Wasm);
         write_bytes(&path, wasm)?;
     }
     if emits.contains(&Emit::Wat) {
         let path = output_path(base, Emit::Wat);
-        let wat_text = make_wat_pretty(wasm)?;
+        let mut wat_text = make_wat_pretty(wasm)?;
+        if let Some(attached) = attached_source {
+            wat_text = prepend_attached_source_as_wat_comment(&wat_text, attached);
+        }
         write_bytes(&path, wat_text.as_bytes())?;
     }
     if emits.contains(&Emit::WatMin) {
         let path = output_path(base, Emit::WatMin);
-        let wat_text = make_wat_min(wasm)?;
+        let mut wat_text = make_wat_min(wasm)?;
+        // minify の後にコメントを付加しないと、minify がコメントを消してしまう
+        if let Some(attached) = attached_source {
+            wat_text = prepend_attached_source_as_wat_comment(&wat_text, attached);
+        }
         write_bytes(&path, wat_text.as_bytes())?;
     }
     Ok(())
