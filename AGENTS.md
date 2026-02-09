@@ -26,7 +26,7 @@ AGENTとして開発しているとき、git commitは適宜行ってくださ�
 commitする前に、テストの通過を確認しなさい  
 
 # テスト
-cargo test と cargo run -p nepl-cli -- test を確認すること
+trunk buildした後nodesrc/cli.jsのテストを実行し、outputのjsonを確認すること
 
 ## NEPL stdlib
 

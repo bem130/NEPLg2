@@ -9,8 +9,8 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { parseFile } = require('./parser');
-const { markdownToHtml, wrapHtml } = require('./html_gen');
+const { parseFile, parseNmdAst } = require('./parser');
+const { renderHtml } = require('./html_gen');
 
 function parseArgs(argv) {
     const inputs = [];
@@ -142,9 +142,9 @@ function genOne(filePath, relPath, outRoot) {
         return 0;
     }
 
-    const body = markdownToHtml(md);
+    const ast = parseNmdAst(md);
     const title = path.basename(filePath);
-    const html = wrapHtml(title, body);
+    const html = renderHtml(ast, { title, rewriteLinks: true });
 
     const outRel = relPath
         .replace(/\.n\.md$/i, '.html')
