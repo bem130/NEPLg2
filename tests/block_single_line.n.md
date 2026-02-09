@@ -219,6 +219,12 @@ fn main <()->i32> ():
 
 ## block_sl_tuple_element
 
+
+このテストは「単行ブロック（`block ...`）が式として評価され、その結果をタプル要素として扱える」ことを確認する意図です。
+ただし、元のテストはタプルの旧リテラル記法 `(a, b)` と、数値フィールドアクセス `t.1` を用いていました。todo.md の方針ではこれらは廃止対象なので、
+タプル生成は新記法 `Tuple:` に、要素取得は `core/field` の `get` に置き換えました。
+これにより、テストの主旨（単行ブロック式の評価・タプル要素化）は維持したまま、仕様の最新方針に整合させています。
+
 neplg2:test
 ret: 2
 ```neplg2
@@ -226,10 +232,13 @@ ret: 2
 #entry main
 #indent 4
 #target wasm
+#import "core/field" as *
 
 fn main <()->i32> ():
-    let t (block 1, block 2) // Tuple 旧記法 Tuple新記法実装後は新記法に移行する必要
-    t.1
+    let t Tuple:
+        block 1
+        block 2
+    get t 1
 ```
 
 ## block_sl_pipe_source

@@ -175,6 +175,12 @@ fn main <()->i32> ():
 
 ## pipe_tuple_source
 
+
+このテストは「パイプ演算子 `|>` の左辺に複数行式（ここでは `Tuple:`）を置けること」と、
+「`|>` の手前で改行してもインデントを増やさない」という plan.md の規則を同時に確認する意図です。
+旧タプルリテラル `(1,2)` と `t.1` は todo.md で廃止対象なので、`Tuple:` と `core/field` の `get` へ置換しました。
+`Tuple:` の要素行は 1 段深いインデントにし、`|>` 行は元のインデントへ戻すことで、パイプ改行規則を満たす形にしています。
+
 neplg2:test
 ret: 2
 ```neplg2
@@ -182,11 +188,15 @@ ret: 2
 #entry main
 #indent 4
 #target wasm
+#import "core/field" as *
 
-fn f <((i32,i32))->i32> (t): t.1
+fn f <((i32,i32))->i32> (t): get t 1
 
-fn main <()->i32> (): // Tuple 旧記法 Tuple新記法実装後は新記法に移行する必要
-    (1,2) |> f
+fn main <()->i32> ():
+    Tuple:
+        1
+        2
+    |> f
 ```
 
 ## pipe_struct_source
