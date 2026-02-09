@@ -47,17 +47,19 @@ stdlib/nmでサポートする拡張markdownの形式で書きます
 //: - r が Err(e) なら e を[返/かえ]します。
 //: - r が Ok(v) なら unreachable により「異常終了」します。
 //:
-//:| #import "std/test" as *
-//:| #import "core/result" as *
 //:
 //: neplg2:test
 //: ```neplg2
+//:| #import "std/test" as *
+//:| #import "core/result" as *
 //: let r Result::Err "oops";
 //: assert_str_eq "oops" unwrap_err r;
 //: ```
 //:
 //: neplg2:test[should_panic]
 //: ```neplg2
+//:| #import "std/test" as *
+//:| #import "core/result" as *
 //: // Ok を渡すと unreachable が呼ばれ、落ちることを期待
 //: let r Result::Ok 123;
 //: unwrap_err r;
@@ -65,6 +67,8 @@ stdlib/nmでサポートする拡張markdownの形式で書きます
 //:
 //: neplg2:test[compile_fail]
 //: ```neplg2
+//:| #import "std/test" as *
+//:| #import "core/result" as *
 //: // E が i32 の Result に文字列 Err を入れているので型エラーを期待
 //: let r <Result<i32, i32>> Result::Err "text";
 //: unwrap_err r;
