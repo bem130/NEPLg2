@@ -94,6 +94,32 @@ class CanvasEditor {
                 'code-block': '#5c6370', 'default': '#b5b7bbff'
             }
         };
+        // renderer 側が参照する「別名キー」を用意する
+        // ガター
+        this.colors.gutterBg = this.colors.gutterBackground;
+        this.colors.foldMarker = this.colors.lineNumberActive;
+        this.colors.foldMarkerHover = this.colors.lineNumber;
+
+        // カレント行の下線（元の見た目に寄せて薄めにする）
+        this.colors.currentLine = 'rgba(255, 255, 255, 0.18)';
+
+        // 選択/一致/括弧など
+        this.colors.bracketHighlight = this.colors.occurrenceHighlight;
+
+        // 空白ハイライト（キー名の互換）
+        this.colors.trailingSpaceHighlight = this.colors.trailingSpace;
+        this.colors.fullWidthSpaceHighlight = this.colors.fullWidthSpace;
+        this.colors.tabHighlight = this.colors.tab;
+        this.colors.whitespaceHighlight = this.colors.whitespaceSymbol;
+
+        // 診断（エラー/警告）
+        this.colors.diagnosticError = this.colors.errorUnderline;
+        this.colors.diagnosticWarning = this.colors.warningUnderline;
+
+        // インデント帯（白すぎ対策：白系ではなく、落ち着いた青みグレーで薄く）
+        this.colors.indentHighlight1 = 'rgba(58, 67, 88, 0.18)';
+        this.colors.indentHighlight2 = 'rgba(58, 67, 88, 0.10)';
+
         // Editor State
         this.text = '';
         this.lines = [];
