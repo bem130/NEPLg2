@@ -65,6 +65,68 @@ function parseQuotedOrPath(value, baseDir) {
     return v;
 }
 
+function parseRetSpec(value) {
+    const v = (value || "").trim();
+    if (!v) return null;
+
+    // 文字列は JSON 文字列（"..."）として受け取る
+    if (v.startsWith('"')) {
+        // stdin/stdout と同様に JSON.parse でエスケープを解釈する
+        try {
+            return { kind: "str", value: JSON.parse(v) };
+        } catch {
+            return { kind: "str", value: v.slice(1, v.endsWith('"') ? -1 : undefined) };
+        }
+    }
+
+    const low = v.toLowerCase();
+    if (low === "nan") return { kind: "f64", value: NaN };
+    if (low === "inf" || low === "+inf" || low === "infinity" || low === "+infinity") return { kind: "f64", value: Infinity };
+    if (low === "-inf" || low === "-infinity") return { kind: "f64", value: -Infinity };
+
+    // 浮動小数点判定（'.' / 'e' / 'E' を含む）
+    const isFloat = /[.eE]/.test(v);
+    const num = Number(v);
+    if (Number.isNaN(num)) return null;
+
+    return { kind: isFloat ? "f64" : "i32", value: num };
+}
+
+function readNeplStrFromMemory(mem, ptr) {
+    if (!mem || !mem.buffer) return null;
+    const u8 = new Uint8Array(mem.buffer);
+    const off = ptr >>> 0;
+    if (off + 4 > u8.length) return null;
+    const len = (u8[off]) | (u8[off + 1] << 8) | (u8[off + 2] << 16) | (u8[off + 3] << 24);
+    const start = off + 4;
+    const end = start + (len >>> 0);
+    if (end > u8.length) return null;
+    try {
+        return new TextDecoder("utf-8", { fatal: false }).decode(u8.slice(start, end));
+    } catch {
+        return Buffer.from(u8.slice(start, end)).toString("utf-8");
+    }
+}
+
+function floatEq(a, b) {
+    if (Number.isNaN(a) && Number.isNaN(b)) return true;
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return a === b;
+    const diff = Math.abs(a - b);
+    const scale = Math.max(1.0, Math.abs(b));
+    return diff <= 1e-9 * scale;
+}
+
+function compareRet(got, mem, spec) {
+    if (!spec) return true;
+    if (spec.kind === "i32") return (got | 0) === (spec.value | 0);
+    if (spec.kind === "f64") return floatEq(Number(got), Number(spec.value));
+    if (spec.kind === "str") {
+        const s = readNeplStrFromMemory(mem, got | 0);
+        return s === spec.value;
+    }
+    return false;
+}
+
 function parseMlstr(lines, startIndex, stripPrefix) {
     let i = startIndex;
     const out = [];
@@ -107,6 +169,7 @@ function extractTestsFromNepl(filePath) {
                 stdin: null,
                 stdout: null,
                 stderr: null,
+                retSpec: null,
                 code: null, // ファイル全体
             };
 
@@ -134,6 +197,7 @@ function extractTestsFromNepl(filePath) {
                         }
                     }
                     if (key === "stderr") t.stderr = parseQuotedOrPath(val, baseDir);
+                if (key === "ret" || key === "result") t.retSpec = parseRetSpec(val);
                 }
                 i += 1;
             }
@@ -173,6 +237,7 @@ function extractTestsFromNmd(filePath) {
             stdin: null,
             stdout: null,
             stderr: null,
+            retSpec: null,
             code: "",
         };
         i += 1;
@@ -196,6 +261,10 @@ function extractTestsFromNmd(filePath) {
                     }
                 }
                 if (key === "stderr") t.stderr = parseQuotedOrPath(val, baseDir);
+                if (key === "ret" || key === "result") t.retSpec = parseRetSpec(val);
+                if (key === "ret" || key === "result") {
+                    t.retSpec = parseRetSpec(val);
+                }
             }
             i += 1;
         }
@@ -228,20 +297,111 @@ function pathToFileUrl(p) {
     return "file://" + x;
 }
 
-async function loadCompiler(compilerDir) {
-    const dir = compilerDir || process.cwd();
-    const jsName = fs.readdirSync(dir).find(f => /^nepl-web-.*\.js$/.test(f));
-    const wasmName = fs.readdirSync(dir).find(f => /^nepl-web-.*_bg\.wasm$/.test(f));
-    if (!jsName || !wasmName) {
-        throw new Error(`compiler not found in ${dir} (need nepl-web-*.js and *_bg.wasm)`);
+function uniq(list) {
+    const out = [];
+    const seen = new Set();
+    for (const x of list) {
+        const k = String(x);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(x);
     }
-    const jsPath = path.resolve(dir, jsName);
-    const wasmPath = path.resolve(dir, wasmName);
+    return out;
+}
 
-    const mod = await import(pathToFileUrl(jsPath));
-    const wasmBytes = fs.readFileSync(wasmPath);
-    mod.initSync({ module: wasmBytes });
-    return mod;
+function isDir(p) {
+    try {
+        return fs.statSync(p).isDirectory();
+    } catch {
+        return false;
+    }
+}
+
+function findCompilerInDir(dir) {
+    if (!isDir(dir)) return null;
+    let files;
+    try {
+        files = fs.readdirSync(dir);
+    } catch {
+        return null;
+    }
+
+    const jsList = files.filter(f => /^nepl-web-.*\.js$/.test(f));
+    const wasmList = files.filter(f => /^nepl-web-.*_bg\.wasm$/.test(f));
+    if (jsList.length === 0 || wasmList.length === 0) return null;
+
+    // 同一プレフィックス（nepl-web-<hash>.js と nepl-web-<hash>_bg.wasm）の組を優先
+    const wasmSet = new Set(wasmList);
+    for (const jsName of jsList) {
+        const base = jsName.replace(/\.js$/, "");
+        const candWasm = base + "_bg.wasm";
+        if (wasmSet.has(candWasm)) {
+            return { dir, jsName, wasmName: candWasm };
+        }
+    }
+    // それでも見つからない場合は先頭を採用
+    return { dir, jsName: jsList[0], wasmName: wasmList[0] };
+}
+
+function candidateCompilerDirs(compilerDir) {
+    const cwd = process.cwd();
+    const here = __dirname;
+
+    const base = [];
+    if (compilerDir) {
+        const r = path.resolve(compilerDir);
+        base.push(r);
+        // 指定がリポジトリルート（またはその近傍）でも動くようにサブディレクトリも試す
+        base.push(path.join(r, "dist"));
+        base.push(path.join(r, "web", "dist"));
+
+        // 指定が dist / web/dist の場合は相互の候補も追加
+        if (path.basename(r) === "dist") {
+            base.push(path.join(path.dirname(r), "web", "dist"));
+        }
+        if (path.basename(r) === "web" && path.basename(path.dirname(r)) !== "") {
+            base.push(path.join(path.dirname(r), "dist"));
+        }
+        if (r.endsWith(path.join("web", "dist"))) {
+            base.push(path.join(path.dirname(path.dirname(r)), "dist"));
+        }
+    }
+
+    // 実行場所が repo ルート / web / nodesrc のいずれでも拾えるように候補を列挙
+    base.push(path.join(cwd, "dist"));
+    base.push(path.join(cwd, "web", "dist"));
+    base.push(path.join(cwd, "..", "dist"));
+    base.push(path.join(cwd, "..", "web", "dist"));
+
+    // nodesrc 直下で実行した場合（__dirname = .../nodesrc）を考慮
+    base.push(path.join(here, "..", "dist"));
+    base.push(path.join(here, "..", "web", "dist"));
+    base.push(path.join(here, "..", "..", "dist"));
+    base.push(path.join(here, "..", "..", "web", "dist"));
+
+    return uniq(base.map(p => path.resolve(p)));
+}
+
+async function loadCompiler(compilerDir) {
+    const tried = [];
+    for (const dir of candidateCompilerDirs(compilerDir)) {
+        tried.push(dir);
+        const found = findCompilerInDir(dir);
+        if (!found) continue;
+        const jsPath = path.resolve(found.dir, found.jsName);
+        const wasmPath = path.resolve(found.dir, found.wasmName);
+
+        const mod = await import(pathToFileUrl(jsPath));
+        const wasmBytes = fs.readFileSync(wasmPath);
+        mod.initSync({ module: wasmBytes });
+        return mod;
+    }
+
+    // エラーメッセージに「どこを探したか」を含める（デバッグ用）
+    const head = compilerDir ? `compiler not found for compilerDir=${compilerDir}` : "compiler not found";
+    throw new Error(
+        `${head}. Need nepl-web-*.js and nepl-web-*_bg.wasm. Tried:\n` + tried.map(x => `- ${x}`).join("\n")
+    );
 }
 
 function runWasiBytes(wasmBytes, stdinStr) {
@@ -288,8 +448,39 @@ function runWasiBytes(wasmBytes, stdinStr) {
     return { exitCode, stdout, stderr, trapped: trapped ? String(trapped) : null };
 }
 
+
+function instantiateAndCallMain(wasmBytes) {
+    const mod = new WebAssembly.Module(wasmBytes);
+    const fallbacks = [
+        {},
+        { env: {} },
+        { wasi_snapshot_preview1: {} },
+        { env: {}, wasi_snapshot_preview1: {} },
+    ];
+    let lastErr = null;
+    for (const imp of fallbacks) {
+        try {
+            const inst = new WebAssembly.Instance(mod, imp);
+            const f = inst.exports && inst.exports.main;
+            if (typeof f !== "function") {
+                return { ok: false, reason: "no exported main", value: null, memory: null };
+            }
+            const v = f();
+            const mem = inst.exports && inst.exports.memory;
+            return { ok: true, value: v, memory: mem && mem.buffer ? mem : null };
+        } catch (e) {
+            lastErr = e;
+        }
+    }
+    return { ok: false, reason: "instantiate failed", value: null, memory: null, detail: String(lastErr) };
+}
+
+
 async function runOneTest(mod, t) {
     const attrs = new Set(t.attrs || []);
+    if (attrs.has("skip")) {
+        return { ...t, ok: true, reason: "skipped" };
+    }
     const norm = (s) => {
         let x = s == null ? "" : String(s);
         if (attrs.has("strip_ansi")) x = stripAnsi(x);
@@ -312,12 +503,35 @@ async function runOneTest(mod, t) {
         }
     }
 
+    if (attrs.has("compile_ok")) {
+        try {
+            mod.compile_outputs(source, ["wasm"], false);
+            return { ...t, ok: true, reason: "compile_ok ok", detail: null };
+        } catch (e) {
+            return { ...t, ok: false, reason: "expected compile_ok but compile error", detail: String(e) };
+        }
+    }
+
+
     let wasmBytes;
     try {
         const out = mod.compile_outputs(source, ["wasm"], false);
         wasmBytes = out.wasm;
     } catch (e) {
         return { ...t, ok: false, reason: "compile error", detail: String(e) };
+    }
+
+
+    if (t.retSpec != null) {
+        const call = instantiateAndCallMain(wasmBytes);
+        if (!call.ok) {
+            return { ...t, ok: false, reason: call.reason, detail: call.detail || null };
+        }
+        const got = (typeof call.value === "bigint") ? Number(call.value) : call.value;
+        if (!compareRet(got, call.memory, t.retSpec)) {
+            return { ...t, ok: false, reason: "ret mismatch", expected: { ret: t.retSpec }, actual: { ret: got } };
+        }
+        return { ...t, ok: true, reason: "ret ok", actual: { ret: got } };
     }
 
     const res = runWasiBytes(wasmBytes, t.stdin || "");

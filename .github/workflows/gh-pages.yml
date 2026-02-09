@@ -95,6 +95,15 @@ jobs:
                   set -o pipefail
                   trunk build --release --public-url /NEPLg2/ 2>&1 | tee trunk-build.log
 
+            - name: Run .n.md doctests (allowed to fail)
+              id: nmd_tests
+              continue-on-error: true
+              env:
+                  NO_COLOR: "true"
+              run: |
+                  set -o pipefail
+                  node nodesrc/tests.js --tests-dir tests --compiler-dir dist --jobs 4 -o nmd-tests.json 2>&1 | tee nmd-tests.log
+
             - name: Prepare dist (always) and attach test/build logs
               if: always()
               run: |
@@ -120,6 +129,22 @@ jobs:
                   # Also store outcomes (plain text, 1 line each)
                   echo "cargo_test_outcome=${{ steps.cargo_test.outcome }}" > dist/tests/outcomes.txt
                   echo "trunk_build_outcome=${{ steps.trunk_build.outcome }}" >> dist/tests/outcomes.txt
+
+                  # Attach .n.md doctest results (create placeholders if missing)
+                  : > dist/tests/nmd-tests.log
+                  : > dist/tests.json
+
+                  if [ -f nmd-tests.log ]; then
+                      cp -f nmd-tests.log dist/tests/nmd-tests.log
+                  fi
+
+                  if [ -f nmd-tests.json ]; then
+                      cp -f nmd-tests.json dist/tests.json
+                  else
+                      echo '{"summary":{"total":0,"passed":0,"failed":0},"results":[],"note":"nmd-tests.json was not produced"}' > dist/tests.json
+                  fi
+
+                  echo "nmd_tests_outcome=${{ steps.nmd_tests.outcome }}" >> dist/tests/outcomes.txt
 
             - name: Upload GitHub Pages artifact (always)
               if: always()
