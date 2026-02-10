@@ -34,6 +34,28 @@
     - `root`（Block/Stmt/Expr/PrefixItem の木）
     - `debug`（AST の pretty 文字列）
 
+## analyze_name_resolution
+
+- シグネチャ: `analyze_name_resolution(source: string): object`
+- 返却内容:
+  - `stage`: `"name_resolution"`
+  - `ok`
+  - `diagnostics[]`
+  - `definitions[]`
+    - `id`
+    - `name`
+    - `kind`（`fn` / `let_hoisted` / `param` / `fn_alias` など）
+    - `scope_depth`
+    - `span`
+  - `references[]`
+    - `name`
+    - `scope_depth`
+    - `span`
+    - `resolved_def_id`
+    - `candidate_def_ids[]`
+  - `by_name`
+    - 識別子名ごとの `definitions[]` / `references[]` の index
+
 ## Node での利用
 
 `nodesrc/analyze_source.js` から呼び出せる。
@@ -41,6 +63,7 @@
 ```bash
 node nodesrc/analyze_source.js --stage lex -i tests/functions.n.md -o /tmp/functions-lex.json
 node nodesrc/analyze_source.js --stage parse -i tests/functions.n.md -o /tmp/functions-parse.json
+node nodesrc/analyze_source.js --stage resolve -i tests/functions.n.md -o /tmp/functions-resolve.json
 ```
 
 ## 今後

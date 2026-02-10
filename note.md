@@ -17,6 +17,26 @@
   - 名前空間再設計（ValueNs/CallableNs 分離）と、nested fn の実体生成（少なくとも non-capture 先行）が必要。
   - 局所 patch では `functions` 群の構造問題を吸収しきれない。
 
+# 2026-02-10 作業メモ (上流優先: if-layout parser 改善 + LSP解析API拡張)
+- 上流優先の方針で parser を先に調整。
+  - `if <cond>:` で then 行のみ先に見える中間状態を、確定エラーにしないよう回復分岐を追加。
+  - `functions#doctest#10` の parser 失敗（`missing expression(s) in if-layout block`）を解消。
+- 回帰確認:
+  - `NO_COLOR=true trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -o /tmp/tests-after-parser-upstream.json -j 4`
+    - `total=312, passed=275, failed=37, errored=0`（+2 改善）
+- LSP/デバッグ支援向け API を追加:
+  - `nepl-web/src/lib.rs` に `analyze_name_resolution(source)` を追加。
+    - `definitions`（定義点）
+    - `references`（参照点、候補ID列、最終解決ID）
+    - `by_name`（同名識別子の逆引き）
+    - 巻き上げ規則は現行仕様（`fn` と `let` 非 `mut`）に合わせた。
+  - `nodesrc/analyze_source.js` に `--stage resolve` を追加。
+- API検証の追加（追加のみ、既存tests削除なし）:
+  - `nodesrc/test_analysis_api.js` を新規追加。
+  - `shadowing_local_let` / `fn_alias_target_resolution` を自動検証。
+  - 実行結果: `2/2 passed`
+
 # 2026-02-10 作業メモ (block 引数位置の根本修正)
 - `tests/block_single_line.n.md` の `doctest#8/#9` を起点に、`add block 1 block 2` と `if true block 1 else block 2` の失敗要因を解析。
 - 原因:

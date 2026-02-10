@@ -129,3 +129,14 @@ node nodesrc/analyze_tests_json.js /tmp/nmd-tests.json
 ```
 
 - Aggregates `fail/error` reasons into coarse categories for prioritizing fixes.
+
+## Analysis API checks
+
+Use this script to verify analyzer APIs used by LSP/debug tooling:
+
+```
+node nodesrc/test_analysis_api.js
+```
+
+- Verifies `analyze_lex` / `analyze_parse` / `analyze_name_resolution`.
+- Includes shadowing and alias-target resolution checks.

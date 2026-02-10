@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use js_sys::{Reflect, Uint8Array};
-use nepl_core::ast::{Block, Directive, FnBody, PrefixExpr, PrefixItem, Stmt};
+use nepl_core::ast::{Block, Directive, FnBody, MatchArm, PrefixExpr, PrefixItem, Stmt, Symbol};
 use nepl_core::diagnostic::{Diagnostic, Severity};
 use nepl_core::error::CoreError;
 use nepl_core::lexer::{lex, Token, TokenKind};
@@ -722,6 +722,245 @@ fn prefix_item_to_js(source: &str, item: &PrefixItem) -> JsValue {
     obj.into()
 }
 
+#[derive(Clone)]
+struct NameDefTrace {
+    id: usize,
+    name: String,
+    kind: &'static str,
+    span: Span,
+    scope_depth: usize,
+}
+
+#[derive(Clone)]
+struct NameRefTrace {
+    name: String,
+    span: Span,
+    scope_depth: usize,
+    resolved_def_id: Option<usize>,
+    candidate_def_ids: Vec<usize>,
+}
+
+#[derive(Default)]
+struct NameResolutionTrace {
+    defs: Vec<NameDefTrace>,
+    refs: Vec<NameRefTrace>,
+    scopes: Vec<BTreeMap<String, Vec<usize>>>,
+}
+
+impl NameResolutionTrace {
+    fn new() -> Self {
+        Self {
+            defs: Vec::new(),
+            refs: Vec::new(),
+            scopes: vec![BTreeMap::new()],
+        }
+    }
+
+    fn current_depth(&self) -> usize {
+        self.scopes.len().saturating_sub(1)
+    }
+
+    fn push_scope(&mut self) {
+        self.scopes.push(BTreeMap::new());
+    }
+
+    fn pop_scope(&mut self) {
+        if self.scopes.len() > 1 {
+            self.scopes.pop();
+        }
+    }
+
+    fn define(&mut self, name: String, kind: &'static str, span: Span) -> usize {
+        let id = self.defs.len();
+        let depth = self.current_depth();
+        self.defs.push(NameDefTrace {
+            id,
+            name: name.clone(),
+            kind,
+            span,
+            scope_depth: depth,
+        });
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.entry(name).or_default().push(id);
+        }
+        id
+    }
+
+    fn lookup_candidates(&self, name: &str) -> Vec<usize> {
+        let mut out = Vec::new();
+        for scope in self.scopes.iter().rev() {
+            if let Some(ids) = scope.get(name) {
+                out.extend(ids.iter().rev().copied());
+            }
+        }
+        out
+    }
+
+    fn reference(&mut self, name: String, span: Span) {
+        let candidates = self.lookup_candidates(&name);
+        let resolved = candidates.first().copied();
+        self.refs.push(NameRefTrace {
+            name,
+            span,
+            scope_depth: self.current_depth(),
+            resolved_def_id: resolved,
+            candidate_def_ids: candidates,
+        });
+    }
+}
+
+fn is_layout_marker(name: &str) -> bool {
+    matches!(name, "cond" | "then" | "else" | "do" | "block")
+}
+
+fn hoist_block_defs(trace: &mut NameResolutionTrace, block: &Block) {
+    for stmt in &block.items {
+        match stmt {
+            Stmt::FnDef(def) => {
+                trace.define(def.name.name.clone(), "fn", def.name.span);
+            }
+            Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => {
+                if let Some(PrefixItem::Symbol(Symbol::Let { name, mutable })) = expr.items.first() {
+                    if !*mutable {
+                        trace.define(name.name.clone(), "let_hoisted", name.span);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn trace_match_arm(trace: &mut NameResolutionTrace, arm: &MatchArm) {
+    trace.push_scope();
+    if let Some(bind) = &arm.bind {
+        trace.define(bind.name.clone(), "match_bind", bind.span);
+    }
+    trace_block(trace, &arm.body);
+    trace.pop_scope();
+}
+
+fn trace_prefix_expr(trace: &mut NameResolutionTrace, expr: &PrefixExpr) {
+    for (idx, item) in expr.items.iter().enumerate() {
+        match item {
+            PrefixItem::Symbol(Symbol::Let { name, mutable }) => {
+                if *mutable {
+                    trace.define(name.name.clone(), "let_mut", name.span);
+                }
+                if idx != 0 {
+                    trace.reference(name.name.clone(), name.span);
+                }
+            }
+            PrefixItem::Symbol(Symbol::Set { name }) => {
+                trace.reference(name.name.clone(), name.span);
+            }
+            PrefixItem::Symbol(Symbol::Ident(id, _)) => {
+                if !is_layout_marker(&id.name) {
+                    trace.reference(id.name.clone(), id.span);
+                }
+            }
+            PrefixItem::Block(block, _) => {
+                trace.push_scope();
+                trace_block(trace, block);
+                trace.pop_scope();
+            }
+            PrefixItem::Match(m, _) => {
+                trace_prefix_expr(trace, &m.scrutinee);
+                for arm in &m.arms {
+                    trace_match_arm(trace, arm);
+                }
+            }
+            PrefixItem::Tuple(items, _) => {
+                for item_expr in items {
+                    trace_prefix_expr(trace, item_expr);
+                }
+            }
+            PrefixItem::Group(inner, _) => {
+                trace_prefix_expr(trace, inner);
+            }
+            PrefixItem::Intrinsic(intr, _) => {
+                for arg in &intr.args {
+                    trace_prefix_expr(trace, arg);
+                }
+            }
+            PrefixItem::Literal(_, _) | PrefixItem::TypeAnnotation(_, _) | PrefixItem::Pipe(_) => {}
+            PrefixItem::Symbol(Symbol::If(_))
+            | PrefixItem::Symbol(Symbol::While(_))
+            | PrefixItem::Symbol(Symbol::AddrOf(_))
+            | PrefixItem::Symbol(Symbol::Deref(_)) => {}
+        }
+    }
+}
+
+fn trace_stmt(trace: &mut NameResolutionTrace, stmt: &Stmt) {
+    match stmt {
+        Stmt::FnDef(def) => match &def.body {
+            FnBody::Parsed(body) => {
+                trace.push_scope();
+                for param in &def.params {
+                    trace.define(param.name.clone(), "param", param.span);
+                }
+                trace_block(trace, body);
+                trace.pop_scope();
+            }
+            FnBody::Wasm(_) => {}
+        },
+        Stmt::FnAlias(alias) => {
+            trace.reference(alias.target.name.clone(), alias.target.span);
+            trace.define(alias.name.name.clone(), "fn_alias", alias.name.span);
+        }
+        Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => {
+            trace_prefix_expr(trace, expr);
+        }
+        _ => {}
+    }
+}
+
+fn trace_block(trace: &mut NameResolutionTrace, block: &Block) {
+    hoist_block_defs(trace, block);
+    for stmt in &block.items {
+        trace_stmt(trace, stmt);
+    }
+}
+
+fn def_trace_to_js(source: &str, def: &NameDefTrace) -> JsValue {
+    let obj = js_sys::Object::new();
+    let _ = Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(def.id as f64));
+    let _ = Reflect::set(&obj, &JsValue::from_str("name"), &JsValue::from_str(&def.name));
+    let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str(def.kind));
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("scope_depth"),
+        &JsValue::from_f64(def.scope_depth as f64),
+    );
+    let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, def.span));
+    obj.into()
+}
+
+fn ref_trace_to_js(source: &str, rf: &NameRefTrace) -> JsValue {
+    let obj = js_sys::Object::new();
+    let _ = Reflect::set(&obj, &JsValue::from_str("name"), &JsValue::from_str(&rf.name));
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("scope_depth"),
+        &JsValue::from_f64(rf.scope_depth as f64),
+    );
+    let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, rf.span));
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("resolved_def_id"),
+        &rf.resolved_def_id
+            .map(|v| JsValue::from_f64(v as f64))
+            .unwrap_or(JsValue::NULL),
+    );
+    let cand = js_sys::Array::new();
+    for id in &rf.candidate_def_ids {
+        cand.push(&JsValue::from_f64(*id as f64));
+    }
+    let _ = Reflect::set(&obj, &JsValue::from_str("candidate_def_ids"), &cand);
+    obj.into()
+}
+
 /// 入力ソースを字句解析し、token 列と診断を JSON で返します。
 ///
 /// VSCode 拡張や LSP 実装で、構文解析前の結果を可視化するための API です。
@@ -811,6 +1050,89 @@ pub fn analyze_parse(source: &str) -> JsValue {
     } else {
         let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(false));
         let _ = Reflect::set(&out, &JsValue::from_str("module"), &JsValue::NULL);
+    }
+
+    out.into()
+}
+
+/// 同名識別子の解決結果を、LSP/エディタ向けに返します。
+///
+/// - `definitions`: 解析で見つかった定義点
+/// - `references`: 各参照点の候補と最終選択（最内側優先）
+/// - 巻き上げは現行仕様に合わせて `fn` と `let`(non-mut) を先行登録します
+#[wasm_bindgen]
+pub fn analyze_name_resolution(source: &str) -> JsValue {
+    let file_id = FileId(0);
+    let lex_result = lex(file_id, source);
+    let parse_result = parse_tokens(file_id, lex_result);
+    let diagnostics = diagnostics_to_js(source, &parse_result.diagnostics);
+
+    let out = js_sys::Object::new();
+    let _ = Reflect::set(
+        &out,
+        &JsValue::from_str("stage"),
+        &JsValue::from_str("name_resolution"),
+    );
+    let _ = Reflect::set(&out, &JsValue::from_str("diagnostics"), &diagnostics);
+
+    if let Some(module) = parse_result.module {
+        let mut trace = NameResolutionTrace::new();
+        trace_block(&mut trace, &module.root);
+
+        let defs = js_sys::Array::new();
+        for def in &trace.defs {
+            defs.push(&def_trace_to_js(source, def));
+        }
+        let refs = js_sys::Array::new();
+        for rf in &trace.refs {
+            refs.push(&ref_trace_to_js(source, rf));
+        }
+
+        let by_name = js_sys::Object::new();
+        let mut names = BTreeMap::<String, (Vec<usize>, Vec<usize>)>::new();
+        for d in &trace.defs {
+            names.entry(d.name.clone()).or_default().0.push(d.id);
+        }
+        for (idx, r) in trace.refs.iter().enumerate() {
+            names.entry(r.name.clone()).or_default().1.push(idx);
+        }
+        for (name, (def_ids, ref_ids)) in names {
+            let name_obj = js_sys::Object::new();
+            let d_arr = js_sys::Array::new();
+            for id in def_ids {
+                d_arr.push(&JsValue::from_f64(id as f64));
+            }
+            let r_arr = js_sys::Array::new();
+            for id in ref_ids {
+                r_arr.push(&JsValue::from_f64(id as f64));
+            }
+            let _ = Reflect::set(&name_obj, &JsValue::from_str("definitions"), &d_arr);
+            let _ = Reflect::set(&name_obj, &JsValue::from_str("references"), &r_arr);
+            let _ = Reflect::set(&by_name, &JsValue::from_str(&name), &name_obj);
+        }
+
+        let policy = js_sys::Object::new();
+        let _ = Reflect::set(
+            &policy,
+            &JsValue::from_str("selection"),
+            &JsValue::from_str("nearest_scope_first"),
+        );
+        let _ = Reflect::set(
+            &policy,
+            &JsValue::from_str("hoist"),
+            &JsValue::from_str("fn and non-mut let"),
+        );
+
+        let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(true));
+        let _ = Reflect::set(&out, &JsValue::from_str("definitions"), &defs);
+        let _ = Reflect::set(&out, &JsValue::from_str("references"), &refs);
+        let _ = Reflect::set(&out, &JsValue::from_str("by_name"), &by_name);
+        let _ = Reflect::set(&out, &JsValue::from_str("policy"), &policy);
+    } else {
+        let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(false));
+        let _ = Reflect::set(&out, &JsValue::from_str("definitions"), &js_sys::Array::new());
+        let _ = Reflect::set(&out, &JsValue::from_str("references"), &js_sys::Array::new());
+        let _ = Reflect::set(&out, &JsValue::from_str("by_name"), &js_sys::Object::new());
     }
 
     out.into()

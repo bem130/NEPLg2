@@ -951,8 +951,43 @@ impl Parser {
                                 }
                             }
                             Err(diag) => {
-                                self.diagnostics.push(diag);
-                                items.push(PrefixItem::Block(block, span));
+                                if diag.message == "missing expression(s) in if-layout block" {
+                                    match self.extract_if_layout_exprs_lenient(
+                                        block.clone(),
+                                        expected,
+                                        colon_span,
+                                    ) {
+                                        Ok(mut args) => {
+                                            for mut a in args.drain(..) {
+                                                if a.items.len() == 1 {
+                                                    let only = a.items.remove(0);
+                                                    items.push(only);
+                                                } else {
+                                                    let wrapped = Block {
+                                                        items: vec![Stmt::Expr(a.clone())],
+                                                        span: a.span,
+                                                    };
+                                                    items.push(PrefixItem::Block(wrapped, a.span));
+                                                }
+                                            }
+                                        }
+                                        Err(diag2) => {
+                                            // `if <cond>:` の直後は then 側だけ先に読める。
+                                            // else は同インデントの後続行で巻き上げ合成されるため、
+                                            // この段階での missing-expression は確定エラーにしない。
+                                            if !(expected == 2
+                                                && diag2.message
+                                                    == "missing expression(s) in if-layout block")
+                                            {
+                                                self.diagnostics.push(diag2);
+                                            }
+                                            items.push(PrefixItem::Block(block, span));
+                                        }
+                                    }
+                                } else {
+                                    self.diagnostics.push(diag);
+                                    items.push(PrefixItem::Block(block, span));
+                                }
                             }
                         }
                     } else if items
@@ -1366,8 +1401,40 @@ impl Parser {
                                 }
                             }
                             Err(diag) => {
-                                self.diagnostics.push(diag);
-                                items.push(PrefixItem::Block(block, span));
+                                if diag.message == "missing expression(s) in if-layout block" {
+                                    match self.extract_if_layout_exprs_lenient(
+                                        block.clone(),
+                                        expected,
+                                        colon_span,
+                                    ) {
+                                        Ok(mut args) => {
+                                            for mut a in args.drain(..) {
+                                                if a.items.len() == 1 {
+                                                    let only = a.items.remove(0);
+                                                    items.push(only);
+                                                } else {
+                                                    let wrapped = Block {
+                                                        items: vec![Stmt::Expr(a.clone())],
+                                                        span: a.span,
+                                                    };
+                                                    items.push(PrefixItem::Block(wrapped, a.span));
+                                                }
+                                            }
+                                        }
+                                        Err(diag2) => {
+                                            if !(expected == 2
+                                                && diag2.message
+                                                    == "missing expression(s) in if-layout block")
+                                            {
+                                                self.diagnostics.push(diag2);
+                                            }
+                                            items.push(PrefixItem::Block(block, span));
+                                        }
+                                    }
+                                } else {
+                                    self.diagnostics.push(diag);
+                                    items.push(PrefixItem::Block(block, span));
+                                }
                             }
                         }
                     } else if items
@@ -2056,6 +2123,96 @@ impl Parser {
                 }
             };
 
+            if let Some(r) = role {
+                let idx = match role_to_index(r) {
+                    Some(i) => i,
+                    None => {
+                        return Err(Diagnostic::error("invalid marker in this if-layout form", expr.span));
+                    }
+                };
+                if slots[idx].is_some() {
+                    return Err(Diagnostic::error("duplicate marker in if-layout block", expr.span));
+                }
+                slots[idx] = Some(expr);
+            } else {
+                while next_unfilled < expected && slots[next_unfilled].is_some() {
+                    next_unfilled += 1;
+                }
+                if next_unfilled >= expected {
+                    return Err(Diagnostic::error("too many expressions in if-layout block", expr.span));
+                }
+                slots[next_unfilled] = Some(expr);
+                next_unfilled += 1;
+            }
+        }
+
+        if slots.iter().any(|s| s.is_none()) {
+            return Err(Diagnostic::error(
+                "missing expression(s) in if-layout block",
+                header_span,
+            ));
+        }
+
+        Ok(slots.into_iter().map(|s| s.unwrap()).collect())
+    }
+
+    fn extract_if_layout_exprs_lenient(
+        &mut self,
+        block: Block,
+        expected: usize,
+        header_span: Span,
+    ) -> Result<Vec<PrefixExpr>, Diagnostic> {
+        let mut entries: Vec<(Option<IfRole>, PrefixExpr)> = Vec::new();
+        let mut pending_role: Option<IfRole> = None;
+
+        for stmt in block.items {
+            let mut expr = match stmt {
+                Stmt::Expr(e) | Stmt::ExprSemi(e, _) => e,
+                other => {
+                    return Err(Diagnostic::error(
+                        "only expressions are allowed in if-layout block",
+                        self.stmt_span(&other),
+                    ));
+                }
+            };
+
+            if let Some(role) = Self::take_role_from_expr(&mut expr) {
+                if expr.items.is_empty() {
+                    if pending_role.is_some() {
+                        return Err(Diagnostic::error("duplicate marker in if-layout block", expr.span));
+                    }
+                    pending_role = Some(role);
+                } else {
+                    entries.push((Some(role), expr));
+                }
+                continue;
+            }
+
+            let role = pending_role.take();
+            entries.push((role, expr));
+        }
+
+        if pending_role.is_some() {
+            return Err(Diagnostic::error(
+                "missing expression(s) in if-layout block",
+                header_span,
+            ));
+        }
+
+        let mut slots: Vec<Option<PrefixExpr>> = vec![None; expected];
+        let role_to_index = |role: IfRole| -> Option<usize> {
+            match (expected, role) {
+                (3, IfRole::Cond) => Some(0),
+                (3, IfRole::Then) => Some(1),
+                (3, IfRole::Else) => Some(2),
+                (2, IfRole::Then) => Some(0),
+                (2, IfRole::Else) => Some(1),
+                _ => None,
+            }
+        };
+
+        let mut next_unfilled = 0usize;
+        for (role, expr) in entries {
             if let Some(r) = role {
                 let idx = match role_to_index(r) {
                     Some(i) => i,

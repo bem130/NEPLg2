@@ -1111,11 +1111,15 @@ fn check_function(
 
     env.pop_scope();
     if diag_out.is_empty() {
-        let out_name = if type_contains_unbound_var(ctx, func_ty) {
-            f.name.name.clone()
-        } else {
-            mangle_function_symbol(&f.name.name, func_ty, ctx)
-        };
+        let out_name = env
+            .lookup_func_symbol(&f.name.name, func_ty, ctx)
+            .unwrap_or_else(|| {
+                if type_contains_unbound_var(ctx, func_ty) {
+                    f.name.name.clone()
+                } else {
+                    mangle_function_symbol(&f.name.name, func_ty, ctx)
+                }
+            });
         Ok(HirFunction {
             name: out_name,
             func_ty, // assigned here
@@ -3652,6 +3656,27 @@ impl Env {
             }
         }
         Vec::new()
+    }
+
+    /// 同名候補から型シグネチャ一致の関数シンボルを返す。
+    ///
+    /// typecheck 本体と HIR 生成で関数名決定ロジックを共有し、
+    /// hoist した symbol と最終的な HIR 名の不整合を防ぐ。
+    fn lookup_func_symbol(&self, name: &str, ty: TypeId, ctx: &TypeCtx) -> Option<String> {
+        let target_sig = function_signature_string(ctx, ty);
+        for scope in self.scopes.iter().rev() {
+            for binding in scope.iter().rev() {
+                if binding.name != name || !binding.defined {
+                    continue;
+                }
+                if let BindingKind::Func { symbol, .. } = &binding.kind {
+                    if function_signature_string(ctx, binding.ty) == target_sig {
+                        return Some(symbol.clone());
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn lookup_mut(&mut self, name: &str) -> Option<&mut Binding> {
