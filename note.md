@@ -1,4 +1,25 @@
 # 状況メモ (2026-01-22)
+# 2026-02-10 作業メモ (予約語の識別子禁止: cond/then/else/do, let/fn)
+- ユーザー指示に合わせて、`cond` / `then` / `else` / `do` を予約語として扱う実装を parser に追加。
+  - `nepl-core/src/parser.rs`
+    - `parse_ident_symbol_item` で、layout marker の許可位置（先頭 marker / if 文脈 / while 文脈）以外での使用をエラー化。
+    - `expect_ident` でも同語を識別子として受け付けないようにし、定義名・束縛名側でも拒否。
+    - 既存の緩和 (`KwSet` / `KwTuple` を識別子化) は削除し、予約語を明確化。
+- `let` / `fn` は lexer で keyword token 化されるため、従来どおり識別子として使用不可であることを確認。
+- `tests/if.n.md` に compile_fail ケースを追加（追加のみ）:
+  - `reserved_cond_cannot_be_identifier`
+  - `reserved_then_cannot_be_function_name`
+  - `reserved_let_fn_cannot_be_identifier`
+  - `reserved_else_do_cannot_be_identifier`
+- 検証:
+  - `NO_COLOR=true trunk build`: 成功
+  - `node nodesrc/tests.js -i tests/if.n.md -o /tmp/tests-if-reserved2.json -j 1`
+    - `total=46, passed=46, failed=0, errored=0`
+- 参考観測（継続課題）:
+  - `tests/functions.n.md::doctest#7` は parser AST 形状自体は `if + con + then-block + else-block` で正しい。
+  - ただし then/else ブロック内に値式が2つあり、typecheck で `expression left extra values on the stack` になる。
+  - 仕様整理（複数値式の扱い）と tests/functions の意図確認が必要。
+
 # 2026-02-10 作業メモ (if/while の AST 仕様テスト追加)
 - `plan.md` の `if/while` 仕様を再確認し、`cond/then/else/do` の `:` あり/なし差分を AST で固定するテストを追加。
 - `nodesrc/test_analysis_api.js` に `analyze_parse` ベースのケースを追加:

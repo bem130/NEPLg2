@@ -205,12 +205,12 @@ impl Parser {
                 if is_else {
                     if let Some(prev) = items.last_mut() {
                         if let Stmt::Expr(pe) | Stmt::ExprSemi(pe, _) = prev {
+                            self.collapse_if_then_tail_for_glued_else(pe);
                             // Extract and modify the current expression
                             if let Stmt::Expr(ref mut curr_e) | Stmt::ExprSemi(ref mut curr_e, _) = &mut stmt {
                                 // Remove the 'else' marker and get remaining items
                                 Self::take_role_from_expr(curr_e);
-                                // Move items without cloning
-                                let curr_items = core::mem::take(&mut curr_e.items);
+                                let mut curr_items = core::mem::take(&mut curr_e.items);
                                 pe.items.extend(curr_items);
                                 pe.span = pe.span.join(curr_e.span).unwrap_or(pe.span);
                                 merged = true;
@@ -251,6 +251,50 @@ impl Parser {
             items,
             span: start_span.join(end_span).unwrap_or(start_span),
         })
+    }
+
+    fn collapse_if_then_tail_for_glued_else(&self, expr: &mut PrefixExpr) {
+        let if_pos = expr
+            .items
+            .iter()
+            .position(|it| matches!(it, PrefixItem::Symbol(Symbol::If(_))));
+        let Some(if_pos) = if_pos else {
+            return;
+        };
+        let then_start = if_pos + 2;
+        if expr.items.len() <= then_start + 1 {
+            return;
+        }
+
+        let trailing_items = expr.items.split_off(then_start);
+        let mut block_items = Vec::new();
+        for item in trailing_items {
+            let span = self.item_span(&item);
+            block_items.push(Stmt::Expr(PrefixExpr {
+                items: vec![item],
+                trailing_semis: 0,
+                trailing_semi_span: None,
+                span,
+            }));
+        }
+        if block_items.is_empty() {
+            return;
+        }
+        let block_span = if let (Some(first), Some(last)) = (block_items.first(), block_items.last()) {
+            self.stmt_span(first)
+                .join(self.stmt_span(last))
+                .unwrap_or_else(|| self.stmt_span(first))
+        } else {
+            expr.span
+        };
+        expr.items.push(PrefixItem::Block(
+            Block {
+                items: block_items,
+                span: block_span,
+            },
+            block_span,
+        ));
+        expr.span = expr.span.join(block_span).unwrap_or(expr.span);
     }
 
     fn parse_import_directive(&mut self, text: &str, span: Span) -> Directive {
@@ -1338,7 +1382,7 @@ impl Parser {
                     break;
                 }
                 TokenKind::At | TokenKind::Ident(_) => {
-                    let ident_item = self.parse_ident_symbol_item(true, true)?;
+                    let ident_item = self.parse_ident_symbol_item(&items, true, true)?;
                     items.push(ident_item);
                 }
                 TokenKind::Ampersand => {
@@ -1682,7 +1726,7 @@ impl Parser {
                     break;
                 }
                 TokenKind::At | TokenKind::Ident(_) => {
-                    let ident_item = self.parse_ident_symbol_item(true, true)?;
+                    let ident_item = self.parse_ident_symbol_item(&items, true, true)?;
                     items.push(ident_item);
                 }
                 TokenKind::Ampersand => {
@@ -1829,7 +1873,7 @@ impl Parser {
                 }
                 TokenKind::At | TokenKind::Ident(_) => {
                     // match scrutinee 側でも `E::A` / `obj.field` を同じ規則で扱う
-                    let ident_item = self.parse_ident_symbol_item(true, true)?;
+                    let ident_item = self.parse_ident_symbol_item(&items, true, true)?;
                     items.push(ident_item);
                 }
                 TokenKind::KwLet => {
@@ -2718,6 +2762,7 @@ impl Parser {
 
     fn parse_ident_symbol_item(
         &mut self,
+        current_items: &[PrefixItem],
         allow_path_sep: bool,
         allow_dot: bool,
     ) -> Option<PrefixItem> {
@@ -2804,6 +2849,15 @@ impl Parser {
             break;
         }
 
+        if Self::is_reserved_layout_word(&full)
+            && !Self::is_allowed_layout_marker_usage(current_items, &full)
+        {
+            self.diagnostics.push(Diagnostic::error(
+                alloc::format!("'{}' is a reserved keyword and cannot be used as an identifier", full),
+                end_span,
+            ));
+        }
+
         Some(PrefixItem::Symbol(Symbol::Ident(
             Ident {
                 name: full,
@@ -2812,6 +2866,26 @@ impl Parser {
             type_args,
             at_span.is_some(),
         )))
+    }
+
+    fn is_reserved_layout_word(name: &str) -> bool {
+        matches!(name, "cond" | "then" | "else" | "do")
+    }
+
+    fn is_allowed_layout_marker_usage(current_items: &[PrefixItem], name: &str) -> bool {
+        if current_items.is_empty() {
+            return matches!(name, "cond" | "then" | "else" | "do");
+        }
+        let has_if = current_items
+            .iter()
+            .any(|it| matches!(it, PrefixItem::Symbol(Symbol::If(_))));
+        if has_if && matches!(name, "cond" | "then" | "else") {
+            return true;
+        }
+        let has_while = current_items
+            .iter()
+            .any(|it| matches!(it, PrefixItem::Symbol(Symbol::While(_))));
+        has_while && matches!(name, "cond" | "do")
     }
 
     fn expect(&mut self, kind: &TokenKind) -> Option<()> {
@@ -2836,18 +2910,20 @@ impl Parser {
             Some(TokenKind::Ident(name)) => {
                 let tok = self.next().unwrap();
                 if let TokenKind::Ident(n) = tok.kind {
+                    if Self::is_reserved_layout_word(&n) {
+                        self.diagnostics.push(Diagnostic::error(
+                            alloc::format!(
+                                "'{}' is a reserved keyword and cannot be used as an identifier",
+                                n
+                            ),
+                            tok.span,
+                        ));
+                        return None;
+                    }
                     Some((n, tok.span))
                 } else {
                     None
                 }
-            }
-            Some(TokenKind::KwSet) => {
-                let tok = self.next().unwrap();
-                Some(("set".to_string(), tok.span))
-            }
-            Some(TokenKind::KwTuple) => {
-                let tok = self.next().unwrap();
-                Some(("Tuple".to_string(), tok.span))
             }
             _ => {
                 let span = self.peek_span().unwrap_or_else(Span::dummy);

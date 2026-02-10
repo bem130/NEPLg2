@@ -826,3 +826,63 @@ fn main <()->i32> ():
         if true 3 4
     v
 ```
+
+## reserved_cond_cannot_be_identifier
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let cond 1;
+    cond
+```
+
+## reserved_then_cannot_be_function_name
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn then <()->i32> ():
+    1
+
+fn main <()->i32> ():
+    then
+```
+
+## reserved_let_fn_cannot_be_identifier
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let let 1;
+    let fn 2;
+    add let fn
+```
+
+## reserved_else_do_cannot_be_identifier
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let else 1;
+    let do 2;
+    add else do
+```
