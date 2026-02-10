@@ -4,6 +4,8 @@
 // - pre>code(language-neplg2) をクリックすると、ポップアップエディタで Run / Interrupt / 出力確認ができる。
 
 const { renderNode } = require('./html_gen');
+const fs = require('fs');
+const path = require('path');
 
 function escapeHtml(s) {
     return String(s)
@@ -33,10 +35,32 @@ function renderToc(tocLinks) {
     return `<aside class="doc-sidebar"><div class="toc-title">Getting Started</div><ul class="toc-list">${items}</ul></aside>`;
 }
 
+function buildPlaygroundVfsOverrides() {
+    const rels = [
+        'stdlib/kp/kpread.nepl',
+        'stdlib/kp/kpwrite.nepl',
+        'stdlib/kp/kpgraph.nepl',
+        'stdlib/kp/kpsearch.nepl',
+        'stdlib/kp/kpprefix.nepl',
+        'stdlib/kp/kpdsu.nepl',
+        'stdlib/kp/kpfenwick.nepl',
+    ];
+    const out = {};
+    for (const rel of rels) {
+        const abs = path.resolve(process.cwd(), rel);
+        if (!fs.existsSync(abs)) continue;
+        const key = '/stdlib/' + rel.replace(/^stdlib\//, '').replace(/\\/g, '/');
+        out[key] = fs.readFileSync(abs, 'utf8');
+    }
+    return out;
+}
+
 function wrapHtmlPlayground(body, title, description, moduleJsPathOpt) {
     const t = title || 'NEPLg2 Tutorial';
     const d = description || 'NEPLg2 tutorial with interactive runnable examples.';
     const moduleJsPath = (moduleJsPathOpt && String(moduleJsPathOpt)) || './nepl-web.js';
+    const vfsOverrides = buildPlaygroundVfsOverrides();
+    const vfsOverridesJson = JSON.stringify(vfsOverrides);
     const tocHtml = (arguments[4] && String(arguments[4])) || '';
     return `<!doctype html>
 <html lang="ja">
@@ -272,6 +296,8 @@ async function loadBindings() {
   return mod;
 }
 
+const __TUTORIAL_VFS_OVERRIDES__ = ${vfsOverridesJson};
+
 function makeWorkerScript() {
   return \`
 self.onmessage = async (e) => {
@@ -279,31 +305,58 @@ self.onmessage = async (e) => {
   let memory = null;
   let stdinOffset = 0;
   const stdin = new TextEncoder().encode(stdinText || '');
+  const decoder = new TextDecoder();
+  function toHex(bytes) {
+    let out = '';
+    for (let i = 0; i < bytes.length; i++) {
+      const h = bytes[i].toString(16).padStart(2, '0');
+      out += (i === 0 ? '' : ' ') + h;
+    }
+    return out;
+  }
   const wasi = {
     fd_write(fd, iovs, iovs_len, nwritten){
       if(!memory) return 5;
       const view = new DataView(memory.buffer);
+      if(fd !== 1 && fd !== 2){
+        view.setUint32(nwritten, 0, true);
+        return 8; // BADF
+      }
       let total = 0;
       for(let i=0;i<iovs_len;i++){
         const ptr = view.getUint32(iovs + i*8, true);
         const len = view.getUint32(iovs + i*8 + 4, true);
-        const bytes = new Uint8Array(memory.buffer, ptr, len);
-        self.postMessage({type:'stdout', fd, text:new TextDecoder().decode(bytes)});
-        total += len;
+        if (ptr >= memory.buffer.byteLength) continue;
+        const maxLen = memory.buffer.byteLength - ptr;
+        const take = Math.min(len, maxLen);
+        const bytes = new Uint8Array(memory.buffer, ptr, take);
+        const text = decoder.decode(bytes, { stream: true });
+        const bytesHex = toHex(bytes);
+        self.postMessage({type:'stdout_bytes', fd, bytesHex, len: take});
+        if (text.length > 0) {
+          self.postMessage({type:'stdout', fd, text});
+        }
+        total += take;
       }
       view.setUint32(nwritten, total, true);
       return 0;
     },
     fd_read(fd, iovs, iovs_len, nread){
-      if(fd !== 0) return 0;
       if(!memory) return 5;
       const view = new DataView(memory.buffer);
+      if(fd !== 0){
+        view.setUint32(nread, 0, true);
+        return 8; // BADF
+      }
       let read = 0;
       for(let i=0;i<iovs_len;i++){
         const ptr = view.getUint32(iovs + i*8, true);
         const len = view.getUint32(iovs + i*8 + 4, true);
+        if (ptr >= memory.buffer.byteLength) continue;
+        const maxLen = memory.buffer.byteLength - ptr;
+        const cap = Math.min(len, maxLen);
         const remain = stdin.length - stdinOffset;
-        const take = Math.min(len, Math.max(0, remain));
+        const take = Math.min(cap, Math.max(0, remain));
         if (take > 0) {
           new Uint8Array(memory.buffer, ptr, take).set(stdin.subarray(stdinOffset, stdinOffset + take));
           stdinOffset += take;
@@ -324,8 +377,16 @@ self.onmessage = async (e) => {
     memory = instance.exports.memory;
     if (instance.exports._start) instance.exports._start();
     else if (instance.exports.main) instance.exports.main();
+    const tail = decoder.decode();
+    if (tail.length > 0) {
+      self.postMessage({ type:'stdout', fd: 1, text: tail });
+    }
     self.postMessage({ type: 'done' });
   } catch (err) {
+    const tail = decoder.decode();
+    if (tail.length > 0) {
+      self.postMessage({ type:'stdout', fd: 1, text: tail });
+    }
     self.postMessage({ type: 'error', message: String(err && err.message || err) });
   }
 };
@@ -429,6 +490,23 @@ function decodeDoctestString(raw) {
 function findDoctestStdinFor(preEl) {
   let cur = preEl.previousElementSibling;
   while (cur) {
+    if (cur.classList && cur.classList.contains('nm-doctest-block')) {
+      const rows = cur.querySelectorAll('.nm-doctest-row');
+      for (const row of rows) {
+        const badge = row.querySelector('.nm-doctest-badge');
+        if (!badge) continue;
+        const key = String(badge.textContent || '').trim().toLowerCase();
+        if (key !== 'stdin') continue;
+        const pre = row.querySelector('.nm-doctest-pre');
+        if (pre) {
+          return String(pre.textContent || '');
+        }
+        const inline = row.querySelector('.nm-doctest-inline');
+        if (inline) {
+          return decodeDoctestString(String(inline.textContent || ''));
+        }
+      }
+    }
     if (cur.tagName === 'PRE') break;
     if (/^H[1-6]$/.test(cur.tagName)) break;
     const text = String(cur.textContent || '').trim();
@@ -618,6 +696,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let worker = null;
   let running = false;
   let stdoutText = '';
+  let stdoutHexLines = [];
 
   function setStdoutText(next) {
     stdoutText = String(next || '');
@@ -643,10 +722,20 @@ window.addEventListener('DOMContentLoaded', () => {
   runBtn.onclick = async () => {
     if (running) return;
     setStdoutText('');
+    stdoutHexLines = [];
     setStatus('compiling...', '');
+    console.log('[Tutorial Runner] source:\\n' + (src.value || ''));
+    console.log('[Tutorial Runner] stdin:\\n' + (stdin.value || ''));
     try {
       const bindings = await loadBindings();
-      const wasmBytes = bindings.compile_source(src.value);
+      let wasmBytes = null;
+      if (typeof bindings.compile_source_with_vfs === 'function') {
+        wasmBytes = bindings.compile_source_with_vfs('/virtual/entry.nepl', src.value, __TUTORIAL_VFS_OVERRIDES__);
+        console.log('[Tutorial Runner] compile_source_with_vfs overrides:', Object.keys(__TUTORIAL_VFS_OVERRIDES__).length);
+      } else {
+        wasmBytes = bindings.compile_source(src.value);
+        console.log('[Tutorial Runner] compile_source (no vfs override API)');
+      }
       setStatus('running...', '');
       const blob = new Blob([makeWorkerScript()], { type: 'text/javascript' });
       worker = new Worker(URL.createObjectURL(blob));
@@ -655,15 +744,24 @@ window.addEventListener('DOMContentLoaded', () => {
         const msg = ev.data || {};
         if (msg.type === 'stdout') {
           setStdoutText(stdoutText + String(msg.text || ''));
+        } else if (msg.type === 'stdout_bytes') {
+          const line = '[len=' + String(msg.len || 0) + '] ' + String(msg.bytesHex || '');
+          stdoutHexLines.push(line);
+          console.log('[Tutorial Runner] stdout bytes:', line);
         } else if (msg.type === 'done') {
           running = false;
           setStatus('done', 'ok');
+          console.log('[Tutorial Runner] stdout:\\n' + stdoutText);
+          console.log('[Tutorial Runner] stdout bytes all:\\n' + stdoutHexLines.join('\\n'));
           worker && worker.terminate();
           worker = null;
         } else if (msg.type === 'error') {
           running = false;
           setStatus('runtime error', 'err');
           setStdoutText(stdoutText + '\\n[error] ' + String(msg.message || ''));
+          console.log('[Tutorial Runner] runtime error:', String(msg.message || ''));
+          console.log('[Tutorial Runner] stdout (partial):\\n' + stdoutText);
+          console.log('[Tutorial Runner] stdout bytes (partial):\\n' + stdoutHexLines.join('\\n'));
           worker && worker.terminate();
           worker = null;
         }
@@ -673,6 +771,8 @@ window.addEventListener('DOMContentLoaded', () => {
       running = false;
       setStatus('compile failed', 'err');
       setStdoutText(stdoutText + '[compile error] ' + String((e && e.message) || e));
+      console.log('[Tutorial Runner] compile failed:', String((e && e.message) || e));
+      console.log('[Tutorial Runner] stdout (partial):\\n' + stdoutText);
     }
   };
 

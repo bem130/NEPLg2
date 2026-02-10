@@ -20,9 +20,13 @@
 #import "core/math" as *
 #import "core/option" as *
 #import "std/stdio" as *
+#import "kp/kpread_core" as *
 #import "alloc/string" as *
 #import "alloc/vec" as *
 #import "core/field" as *
+
+fn scanner_new <()*>i32> ():
+    scanner_new_impl_i 0
 
 // kpread: 競技プログラミング用高速スキャナ
 //
@@ -49,85 +53,6 @@
 // - [0] buf_ptr: 入力バッファの開始位置
 // - [4] len:     バッファの長さ
 // - [8] pos:     現在のカーソル位置
-
-// scanner_new: 標準入力をすべて読み込みスキャナを作成する
-//
-// 目的:
-// - 標準入力を完全に読み込み、スキャナハンドル（ポインタ）を返します。
-//
-// 実装(アルゴリズム):
-// - cap=65536 で開始します。一杯になったら 2 倍に拡張して続行します。
-// - 0 バイト (EOF) または errno != 0 が返るまで fd_read を呼び出します。
-// - 12 バイトのヘッダ [buf,len,pos] を確保して返します。
-//
-// 注意(重要):
-// - 返り値は 12 バイトのスキャナヘッダへのポインタです。
-// - 本モジュールは入力バッファの解放 API を提供していません（後で追加可能です）。
-//
-// 計算量:
-// - O(bytes)
-//: scanner_new: 関数の概要
-//:
-//: [目的/もくてき]:
-//: - scanner_new が担う機能を提供します。
-//:
-//: [実装/じっそう]:
-//: - 前置記法・オフサイドルール前提で読みやすく保つ構造です。
-//:
-//: [注意/ちゅうい]:
-//: - 型引数や所有権の制約は呼び出し側で満たしてください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 実装に依存します。
-fn scanner_new <()*>i32> ():
-    let mut cap <i32> 65536;
-    let mut buf <i32> alloc cap;
-    let mut len <i32> 0;
-
-    // Temporary objects for WASI fd_read
-    let iov <i32> alloc 8;
-    let nread_ptr <i32> alloc 4;
-
-    let mut done <i32> 0;
-    while eq done 0:
-        do:
-            if:
-                eq len cap
-                then:
-                    let new_cap <i32> mul cap 2;
-                    let new_buf <i32> realloc buf cap new_cap;
-                    set buf new_buf;
-                    set cap new_cap;
-                else:
-                    ()
-
-            store_i32 iov add buf len;
-            store_i32 add iov 4 sub cap len;
-            store_i32 nread_ptr 0;
-
-            let errno <i32> fd_read 0 iov 1 nread_ptr;
-            if:
-                ne errno 0
-                then:
-                    set done 1;
-                else:
-                    let n <i32> load_i32 nread_ptr;
-                    if:
-                        eq n 0
-                        then:
-                            set done 1;
-                        else:
-                            set len add len n;
-
-    // Free temporaries; the main input buffer stays alive.
-    dealloc iov 8;
-    dealloc nread_ptr 4;
-
-    let sc <i32> alloc 12;
-    store_i32 sc buf;
-    store_i32 add sc 4 len;
-    store_i32 add sc 8 0;
-    sc
 
 // scanner_skip_ws: ASCII 空白（および先頭の BOM）をスキップする
 //
@@ -212,11 +137,26 @@ fn scanner_skip_ws <(i32)*>()> (sc):
                         set p add p 1;
                     else:
                         if:
-                            or eq byte 32 or eq byte 10 or eq byte 13 eq byte 9
+                            eq byte 32
                             then:
                                 set p add p 1;
                             else:
-                                set done 1;
+                                if:
+                                    eq byte 10
+                                    then:
+                                        set p add p 1;
+                                    else:
+                                        if:
+                                            eq byte 13
+                                            then:
+                                                set p add p 1;
+                                            else:
+                                                if:
+                                                    eq byte 9
+                                                    then:
+                                                        set p add p 1;
+                                                    else:
+                                                        set done 1;
             else:
                 set done 1;
 
@@ -289,11 +229,26 @@ fn scanner_skip_token <(i32)*>()> (sc):
             then:
                 let byte <i32> load_u8 add buf p;
                 if:
-                    or eq byte 32 or eq byte 10 or eq byte 13 eq byte 9
+                    eq byte 32
                     then:
                         set done 1;
                     else:
-                        set p add p 1;
+                        if:
+                            eq byte 10
+                            then:
+                                set done 1;
+                            else:
+                                if:
+                                    eq byte 13
+                                    then:
+                                        set done 1;
+                                    else:
+                                        if:
+                                            eq byte 9
+                                            then:
+                                                set done 1;
+                                            else:
+                                                set p add p 1;
             else:
                 set done 1;
 
@@ -341,11 +296,26 @@ fn scanner_read_token <(i32)*>str> (sc):
             then:
                 let byte <i32> load_u8 add buf p;
                 if:
-                    or eq byte 32 or eq byte 10 or eq byte 13 eq byte 9
+                    eq byte 32
                     then:
                         set done 1;
                     else:
-                        set p add p 1;
+                        if:
+                            eq byte 10
+                            then:
+                                set done 1;
+                            else:
+                                if:
+                                    eq byte 13
+                                    then:
+                                        set done 1;
+                                    else:
+                                        if:
+                                            eq byte 9
+                                            then:
+                                                set done 1;
+                                            else:
+                                                set p add p 1;
             else:
                 set done 1;
 
@@ -425,17 +395,25 @@ fn scanner_read_i32 <(i32)*>i32> (sc):
                                 set p add p 1;
                             else:
                                 if:
-                                    and ge byte 48 le byte 57
+                                    ge byte 48
                                     then:
-                                        set val add mul val 10 sub byte 48;
-                                        set p add p 1;
+                                        if:
+                                            le byte 57
+                                            then:
+                                                let digit <i32> sub byte 48;
+                                                let scaled <i32> mul val 10;
+                                                set val add scaled digit;
+                                                set p add p 1;
+                                            else:
+                                                set done 1;
                                     else:
                                         set done 1;
                     else:
                         set done 1;
 
             store_i32 add sc 8 p;
-            mul val sign
+            let signed <i32> mul val sign;
+            signed
 
 //: scanner_read_u64: 次のトークンを u64 相当として読み込む
 //:
@@ -483,11 +461,17 @@ fn scanner_read_u64 <(i32)*>i64> (sc):
                                 set p add p 1;
                             else:
                                 if:
-                                    and ge byte 48 le byte 57
+                                    ge byte 48
                                     then:
-                                        let digit <i64> i64_extend_i32_u sub byte 48;
-                                        set val i64_add i64_mul val i64_extend_i32_u 10 digit;
-                                        set p add p 1;
+                                        if:
+                                            le byte 57
+                                            then:
+                                                let digit <i64> i64_extend_i32_u sub byte 48;
+                                                let scaled <i64> i64_mul val i64_extend_i32_u 10;
+                                                set val i64_add scaled digit;
+                                                set p add p 1;
+                                            else:
+                                                set done 1;
                                     else:
                                         set done 1;
                     else:
@@ -545,11 +529,17 @@ fn scanner_read_i64 <(i32)*>i64> (sc):
                                 set p add p 1;
                             else:
                                 if:
-                                    and ge byte 48 le byte 57
+                                    ge byte 48
                                     then:
-                                        let digit <i64> i64_extend_i32_u sub byte 48;
-                                        set val i64_add i64_mul val i64_extend_i32_u 10 digit;
-                                        set p add p 1;
+                                        if:
+                                            le byte 57
+                                            then:
+                                                let digit <i64> i64_extend_i32_u sub byte 48;
+                                                let scaled <i64> i64_mul val i64_extend_i32_u 10;
+                                                set val i64_add scaled digit;
+                                                set p add p 1;
+                                            else:
+                                                set done 1;
                                     else:
                                         set done 1;
                     else:
@@ -559,7 +549,8 @@ fn scanner_read_i64 <(i32)*>i64> (sc):
             if:
                 eq neg 1
                 then:
-                    i64_sub i64_extend_i32_u 0 val
+                    let zero <i64> i64_extend_i32_u 0;
+                    i64_sub zero val
                 else:
                     val
 

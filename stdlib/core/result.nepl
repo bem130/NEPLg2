@@ -1,7 +1,5 @@
 #indent 4
 
-#import "core/mem" as *
-
 //: result: 成功(Ok)と失敗(Err)を表す型と基本操作
 //:
 //: 目的:

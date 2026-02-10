@@ -35,8 +35,24 @@
 //: 計算量:
 //: - O(1)
 fn writer_new <()*>i32> ():
-    let cap <i32> 65536;
-    let buf <i32> alloc cap;
+    let mut cap <i32> 4096;
+    let mut buf <i32> alloc cap;
+    if:
+        eq buf 0
+        then:
+            set cap 1024;
+            set buf alloc cap;
+            ()
+        else:
+            ();
+    if:
+        eq buf 0
+        then:
+            set cap 256;
+            set buf alloc cap;
+            ()
+        else:
+            ();
     let iov <i32> alloc 8;
     let nw  <i32> alloc 4;
 
@@ -77,10 +93,11 @@ fn writer_free <(i32)*>()> (w):
 //: - O(len)
 fn writer_flush <(i32)*>()> (w):
     let buf <i32> load_i32 w;
+    let cap <i32> load_i32 add w 4;
     let len <i32> load_i32 add w 8;
 
     if:
-        eq len 0
+        or eq len 0 le cap 0
         then:
             ()
         else:
@@ -141,12 +158,18 @@ fn writer_ensure <(i32,i32)*>()> (w, need):
 //: 計算量:
 //: - O(1)（flush が入ると O(len)）
 fn writer_put_u8 <(i32,i32)*>()> (w, b):
-    writer_ensure w 1;
-    let buf <i32> load_i32 w;
-    let len <i32> load_i32 add w 8;
-    store_u8 add buf len b;
-    store_i32 add w 8 add len 1;
-    ()
+    let cap <i32> load_i32 add w 4;
+    if:
+        le cap 0
+        then:
+            ()
+        else:
+            writer_ensure w 1;
+            let buf <i32> load_i32 w;
+            let len <i32> load_i32 add w 8;
+            store_u8 add buf len b;
+            store_i32 add w 8 add len 1;
+            ()
 
 //: writer_writeln: 改行 '\n' を出力する
 fn writer_writeln <(i32)*>()> (w):
@@ -157,10 +180,11 @@ fn writer_writeln <(i32)*>()> (w):
 //: 注意:
 //: - str は [len][bytes] 形式なので、bytes 先頭は add s 4 です。
 fn writer_write_str <(i32,str)*>()> (w, s):
+    let cap <i32> load_i32 add w 4;
     let n <i32> load_i32 s;
 
     if:
-        le n 0
+        or le n 0 le cap 0
         then:
             ()
         else:
@@ -206,7 +230,8 @@ fn writer_write_i32 <(i32,i32)*>()> (w, v):
                         lt x 0
                         then:
                             writer_put_u8 w 45;   // '-'
-                            set x sub 0 x;
+                            let zero <i32> 0;
+                            set x sub zero x;
                             ()
                         else:
                             ();
@@ -233,7 +258,8 @@ fn writer_write_i32 <(i32,i32)*>()> (w, v):
                         do:
                             let rem <i32> mod_s n 10;
                             let off <i32> sub endm1 i;
-                            store_u8 add buf off add 48 rem;
+                            let code <i32> add 48 rem;
+                            store_u8 add buf off code;
                             set n div_s n 10;
                             set i add i 1;
 
@@ -254,16 +280,17 @@ fn writer_write_i32 <(i32,i32)*>()> (w, v):
 //: 計算量:
 //: - O(桁数)
 fn writer_write_u64 <(i32,i64)*>()> (w, v):
+    let zero <i64> i64_extend_i32_u 0;
+    let ten <i64> i64_extend_i32_u 10;
     if:
-        i64_eq v i64_extend_i32_u 0
+        i64_eq v zero
         then:
             writer_put_u8 w 48;
             ()
         else:
-            let ten <i64> i64_extend_i32_u 10;
             let mut t <i64> v;
             let mut d <i32> 0;
-            while i64_gt_u t i64_extend_i32_u 0:
+            while i64_gt_u t zero:
                 do:
                     set d add d 1;
                     set t i64_div_u t ten;
@@ -282,7 +309,8 @@ fn writer_write_u64 <(i32,i64)*>()> (w, v):
                     let rem64 <i64> i64_rem_u n ten;
                     let rem <i32> i32_wrap_i64 rem64;
                     let off <i32> sub endm1 i;
-                    store_u8 add buf off add 48 rem;
+                    let code <i32> add 48 rem;
+                    store_u8 add buf off code;
                     set n i64_div_u n ten;
                     set i add i 1;
 
@@ -300,11 +328,13 @@ fn writer_write_u64 <(i32,i64)*>()> (w, v):
 //: 計算量:
 //: - O(桁数)
 fn writer_write_i64 <(i32,i64)*>()> (w, v):
+    let zero <i64> i64_extend_i32_u 0;
     if:
-        i64_lt_s v i64_extend_i32_u 0
+        i64_lt_s v zero
         then:
             writer_put_u8 w 45;
-            writer_write_u64 w i64_sub i64_extend_i32_u 0 v;
+            let abs_u <i64> i64_sub zero v;
+            writer_write_u64 w abs_u;
             ()
         else:
             writer_write_u64 w v;

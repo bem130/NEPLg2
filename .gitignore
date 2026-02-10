@@ -9,3 +9,4 @@
 /examples/*.tmp.nepl
 /web/examples
 /web/node_modules
+/tests/output/*

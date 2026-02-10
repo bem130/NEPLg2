@@ -1,0 +1,86 @@
+#indent 4
+#target wasi
+
+#import "core/mem" as *
+#import "core/math" as *
+#import "std/stdio" as *
+
+//: kpread_core: kpread の上流入出力処理を分離した内部モジュール
+//:
+//: [目的/もくてき]:
+//: - scanner_new の低レベル実装を小さな単位で安定して生成できるようにします。
+//:
+//: [注意/ちゅうい]:
+//: - 互換 API は kp/kpread.nepl 側の `scanner_new` から利用します。
+//:
+//: neplg2:test[skip]
+//: ```neplg2
+//:| #entry main
+//:| #target wasi
+//: ()
+//: ```
+fn scanner_new_impl_i <(i32)*>i32> (_dummy):
+    let mut cap <i32> 65536;
+    let mut buf <i32> alloc cap;
+    if:
+        eq buf 0
+        then:
+            let sc0 <i32> alloc 12;
+            store_i32 sc0 0;
+            store_i32 add sc0 4 0;
+            store_i32 add sc0 8 0;
+            sc0
+        else:
+            let iov <i32> alloc 8;
+            let nread_ptr <i32> alloc 4;
+            let mut read_len <i32> 0;
+            let mut done <i32> 0;
+
+            while eq done 0:
+                do:
+                    if:
+                        eq read_len cap
+                        then:
+                            let new_cap <i32> mul cap 2;
+                            let new_buf <i32> realloc buf cap new_cap;
+                            if:
+                                eq new_buf 0
+                                then:
+                                    set done 1;
+                                else:
+                                    set buf new_buf;
+                                    set cap new_cap;
+                        else:
+                            ();
+
+                    if:
+                        eq done 0
+                        then:
+                            let write_ptr <i32> add buf read_len;
+                            let rem <i32> sub cap read_len;
+                            store_i32 iov write_ptr;
+                            store_i32 add iov 4 rem;
+                            store_i32 nread_ptr 0;
+                            let errno <i32> fd_read 0 iov 1 nread_ptr;
+                            if:
+                                ne errno 0
+                                then:
+                                    set done 1;
+                                else:
+                                    let n <i32> load_i32 nread_ptr;
+                                    if:
+                                        eq n 0
+                                        then:
+                                            set done 1;
+                                        else:
+                                            set read_len add read_len n;
+                        else:
+                            ();
+
+            let sc <i32> alloc 12;
+            store_i32 sc buf;
+            store_i32 add sc 4 read_len;
+            store_i32 add sc 8 0;
+            dealloc iov 8;
+            dealloc nread_ptr 4;
+            sc
