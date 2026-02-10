@@ -1916,7 +1916,7 @@ impl<'a> BlockChecker<'a> {
                             },
                             type_args: Vec::new(),
                             assign: Some(AssignKind::Let),
-                            auto_call: true,
+                            auto_call: false,
                         });
                         // defer applying ascription until the expression is complete
                         last_expr = Some(stack.last().unwrap().expr.clone());
@@ -2353,7 +2353,7 @@ impl<'a> BlockChecker<'a> {
                             },
                             type_args: Vec::new(),
                             assign: None,
-                            auto_call: true,
+                            auto_call: false,
                         });
                         // defer applying ascription until the expression is complete
                         last_expr = Some(stack.last().unwrap().expr.clone());
@@ -2457,12 +2457,21 @@ impl<'a> BlockChecker<'a> {
                 .push(Diagnostic::error("pipe has no target", expr.span));
         }
 
-        // Validate final stack depth. If there are extra values, recover by
-        // dropping extras so later checks can proceed. Do not treat this as a
-        // hard error here to allow layout forms (like `if:` blocks used as
-        // sub-expressions) to compile; block-level checks will still emit
-        // diagnostics when appropriate.
-        if stack.len() > base_depth + 1 {
+        let leading_let = matches!(
+            expr.items.first(),
+            Some(PrefixItem::Symbol(Symbol::Let { .. }))
+        );
+        // Validate final stack depth. `let` is special-cased because its RHS
+        // expression remains on stack until we lower to `HirExprKind::Let`.
+        if leading_let {
+            if stack.len() > base_depth + 2 {
+                let extras = stack.len() - (base_depth + 2);
+                for _ in 0..extras {
+                    stack.pop();
+                }
+                dropped = true;
+            }
+        } else if stack.len() > base_depth + 1 {
             let extras = stack.len() - (base_depth + 1);
             for _ in 0..extras {
                 stack.pop();
@@ -2470,7 +2479,9 @@ impl<'a> BlockChecker<'a> {
             dropped = true;
         }
 
-        let mut result_expr = if stack.len() == base_depth + 1 {
+        let result_expr = if leading_let && stack.len() >= base_depth + 2 {
+            stack[base_depth + 1].expr.clone()
+        } else if stack.len() == base_depth + 1 {
             stack.last().unwrap().expr.clone()
         } else if let Some(ref e) = last_expr {
             e.clone()
@@ -2488,13 +2499,12 @@ impl<'a> BlockChecker<'a> {
         // `Let` expression so downstream codegen sees a stable binding.
         if let Some(PrefixItem::Symbol(Symbol::Let { name, mutable })) = expr.items.first() {
             if !matches!(result_expr.kind, HirExprKind::Let { .. }) {
-                // If reduction left only the placeholder `Var(name)` (self-reference),
-                // prefer the last parsed expression as the real RHS. Also, if the
-                // reduction produced a 3-line `Block` coming from an `if:` layout,
-                // turn that block into an `If` expression so semantics match the
-                // other `if` layout forms (otherwise a bare block's last-line
-                // value might be used incorrectly).
-                let value_expr = match &result_expr.kind {
+                // If RHS remains on stack (auto_call disabled for `let`), use it as
+                // the binding value directly.
+                let value_expr = if stack.len() >= base_depth + 2 {
+                    stack[base_depth + 1].expr.clone()
+                } else {
+                    match &result_expr.kind {
                     HirExprKind::Var(n) if n == &name.name => {
                         if let Some(le) = last_expr.clone() { le } else { result_expr.clone() }
                     }
@@ -2520,6 +2530,7 @@ impl<'a> BlockChecker<'a> {
                         }
                     }
                     _ => result_expr.clone(),
+                }
                 };
 
                 if let Some(b) = self.env.lookup_mut(&name.name) {
@@ -2535,6 +2546,16 @@ impl<'a> BlockChecker<'a> {
                     },
                     span: expr.span,
                 };
+                while stack.len() > base_depth {
+                    let _ = stack.pop();
+                }
+                stack.push(StackEntry {
+                    ty: self.ctx.unit(),
+                    expr: let_expr.clone(),
+                    type_args: Vec::new(),
+                    assign: None,
+                    auto_call: true,
+                });
                 return Some((let_expr, dropped));
             }
         }
@@ -2598,13 +2619,12 @@ impl<'a> BlockChecker<'a> {
                     ..
                 } => (params, result, effect),
                 _ => {
-                    // 走査時点で関数でなくなっていた場合は次の候補を探す。
                     continue;
                 }
             };
             if stack.len() < func_pos + 1 + params.len() {
                 break;
-            }
+            };
             let expected_ret = expected.and_then(|(target, base_len)| {
                 let new_len = stack.len().saturating_sub(params.len());
                 if new_len == base_len + 1 {
@@ -2690,8 +2710,7 @@ impl<'a> BlockChecker<'a> {
                     effect,
                     ..
                 } => (params, result, effect),
-                 _ => {
-                    // 走査時点で関数でなくなっていた場合は次の候補を探す。
+                _ => {
                     continue;
                 }
             };

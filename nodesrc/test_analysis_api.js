@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // nodesrc/test_analysis_api.js
 // 目的:
-// - nepl-web の解析 API（lex/parse/name_resolution）が期待どおりの形で
+// - nepl-web の解析 API（lex/parse/name_resolution/semantics）が期待どおりの形で
 //   情報を返せることを確認する。
 
 const { candidateDistDirs } = require('./util_paths');
@@ -53,8 +53,31 @@ async function run() {
     if (typeof api.analyze_lex !== 'function') fail('analyze_lex is missing');
     if (typeof api.analyze_parse !== 'function') fail('analyze_parse is missing');
     if (typeof api.analyze_name_resolution !== 'function') fail('analyze_name_resolution is missing');
+    if (typeof api.analyze_semantics !== 'function') fail('analyze_semantics is missing');
 
     const cases = [
+        {
+            id: 'semantics_token_type_and_ranges',
+            source: `#entry main
+#indent 4
+#target wasm
+fn main <()->i32> ():
+    1
+`,
+            checkSemantics(semResult) {
+                const exprs = Array.isArray(semResult?.expressions) ? semResult.expressions : [];
+                if (exprs.length === 0) fail('semantics_token_type_and_ranges: expressions missing');
+                const lit = exprs.find(e => e && e.kind === 'LiteralI32');
+                if (!lit) fail('semantics_token_type_and_ranges: literal expression missing');
+                if (!Array.isArray(lit.argument_ranges) || lit.argument_ranges.length !== 0) {
+                    fail('semantics_token_type_and_ranges: literal argument ranges should be empty');
+                }
+                const tokenSem = Array.isArray(semResult?.token_semantics) ? semResult.token_semantics : [];
+                if (tokenSem.length === 0) fail('semantics_token_type_and_ranges: token_semantics missing');
+                const hasTypedToken = tokenSem.some(t => t && typeof t.inferred_type === 'string' && t.inferred_type.length > 0);
+                if (!hasTypedToken) fail('semantics_token_type_and_ranges: inferred_type not found on any token');
+            },
+        },
         {
             id: 'shadowing_local_let',
             source: `#entry main
@@ -196,12 +219,16 @@ fn main <()->i32> ():
         const lex = api.analyze_lex(c.source);
         const parse = api.analyze_parse(c.source);
         const resolve = api.analyze_name_resolution(c.source);
+        const semantics = api.analyze_semantics(c.source);
         if (!lex || lex.stage !== 'lex') fail(`${c.id}: lex stage mismatch`);
         if (!parse || parse.stage !== 'parse') fail(`${c.id}: parse stage mismatch`);
         if (!resolve || resolve.stage !== 'name_resolution') fail(`${c.id}: resolve stage mismatch`);
+        if (!semantics || semantics.stage !== 'semantics') fail(`${c.id}: semantics stage mismatch`);
         if (!resolve.ok) fail(`${c.id}: resolve not ok`);
+        if (!Array.isArray(semantics?.diagnostics)) fail(`${c.id}: semantics diagnostics missing`);
         if (typeof c.checkParse === 'function') c.checkParse(parse);
         if (typeof c.check === 'function') c.check(resolve);
+        if (typeof c.checkSemantics === 'function') c.checkSemantics(semantics);
         results.push({ id: c.id, ok: true });
     }
 

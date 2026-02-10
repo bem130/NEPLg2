@@ -7,6 +7,7 @@
 //   node nodesrc/analyze_source.js --stage lex -i tests/functions.n.md
 //   node nodesrc/analyze_source.js --stage parse -i path/to/file.nepl -o /tmp/parse.json
 //   node nodesrc/analyze_source.js --stage resolve -i path/to/file.nepl -o /tmp/resolve.json
+//   node nodesrc/analyze_source.js --stage semantics -i path/to/file.nepl -o /tmp/semantics.json
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -91,8 +92,8 @@ function printSummary(result) {
 
 async function main() {
     const { help, inputPath, outPath, stage, distHint, sourceInline } = parseArgs(process.argv.slice(2));
-    if (help || !['lex', 'parse', 'resolve'].includes(stage)) {
-        console.log('Usage: node nodesrc/analyze_source.js --stage <lex|parse|resolve> (-i <file> | --source <text>) [-o <out.json>] [--dist <dir>]');
+    if (help || !['lex', 'parse', 'resolve', 'semantics'].includes(stage)) {
+        console.log('Usage: node nodesrc/analyze_source.js --stage <lex|parse|resolve|semantics> (-i <file> | --source <text>) [-o <out.json>] [--dist <dir>]');
         process.exit(help ? 0 : 2);
     }
 
@@ -110,12 +111,17 @@ async function main() {
     if (stage === 'resolve' && typeof api.analyze_name_resolution !== 'function') {
         throw new Error('compiler API analyze_name_resolution is not available. rebuild dist first.');
     }
+    if (stage === 'semantics' && typeof api.analyze_semantics !== 'function') {
+        throw new Error('compiler API analyze_semantics is not available. rebuild dist first.');
+    }
 
     const result = stage === 'lex'
         ? api.analyze_lex(source)
         : stage === 'parse'
             ? api.analyze_parse(source)
-            : api.analyze_name_resolution(source);
+            : stage === 'resolve'
+                ? api.analyze_name_resolution(source)
+                : api.analyze_semantics(source);
 
     printSummary(result);
     if (outPath) {

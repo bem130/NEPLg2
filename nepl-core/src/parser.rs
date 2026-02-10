@@ -261,6 +261,9 @@ impl Parser {
         let Some(if_pos) = if_pos else {
             return;
         };
+        if matches!(expr.items.last(), Some(PrefixItem::Block(_, _))) {
+            return;
+        }
         let then_start = if_pos + 2;
         if expr.items.len() <= then_start + 1 {
             return;

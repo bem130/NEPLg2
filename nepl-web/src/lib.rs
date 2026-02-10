@@ -5,11 +5,13 @@ use js_sys::{Reflect, Uint8Array};
 use nepl_core::ast::{Block, Directive, FnBody, MatchArm, PrefixExpr, PrefixItem, Stmt, Symbol};
 use nepl_core::diagnostic::{Diagnostic, Severity};
 use nepl_core::error::CoreError;
+use nepl_core::hir::{HirBlock, HirExpr, HirExprKind, HirLine};
 use nepl_core::lexer::{lex, Token, TokenKind};
 use nepl_core::loader::{Loader, SourceMap};
 use nepl_core::parser::parse_tokens;
 use nepl_core::span::{FileId, Span};
-use nepl_core::{compile_module, CompileOptions, CompileTarget};
+use nepl_core::typecheck::typecheck;
+use nepl_core::{compile_module, BuildProfile, CompileOptions, CompileTarget};
 use wasmprinter::print_bytes;
 use wasm_bindgen::prelude::*;
 
@@ -763,6 +765,27 @@ struct NameRefTrace {
     candidate_def_ids: Vec<usize>,
 }
 
+#[derive(Clone)]
+struct SemanticExprTrace {
+    id: usize,
+    function_name: String,
+    kind: &'static str,
+    span: Span,
+    ty: String,
+    parent_id: Option<usize>,
+    arg_spans: Vec<Span>,
+}
+
+#[derive(Clone)]
+struct SemanticTokenTrace {
+    token_index: usize,
+    inferred_expr_id: Option<usize>,
+    inferred_type: Option<String>,
+    expr_span: Option<Span>,
+    arg_index: Option<usize>,
+    arg_span: Option<Span>,
+}
+
 #[derive(Default)]
 struct NameResolutionTrace {
     defs: Vec<NameDefTrace>,
@@ -984,6 +1007,296 @@ fn ref_trace_to_js(source: &str, rf: &NameRefTrace) -> JsValue {
     obj.into()
 }
 
+fn semantic_expr_to_js(source: &str, se: &SemanticExprTrace) -> JsValue {
+    let obj = js_sys::Object::new();
+    let _ = Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(se.id as f64));
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("function_name"),
+        &JsValue::from_str(&se.function_name),
+    );
+    let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str(se.kind));
+    let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, se.span));
+    let _ = Reflect::set(&obj, &JsValue::from_str("inferred_type"), &JsValue::from_str(&se.ty));
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("parent_id"),
+        &se.parent_id
+            .map(|v| JsValue::from_f64(v as f64))
+            .unwrap_or(JsValue::NULL),
+    );
+    let arg_arr = js_sys::Array::new();
+    for sp in &se.arg_spans {
+        arg_arr.push(&span_to_js(source, *sp));
+    }
+    let _ = Reflect::set(&obj, &JsValue::from_str("argument_ranges"), &arg_arr);
+    obj.into()
+}
+
+fn semantic_token_to_js(source: &str, st: &SemanticTokenTrace) -> JsValue {
+    let obj = js_sys::Object::new();
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("token_index"),
+        &JsValue::from_f64(st.token_index as f64),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("inferred_expr_id"),
+        &st.inferred_expr_id
+            .map(|v| JsValue::from_f64(v as f64))
+            .unwrap_or(JsValue::NULL),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("inferred_type"),
+        &st.inferred_type
+            .as_ref()
+            .map(|s| JsValue::from_str(s))
+            .unwrap_or(JsValue::NULL),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("expression_range"),
+        &st.expr_span
+            .map(|s| span_to_js(source, s))
+            .unwrap_or(JsValue::NULL),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("arg_index"),
+        &st.arg_index
+            .map(|v| JsValue::from_f64(v as f64))
+            .unwrap_or(JsValue::NULL),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("arg_range"),
+        &st.arg_span
+            .map(|s| span_to_js(source, s))
+            .unwrap_or(JsValue::NULL),
+    );
+    obj.into()
+}
+
+fn span_contains(outer: Span, inner: Span) -> bool {
+    outer.file_id == inner.file_id && outer.start <= inner.start && inner.end <= outer.end
+}
+
+fn span_width(span: Span) -> usize {
+    span.end.saturating_sub(span.start) as usize
+}
+
+fn hir_kind_name(kind: &HirExprKind) -> &'static str {
+    match kind {
+        HirExprKind::LiteralI32(_) => "LiteralI32",
+        HirExprKind::LiteralF32(_) => "LiteralF32",
+        HirExprKind::LiteralBool(_) => "LiteralBool",
+        HirExprKind::LiteralStr(_) => "LiteralStr",
+        HirExprKind::Unit => "Unit",
+        HirExprKind::Var(_) => "Var",
+        HirExprKind::Call { .. } => "Call",
+        HirExprKind::CallIndirect { .. } => "CallIndirect",
+        HirExprKind::If { .. } => "If",
+        HirExprKind::While { .. } => "While",
+        HirExprKind::Match { .. } => "Match",
+        HirExprKind::EnumConstruct { .. } => "EnumConstruct",
+        HirExprKind::StructConstruct { .. } => "StructConstruct",
+        HirExprKind::TupleConstruct { .. } => "TupleConstruct",
+        HirExprKind::Block(_) => "Block",
+        HirExprKind::Let { .. } => "Let",
+        HirExprKind::Set { .. } => "Set",
+        HirExprKind::Intrinsic { .. } => "Intrinsic",
+        HirExprKind::AddrOf(_) => "AddrOf",
+        HirExprKind::Deref(_) => "Deref",
+        HirExprKind::Drop { .. } => "Drop",
+    }
+}
+
+fn collect_semantic_expr_from_line(
+    line: &HirLine,
+    function_name: &str,
+    types: &nepl_core::types::TypeCtx,
+    out: &mut Vec<SemanticExprTrace>,
+) {
+    collect_semantic_expr(&line.expr, function_name, types, None, out);
+}
+
+fn collect_semantic_expr_from_block(
+    block: &HirBlock,
+    function_name: &str,
+    types: &nepl_core::types::TypeCtx,
+    parent_id: Option<usize>,
+    out: &mut Vec<SemanticExprTrace>,
+) {
+    for line in &block.lines {
+        collect_semantic_expr(&line.expr, function_name, types, parent_id, out);
+    }
+}
+
+fn collect_semantic_expr(
+    expr: &HirExpr,
+    function_name: &str,
+    types: &nepl_core::types::TypeCtx,
+    parent_id: Option<usize>,
+    out: &mut Vec<SemanticExprTrace>,
+) -> usize {
+    let id = out.len();
+    out.push(SemanticExprTrace {
+        id,
+        function_name: function_name.to_string(),
+        kind: hir_kind_name(&expr.kind),
+        span: expr.span,
+        ty: types.type_to_string(expr.ty),
+        parent_id,
+        arg_spans: Vec::new(),
+    });
+
+    let mut arg_spans = Vec::new();
+    match &expr.kind {
+        HirExprKind::Call { args, .. } => {
+            for a in args {
+                arg_spans.push(a.span);
+                collect_semantic_expr(a, function_name, types, Some(id), out);
+            }
+        }
+        HirExprKind::CallIndirect { callee, args, .. } => {
+            collect_semantic_expr(callee, function_name, types, Some(id), out);
+            for a in args {
+                arg_spans.push(a.span);
+                collect_semantic_expr(a, function_name, types, Some(id), out);
+            }
+        }
+        HirExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            arg_spans.push(cond.span);
+            arg_spans.push(then_branch.span);
+            arg_spans.push(else_branch.span);
+            collect_semantic_expr(cond, function_name, types, Some(id), out);
+            collect_semantic_expr(then_branch, function_name, types, Some(id), out);
+            collect_semantic_expr(else_branch, function_name, types, Some(id), out);
+        }
+        HirExprKind::While { cond, body } => {
+            arg_spans.push(cond.span);
+            arg_spans.push(body.span);
+            collect_semantic_expr(cond, function_name, types, Some(id), out);
+            collect_semantic_expr(body, function_name, types, Some(id), out);
+        }
+        HirExprKind::Match { scrutinee, arms } => {
+            arg_spans.push(scrutinee.span);
+            collect_semantic_expr(scrutinee, function_name, types, Some(id), out);
+            for arm in arms {
+                arg_spans.push(arm.body.span);
+                collect_semantic_expr(&arm.body, function_name, types, Some(id), out);
+            }
+        }
+        HirExprKind::EnumConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                arg_spans.push(p.span);
+                collect_semantic_expr(p, function_name, types, Some(id), out);
+            }
+        }
+        HirExprKind::StructConstruct { fields, .. } => {
+            for f in fields {
+                arg_spans.push(f.span);
+                collect_semantic_expr(f, function_name, types, Some(id), out);
+            }
+        }
+        HirExprKind::TupleConstruct { items } => {
+            for e in items {
+                arg_spans.push(e.span);
+                collect_semantic_expr(e, function_name, types, Some(id), out);
+            }
+        }
+        HirExprKind::Block(b) => {
+            collect_semantic_expr_from_block(b, function_name, types, Some(id), out);
+        }
+        HirExprKind::Let { value, .. } | HirExprKind::Set { value, .. } => {
+            arg_spans.push(value.span);
+            collect_semantic_expr(value, function_name, types, Some(id), out);
+        }
+        HirExprKind::Intrinsic { args, .. } => {
+            for a in args {
+                arg_spans.push(a.span);
+                collect_semantic_expr(a, function_name, types, Some(id), out);
+            }
+        }
+        HirExprKind::AddrOf(inner) | HirExprKind::Deref(inner) => {
+            arg_spans.push(inner.span);
+            collect_semantic_expr(inner, function_name, types, Some(id), out);
+        }
+        HirExprKind::LiteralI32(_)
+        | HirExprKind::LiteralF32(_)
+        | HirExprKind::LiteralBool(_)
+        | HirExprKind::LiteralStr(_)
+        | HirExprKind::Unit
+        | HirExprKind::Var(_)
+        | HirExprKind::Drop { .. } => {}
+    }
+
+    out[id].arg_spans = arg_spans;
+    id
+}
+
+fn resolve_target_for_analysis(module: &nepl_core::ast::Module) -> (CompileTarget, Vec<Diagnostic>) {
+    let mut found: Option<(CompileTarget, Span)> = None;
+    let mut diags = Vec::new();
+
+    for d in &module.directives {
+        if let Directive::Target { target, span } = d {
+            let parsed = match target.as_str() {
+                "wasm" => Some(CompileTarget::Wasm),
+                "wasi" => Some(CompileTarget::Wasi),
+                _ => None,
+            };
+            if let Some(t) = parsed {
+                if let Some((_, prev_span)) = found {
+                    diags.push(
+                        Diagnostic::error("multiple #target directives are not allowed", *span)
+                            .with_secondary_label(prev_span, Some("previous #target here".into())),
+                    );
+                } else {
+                    found = Some((t, *span));
+                }
+            } else {
+                diags.push(Diagnostic::error("unknown target in #target", *span));
+            }
+        }
+    }
+
+    if found.is_none() {
+        for it in &module.root.items {
+            if let Stmt::Directive(Directive::Target { target, span }) = it {
+                let parsed = match target.as_str() {
+                    "wasm" => Some(CompileTarget::Wasm),
+                    "wasi" => Some(CompileTarget::Wasi),
+                    _ => None,
+                };
+                if let Some(t) = parsed {
+                    if let Some((_, prev_span)) = found {
+                        diags.push(
+                            Diagnostic::error("multiple #target directives are not allowed", *span)
+                                .with_secondary_label(
+                                    prev_span,
+                                    Some("previous #target here".into()),
+                                ),
+                        );
+                    } else {
+                        found = Some((t, *span));
+                    }
+                } else {
+                    diags.push(Diagnostic::error("unknown target in #target", *span));
+                }
+            }
+        }
+    }
+
+    (found.map(|(t, _)| t).unwrap_or(CompileTarget::Wasm), diags)
+}
+
 /// 入力ソースを字句解析し、token 列と診断を JSON で返します。
 ///
 /// VSCode 拡張や LSP 実装で、構文解析前の結果を可視化するための API です。
@@ -1156,6 +1469,150 @@ pub fn analyze_name_resolution(source: &str) -> JsValue {
         let _ = Reflect::set(&out, &JsValue::from_str("definitions"), &js_sys::Array::new());
         let _ = Reflect::set(&out, &JsValue::from_str("references"), &js_sys::Array::new());
         let _ = Reflect::set(&out, &JsValue::from_str("by_name"), &js_sys::Object::new());
+    }
+
+    out.into()
+}
+
+/// 字句・構文・型検査の情報を統合し、LSP 向けの詳細解析結果を返します。
+///
+/// 返却する主な情報:
+/// - `expressions`: 各式の範囲・推論型・親子関係・引数範囲
+/// - `token_semantics`: token ごとの対応式と推論型、引数位置情報
+/// - `functions`: 関数定義の範囲とシグネチャ
+#[wasm_bindgen]
+pub fn analyze_semantics(source: &str) -> JsValue {
+    let file_id = FileId(0);
+    let lex_result = lex(file_id, source);
+    let tokens = lex_result.tokens.clone();
+    let token_arr = js_sys::Array::new();
+    for token in &tokens {
+        token_arr.push(&token_to_js(source, token));
+    }
+
+    let parse_result = parse_tokens(file_id, lex_result);
+    let out = js_sys::Object::new();
+    let _ = Reflect::set(
+        &out,
+        &JsValue::from_str("stage"),
+        &JsValue::from_str("semantics"),
+    );
+    let _ = Reflect::set(&out, &JsValue::from_str("tokens"), &token_arr);
+
+    let mut all_diags = parse_result.diagnostics.clone();
+    let mut has_error = all_diags
+        .iter()
+        .any(|d| matches!(d.severity, Severity::Error));
+
+    if let Some(module) = &parse_result.module {
+        let (target, mut target_diags) = resolve_target_for_analysis(module);
+        has_error |= target_diags
+            .iter()
+            .any(|d| matches!(d.severity, Severity::Error));
+        all_diags.append(&mut target_diags);
+
+        let tc = typecheck(module, target, BuildProfile::Debug);
+        has_error |= tc
+            .diagnostics
+            .iter()
+            .any(|d| matches!(d.severity, Severity::Error));
+        all_diags.extend(tc.diagnostics.clone());
+
+        let diagnostics = diagnostics_to_js(source, &all_diags);
+        let _ = Reflect::set(&out, &JsValue::from_str("diagnostics"), &diagnostics);
+
+        if let Some(hir_module) = tc.module {
+            let mut exprs = Vec::<SemanticExprTrace>::new();
+            let function_arr = js_sys::Array::new();
+            for f in &hir_module.functions {
+                let f_obj = js_sys::Object::new();
+                let _ = Reflect::set(&f_obj, &JsValue::from_str("name"), &JsValue::from_str(&f.name));
+                let _ = Reflect::set(&f_obj, &JsValue::from_str("span"), &span_to_js(source, f.span));
+                let _ = Reflect::set(
+                    &f_obj,
+                    &JsValue::from_str("signature"),
+                    &JsValue::from_str(&tc.types.type_to_string(f.func_ty)),
+                );
+                function_arr.push(&f_obj);
+                if let nepl_core::hir::HirBody::Block(b) = &f.body {
+                    for line in &b.lines {
+                        collect_semantic_expr_from_line(line, &f.name, &tc.types, &mut exprs);
+                    }
+                }
+            }
+
+            let expr_arr = js_sys::Array::new();
+            for ex in &exprs {
+                expr_arr.push(&semantic_expr_to_js(source, ex));
+            }
+
+            let mut token_semantics = Vec::<SemanticTokenTrace>::new();
+            for (tok_idx, token) in tokens.iter().enumerate() {
+                let mut best_expr: Option<&SemanticExprTrace> = None;
+                for ex in &exprs {
+                    if span_contains(ex.span, token.span) {
+                        if let Some(prev) = best_expr {
+                            if span_width(ex.span) < span_width(prev.span) {
+                                best_expr = Some(ex);
+                            }
+                        } else {
+                            best_expr = Some(ex);
+                        }
+                    }
+                }
+                let mut arg_hit: Option<(usize, Span)> = None;
+                for ex in &exprs {
+                    for (a_idx, a_sp) in ex.arg_spans.iter().enumerate() {
+                        if span_contains(*a_sp, token.span) {
+                            if let Some((_, prev_sp)) = arg_hit {
+                                if span_width(*a_sp) < span_width(prev_sp) {
+                                    arg_hit = Some((a_idx, *a_sp));
+                                }
+                            } else {
+                                arg_hit = Some((a_idx, *a_sp));
+                            }
+                        }
+                    }
+                }
+                token_semantics.push(SemanticTokenTrace {
+                    token_index: tok_idx,
+                    inferred_expr_id: best_expr.map(|x| x.id),
+                    inferred_type: best_expr.map(|x| x.ty.clone()),
+                    expr_span: best_expr.map(|x| x.span),
+                    arg_index: arg_hit.map(|(idx, _)| idx),
+                    arg_span: arg_hit.map(|(_, sp)| sp),
+                });
+            }
+            let token_sem_arr = js_sys::Array::new();
+            for ts in &token_semantics {
+                token_sem_arr.push(&semantic_token_to_js(source, ts));
+            }
+
+            let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(!has_error));
+            let _ = Reflect::set(&out, &JsValue::from_str("expressions"), &expr_arr);
+            let _ = Reflect::set(&out, &JsValue::from_str("token_semantics"), &token_sem_arr);
+            let _ = Reflect::set(&out, &JsValue::from_str("functions"), &function_arr);
+        } else {
+            let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(false));
+            let _ = Reflect::set(&out, &JsValue::from_str("expressions"), &js_sys::Array::new());
+            let _ = Reflect::set(
+                &out,
+                &JsValue::from_str("token_semantics"),
+                &js_sys::Array::new(),
+            );
+            let _ = Reflect::set(&out, &JsValue::from_str("functions"), &js_sys::Array::new());
+        }
+    } else {
+        let diagnostics = diagnostics_to_js(source, &all_diags);
+        let _ = Reflect::set(&out, &JsValue::from_str("diagnostics"), &diagnostics);
+        let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(false));
+        let _ = Reflect::set(&out, &JsValue::from_str("expressions"), &js_sys::Array::new());
+        let _ = Reflect::set(
+            &out,
+            &JsValue::from_str("token_semantics"),
+            &js_sys::Array::new(),
+        );
+        let _ = Reflect::set(&out, &JsValue::from_str("functions"), &js_sys::Array::new());
     }
 
     out.into()

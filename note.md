@@ -178,6 +178,34 @@
   - `tests/neplg2.n.md`（8 fail）と `tests/selfhost_req.n.md`（5 fail）: namespace と callable 解決の構造問題
   - `tests/pipe_operator.n.md`（4 fail）: pipe 自体の上流問題は縮小済みで、残りは型注釈/構造体アクセス仕様との整合が中心
 
+# 2026-02-10 作業メモ (高階関数 継続: let-RHS/if-block 呼び出し順の根本修正)
+- `functions` の回帰を引き起こしていた根因を 2 点に分離して修正。
+  - `let f get_op true` 系:
+    - `let` を通常の auto-call 経路で簡約すると `let f get_op` が先に確定し、`true` が取り残される。
+    - 対応として `Symbol::Let` は `auto_call: false` とし、`check_prefix` 終端で `stack[base+1]` を RHS として `HirExprKind::Let` に確定する経路を整備。
+    - `let ...;` で `statement must leave exactly one value` にならないよう、`let` 降格時に内部 stack を `unit` 1 個へ正規化。
+  - `if` + `then/else` が関数値を返す系（`function_return`）:
+    - `PrefixItem::Block` を `auto_call: true` で積むと、`if` の引数収集中に右端の関数値が優先され `if` 本体が簡約されない。
+    - `PrefixItem::Block` の push を `auto_call: false` に変更し、`if` の 3 引数簡約を優先させるよう修正。
+- `reduce_calls` は「右端優先・不足なら待つ」に戻した。
+  - 左探索を有効化すると `mul n fact sub n 1` で `mul n fact` が先に確定し、再帰呼び出しが壊れることを再現確認したため撤回。
+
+- 検証結果:
+  - `NO_COLOR=true trunk build`: 成功
+  - `node nodesrc/test_analysis_api.js`: `7/7 pass`
+  - `node nodesrc/tests.js -i tests/functions.n.md -o /tmp/tests-functions-after-block-autocall-false.json -j 1`
+    - `total=19, passed=15, failed=4, errored=0`
+    - 残 fail: `doctest#12 #13 #16 #17`
+  - `node nodesrc/tests.js -i tests -o /tmp/tests-all-after-hof-upstream-fixes.json -j 1`
+    - `total=328, passed=288, failed=40, errored=0`
+
+- 残件の分析:
+  - `doctest#12/#13/#16`:
+    - typecheck では nested 関数内 `y` 参照は解決できているが、codegen で `unknown variable y` になる。
+    - これは nested 関数の capture が未 lower（closure conversion 未実装）であることが原因。
+  - `doctest#17`:
+    - `compile_fail` 期待に対して成功するため、純粋/非純粋の effect 判定経路（署名解釈 or overload 選択）の再点検が必要。
+
 # 2026-02-10 作業メモ (lexer/parser 解析API追加)
 - VSCode 拡張計画（todo.md の LSP / VSCode 項）を再確認し、上流解析を可視化する API を先に追加した。
 - `nepl-web/src/lib.rs` に wasm 公開関数を追加:

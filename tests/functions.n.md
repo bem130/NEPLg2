@@ -270,6 +270,73 @@ fn main <()->i32> ():
     add_y 5
 ```
 
+## function_return_minimal_single_expr_branches
+
+neplg2:test
+ret: 15
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn add_op <(i32, i32)->i32> (a, b):
+    add a b
+
+fn sub_op <(i32, i32)->i32> (a, b):
+    sub a b
+
+fn get_op <(bool)->(i32, i32)->i32> (con):
+    if:
+        cond con
+        then @add_op
+        else @sub_op
+
+fn main <()->i32> ():
+    let f get_op true
+    f 10 5
+```
+
+## function_recursive_factorial_if_layout_minimal
+
+neplg2:test
+ret: 120
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn fact <(i32)->i32> (n):
+    if:
+        cond le n 1
+        then 1
+        else mul n fact sub n 1
+
+fn main <()->i32> ():
+    fact 5
+```
+
+## function_nested_capture_variable_minimal
+
+neplg2:test
+ret: 15
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let y 10;
+    fn add_y (x):
+        add x y
+    add_y 5
+```
+
 ## function_purity_check_pure_calls_impure
 
 neplg2:test[compile_fail]
