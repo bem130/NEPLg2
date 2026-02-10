@@ -1840,6 +1840,28 @@ impl Parser {
                     let span = self.next().unwrap().span;
                     items.push(PrefixItem::Symbol(Symbol::While(span)));
                 }
+                TokenKind::KwBlock => {
+                    let span = self.next().unwrap().span;
+                    if self.consume_if(&TokenKind::Colon) {
+                        let block = if self.check(&TokenKind::Newline) {
+                            self.parse_block_after_colon()?
+                        } else {
+                            let err_span = self.peek_span().unwrap_or(span);
+                            self.diagnostics.push(Diagnostic::error(
+                                "block: requires newline after ':' (only whitespace/comment is allowed)",
+                                err_span,
+                            ));
+                            self.parse_single_line_block(err_span)?
+                        };
+                        let bspan = block.span;
+                        items.push(PrefixItem::Block(block, bspan));
+                        break;
+                    } else {
+                        let block = self.parse_single_line_block_until_tuple_delim(span)?;
+                        let bspan = block.span;
+                        items.push(PrefixItem::Block(block, bspan));
+                    }
+                }
                 TokenKind::KwMatch => {
                     let m = self.parse_match_expr()?;
                     let sp = m.span;
@@ -3243,6 +3265,35 @@ impl Parser {
             }
 
             if let Some(expr) = self.parse_prefix_expr() {
+                if expr.trailing_semis > 0 {
+                    items.push(Stmt::ExprSemi(expr.clone(), expr.trailing_semi_span));
+                } else {
+                    items.push(Stmt::Expr(expr));
+                }
+            } else {
+                break;
+            }
+        }
+        let end_span = self.peek_span().unwrap_or(span);
+        Some(Block {
+            items,
+            span: span.join(end_span).unwrap_or(span),
+        })
+    }
+
+    fn parse_single_line_block_until_tuple_delim(&mut self, span: Span) -> Option<Block> {
+        let mut items = Vec::new();
+        while !self.is_end(&TokenEnd::Line)
+            && !matches!(self.peek_kind(), Some(TokenKind::Comma | TokenKind::RParen))
+        {
+            while self.consume_if(&TokenKind::Semicolon) {}
+            if self.is_end(&TokenEnd::Line)
+                || matches!(self.peek_kind(), Some(TokenKind::Comma | TokenKind::RParen))
+            {
+                break;
+            }
+
+            if let Some(expr) = self.parse_prefix_expr_until_tuple_delim() {
                 if expr.trailing_semis > 0 {
                     items.push(Stmt::ExprSemi(expr.clone(), expr.trailing_semi_span));
                 } else {

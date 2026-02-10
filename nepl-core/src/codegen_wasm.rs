@@ -815,6 +815,7 @@ fn gen_block(
     // epilogue drops (or drop-inserted housekeeping) cannot accidentally
     // erase the function's return value. In future the HIR should be
     // evolved to explicitly separate `result_expr` from drop lines.
+    locals.begin_scope();
     let mut last_val: Option<ValType> = None;
     for line in &block.lines {
         let val = gen_expr(ctx, &line.expr, name_map, sig_map, strings, locals, insts, diags);
@@ -830,6 +831,7 @@ fn gen_block(
             last_val = val;
         }
     }
+    locals.end_scope();
     Some(last_val)
 }
 
@@ -1474,7 +1476,8 @@ struct LocalInfo {
 #[derive(Debug)]
 struct LocalMap {
     locals: Vec<LocalInfo>,
-    map: BTreeMap<String, u32>,
+    map: BTreeMap<String, Vec<u32>>,
+    scopes: Vec<Vec<String>>,
     next_idx: u32,
     decls: Vec<ValType>,
 }
@@ -1484,6 +1487,7 @@ impl LocalMap {
         Self {
             locals: Vec::new(),
             map: BTreeMap::new(),
+            scopes: vec![Vec::new()],
             next_idx: param_count as u32,
             decls: Vec::new(),
         }
@@ -1497,11 +1501,11 @@ impl LocalMap {
             ty: Some(ty),
             is_param: true,
         });
-        self.map.insert(name, idx);
+        self.bind_name(name, idx);
     }
 
     fn ensure_local(&mut self, name: String, ty: TypeId, ctx: &TypeCtx) -> u32 {
-        if let Some(idx) = self.lookup(&name) {
+        if let Some(idx) = self.lookup_current(&name) {
             idx
         } else {
             let idx = self.next_idx;
@@ -1512,7 +1516,7 @@ impl LocalMap {
                 ty: Some(ty),
                 is_param: false,
             });
-            self.map.insert(name, idx);
+            self.bind_name(name, idx);
             if let Some(vt) = valtype(&ctx.get(ty)) {
                 self.decls.push(vt);
             }
@@ -1534,7 +1538,7 @@ impl LocalMap {
     }
 
     fn lookup(&self, name: &str) -> Option<u32> {
-        self.map.get(name).copied()
+        self.map.get(name).and_then(|stack| stack.last().copied())
     }
 
     fn local_decls(&self) -> Vec<(u32, ValType)> {
@@ -1546,6 +1550,42 @@ impl LocalMap {
             .iter()
             .find(|l| l.idx == idx)
             .and_then(|l| l.ty.and_then(|t| valtype(&ctx.get(t))))
+    }
+
+    fn begin_scope(&mut self) {
+        self.scopes.push(Vec::new());
+    }
+
+    fn end_scope(&mut self) {
+        if let Some(names) = self.scopes.pop() {
+            for name in names {
+                let remove_entry = if let Some(stack) = self.map.get_mut(&name) {
+                    stack.pop();
+                    stack.is_empty()
+                } else {
+                    false
+                };
+                if remove_entry {
+                    self.map.remove(&name);
+                }
+            }
+        }
+    }
+
+    fn lookup_current(&self, name: &str) -> Option<u32> {
+        let current = self.scopes.last()?;
+        if current.iter().any(|n| n == name) {
+            self.lookup(name)
+        } else {
+            None
+        }
+    }
+
+    fn bind_name(&mut self, name: String, idx: u32) {
+        self.map.entry(name.clone()).or_default().push(idx);
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.push(name);
+        }
     }
 }
 
