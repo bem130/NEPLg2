@@ -16,6 +16,36 @@ function findRefByName(result, name) {
     return refs.filter(r => r && r.name === name);
 }
 
+function getFnDef(parseResult, name) {
+    const rootItems = parseResult?.module?.root?.items;
+    if (!Array.isArray(rootItems)) return null;
+    return rootItems.find((item) => item && item.kind === 'FnDef' && item.name === name) || null;
+}
+
+function getStmtExpr(stmt) {
+    if (!stmt || typeof stmt !== 'object') return null;
+    return stmt.expr && typeof stmt.expr === 'object' ? stmt.expr : null;
+}
+
+function firstSymbolDebug(expr) {
+    if (!expr || !Array.isArray(expr.items) || expr.items.length === 0) return '';
+    const first = expr.items[0];
+    return String(first?.kind === 'Symbol' ? (first.debug || '') : '');
+}
+
+function assertItemKinds(expr, expectedKinds, label) {
+    const items = Array.isArray(expr?.items) ? expr.items : [];
+    const actualKinds = items.map((x) => x.kind);
+    if (actualKinds.length !== expectedKinds.length) {
+        fail(`${label}: expected item count ${expectedKinds.length}, got ${actualKinds.length} (${actualKinds.join(',')})`);
+    }
+    for (let i = 0; i < expectedKinds.length; i++) {
+        if (actualKinds[i] !== expectedKinds[i]) {
+            fail(`${label}: expected item[${i}]=${expectedKinds[i]}, got ${actualKinds[i]}`);
+        }
+    }
+}
+
 async function run() {
     const loaded = await loadCompilerFromCandidates(candidateDistDirs(''));
     const api = loaded.api;
@@ -71,6 +101,94 @@ fn main <()->i32> ():
                 if (refs[0].resolved_def_id == null) fail('alias target inc should be resolved');
             },
         },
+        {
+            id: 'parse_if_inline_no_colon_blocks',
+            source: `#entry main
+#indent 4
+#target wasm
+fn main <()->i32> ():
+    if cond true then 1 else 2
+`,
+            checkParse(parseResult) {
+                const fn = getFnDef(parseResult, 'main');
+                if (!fn) fail('parse_if_inline_no_colon_blocks: main not found');
+                const bodyItems = Array.isArray(fn?.body?.items) ? fn.body.items : [];
+                const ifStmt = bodyItems.find((stmt) => firstSymbolDebug(getStmtExpr(stmt)).startsWith('If('));
+                if (!ifStmt) fail('parse_if_inline_no_colon_blocks: if stmt not found');
+                const ifExpr = getStmtExpr(ifStmt);
+                assertItemKinds(ifExpr, ['Symbol', 'Literal', 'Literal', 'Literal'], 'parse_if_inline_no_colon_blocks');
+            },
+        },
+        {
+            id: 'parse_if_colon_uses_block_for_cond_then_else',
+            source: `#entry main
+#indent 4
+#target wasm
+fn main <()->i32> ():
+    if:
+        cond:
+            true
+        then:
+            1
+        else:
+            2
+`,
+            checkParse(parseResult) {
+                const fn = getFnDef(parseResult, 'main');
+                if (!fn) fail('parse_if_colon_uses_block_for_cond_then_else: main not found');
+                const bodyItems = Array.isArray(fn?.body?.items) ? fn.body.items : [];
+                const ifStmt = bodyItems.find((stmt) => firstSymbolDebug(getStmtExpr(stmt)).startsWith('If('));
+                if (!ifStmt) fail('parse_if_colon_uses_block_for_cond_then_else: if stmt not found');
+                const ifExpr = getStmtExpr(ifStmt);
+                assertItemKinds(ifExpr, ['Symbol', 'Block', 'Block', 'Block'], 'parse_if_colon_uses_block_for_cond_then_else');
+            },
+        },
+        {
+            id: 'parse_while_inline_no_colon_blocks',
+            source: `#entry main
+#indent 4
+#target wasm
+fn main <()->i32> ():
+    let mut i 0;
+    while cond lt i 3 do set i add i 1;
+    i
+`,
+            checkParse(parseResult) {
+                const fn = getFnDef(parseResult, 'main');
+                if (!fn) fail('parse_while_inline_no_colon_blocks: main not found');
+                const bodyItems = Array.isArray(fn?.body?.items) ? fn.body.items : [];
+                const whileStmt = bodyItems.find((stmt) => firstSymbolDebug(getStmtExpr(stmt)).startsWith('While('));
+                if (!whileStmt) fail('parse_while_inline_no_colon_blocks: while stmt not found');
+                const whileExpr = getStmtExpr(whileStmt);
+                const kinds = Array.isArray(whileExpr?.items) ? whileExpr.items.map((x) => x.kind) : [];
+                if (kinds.includes('Block')) {
+                    fail(`parse_while_inline_no_colon_blocks: unexpected Block in inline while (${kinds.join(',')})`);
+                }
+            },
+        },
+        {
+            id: 'parse_while_colon_uses_block_for_cond_do',
+            source: `#entry main
+#indent 4
+#target wasm
+fn main <()->i32> ():
+    let mut i 0;
+    while:
+        cond lt i 3
+        do:
+            set i add i 1;
+    i
+`,
+            checkParse(parseResult) {
+                const fn = getFnDef(parseResult, 'main');
+                if (!fn) fail('parse_while_colon_uses_block_for_cond_do: main not found');
+                const bodyItems = Array.isArray(fn?.body?.items) ? fn.body.items : [];
+                const whileStmt = bodyItems.find((stmt) => firstSymbolDebug(getStmtExpr(stmt)).startsWith('While('));
+                if (!whileStmt) fail('parse_while_colon_uses_block_for_cond_do: while stmt not found');
+                const whileExpr = getStmtExpr(whileStmt);
+                assertItemKinds(whileExpr, ['Symbol', 'Block', 'Block'], 'parse_while_colon_uses_block_for_cond_do');
+            },
+        },
     ];
 
     const results = [];
@@ -82,7 +200,8 @@ fn main <()->i32> ():
         if (!parse || parse.stage !== 'parse') fail(`${c.id}: parse stage mismatch`);
         if (!resolve || resolve.stage !== 'name_resolution') fail(`${c.id}: resolve stage mismatch`);
         if (!resolve.ok) fail(`${c.id}: resolve not ok`);
-        c.check(resolve);
+        if (typeof c.checkParse === 'function') c.checkParse(parse);
+        if (typeof c.check === 'function') c.check(resolve);
         results.push({ id: c.id, ok: true });
     }
 

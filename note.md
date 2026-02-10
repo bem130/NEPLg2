@@ -1,4 +1,18 @@
 # 状況メモ (2026-01-22)
+# 2026-02-10 作業メモ (if/while の AST 仕様テスト追加)
+- `plan.md` の `if/while` 仕様を再確認し、`cond/then/else/do` の `:` あり/なし差分を AST で固定するテストを追加。
+- `nodesrc/test_analysis_api.js` に `analyze_parse` ベースのケースを追加:
+  - `parse_if_inline_no_colon_blocks`
+  - `parse_if_colon_uses_block_for_cond_then_else`
+  - `parse_while_inline_no_colon_blocks`
+  - `parse_while_colon_uses_block_for_cond_do`
+- 検証方針:
+  - `:` なしでは `PrefixExpr` の引数列に `Block` を作らない。
+  - `:` ありでは `if` は `Symbol + Block + Block + Block`、`while` は `Symbol + Block + Block` になることを確認。
+- 実行結果:
+  - `node nodesrc/test_analysis_api.js`
+  - `summary: total=6, passed=6, failed=0`
+
 # 2026-02-10 作業メモ (functions 失敗の深掘り: symbol/entry)
 - `tests` 全体を再実行し、現状を再確認:
   - `/tmp/tests-restored-stable.json` = `total=312, passed=273, failed=39, errored=0`
