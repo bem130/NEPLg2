@@ -192,6 +192,24 @@ function humanizeDocName(outRel) {
     return base.replace(/^\d+[_-]?/, '').replace(/_/g, ' ');
 }
 
+function readFirstHeadingTitle(filePath) {
+    try {
+        const md = extractMarkdownForHtml(filePath);
+        if (!md) return null;
+        const lines = md.replace(/\r\n/g, '\n').split('\n');
+        for (const ln of lines) {
+            const t = ln.trim();
+            if (!t) continue;
+            const h = t.match(/^#\s+(.+?)\s*$/);
+            if (h) return h[1].trim();
+            break;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 function toPosix(p) {
     return String(p).replace(/\\/g, '/');
 }
@@ -224,6 +242,16 @@ function buildTocEntries(inputRoot, files) {
     }
 
     const known = new Set(allOutRels);
+    const outRelToTitle = new Map();
+    for (const f of files) {
+        const outRel = toPosix(path.relative(inputRoot, f))
+            .replace(/\.n\.md$/i, '.html')
+            .replace(/\.nepl$/i, '.html');
+        const title = readFirstHeadingTitle(f);
+        if (title && title.length > 0) {
+            outRelToTitle.set(outRel, title);
+        }
+    }
     const used = new Set();
     const entries = [];
     const text = fs.readFileSync(indexPath, 'utf8').replace(/\r\n/g, '\n');
@@ -243,7 +271,7 @@ function buildTocEntries(inputRoot, files) {
         const item = ln.match(/^(\s*)-\s+\[([^\]]+)\]\(([^)]+)\)\s*$/);
         if (!item) continue;
         const indent = item[1] || '';
-        const label = item[2].trim();
+        const indexLabel = item[2].trim();
         const rawHref = item[3].trim();
         if (!rawHref || /^https?:\/\//i.test(rawHref)) continue;
 
@@ -252,6 +280,7 @@ function buildTocEntries(inputRoot, files) {
             .replace(/\.n\.md$/i, '.html')
             .replace(/\.nepl$/i, '.html');
         if (!known.has(outRel)) continue;
+        const label = outRelToTitle.get(outRel) || indexLabel;
 
         const depth = Math.floor(indent.length / 2) + 1;
         entries.push({
@@ -265,9 +294,10 @@ function buildTocEntries(inputRoot, files) {
 
     const remaining = allOutRels.filter(r => !used.has(r));
     if (hasIndex) {
+        const indexLabel = outRelToTitle.get('00_index.html') || '00 index';
         entries.unshift({
             outRel: '00_index.html',
-            label: '00 index',
+            label: indexLabel,
             isGroup: false,
             depth: 0,
         });
@@ -281,7 +311,7 @@ function buildTocEntries(inputRoot, files) {
         for (const outRel of remaining) {
             entries.push({
                 outRel,
-                label: humanizeDocName(outRel),
+                label: outRelToTitle.get(outRel) || humanizeDocName(outRel),
                 isGroup: false,
                 depth: 1,
             });
