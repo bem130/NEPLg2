@@ -1034,3 +1034,59 @@
 ## コミット
 - `cb90042`
   - `Fix purity/effect checks and extend semantics resolve API`
+
+# 2026-02-10 作業メモ (sort テスト追加)
+## 実装
+- `tests/sort.n.md` を新規作成。
+  - `sort_quick` / `sort_merge` / `sort_heap` / `sort` / `sort_is_sorted` の 5 ケースを追加。
+  - いずれも `Vec<i32>` を生成してソート結果を数値化して検証する構成。
+
+## 実行結果
+- `node nodesrc/tests.js -i tests/sort.n.md -o /tmp/tests-sort-new.json -j 1`
+  - `total=5, passed=0, failed=5, errored=0`
+  - 共通エラー: `pure context cannot call impure function`
+  - 発生箇所: `stdlib/alloc/sort.nepl:117` (`sort_is_sorted` 内 `set ok false`)
+
+## 所見
+- `sort.nepl` 側の純粋性指定と実装 (`set` の使用) が矛盾しており、まずここを修正する必要がある。
+- ユーザー指摘どおり、ジェネリクス経路と sort の連携不具合として継続調査する。
+
+# 2026-02-10 作業メモ (if-layoutマーカー抽出の上流修正 + 全体再分類)
+## 実装
+- `nepl-core/src/parser.rs`
+  - `if:` / `while:` レイアウト解析で、`Stmt::ExprSemi` 行（例: `else ();`）もマーカー抽出対象に含めるよう修正。
+  - これにより `else` が通常識別子として誤解釈される経路を除去。
+- `tests/if.n.md`
+  - ネスト if の回帰確認ケースを 3 件追加。
+  - `node nodesrc/tests.js -i tests/if.n.md ...` で `58/58 pass` を確認。
+
+## 実行結果
+- 修正前全体: `total=336, passed=303, failed=33, errored=0`
+- parser修正後: `total=336, passed=311, failed=25, errored=0`
+- 改善量: `+8 pass`
+
+## 失敗分類（最新）
+- `tests/neplg2.n.md`: 7
+- `tests/sort.n.md`: 5
+- `tests/selfhost_req.n.md`: 4
+- `tests/pipe_operator.n.md`: 4
+- `tests/string.n.md`: 2
+- `tests/tuple_new_syntax.n.md`: 1
+- `tests/ret_f64_example.n.md`: 1
+- `tests/offside_and_indent_errors.n.md`: 1
+
+## 追加修正
+- `nepl-core/src/codegen_wasm.rs`
+  - 未具体化ジェネリック関数（型変数が残る関数）をWASM出力対象から除外するガードを追加。
+  - `unsupported function signature for wasm` の主塊を削減。
+- `stdlib/alloc/sort.nepl`
+  - `cast` 解決漏れを修正するため `#import "core/cast" as *` を追加。
+
+## 継続課題
+- `tests/sort.n.md` は `cast` 解決後に move-check 起因の失敗へ遷移。
+  - 現状 API (`sort_*: (Vec<T>)->()`) と move 規則の整合（再利用可否）を設計確認して修正が必要。
+- `pipe_operator` / `selfhost_req` は上流（式分割/所有権）起因が残るため、次段で parser/typecheck 境界から再調査する。
+
+## 再確認（コミット前）
+- `node nodesrc/tests.js -i tests -o /tmp/tests-all-before-commit.json -j 1`
+  - `total=336, passed=311, failed=25, errored=0`

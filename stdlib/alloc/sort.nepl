@@ -2,6 +2,7 @@
 
 #import "core/mem" as *
 #import "core/math" as *
+#import "core/cast" as *
 #import "alloc/vec" as *
 #import "core/field" as *
 
@@ -100,7 +101,7 @@ fn sort_swap <.T> <(Vec<.T>,i32,i32)*>()> (v, i, j):
 //
 // 注意(重要):
 // - strict lt を使うため、隣り合う要素で「右 < 左」があれば未ソート。
-fn sort_is_sorted <.T: Ord> <(Vec<.T>)->bool> (v):
+fn sort_is_sorted <.T: Ord> <(Vec<.T>)*>bool> (v):
     let n <i32> get v "len"
     if:
         le n 1

@@ -1050,3 +1050,77 @@ fn main <()->i32> ():
         else 1
     v
 ```
+
+## if_nested_double_level_mixed_layout
+
+neplg2:test
+ret: 42
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let v <i32> if:
+        cond true
+        then:
+            if:
+                cond lt 3 4
+                then 42
+                else 0
+        else:
+            if true 1 2
+    v
+```
+
+## if_nested_inline_then_set_else_unit
+
+neplg2:test
+ret: 1
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let mut x <i32> 0;
+    let v <i32> if:
+        true
+        then:
+            if:
+                lt 1 2
+                then set x 1
+                else ()
+            x
+        else:
+            0
+    v
+```
+
+## if_nested_else_branch_block_and_inline_mix
+
+neplg2:test
+ret: 9
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let v <i32> if:
+        false
+        then 1
+        else:
+            if:
+                cond false
+                then:
+                    7
+                else 9
+    v
+```

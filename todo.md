@@ -20,27 +20,33 @@
 - 関数値呼び出し (`func val`) の `_unknown` フォールバックを廃止し、WASM table + `call_indirect` で非キャプチャ高階関数を動作させる。
 - 関数リテラル系ケースは、non-capture 先行（table + `call_indirect`）で段階導入し、capture ありは closure conversion の設計後に実装する。
 
-4. tests 全体の再分類と上流優先解消
+4. sort/generics 連携不具合の調査
+- `tests/sort.n.md` を起点に、`stdlib/alloc/sort.nepl` の move-check 失敗（`use of moved value`）を解消する。
+- `sort_*` API (`(Vec<T>)->()`) と move 規則の整合を見直し、必要なら API/実装/テストを一貫して再設計する。
+- `stdlib/alloc/sort.nepl` がジェネリクス（`<.T: Ord>`）で動作する経路を `tests/generics.n.md` と合わせて確認する。
+
+5. tests 全体の再分類と上流優先解消
 - `node nodesrc/tests.js -i tests -o ...` の結果を stage 別に管理する。
 - parser 起因の失敗群（stack/indent/unexpected token）を先に潰し、次に typecheck/codegen を進める。
+- 最新分類（2026-02-10）: `total=336, passed=311, failed=25`
 
-5. ドキュメント運用
+6. ドキュメント運用
 - 実装進捗・結果・失敗分析は `note.md` のみに記録する。
 - `todo.md` は未完了タスクのみを保持し、完了項目は即時削除する。
 
-6. VSCode/LSP API 拡張（phase 2）
+7. VSCode/LSP API 拡張（phase 2）
 - `analyze_name_resolution` を拡張し、`import` / `alias` / `use` を跨いだ同名識別子の解決結果（候補一覧・最終選択・定義位置）を返す。
 - token 単位の型情報 API（`token -> inferred type / expression range / argument range`）の既存出力へ、import 先を含む定義ジャンプ情報を統合する。
 - 定義ジャンプ API を同一ファイルだけでなく import 先ファイルまで解決できる形で実装する。
 - Hover/Inlay Hint 用に「式範囲」「引数範囲」「推論型」「関連ドキュメントコメント」を返す API を追加する。
 
-7. 高階関数実装後のコンパイラエラー再整理
+8. 高階関数実装後のコンパイラエラー再整理
 - エラーをテーブルで一元管理する（短い数値ID + 詳細メッセージ本文）。
 - 診断生成側は原則 `ErrorId` を返し、表示層で `id -> 本文` を解決する構造に整理する。
 - 既存エラー文言の重複を統合し、同一原因に同一IDを付与する。
 - LSP/API からは `id` と展開済み本文の両方を取得できるようにする。
 
-8. 高階関数対応完了後の Web Playground 改良
+9. 高階関数対応完了後の Web Playground 改良
 - `web/src` の既存 JavaScript を TypeScript へ移行する。
 - VSCode 拡張機能で提供予定の情報（名前解決、型情報、式範囲、引数範囲、定義ジャンプ候補）を Playground 上でも表示できる UI/API を追加する。
 - `web/tests.html` でテスト詳細展開時に、該当ソースと解析 API の詳細（AST/resolve/semantics）を併記できるようにする。

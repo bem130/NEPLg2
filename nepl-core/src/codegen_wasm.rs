@@ -212,6 +212,9 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
         if let Some(sig) = wasm_sig(ctx, f.result, &f.params) {
             functions.push(FuncLower::user(f, sig));
         } else {
+            if should_skip_wasm_codegen_for_generic(ctx, f) {
+                continue;
+            }
             if crate::log::is_verbose() {
                 std::eprintln!(
                     "codegen: failed to lower signature for {}: result={:?}, params={:?}",
@@ -388,6 +391,63 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
     }
 }
 
+fn should_skip_wasm_codegen_for_generic(ctx: &TypeCtx, f: &HirFunction) -> bool {
+    let fty = ctx.get(ctx.resolve_id(f.func_ty));
+    if let TypeKind::Function {
+        type_params,
+        params,
+        result,
+        ..
+    } = fty
+    {
+        if !type_params.is_empty() {
+            return true;
+        }
+        if has_unbound_type_var(ctx, result) {
+            return true;
+        }
+        for p in params {
+            if has_unbound_type_var(ctx, p) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn has_unbound_type_var(ctx: &TypeCtx, ty: TypeId) -> bool {
+    let resolved = ctx.resolve_id(ty);
+    match ctx.get(resolved) {
+        TypeKind::Var(tv) => match tv.binding {
+            Some(next) => has_unbound_type_var(ctx, next),
+            None => true,
+        },
+        TypeKind::Enum { type_params, .. } => type_params.iter().any(|t| has_unbound_type_var(ctx, *t)),
+        TypeKind::Struct {
+            type_params, fields, ..
+        } => {
+            type_params.iter().any(|t| has_unbound_type_var(ctx, *t))
+                || fields.iter().any(|t| has_unbound_type_var(ctx, *t))
+        }
+        TypeKind::Tuple { items } => items.iter().any(|t| has_unbound_type_var(ctx, *t)),
+        TypeKind::Function {
+            type_params,
+            params,
+            result,
+            ..
+        } => {
+            type_params.iter().any(|t| has_unbound_type_var(ctx, *t))
+                || params.iter().any(|t| has_unbound_type_var(ctx, *t))
+                || has_unbound_type_var(ctx, result)
+        }
+        TypeKind::Apply { base, args } => {
+            has_unbound_type_var(ctx, base) || args.iter().any(|t| has_unbound_type_var(ctx, *t))
+        }
+        TypeKind::Box(inner) | TypeKind::Reference(inner, _) => has_unbound_type_var(ctx, inner),
+        _ => false,
+    }
+}
+
 // ---------------------------------------------------------------------
 // Function lowering
 // ---------------------------------------------------------------------
@@ -539,14 +599,31 @@ fn valtype(kind: &TypeKind) -> Option<ValType> {
     }
 }
 
-fn find_alloc_index(name_map: &BTreeMap<String, u32>) -> Option<u32> {
-    if let Some(idx) = name_map.get("alloc") {
+fn find_runtime_helper_index(name_map: &BTreeMap<String, u32>, base: &str) -> Option<u32> {
+    if let Some(idx) = name_map.get(base) {
         return Some(*idx);
     }
-    name_map
-        .iter()
-        .find(|(name, _)| name.starts_with("alloc__"))
-        .map(|(_, idx)| *idx)
+    let mut plain_prefix = String::from(base);
+    plain_prefix.push_str("__");
+    let mut namespaced_prefix = String::from("::");
+    namespaced_prefix.push_str(base);
+    namespaced_prefix.push_str("__");
+    let mut namespaced_exact = String::from("::");
+    namespaced_exact.push_str(base);
+
+    for (name, idx) in name_map {
+        if name.starts_with(&plain_prefix)
+            || name.contains(&namespaced_prefix)
+            || name.ends_with(&namespaced_exact)
+        {
+            return Some(*idx);
+        }
+    }
+    None
+}
+
+fn find_alloc_index(name_map: &BTreeMap<String, u32>) -> Option<u32> {
+    find_runtime_helper_index(name_map, "alloc")
 }
 
 fn find_function_value_index(name_map: &BTreeMap<String, u32>, base: &str) -> Option<u32> {

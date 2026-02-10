@@ -2006,7 +2006,11 @@ impl Parser {
         // Check if marker is inside a Block (for block-style markers like `else:`)
         for item in &expr.items {
             if let PrefixItem::Block(block, _) = item {
-                if let Some(Stmt::Expr(inner)) = block.items.first() {
+                let inner_opt = match block.items.first() {
+                    Some(Stmt::Expr(inner)) | Some(Stmt::ExprSemi(inner, _)) => Some(inner),
+                    _ => None,
+                };
+                if let Some(inner) = inner_opt {
                     if let Some(PrefixItem::Symbol(Symbol::Ident(id, _, _))) = inner.items.first() {
                         match id.name.as_str() {
                             "cond" => return Some(IfRole::Cond),
@@ -2041,7 +2045,11 @@ impl Parser {
         for i in 0..expr.items.len() {
             if let PrefixItem::Block(block, block_span) = &mut expr.items[i] {
                 if let Some(stmt) = block.items.first_mut() {
-                    if let Stmt::Expr(inner) = stmt {
+                    let inner_opt = match stmt {
+                        Stmt::Expr(inner) | Stmt::ExprSemi(inner, _) => Some(inner),
+                        _ => None,
+                    };
+                    if let Some(inner) = inner_opt {
                         if let Some(PrefixItem::Symbol(Symbol::Ident(id, _, _))) = inner.items.first() {
                             let role = if id.name == "cond" {
                                 IfRole::Cond
@@ -2084,7 +2092,11 @@ impl Parser {
         for i in 0..expr.items.len() {
             if let PrefixItem::Block(block, block_span) = &mut expr.items[i] {
                 if let Some(stmt) = block.items.first_mut() {
-                    if let Stmt::Expr(inner) = stmt {
+                    let inner_opt = match stmt {
+                        Stmt::Expr(inner) | Stmt::ExprSemi(inner, _) => Some(inner),
+                        _ => None,
+                    };
+                    if let Some(inner) = inner_opt {
                         if let Some(PrefixItem::Symbol(Symbol::Ident(id, _, _))) = inner.items.first() {
                             let role = if id.name == "cond" {
                                 WhileRole::Cond
@@ -2205,7 +2217,7 @@ impl Parser {
 
         for stmt in block.items {
             let mut is_marker = false;
-            if let Stmt::Expr(e) = &stmt {
+            if let Stmt::Expr(e) | Stmt::ExprSemi(e, _) = &stmt {
                 let mut e_copy = e.clone();
                 let role_opt = Self::take_role_from_expr(&mut e_copy);
                 if let Some(role) = role_opt {
@@ -2435,7 +2447,7 @@ impl Parser {
 
         for stmt in block.items {
             let mut is_marker = false;
-            if let Stmt::Expr(e) = &stmt {
+            if let Stmt::Expr(e) | Stmt::ExprSemi(e, _) = &stmt {
                 let mut e_copy = e.clone();
                 let role_opt = Self::take_while_role_from_expr(&mut e_copy);
                 if let Some(role) = role_opt {
