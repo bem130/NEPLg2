@@ -1265,3 +1265,17 @@
 ## 検証
 - `NO_COLOR=true trunk build`
   - 成功。
+
+# 2026-02-10 作業メモ (WASM stack size 引き上げ)
+## 実装
+- `.cargo/config.toml` の wasm ターゲット向け linker 引数を変更:
+  - `-zstack-size=2097152` (2MB) → `-zstack-size=16777216` (16MB)
+
+## 検証
+- `NO_COLOR=true trunk build`
+  - 成功。
+
+## 追加観測
+- `node nodesrc/analyze_source.js --stage parse -i examples/rpn.nepl -o /tmp/rpn-parse.json`
+  - `RangeError: Maximum call stack size exceeded` は継続。
+  - これは stack size 不足だけでなく、parser の再帰経路（`parse_prefix_expr` / `parse_block_after_colon` 周辺）に根因が残っていることを示す。
