@@ -20,7 +20,7 @@
 #import "alloc/vec" as *
 #import "core/option" as *
 #import "core/mem" as *
-#import "std/math" as *
+#import "core/math" as *
 #import "alloc/collections/stack" as *
 #import "core/field" as *
 
@@ -587,13 +587,14 @@ fn parse_inlines <(str)->Vec<Inline>> (s):
                             if:
                                 and eq closed true ge slash 0
                                 then:
-                                    let next_is_paren <bool>
-                                        if:
-                                            lt add j 1 n
-                                            then:
-                                                let nx <i32> load_u8 add s add 4 add j 1;
-                                                eq nx 40
-                                            else false
+                                    let mut next_is_paren <bool> false;
+                                    if:
+                                        lt add j 1 n
+                                        then:
+                                            let nx <i32> load_u8 add s add 4 add j 1;
+                                            set next_is_paren eq nx 40;
+                                            ()
+                                        else ()
 
                                     if:
                                         eq next_is_paren true

@@ -1,4 +1,23 @@
 # 状況メモ (2026-01-22)
+# 2026-02-10 作業メモ (parser 再帰暴走の停止保証)
+- ユーザー指示「コンパイラは必ず停止する」を受けて、`nepl-core/src/parser.rs` に停止保証を追加。
+- 実装内容（上流 parser 側）:
+  - 再帰深さ上限を追加:
+    - `MAX_PARSE_RECURSION_DEPTH = 2048`
+    - `enter_parse_context` / `leave_parse_context` を追加
+    - `parse_stmt` をコンテキスト管理下で実行し、過剰再帰時は診断を返して停止するよう変更
+  - 無進捗ループ検出を追加:
+    - `MAX_NO_PROGRESS_STEPS = 64`
+    - `parse_block_until_internal` / `parse_prefix_expr` / `parse_prefix_expr_until_tuple_delim` / `parse_prefix_expr_until_colon`
+    - 同一 `pos` が一定回数続いたら診断を出して 1 token 前進し、無限ループを回避
+- 検証:
+  - `NO_COLOR=true trunk build`: 成功
+  - `timeout 20s node nodesrc/analyze_source.js -i stdlib/nm/parser.nepl --stage parse`: `PARSE_EXIT:0`
+  - `node nodesrc/test_analysis_api.js`: `7/7 passed`
+- 補足:
+  - `stdlib/nm/parser.nepl` の parse で以前発生していた停止しない挙動は、少なくとも解析 API 経路では再現しなくなった。
+  - `examples/nm.nepl` 側は引き続き type/effect 不整合（`nm` ライブラリの pure/impure 署名ズレ等）が残っており、次段で修正継続。
+
 # 2026-02-10 作業メモ (tuple unit 要素の codegen 根本修正)
 - `tests/tuple_new_syntax.n.md::doctest#10` の根因を特定。
   - `Tuple:` に `()` が含まれると、WASM codegen が `unit` 要素を通常値として `LocalSet` しようとしてスタック不足になっていた。

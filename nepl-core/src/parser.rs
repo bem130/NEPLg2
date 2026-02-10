@@ -13,6 +13,9 @@ use crate::diagnostic::Diagnostic;
 use crate::lexer::{LexResult, Token, TokenKind};
 use crate::span::{FileId, Span};
 
+const MAX_PARSE_RECURSION_DEPTH: usize = 2048;
+const MAX_NO_PROGRESS_STEPS: usize = 64;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum IfRole {
     Cond,
@@ -61,6 +64,28 @@ struct Parser {
 }
 
 impl Parser {
+    /// 再帰的な文解析の深さを制限して、暴走を必ず停止させる。
+    fn enter_parse_context(&mut self, kind: &str, span: Span) -> bool {
+        if self.depth >= MAX_PARSE_RECURSION_DEPTH {
+            self.diagnostics.push(Diagnostic::error(
+                alloc::format!(
+                    "parser recursion limit exceeded while parsing {} (limit={})",
+                    kind, MAX_PARSE_RECURSION_DEPTH
+                ),
+                span,
+            ));
+            return false;
+        }
+        self.depth += 1;
+        true
+    }
+
+    fn leave_parse_context(&mut self) {
+        if self.depth > 0 {
+            self.depth -= 1;
+        }
+    }
+
     fn try_extract_lambda_params(item: &PrefixItem) -> Option<(Vec<Ident>, Span)> {
         fn expr_to_ident(expr: &PrefixExpr) -> Option<Ident> {
             if expr.items.len() != 1 {
@@ -178,8 +203,31 @@ impl Parser {
         let mut start_span = self.peek_span().unwrap_or_else(Span::dummy);
         // O(1) flag: tracks if the previous statement contains an 'if' expression
         let mut prev_has_if = false;
+        let mut last_pos = usize::MAX;
+        let mut no_progress_steps: usize = 0;
 
         while !self.is_end(&end) {
+            if self.pos == last_pos {
+                no_progress_steps += 1;
+                if no_progress_steps >= MAX_NO_PROGRESS_STEPS {
+                    let sp = self.peek_span().unwrap_or(start_span);
+                    self.diagnostics.push(Diagnostic::error(
+                        "parser made no progress while parsing block; recovering",
+                        sp,
+                    ));
+                    if self.is_eof() {
+                        break;
+                    }
+                    self.next();
+                    no_progress_steps = 0;
+                    last_pos = self.pos;
+                    continue;
+                }
+            } else {
+                last_pos = self.pos;
+                no_progress_steps = 0;
+            }
+
             if self.consume_if(&TokenKind::Newline) {
                 continue;
             }
@@ -379,7 +427,11 @@ impl Parser {
     }
 
     fn parse_stmt(&mut self) -> Option<Stmt> {
-        match self.peek_kind()? {
+        let ctx_span = self.peek_span().unwrap_or_else(Span::dummy);
+        if !self.enter_parse_context("statement", ctx_span) {
+            return None;
+        }
+        let out = (|| match self.peek_kind()? {
             TokenKind::DirEntry(_) => {
                 let (name, span) = match self.next() {
                     Some(tok) => {
@@ -528,7 +580,9 @@ impl Parser {
                 }
             }
             _ => self.parse_expr_stmt(),
-        }
+        })();
+        self.leave_parse_context();
+        out
     }
 
     fn parse_expr_stmt(&mut self) -> Option<Stmt> {
@@ -1007,8 +1061,31 @@ impl Parser {
         let mut trailing_semis: u32 = 0;
         let mut in_trailing_semis = false;
         let mut last_semi_span: Option<Span> = None;
+        let mut last_pos = usize::MAX;
+        let mut no_progress_steps: usize = 0;
 
         while !self.is_end(&TokenEnd::Line) || self.is_pipe_continuation() {
+            if self.pos == last_pos {
+                no_progress_steps += 1;
+                if no_progress_steps >= MAX_NO_PROGRESS_STEPS {
+                    let sp = self.peek_span().unwrap_or(start_span);
+                    self.diagnostics.push(Diagnostic::error(
+                        "parser made no progress while parsing expression; recovering",
+                        sp,
+                    ));
+                    if self.is_eof() {
+                        break;
+                    }
+                    self.next();
+                    no_progress_steps = 0;
+                    last_pos = self.pos;
+                    continue;
+                }
+            } else {
+                last_pos = self.pos;
+                no_progress_steps = 0;
+            }
+
             if self.is_pipe_continuation() && self.check(&TokenKind::Newline) {
                 self.next(); // skip newline to continue expression
             }
@@ -1485,10 +1562,33 @@ impl Parser {
         let mut trailing_semis: u32 = 0;
         let mut in_trailing_semis = false;
         let mut last_semi_span: Option<Span> = None;
+        let mut last_pos = usize::MAX;
+        let mut no_progress_steps: usize = 0;
 
         while !self.is_end(&TokenEnd::Line)
             && !matches!(self.peek_kind(), Some(TokenKind::Comma | TokenKind::RParen))
         {
+            if self.pos == last_pos {
+                no_progress_steps += 1;
+                if no_progress_steps >= MAX_NO_PROGRESS_STEPS {
+                    let sp = self.peek_span().unwrap_or(start_span);
+                    self.diagnostics.push(Diagnostic::error(
+                        "parser made no progress while parsing tuple expression; recovering",
+                        sp,
+                    ));
+                    if self.is_eof() {
+                        break;
+                    }
+                    self.next();
+                    no_progress_steps = 0;
+                    last_pos = self.pos;
+                    continue;
+                }
+            } else {
+                last_pos = self.pos;
+                no_progress_steps = 0;
+            }
+
             match self.peek_kind()? {
                 TokenKind::Semicolon => {
                     let sp = self.next().unwrap().span;
@@ -1816,7 +1916,30 @@ impl Parser {
         let mut items = Vec::new();
         let mut trailing_semis: u32 = 0;
         let mut last_semi_span: Option<Span> = None;
+        let mut last_pos = usize::MAX;
+        let mut no_progress_steps: usize = 0;
         while !self.is_end(&TokenEnd::Line) {
+            if self.pos == last_pos {
+                no_progress_steps += 1;
+                if no_progress_steps >= MAX_NO_PROGRESS_STEPS {
+                    let sp = self.peek_span().unwrap_or(start_span);
+                    self.diagnostics.push(Diagnostic::error(
+                        "parser made no progress while parsing match scrutinee; recovering",
+                        sp,
+                    ));
+                    if self.is_eof() {
+                        break;
+                    }
+                    self.next();
+                    no_progress_steps = 0;
+                    last_pos = self.pos;
+                    continue;
+                }
+            } else {
+                last_pos = self.pos;
+                no_progress_steps = 0;
+            }
+
             if matches!(self.peek_kind(), Some(TokenKind::Colon)) {
                 break;
             }
