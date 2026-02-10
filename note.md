@@ -1294,3 +1294,24 @@
 
 ## 検証
 - `NO_COLOR=true trunk build` 成功。
+
+# 2026-02-10 作業メモ (Hover/定義ジャンプ改善 + エディタ機能ガイド)
+## 実装
+- `web/src/language/neplg2/neplg2-provider.ts`
+  - ハイライト不自然化の要因だった token を正規化:
+    - `Indent` / `Dedent` / `Eof` / `Newline` を描画トークンから除外
+    - `span.end <= span.start` の不正範囲 token を除外
+  - Hover / 定義ジャンプのフォールバック強化:
+    - `semantics` 由来 token 解決が取れない場合、`name_resolution.references` から
+      最小 span の参照を探索して情報表示/ジャンプを実施。
+  - whitespace 表示を既定で無効化（`highlightWhitespace: false`）し、
+    読みやすさを優先。
+- `web/index.html`
+  - ヘッダに `Editor` ガイドボタンを追加。
+- `web/src/main.ts`
+  - `Editor` ボタン押下で、Hover/定義ジャンプ/補完/コメント切替など
+    操作方法をポップアップ表示する処理を追加。
+
+## 検証
+- `NO_COLOR=true trunk build`
+  - 成功。

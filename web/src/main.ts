@@ -83,6 +83,7 @@ function start_app() {
     const runBtn = document.getElementById('run-button') as HTMLButtonElement;
     const compileBtn = document.getElementById('compile-button') as HTMLButtonElement;
     const helpBtn = document.getElementById('help-button') as HTMLButtonElement;
+    const editorHelpBtn = document.getElementById('editor-help-button') as HTMLButtonElement;
     const clearBtn = document.getElementById('clear-button') as HTMLButtonElement;
     const stopBtn = document.getElementById('stop-button') as HTMLButtonElement;
 
@@ -240,6 +241,25 @@ function start_app() {
     runBtn.addEventListener('click', runCurrentFile);
     compileBtn.addEventListener('click', compileCurrentFile);
     helpBtn.addEventListener('click', () => executeCommand('help'));
+    editorHelpBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const rect = editorHelpBtn.getBoundingClientRect();
+        const guide = [
+            'Editor機能ガイド',
+            '',
+            'Hover: シンボル上にマウス停止で型/定義情報を表示',
+            '定義ジャンプ: F12',
+            '参照ハイライト: カーソル移動で同名参照を強調',
+            '補完: 入力中に候補表示、Enter/Tabで確定',
+            'コメント切替: Ctrl+/',
+            '単語移動: Ctrl+← / Ctrl+→',
+            '',
+            '注: parser が失敗する入力では Hover/定義ジャンプは',
+            'lex ベースのフォールバック情報のみ表示されます。',
+        ].join('\n');
+        editor.domUI.showPopup(guide, rect.left, rect.bottom + 8);
+        editor.focus();
+    });
     clearBtn.addEventListener('click', () => terminal.clear());
     stopBtn.addEventListener('click', () => {
         if (terminal.shell && terminal.shell.interrupt) {

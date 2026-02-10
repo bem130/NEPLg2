@@ -56,7 +56,7 @@ class NEPLg2LanguageProvider {
                 foldingRanges: [],
                 semanticTokens: [],
                 inlayHints: [],
-                config: { highlightWhitespace: true, highlightIndent: true },
+                config: { highlightWhitespace: false, highlightIndent: true },
             };
             this.lastUpdatePayload = payload;
             this.updateCallback(payload);
@@ -146,7 +146,7 @@ class NEPLg2LanguageProvider {
             foldingRanges,
             semanticTokens,
             inlayHints,
-            config: { highlightWhitespace: true, highlightIndent: true },
+            config: { highlightWhitespace: false, highlightIndent: true },
         };
         this.lastUpdatePayload = payload;
         this.updateCallback(payload);
@@ -212,9 +212,16 @@ class NEPLg2LanguageProvider {
     _buildEditorTokens() {
         const lexTokens = Array.isArray(this.lex?.tokens) ? this.lex.tokens : [];
         const tokenRes = Array.isArray(this.semantics?.token_resolution) ? this.semantics.token_resolution : [];
+        const skipKinds = new Set(['Indent', 'Dedent', 'Eof', 'Newline']);
+        const normalized = [];
 
-        return lexTokens.map((tok, idx) => {
+        for (let idx = 0; idx < lexTokens.length; idx++) {
+            const tok = lexTokens[idx];
+            const kind = String(tok?.kind || '');
+            if (skipKinds.has(kind)) continue;
             const span = this._spanFrom(tok) || { startIndex: 0, endIndex: 0 };
+            if (!Number.isFinite(span.startIndex) || !Number.isFinite(span.endIndex)) continue;
+            if (span.endIndex <= span.startIndex) continue;
             let t = this._tokenType(String(tok.kind || ''), tok.debug);
 
             const tr = tokenRes[idx];
@@ -224,12 +231,15 @@ class NEPLg2LanguageProvider {
                     t = 'function';
                 }
             }
-            return {
+            normalized.push({
                 startIndex: span.startIndex,
                 endIndex: span.endIndex,
                 type: t,
-            };
-        });
+            });
+        }
+
+        normalized.sort((a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex);
+        return normalized;
     }
 
     _buildSemanticTokens() {
@@ -368,11 +378,20 @@ class NEPLg2LanguageProvider {
 
     async getHoverInfo(index) {
         const insight = this.getTokenInsight(index);
-        if (!insight) return null;
+        if (!insight) {
+            const fallbackRef = this._referenceAt(index);
+            if (!fallbackRef) return null;
+            const resolvedDef = fallbackRef.resolved_def_id != null ? this.definitionById.get(fallbackRef.resolved_def_id) : null;
+            const lines = [fallbackRef.name];
+            if (resolvedDef) lines.push(`def: ${resolvedDef.kind} ${resolvedDef.name}`);
+            return { content: lines.join('\n'), startIndex: Number(fallbackRef.span.start ?? index), endIndex: Number(fallbackRef.span.end ?? index + 1) };
+        }
 
         const lines = [];
         const hit = this._tokenAt(index);
-        const raw = String(hit?.token?.value || hit?.token?.debug || '').trim();
+        const rawFromToken = String(hit?.token?.value || hit?.token?.debug || '').trim();
+        const rawFromSource = hit?.span ? this.text.slice(hit.span.startIndex, hit.span.endIndex).trim() : '';
+        const raw = rawFromToken || rawFromSource || String(insight.tokenKind || '');
         if (raw) lines.push(raw);
         if (insight.inferredType) lines.push(`type: ${insight.inferredType}`);
         if (insight.exprSpan) lines.push(`expr: ${this._formatSpan(insight.exprSpan)}`);
@@ -388,8 +407,17 @@ class NEPLg2LanguageProvider {
 
     async getDefinitionLocation(index) {
         const insight = this.getTokenInsight(index);
-        if (!insight || !insight.resolvedDefinition || !insight.resolvedDefinition.span) return null;
-        return { targetIndex: Number(insight.resolvedDefinition.span.start ?? 0) };
+        if (insight && insight.resolvedDefinition && insight.resolvedDefinition.span) {
+            return { targetIndex: Number(insight.resolvedDefinition.span.start ?? 0) };
+        }
+        const fallbackRef = this._referenceAt(index);
+        if (fallbackRef && fallbackRef.resolved_def_id != null) {
+            const def = this.definitionById.get(fallbackRef.resolved_def_id);
+            if (def?.span) {
+                return { targetIndex: Number(def.span.start ?? 0) };
+            }
+        }
+        return null;
     }
 
     async getDefinitionCandidates(index) {
@@ -420,6 +448,27 @@ class NEPLg2LanguageProvider {
             }
         }
         return out;
+    }
+
+    _referenceAt(index) {
+        const refs = Array.isArray(this.resolve?.references) ? this.resolve.references : [];
+        let best = null;
+        let bestWidth = Number.MAX_SAFE_INTEGER;
+        for (const r of refs) {
+            const sp = r?.span;
+            if (!sp) continue;
+            const s = Number(sp.start ?? -1);
+            const e = Number(sp.end ?? -1);
+            if (s < 0 || e <= s) continue;
+            if (index >= s && index < e) {
+                const w = e - s;
+                if (w < bestWidth) {
+                    best = r;
+                    bestWidth = w;
+                }
+            }
+        }
+        return best;
     }
 
     _wordAt(index) {
