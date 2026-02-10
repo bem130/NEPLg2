@@ -70,3 +70,30 @@ fn main <()*> ()> ():
     assert_eq_i32 107 score 7
     test_checked "if with block then else"
 ```
+
+## `cond` / `then` / `else` の順序を固定する
+
+`if:` 形式では、可読性のためにも `cond` → `then` → `else` の順序を崩さない運用を推奨します。  
+`then` だけ式、`else` だけ block のような混在も可能です。
+
+neplg2:test
+```neplg2
+| #entry main
+| #indent 4
+| #target wasi
+|
+| #import "core/math" as *
+| #import "std/test" as *
+|
+fn adjust <(i32)->i32> (x):
+    if:
+        cond lt x 0
+        then add x 100
+        else:
+            sub x 100
+|
+fn main <()*> ()> ():
+    assert_eq_i32 95 adjust -5
+    assert_eq_i32 -95 adjust 5
+    test_checked "if order and mixed layout"
+```

@@ -1,4 +1,19 @@
 # 状況メモ (2026-01-22)
+# 2026-02-10 作業メモ (競プロカタログ拡張 + kpモジュール整理)
+- チュートリアルに競プロ定番の参照章を追加し、重要アルゴリズム/データ構造のサンプルを 20 項目で列挙した。
+  - 追加: `tutorials/getting_started/27_competitive_algorithms_catalog.n.md`
+  - 目次反映: `tutorials/getting_started/00_index.n.md`
+- `stdlib/kp` を機能別に整理し、新規モジュールを追加した。
+  - `stdlib/kp/kpsearch.nepl`
+    - `lower_bound_i32`, `upper_bound_i32`, `contains_i32`
+  - `stdlib/kp/kpprefix.nepl`
+    - `prefix_build_i32`, `prefix_range_sum_i32`
+  - `stdlib/kp/kpdsu.nepl`
+    - `dsu_new`, `dsu_find`, `dsu_unite`, `dsu_same`, `dsu_size`, `dsu_free`
+  - `stdlib/kp/kpfenwick.nepl`
+    - `fenwick_new`, `fenwick_add`, `fenwick_sum_prefix`, `fenwick_sum_range`, `fenwick_free`
+- すべて `//:` のドキュメントコメント形式で記述し、各モジュールに最小 doctest を付与した。
+
 # 2026-02-10 作業メモ (関数単位レビュー: 機械置換の後処理)
 - ユーザー指示に基づき、`vec/stack/list` を関数ごとに再確認し、機械置換由来の不整合を手修正した。
 - 主な修正:

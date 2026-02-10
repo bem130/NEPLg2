@@ -127,3 +127,48 @@ fn main <()*>()> ():
 
     dealloc data mul len 4;
 ```
+
+## 二分探索版 `lower_bound`（本番向け）
+
+本番では `O(log N)` の二分探索版を使います。  
+不変条件は「`[0, lo)` は `x` 未満、`[hi, len)` は `x` 以上」です。
+
+neplg2:test[stdio, normalize_newlines]
+stdout: "1 1 4\n"
+```neplg2
+| #entry main
+| #indent 4
+| #target wasi
+|
+| #import "core/math" as *
+| #import "core/mem" as *
+| #import "std/stdio" as *
+|
+fn lower_bound_i32_bin <(i32,i32,i32)*>i32> (data, len, x):
+    let mut lo <i32> 0;
+    let mut hi <i32> len;
+    while lt lo hi:
+        do:
+            let mid <i32> i32_div_s add lo hi 2;
+            let mv <i32> load_i32 add data mul mid 4;
+            if lt mv x:
+                then set lo add mid 1
+                else set hi mid;
+    lo
+|
+fn main <()*>()> ():
+    let len <i32> 4;
+    let data <i32> alloc mul len 4;
+    store_i32 add data 0 1;
+    store_i32 add data 4 3;
+    store_i32 add data 8 3;
+    store_i32 add data 12 7;
+
+    print_i32 lower_bound_i32_bin data len 2;
+    print " ";
+    print_i32 lower_bound_i32_bin data len 3;
+    print " ";
+    println_i32 lower_bound_i32_bin data len 8;
+
+    dealloc data mul len 4
+```

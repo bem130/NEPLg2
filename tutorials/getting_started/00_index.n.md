@@ -2,9 +2,9 @@
 
 このチュートリアルは、NEPLg2 を初めて触る人向けに「仕様どおりに動く最小コード」を段階的に学ぶための資料です。
 
-章立ては Rust Book のように「概念章」と「実践章」を交互に置く方針を参考にしています。
+章立ては「概念章」と「実践章」を交互に置く方針で構成しています。
 短い章で前提を積み上げ、途中で小さな実践章を挟んで手を動かしながら進みます。
-後半は Elm / Lean のチュートリアルで重視される「関数中心」「型で仕様を表す」流れを取り入れています。
+後半は「関数中心」「型で仕様を表す」流れを重視した構成にしています。
 
 NEPLg2 の中核は次の 3 つです。
 
@@ -13,6 +13,19 @@ NEPLg2 の中核は次の 3 つです。
 - オフサイドルール: インデントでブロックや複数行引数を表現します。
 
 各ページに `neplg2:test` のコード例を埋め込み、`nodesrc/cli.js` のテスト実行でそのまま検証できます。
+
+## 学び方（推奨）
+
+1. Part 1 を通して「前置記法」「式指向」「インデント規則」に慣れる。
+2. Part 2 で `if` / `while` / `import` の書式差を整理する。
+3. Part 3 で小さな課題を実装し、`neplg2:test` で回帰確認する。
+4. Part 4〜5 で再利用しやすい関数設計へ寄せる。
+5. Part 6 で競技プログラミング向けの定石パターンを繰り返す。
+
+実行確認の基本手順:
+- `trunk build`
+- `node nodesrc/tests.js -i tutorials/getting_started -o tests/output/tutorials_getting_started.json -j 1`
+- JSON の `summary` と `top_issues` を確認
 
 ## 学習ロードマップ
 
@@ -33,7 +46,7 @@ NEPLg2 の中核は次の 3 つです。
 - [10 ミニプロジェクト: FizzBuzz](10_project_fizzbuzz.n.md)
 - [11 テスト駆動で関数を固める](11_testing_workflow.n.md)
 
-### Part 4: 関数型・型駆動スタイル（Elm / Lean 風）
+### Part 4: 関数型・型駆動スタイル
 - [12 純粋関数の合成（状態を持たない変換）](12_pure_function_pipeline.n.md)
 - [13 型で失敗を表す（Option / Result の徹底）](13_type_driven_error_modeling.n.md)
 - [14 等式的リファクタと回帰テスト](14_refactor_with_properties.n.md)
@@ -51,3 +64,6 @@ NEPLg2 の中核は次の 3 つです。
 - [22 競プロ向け I/O と演算](22_competitive_io_and_arith.n.md)
 - [23 sort と二分探索の型](23_competitive_sort_and_search.n.md)
 - [24 DP の基本パターン](24_competitive_dp_basics.n.md)
+- [25 prefix sum と two pointers](25_competitive_prefixsum_twopointers.n.md)
+- [26 グラフ探索（BFS）](26_competitive_graph_bfs.n.md)
+- [27 競プロ定番 20 サンプル集](27_competitive_algorithms_catalog.n.md)

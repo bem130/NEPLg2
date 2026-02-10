@@ -22,6 +22,35 @@ fn main <()*> ()> ():
     test_checked "prefix arithmetic"
 ```
 
+## 複合式と「優先順位」の考え方
+
+NEPLg2 では中置記法のような優先順位（`*` が `+` より先など）を前提にしません。
+代わりに、**関数名が先にあり、必要な引数個数を左から順に取る** ことで式が決まります。
+
+- `mul add 2 3 sub 10 4` は
+  - `mul (add 2 3) (sub 10 4)` と同じ
+  - `5 * 6 = 30`
+- `sub mul 5 add 1 1 3` は
+  - `sub (mul 5 (add 1 1)) 3` と同じ
+  - `10 - 3 = 7`
+
+neplg2:test
+```neplg2
+| #entry main
+| #indent 4
+| #target wasi
+|
+| #import "core/math" as *
+| #import "std/test" as *
+|
+fn main <()*> ()> ():
+    let a <i32> mul add 2 3 sub 10 4
+    let b <i32> sub mul 5 add 1 1 3
+    assert_eq_i32 30 a
+    assert_eq_i32 7 b
+    test_checked "prefix composition without precedence"
+```
+
 ## 変数定義（`let`）と型注釈（`<T>`）
 
 `let name <type> expr` の形で定義できます。
