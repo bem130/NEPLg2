@@ -406,21 +406,107 @@ impl Parser {
             TokenKind::KwFn => self.parse_fn(),
             TokenKind::KwTrait => self.parse_trait(),
             TokenKind::KwImpl => self.parse_impl(),
-            _ => {
-                let expr = self.parse_prefix_expr()?;
-                // semicolons are collected into PrefixExpr.trailing_semis
-                let semi_span = if expr.trailing_semis > 0 {
-                    expr.trailing_semi_span
+            TokenKind::KwLet => {
+                if let Some(def) = self.parse_let_fn_def() {
+                    Some(def)
                 } else {
-                    None
-                };
-                if expr.trailing_semis > 0 {
-                    Some(Stmt::ExprSemi(expr, semi_span))
-                } else {
-                    Some(Stmt::Expr(expr))
+                    self.parse_expr_stmt()
                 }
             }
+            _ => self.parse_expr_stmt(),
         }
+    }
+
+    fn parse_expr_stmt(&mut self) -> Option<Stmt> {
+        let expr = self.parse_prefix_expr()?;
+        let semi_span = if expr.trailing_semis > 0 {
+            expr.trailing_semi_span
+        } else {
+            None
+        };
+        if expr.trailing_semis > 0 {
+            Some(Stmt::ExprSemi(expr, semi_span))
+        } else {
+            Some(Stmt::Expr(expr))
+        }
+    }
+
+    fn infer_signature_from_params(param_count: usize) -> TypeExpr {
+        let mut params = Vec::new();
+        for _ in 0..param_count {
+            params.push(TypeExpr::Label(None));
+        }
+        TypeExpr::Function {
+            params,
+            result: Box::new(TypeExpr::Label(None)),
+            effect: Effect::Pure,
+        }
+    }
+
+    fn parse_param_list(&mut self) -> Option<Vec<Ident>> {
+        self.expect(&TokenKind::LParen)?;
+        let mut params = Vec::new();
+        if !self.check(&TokenKind::RParen) {
+            loop {
+                let (pname, pspan) = self.expect_ident()?;
+                params.push(Ident {
+                    name: pname,
+                    span: pspan,
+                });
+                if self.consume_if(&TokenKind::Comma) {
+                    continue;
+                }
+                break;
+            }
+        }
+        self.expect(&TokenKind::RParen)?;
+        Some(params)
+    }
+
+    fn parse_let_fn_def(&mut self) -> Option<Stmt> {
+        let saved_pos = self.pos;
+        let saved_diags_len = self.diagnostics.len();
+
+        if !self.consume_if(&TokenKind::KwLet) {
+            return None;
+        }
+        let (name, nspan) = self.expect_ident()?;
+
+        let signature = if self.consume_if(&TokenKind::LAngle) {
+            let sig = self.parse_type_expr()?;
+            self.expect(&TokenKind::RAngle)?;
+            Some(sig)
+        } else {
+            None
+        };
+
+        if !self.check(&TokenKind::LParen) {
+            self.pos = saved_pos;
+            self.diagnostics.truncate(saved_diags_len);
+            return None;
+        }
+        let params = self.parse_param_list()?;
+        if !self.consume_if(&TokenKind::Colon) {
+            self.pos = saved_pos;
+            self.diagnostics.truncate(saved_diags_len);
+            return None;
+        }
+        let body = self.parse_block_after_colon()?;
+
+        let fn_body = match body.items.first() {
+            Some(Stmt::Wasm(wb)) if body.items.len() == 1 => FnBody::Wasm(wb.clone()),
+            _ => FnBody::Parsed(body),
+        };
+
+        Some(Stmt::FnDef(FnDef {
+            vis: Visibility::Private,
+            name: Ident { name, span: nspan },
+            type_params: Vec::new(),
+            signature: signature
+                .unwrap_or_else(|| Self::infer_signature_from_params(params.len())),
+            params,
+            body: fn_body,
+        }))
     }
 
     fn parse_struct(&mut self) -> Option<Stmt> {
@@ -519,9 +605,13 @@ impl Parser {
         };
 
 
-        if matches!(self.peek_kind(), Some(TokenKind::Ident(_)))
-            && matches!(self.peek_kind_at(1), Some(TokenKind::Semicolon))
+        if (matches!(self.peek_kind(), Some(TokenKind::Ident(_)))
+            && matches!(self.peek_kind_at(1), Some(TokenKind::Semicolon)))
+            || (matches!(self.peek_kind(), Some(TokenKind::At))
+                && matches!(self.peek_kind_at(1), Some(TokenKind::Ident(_)))
+                && matches!(self.peek_kind_at(2), Some(TokenKind::Semicolon)))
         {
+            self.consume_if(&TokenKind::At);
             let target_tok = self.expect_ident()?;
             let target = Ident {
                 name: target_tok.0,
@@ -554,26 +644,33 @@ impl Parser {
             }
         }
 
-        self.expect(&TokenKind::LAngle)?;
-        let signature = self.parse_type_expr()?;
-        self.expect(&TokenKind::RAngle)?;
+        let signature = if self.consume_if(&TokenKind::LAngle) {
+            let sig = self.parse_type_expr()?;
+            self.expect(&TokenKind::RAngle)?;
+            sig
+        } else {
+            Self::infer_signature_from_params(0)
+        };
 
-        self.expect(&TokenKind::LParen)?;
-        let mut params = Vec::new();
-        if !self.check(&TokenKind::RParen) {
-            loop {
-                let (pname, pspan) = self.expect_ident()?;
-                params.push(Ident {
-                    name: pname,
-                    span: pspan,
-                });
-                if self.consume_if(&TokenKind::Comma) {
-                    continue;
+        let params = self.parse_param_list()?;
+        let signature = match signature {
+            TypeExpr::Function {
+                params: p,
+                result,
+                effect,
+            } if p.is_empty() => {
+                let mut inferred_params = Vec::new();
+                for _ in 0..params.len() {
+                    inferred_params.push(TypeExpr::Label(None));
                 }
-                break;
+                TypeExpr::Function {
+                    params: inferred_params,
+                    result,
+                    effect,
+                }
             }
-        }
-        self.expect(&TokenKind::RParen)?;
+            other => other,
+        };
         self.expect(&TokenKind::Colon)?;
         let body = self.parse_block_after_colon()?;
 
@@ -1050,9 +1147,23 @@ impl Parser {
                     items.push(PrefixItem::Match(m, sp));
                     break;
                 }
-                TokenKind::Ident(_) => {
+                TokenKind::At | TokenKind::Ident(_) => {
+                    let at_span = if self.check(&TokenKind::At) {
+                        Some(self.next().unwrap().span)
+                    } else {
+                        None
+                    };
                     let tok = self.next().unwrap();
-                    let name = if let TokenKind::Ident(n) = tok.kind { n } else { unreachable!() };
+                    let name = if let TokenKind::Ident(n) = tok.kind {
+                        n
+                    } else {
+                        let sp = at_span.unwrap_or(tok.span);
+                        self.diagnostics.push(Diagnostic::error(
+                            "expected identifier after '@'",
+                            sp,
+                        ));
+                        continue;
+                    };
                     let mut full = name;
                     let mut end_span = tok.span;
                     let mut type_args = Vec::new();
@@ -1411,9 +1522,23 @@ impl Parser {
                     items.push(PrefixItem::Match(m, sp));
                     break;
                 }
-                TokenKind::Ident(_) => {
+                TokenKind::At | TokenKind::Ident(_) => {
+                    let at_span = if self.check(&TokenKind::At) {
+                        Some(self.next().unwrap().span)
+                    } else {
+                        None
+                    };
                     let tok = self.next().unwrap();
-                    let name = if let TokenKind::Ident(n) = tok.kind { n } else { unreachable!() };
+                    let name = if let TokenKind::Ident(n) = tok.kind {
+                        n
+                    } else {
+                        let sp = at_span.unwrap_or(tok.span);
+                        self.diagnostics.push(Diagnostic::error(
+                            "expected identifier after '@'",
+                            sp,
+                        ));
+                        continue;
+                    };
                     let mut full = name;
                     let mut end_span = tok.span;
                     // Path separators: mod::item
@@ -1601,9 +1726,23 @@ impl Parser {
                         }
                     }
                 }
-                TokenKind::Ident(_) => {
+                TokenKind::At | TokenKind::Ident(_) => {
+                    let at_span = if self.check(&TokenKind::At) {
+                        Some(self.next().unwrap().span)
+                    } else {
+                        None
+                    };
                     let tok = self.next().unwrap();
-                    let name = if let TokenKind::Ident(n) = tok.kind { n } else { unreachable!() };
+                    let name = if let TokenKind::Ident(n) = tok.kind {
+                        n
+                    } else {
+                        let sp = at_span.unwrap_or(tok.span);
+                        self.diagnostics.push(Diagnostic::error(
+                            "expected identifier after '@'",
+                            sp,
+                        ));
+                        continue;
+                    };
                     let mut full_name = name;
                     let mut span = tok.span;
                     

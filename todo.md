@@ -1,38 +1,3 @@
-2026-02-10 trunk build復旧後の優先実装計画
-
-現状把握
-- `NO_COLOR=true trunk build` は成功する
-- compiler artifact は `web/dist/nepl-web-*_bg.wasm` と `web/dist/nepl-web-*.js` に出力される
-- `node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests-after-trunk.json -j 4` は `total=326, errored=326`
-- 主因は `nodesrc/util_paths.js` の探索順序で、存在確認だけで `dist/` を選び、artifact 未存在のまま `nodesrc/compiler_loader.js` が失敗すること
-
-実装計画
-1. dist探索の根本修正
-- `candidateDistDirs` の「存在する最初のディレクトリ」を採用する方式をやめる
-- `compiler_loader` 側で `nepl-web-*.js` と `*_bg.wasm` のペアが存在するディレクトリのみ採用する
-- 複数候補がある場合は `web/dist` と `NEPL_DIST` を優先し、理由をエラーメッセージに出す
-
-2. テスト導線の強化
-- `nodesrc/tests.js` に `--dist` 指定時の検証ログを追加し、どの候補を採用したかをJSONに記録
-- `--dist` 未指定時に候補全滅なら、探索した全パスをまとめて表示して調査時間を減らす
-
-3. 回帰テストの追加
-- `dist/` は存在するがartifactなし、`web/dist/` にartifactあり、という今回の再現ケースを固定テスト化
-- `NEPL_DIST` 指定時の優先挙動をテスト化
-
-4. 手順とCI整合
-- `doc/testing.md` と workflow の実行例を、`trunk build` 後に `nodesrc/tests.js` が確実に同じ出力先を参照する書き方へ統一
-- 必要なら workflow 側で `--dist web/dist` を明示
-
-完了条件
-- `trunk build` 直後に `node nodesrc/tests.js ...` を `--dist` 省略で実行しても `errored=0`
-- 失敗が出る場合はテスト内容由来の `failed` のみになること
-
-進捗 (2026-02-10)
-- 1. dist探索の根本修正: 完了
-- 2. テスト導線の強化: 完了（`resolved_dist_dirs` をJSON出力に追加、stdoutに `dist.resolved` を表示）
-- 実測: `node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests-after-fix.json -j 4` で `passed=250, failed=76, errored=0`
-
 2026-02-10 コンパイラ再設計計画 (抜本改善)
 
 現状計測
@@ -122,6 +87,23 @@
   - `nepl-core/src/compiler.rs` を段階関数（typecheck/move_check/codegen）へ分割
   - 公開APIと主要型へ日本語docコメントを追加
   - 挙動は維持（tests件数は同一）
+
+実装進捗 (2026-02-10 追記: namespace再設計開始)
+- 上流修正:
+  - lexer: `@` と 16進整数 (`0x...`) の字句化を実装
+  - parser: `@ident` の式受理、`fn alias @target;` の受理、`let name (..):` を `fn` 糖衣として受理、`fn name (..):` の型注釈省略を受理
+- 計測:
+  - `node nodesrc/tests.js -i tests -o /tmp/tests-only-after-upstream-fix.json -j 4`
+  - `total=309, passed=242, failed=67, errored=0`（+2）
+  - `tests/functions.n.md` は追加ケース込みで `total=16, passed=5, failed=11`
+- 根本課題（namespace）:
+  - `plan.md` の「fn は let の糖衣」「巻き上げは mut でない let に適用」と、現状の `Env` 実装（値/関数/別スコープの混在）の責務が一致していない
+  - nested `fn/let` と alias、entry 解決、関数値呼び出しが同一名前空間で衝突しやすい
+- 次タスク（namespace再設計フェーズ1）:
+  1. `TypeCheck` の解決責務を分離し、`ValueNs`（変数）と `CallableNs`（関数・alias）を明示的に分離
+  2. 巻き上げは `let(non-mut)/fn` のみを `CallableNs` に事前登録し、`set/let mut` は `ValueNs` のみで扱う
+  3. entry は「解決できた」だけでなく「コード生成対象として実在する」ことを検証し、欠落時は compile error にする
+  4. nested `fn/let` を HIR へ落とすまでの最小経路（先にトップレベル相当化か、明示的 unsupported 診断か）を決めて不整合を止める
 
 
 === ここまで編集自由 ===

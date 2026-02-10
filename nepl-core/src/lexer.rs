@@ -31,6 +31,7 @@ pub enum TokenKind {
     RAngle,
     Arrow(Effect), // -> (Pure) or *> (Impure)
     PathSep,       // ::
+    At,            // @
     Dot,
     Ampersand, // &
     Star,      // *
@@ -597,6 +598,10 @@ impl<'a> LexState<'a> {
                         i += 1;
                     }
                 }
+                b'@' => {
+                    self.push_token(TokenKind::At, offset + i, offset + i + 1);
+                    i += 1;
+                }
                 b'<' => {
                     self.push_token(TokenKind::LAngle, offset + i, offset + i + 1);
                     i += 1;
@@ -731,6 +736,22 @@ impl<'a> LexState<'a> {
                 }
                 b'0'..=b'9' => {
                     let start = i;
+                    if bytes[i] == b'0'
+                        && i + 1 < bytes.len()
+                        && (bytes[i + 1] == b'x' || bytes[i + 1] == b'X')
+                    {
+                        i += 2;
+                        while i < bytes.len() && hex_val(bytes[i]).is_some() {
+                            i += 1;
+                        }
+                        let lexeme = &text[start..i];
+                        self.push_token(
+                            TokenKind::IntLiteral(lexeme.to_string()),
+                            offset + start,
+                            offset + i,
+                        );
+                        continue;
+                    }
                     let mut has_dot = false;
                     while i < bytes.len() {
                         match bytes[i] {

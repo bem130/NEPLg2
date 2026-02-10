@@ -1,4 +1,27 @@
 # 状況メモ (2026-01-22)
+# 2026-02-10 作業メモ (namespace再設計着手)
+- plan.md の再確認:
+  - `fn` は `let` の糖衣構文
+  - 定義の巻き上げは `mut` でない `let` のみ（`fn` も含む）
+- 実装・計測:
+  - lexer に `@` と `0x...` を追加
+  - parser に `@ident` / `fn alias @target;` / `let` 関数糖衣 / `fn` 型注釈省略を追加
+  - `NO_COLOR=true trunk build` は成功
+  - `node nodesrc/tests.js -i tests -o /tmp/tests-only-after-upstream-fix.json -j 4`:
+    - `total=309, passed=242, failed=67, errored=0`
+  - `node nodesrc/tests.js -i tests/functions.n.md -o /tmp/functions-only-after-entry-fix.json -j 1`:
+    - `total=16, passed=5, failed=11, errored=0`
+- 観測した根本問題:
+  - 名前解決が `Env` の単一テーブルに寄りすぎており、変数と関数値、alias、entry 解決が同一経路で干渉する
+  - nested `fn` を block で宣言できても、HirFunction に落ちず `unknown function` へ繋がる
+  - entry は解決できても codegen 側に関数本体が無い場合に `_start` が出力されない（実行時エラー化）
+- 直近の修正:
+  - top-level `fn alias` の登録を関数本体チェック前に移動
+  - 型未確定関数の symbol は暫定で unmangled 名を使うよう変更（entry/mangleずれ緩和）
+- 次ステップ:
+  - namespace を `ValueNs` / `CallableNs` に分離し、巻き上げを仕様準拠に寄せる
+  - entry の「解決済みかつ生成済み」検証を追加して compile error 化する
+
 # 2026-02-03 作業メモ (wasm32 build)
 - wasm32-unknown-unknown での `cargo test --no-run` が getrandom の js feature なしで失敗していたため、`nepl-core` の wasm32 用 dev-dependencies に `getrandom` (features=["js"]) を追加した。
 - `cargo test --target wasm32-unknown-unknown --no-run --all --all-features` を実行し、Cargo.lock を更新してビルドが通ることを確認。

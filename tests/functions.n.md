@@ -19,6 +19,46 @@ fn main <()->i32> ():
     inc 41
 ```
 
+## function_basic_def_and_call_let
+
+fnは関数専用のlet(糖衣構文)であるから、fnの代わりにletを用いてよい
+
+neplg2:test
+ret: 42
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+let inc <(i32)->i32> (x):
+    add x 1
+
+let main <()->i32> ():
+    inc 41
+```
+
+## function_basic_def_and_call_without_type_annotation
+
+推論できるならば型注釈は不要
+
+neplg2:test
+ret: 42
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+let inc (x):
+    add x 1
+
+fn main ():
+    inc 41
+```
+
 ## function_nested
 
 neplg2:test
@@ -202,6 +242,27 @@ fn main <()->i32> ():
 
     // ネストされた関数が外側のスコープの変数 'y' をキャプチャする
     fn add_y <(i32)->i32> (x):
+        add x y
+
+    add_y 5
+```
+
+## function_nested_capture_variable_let
+
+neplg2:test
+ret: 15
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let y <i32> 10;
+
+    // ネストされた関数が外側のスコープの変数 'y' をキャプチャする
+    let add_y (x):
         add x y
 
     add_y 5

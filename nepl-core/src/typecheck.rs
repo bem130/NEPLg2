@@ -632,7 +632,11 @@ pub fn typecheck(
                 if crate::log::is_verbose() {
                     std::eprintln!("typecheck: registering global func {}", f.name.name);
                 }
-                let symbol = mangle_function_symbol(&f.name.name, ty, &ctx);
+                let symbol = if type_contains_unbound_var(&ctx, ty) {
+                    f.name.name.clone()
+                } else {
+                    mangle_function_symbol(&f.name.name, ty, &ctx)
+                };
                 env.insert_global(Binding {
                     name: f.name.name.clone(),
                     ty,
@@ -653,6 +657,76 @@ pub fn typecheck(
                     f.name.span,
                 ));
             }
+        }
+    }
+
+    for alias in &fn_aliases {
+        if enums.contains_key(&alias.name.name) || structs.contains_key(&alias.name.name) {
+            diagnostics.push(Diagnostic::error(
+                "name already used by another item",
+                alias.name.span,
+            ));
+            continue;
+        }
+        let targets = env.lookup_all(&alias.target.name);
+        if targets.is_empty() {
+            diagnostics.push(Diagnostic::error(
+                "alias target not found",
+                alias.target.span,
+            ));
+            continue;
+        }
+        let mut target_infos = Vec::new();
+        for target in targets {
+            let (symbol, effect, arity, builtin, bounds) = match &target.kind {
+                BindingKind::Func {
+                    symbol,
+                    effect,
+                    arity,
+                    builtin,
+                    type_param_bounds,
+                } => (
+                    symbol.clone(),
+                    *effect,
+                    *arity,
+                    *builtin,
+                    type_param_bounds.clone(),
+                ),
+                _ => {
+                    diagnostics.push(Diagnostic::error(
+                        "alias target is not a function",
+                        alias.target.span,
+                    ));
+                    continue;
+                }
+            };
+            target_infos.push((target.ty, symbol, effect, arity, builtin, bounds));
+        }
+        for (ty, symbol, effect, arity, builtin, bounds) in target_infos {
+            if let Some(existing) = env.lookup(&alias.name.name) {
+                if !matches!(existing.kind, BindingKind::Func { .. }) {
+                    diagnostics.push(Diagnostic::error(
+                        "name already used by another item",
+                        alias.name.span,
+                    ));
+                    break;
+                }
+            }
+            env.remove_duplicate_func(&alias.name.name, ty, &ctx);
+            env.insert_global(Binding {
+                name: alias.name.name.clone(),
+                ty,
+                mutable: false,
+                defined: true,
+                moved: false,
+                kind: BindingKind::Func {
+                    symbol,
+                    effect,
+                    arity,
+                    builtin,
+                    type_param_bounds: bounds,
+                },
+            });
         }
     }
 
@@ -899,76 +973,6 @@ pub fn typecheck(
         }
     }
 
-    for alias in fn_aliases {
-        if enums.contains_key(&alias.name.name) || structs.contains_key(&alias.name.name) {
-            diagnostics.push(Diagnostic::error(
-                "name already used by another item",
-                alias.name.span,
-            ));
-            continue;
-        }
-        let targets = env.lookup_all(&alias.target.name);
-        if targets.is_empty() {
-            diagnostics.push(Diagnostic::error(
-                "alias target not found",
-                alias.target.span,
-            ));
-            continue;
-        }
-        let mut target_infos = Vec::new();
-        for target in targets {
-            let (symbol, effect, arity, builtin, bounds) = match &target.kind {
-                BindingKind::Func {
-                    symbol,
-                    effect,
-                    arity,
-                    builtin,
-                    type_param_bounds,
-                } => (
-                    symbol.clone(),
-                    *effect,
-                    *arity,
-                    *builtin,
-                    type_param_bounds.clone(),
-                ),
-                _ => {
-                    diagnostics.push(Diagnostic::error(
-                        "alias target is not a function",
-                        alias.target.span,
-                    ));
-                    continue;
-                }
-            };
-            target_infos.push((target.ty, symbol, effect, arity, builtin, bounds));
-        }
-        for (ty, symbol, effect, arity, builtin, bounds) in target_infos {
-            if let Some(existing) = env.lookup(&alias.name.name) {
-                if !matches!(existing.kind, BindingKind::Func { .. }) {
-                    diagnostics.push(Diagnostic::error(
-                        "name already used by another item",
-                        alias.name.span,
-                    ));
-                    break;
-                }
-            }
-            env.remove_duplicate_func(&alias.name.name, ty, &ctx);
-            env.insert_global(Binding {
-                name: alias.name.name.clone(),
-                ty,
-                mutable: false,
-                defined: true,
-                moved: false,
-                kind: BindingKind::Func {
-                    symbol,
-                    effect,
-                    arity,
-                    builtin,
-                    type_param_bounds: bounds,
-                },
-            });
-        }
-    }
-
     let resolved_entry = if let Some(name) = entry {
         let bindings = env.lookup_all(&name);
         let mut func_symbols = Vec::new();
@@ -1107,8 +1111,13 @@ fn check_function(
 
     env.pop_scope();
     if diag_out.is_empty() {
+        let out_name = if type_contains_unbound_var(ctx, func_ty) {
+            f.name.name.clone()
+        } else {
+            mangle_function_symbol(&f.name.name, func_ty, ctx)
+        };
         Ok(HirFunction {
-            name: mangle_function_symbol(&f.name.name, func_ty, ctx),
+            name: out_name,
             func_ty, // assigned here
             params: f
                 .params
