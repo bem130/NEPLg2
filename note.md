@@ -1718,3 +1718,30 @@
   - `total: 152, passed: 152, failed: 0, errored: 0`
 - `node nodesrc/cli.js -i tutorials/getting_started -o html_play=dist/tutorials/getting_started`
   - `00`〜`24` の HTML を再生成。
+
+# 2026-02-10 作業メモ (kp: kpread+kpwrite 相互作用の根本修正)
+## 症状
+- `kpread` と `kpwrite` を同時に import したケースで、stdout に `\0` が大量混入し、`13\n` などが `13\0...` に壊れていた。
+- `kpwrite` 単体テストは通るため、出力単体ではなく import/名前解決経路の相互作用が原因だった。
+
+## 根因
+- `stdlib/kp/kpread.nepl` が不要な `#import "alloc/string" as *` を持っており、`len` などの識別子汚染を引き起こしていた。
+- 同時 import 時に `kpwrite` 側の `len` ローカル束縛と衝突し、長さ計算/書き込み長が壊れていた。
+
+## 実装
+- `stdlib/kp/kpread.nepl`
+  - 不要な `#import "alloc/string" as *` を削除。
+- `stdlib/kp/kpwrite.nepl`
+  - `len` 局所変数を `write_len` に改名（`writer_flush` / `writer_ensure` / `writer_put_u8` / `writer_write_str`）。
+  - 名前衝突時の再発耐性を強化。
+- `nepl-core/tests/kp.rs`
+  - `kpwrite` 単体切り分けテストを追加。
+  - `kpread_buffer_bytes_debug` を scanner 12B ヘッダ仕様に合わせて更新。
+
+## 検証
+- `cargo test --test kp -- --nocapture`
+  - `12 passed, 0 failed`
+- `NO_COLOR=true trunk build`
+  - 成功
+- `node nodesrc/tests.js -i tests/kp.n.md -o tests/output/kp_current.json -j 1`
+  - `total=116, passed=116, failed=0, errored=0`

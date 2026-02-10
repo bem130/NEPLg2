@@ -142,6 +142,51 @@ fn main <()*>()> ():
 }
 
 #[test]
+fn kpwrite_i64_stdout_no_input() {
+    let src = r#"
+#entry main
+#indent 4
+#target wasi
+
+#import "core/math" as *
+#import "kp/kpwrite" as *
+
+fn main <()*>()> ():
+    let w <i32> writer_new;
+    writer_write_i64 w i64_extend_i32_u 13;
+    writer_writeln w;
+    writer_flush w;
+    writer_free w;
+"#;
+    let out = run_main_capture_stdout_with_stdin(src, b"");
+    assert_eq!(out, "13\n");
+}
+
+#[test]
+fn kpwrite_i32_lines_no_input() {
+    let src = r#"
+#entry main
+#indent 4
+#target wasi
+
+#import "kp/kpwrite" as *
+
+fn main <()*>()> ():
+    let w <i32> writer_new;
+    writer_write_i32 w 6;
+    writer_writeln w;
+    writer_write_i32 w 14;
+    writer_writeln w;
+    writer_write_i32 w 15;
+    writer_writeln w;
+    writer_flush w;
+    writer_free w;
+"#;
+    let out = run_main_capture_stdout_with_stdin(src, b"");
+    assert_eq!(out, "6\n14\n15\n");
+}
+
+#[test]
 fn kpread_scanner_header_debug() {
     let src = r#"
 #entry main
@@ -195,12 +240,6 @@ fn main <()*>()> ():
     let sc <i32> scanner_new;
     let buf <i32> load_i32 sc;
     let len <i32> load_i32 add sc 4;
-    let iov <i32> load_i32 add sc 12;
-    let np <i32> load_i32 add sc 16;
-    let iov_ptr <i32> load_i32 add sc 20;
-    let iov_len <i32> load_i32 add sc 24;
-    let nread_last <i32> load_i32 add sc 28;
-    let len_init <i32> load_i32 add sc 32;
     let p0 <i32> buf;
     let p1 <i32> add buf 1;
     let p2 <i32> add buf 2;
@@ -213,18 +252,6 @@ fn main <()*>()> ():
     print " ";
     print_i32 len;
     print " ";
-    print_i32 iov;
-    print " ";
-    print_i32 np;
-    print " ";
-    print_i32 iov_ptr;
-    print " ";
-    print_i32 iov_len;
-    print " ";
-    print_i32 nread_last;
-    print " ";
-    print_i32 len_init;
-    print " ";
     print_i32 b0;
     print " ";
     print_i32 b1;
@@ -235,24 +262,14 @@ fn main <()*>()> ():
     let out = run_main_capture_stdout_with_stdin(src, b"10 20 30\n");
     println!("local_scanner_new_logic_debug out={out:?}");
     let parts: Vec<&str> = out.trim().split(' ').collect();
-    assert_eq!(parts.len(), 12, "unexpected buffer debug format: {out}");
+    assert_eq!(parts.len(), 6, "unexpected buffer debug format: {out}");
     let sc: i32 = parts[0].parse().expect("sc parse");
     let buf: i32 = parts[1].parse().expect("buf parse");
     let len: i32 = parts[2].parse().expect("len parse");
-    let iov: i32 = parts[3].parse().expect("iov parse");
-    let np: i32 = parts[4].parse().expect("np parse");
-    let iov_ptr: i32 = parts[5].parse().expect("iov_ptr parse");
-    let iov_len: i32 = parts[6].parse().expect("iov_len parse");
-    let nread_last: i32 = parts[7].parse().expect("nread_last parse");
-    let len_init: i32 = parts[8].parse().expect("len_init parse");
-    let b0: i32 = parts[9].parse().expect("b0 parse");
-    let b1: i32 = parts[10].parse().expect("b1 parse");
-    let b2: i32 = parts[11].parse().expect("b2 parse");
+    let b0: i32 = parts[3].parse().expect("b0 parse");
+    let b1: i32 = parts[4].parse().expect("b1 parse");
+    let b2: i32 = parts[5].parse().expect("b2 parse");
     assert!(sc > 0 && buf > 0, "pointers should be non-zero: {out}");
-    assert!(iov > 0 && np > 0, "temp pointers should be non-zero: {out}");
-    assert!(iov_ptr > 0 && iov_len > 0, "iovec values should be non-zero: {out}");
-    assert!(nread_last >= 0, "nread should be non-negative: {out}");
-    assert_eq!(len_init, 0, "len should initialize to 0: {out}");
     assert!(len > 0, "input should be read: {out}");
     assert_eq!(b0, 49, "expected '1' at first byte: {out}");
     assert_eq!(b1, 48, "expected '0' at second byte: {out}");

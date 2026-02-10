@@ -94,10 +94,10 @@ fn writer_free <(i32)*>()> (w):
 fn writer_flush <(i32)*>()> (w):
     let buf <i32> load_i32 w;
     let cap <i32> load_i32 add w 4;
-    let len <i32> load_i32 add w 8;
+    let write_len <i32> load_i32 add w 8;
 
     if:
-        or eq len 0 le cap 0
+        or eq write_len 0 le cap 0
         then:
             ()
         else:
@@ -109,13 +109,13 @@ fn writer_flush <(i32)*>()> (w):
 
             while eq done 0:
                 if:
-                    ge off len
+                    ge off write_len
                     then:
                         set done 1;
                         ()
                     else:
                         store_i32 iov add buf off;
-                        store_i32 add iov 4 sub len off;
+                        store_i32 add iov 4 sub write_len off;
                         store_i32 nw 0;
 
                         let errno <i32> fd_write 1 iov 1 nw;
@@ -144,9 +144,9 @@ fn writer_flush <(i32)*>()> (w):
 //: - need が cap を超えるケースは呼び出し側で避けてください（この版は最小実装）。
 fn writer_ensure <(i32,i32)*>()> (w, need):
     let cap <i32> load_i32 add w 4;
-    let len <i32> load_i32 add w 8;
+    let write_len <i32> load_i32 add w 8;
     if:
-        le add len need cap
+        le add write_len need cap
         then:
             ()
         else:
@@ -166,9 +166,9 @@ fn writer_put_u8 <(i32,i32)*>()> (w, b):
         else:
             writer_ensure w 1;
             let buf <i32> load_i32 w;
-            let len <i32> load_i32 add w 8;
-            store_u8 add buf len b;
-            store_i32 add w 8 add len 1;
+            let write_len <i32> load_i32 add w 8;
+            store_u8 add buf write_len b;
+            store_i32 add w 8 add write_len 1;
             ()
 
 //: writer_writeln: 改行 '\n' を出力する
@@ -191,16 +191,16 @@ fn writer_write_str <(i32,str)*>()> (w, s):
             writer_ensure w n;
 
             let buf <i32> load_i32 w;
-            let len <i32> load_i32 add w 8;
+            let write_len <i32> load_i32 add w 8;
             let src <i32> add s 4;
 
             let mut i <i32> 0;
             while lt i n:
                 do:
-                    store_u8 add buf add len i load_u8 add src i;
+                    store_u8 add buf add write_len i load_u8 add src i;
                     set i add i 1;
 
-            store_i32 add w 8 add len n;
+            store_i32 add w 8 add write_len n;
             ()
 
 //: writer_write_i32: i32 を 10 進で出力する（alloc なし）
