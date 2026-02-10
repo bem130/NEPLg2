@@ -72,10 +72,26 @@ fn build_attached_source_comment(entry_path: &str, source: &str) -> String {
     out
 }
 
-fn decorate_wat(mut wat: String, attach_source: bool, entry_path: &str, source: &str) -> String {
+fn build_nepl_wat_debug_comment(debug_text: &str) -> String {
+    if debug_text.trim().is_empty() {
+        return String::new();
+    }
+    let mut out = String::new();
+    out.push_str(";; ---- BEGIN NEPL WAT DEBUG ----\n");
+    for line in debug_text.lines() {
+        out.push_str(";; ");
+        out.push_str(line);
+        out.push('\n');
+    }
+    out.push_str(";; ---- END NEPL WAT DEBUG ----\n\n");
+    out
+}
+
+fn decorate_wat(wat: String, attach_source: bool, entry_path: &str, source: &str, wat_debug: &str) -> String {
     // WAT/wasmprinter の本文の前に、コンパイラ情報＋（必要なら）入力ソースを差し込む
     let mut out = String::new();
     out.push_str(&build_wat_header_comments());
+    out.push_str(&build_nepl_wat_debug_comment(wat_debug));
     if attach_source {
         out.push_str(&build_attached_source_comment(entry_path, source));
     }
@@ -83,16 +99,23 @@ fn decorate_wat(mut wat: String, attach_source: bool, entry_path: &str, source: 
     out
 }
 
-fn make_wat(wasm: &[u8], attach_source: bool, entry_path: &str, source: &str) -> Result<String, JsValue> {
+fn make_wat(
+    wasm: &[u8],
+    attach_source: bool,
+    entry_path: &str,
+    source: &str,
+    wat_debug: &str,
+) -> Result<String, JsValue> {
     let wat = print_bytes(wasm).map_err(|e| JsValue::from_str(&e.to_string()))?;
-    Ok(decorate_wat(wat, attach_source, entry_path, source))
+    Ok(decorate_wat(wat, attach_source, entry_path, source, wat_debug))
 }
 
 fn make_wat_min(wasm: &[u8], attach_source: bool, entry_path: &str, source: &str) -> Result<String, JsValue> {
-    // 先に minify してからコメントを足す（minify がコメントを削除するため）
+    // wat-min では圧縮後に、既存の compiler/source コメントのみ付加する。
+    // NEPL 詳細注釈は付与しない。
     let wat = print_bytes(wasm).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let min = minify_wat_text(&wat);
-    Ok(decorate_wat(min, attach_source, entry_path, source))
+    Ok(decorate_wat(min, attach_source, entry_path, source, ""))
 }
 
 // main.rs の wat-min と同等の単純 minify：
@@ -1146,7 +1169,7 @@ fn compile_outputs_impl(
     attach_source: bool,
 ) -> Result<JsValue, JsValue> {
     // 1) wasm を生成
-    let wasm = compile_wasm_with_entry(entry_path, source, vfs)
+    let compiled = compile_wasm_with_entry(entry_path, source, vfs)
         .map_err(|msg| JsValue::from_str(&msg))?;
 
     // 2) 依頼された形式に応じて結果を詰める
@@ -1156,15 +1179,21 @@ fn compile_outputs_impl(
     for e in emit_list {
         match e.as_str() {
             "wasm" => {
-                let bytes = Uint8Array::from(wasm.as_slice());
+                let bytes = Uint8Array::from(compiled.wasm.as_slice());
                 Reflect::set(&obj, &JsValue::from_str("wasm"), &bytes.into())?;
             }
             "wat" => {
-                let wat = make_wat(&wasm, attach_source, entry_path, source)?;
+                let wat = make_wat(
+                    &compiled.wasm,
+                    attach_source,
+                    entry_path,
+                    source,
+                    &compiled.wat_comments,
+                )?;
                 Reflect::set(&obj, &JsValue::from_str("wat"), &JsValue::from_str(&wat))?;
             }
             "wat-min" => {
-                let wat_min = make_wat_min(&wasm, attach_source, entry_path, source)?;
+                let wat_min = make_wat_min(&compiled.wasm, attach_source, entry_path, source)?;
                 Reflect::set(&obj, &JsValue::from_str("wat-min"), &JsValue::from_str(&wat_min))?;
             }
             other => {
@@ -1180,12 +1209,14 @@ fn compile_outputs_impl(
 #[wasm_bindgen]
 pub fn compile_source(source: &str) -> Result<Vec<u8>, JsValue> {
     compile_wasm_with_entry("/virtual/entry.nepl", source, None)
+        .map(|a| a.wasm)
         .map_err(|msg| JsValue::from_str(&msg))
 }
 
 #[wasm_bindgen]
 pub fn compile_source_with_vfs(entry_path: &str, source: &str, vfs: JsValue) -> Result<Vec<u8>, JsValue> {
     compile_wasm_with_entry(entry_path, source, Some(vfs))
+        .map(|a| a.wasm)
         .map_err(|msg| JsValue::from_str(&msg))
 }
 
@@ -1208,16 +1239,22 @@ pub fn compile_outputs_with_vfs(
 
 #[wasm_bindgen]
 pub fn compile_to_wat_min(source: &str, attach_source: bool) -> Result<String, JsValue> {
-    let wasm = compile_wasm_with_entry("/virtual/entry.nepl", source, None)
+    let compiled = compile_wasm_with_entry("/virtual/entry.nepl", source, None)
         .map_err(|msg| JsValue::from_str(&msg))?;
-    make_wat_min(&wasm, attach_source, "/virtual/entry.nepl", source)
+    make_wat_min(&compiled.wasm, attach_source, "/virtual/entry.nepl", source)
 }
 
 #[wasm_bindgen]
 pub fn compile_to_wat(source: &str) -> Result<String, JsValue> {
-    let wasm = compile_wasm_with_entry("/virtual/entry.nepl", source, None)
+    let compiled = compile_wasm_with_entry("/virtual/entry.nepl", source, None)
         .map_err(|msg| JsValue::from_str(&msg))?;
-    make_wat(&wasm, false, "/virtual/entry.nepl", source)
+    make_wat(
+        &compiled.wasm,
+        false,
+        "/virtual/entry.nepl",
+        source,
+        &compiled.wat_comments,
+    )
 }
 
 #[wasm_bindgen]
@@ -1268,10 +1305,20 @@ pub fn compile_test(name: &str) -> Result<Vec<u8>, JsValue> {
         .map(|(_, src)| *src)
         .ok_or_else(|| JsValue::from_str("unknown test"))?;
     compile_wasm_with_entry(&format!("/virtual/tests/{name}.nepl"), src, None)
+        .map(|a| a.wasm)
         .map_err(|msg| JsValue::from_str(&msg))
 }
 
-fn compile_wasm_with_entry(entry_path: &str, source: &str, vfs: Option<JsValue>) -> Result<Vec<u8>, String> {
+struct CompiledWasm {
+    wasm: Vec<u8>,
+    wat_comments: String,
+}
+
+fn compile_wasm_with_entry(
+    entry_path: &str,
+    source: &str,
+    vfs: Option<JsValue>,
+) -> Result<CompiledWasm, String> {
     let stdlib_root = PathBuf::from("/stdlib");
     let mut sources = stdlib_sources(&stdlib_root);
     
@@ -1321,7 +1368,10 @@ fn compile_wasm_with_entry(entry_path: &str, source: &str, vfs: Option<JsValue>)
         },
     )
     .map_err(|e| render_core_error(e, &loaded.source_map))?;
-    Ok(artifact.wasm)
+    Ok(CompiledWasm {
+        wasm: artifact.wasm,
+        wat_comments: artifact.wat_comments,
+    })
 }
 
 fn render_core_error(err: CoreError, sm: &SourceMap) -> String {

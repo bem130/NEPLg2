@@ -850,3 +850,27 @@
 ## 次アクション
 - `other=22` の内訳をさらに分解し、parser分割着手時の優先順を確定する。
 - `tests/block_single_line.n.md` と `tests/block_if_semantics.n.md` の失敗を最初の修正対象にする。
+
+# 2026-02-10 作業メモ (WAT可読性改善とdoctest要約強化)
+## 実装
+- `nepl-core/src/compiler.rs`
+  - `CompilationArtifact` に `wat_comments: String` を追加。
+  - HIR と型情報から関数シグネチャ・引数・ローカルの情報を収集し、WATデバッグコメント文字列を生成する処理を追加。
+- `nepl-cli/src/main.rs`
+  - `wat` 出力時のみ、`wat_comments` を `;;` コメントとして先頭に付加する処理を追加。
+  - `wat-min` は従来どおり minify を維持しつつ、`attached-source` と compiler 情報コメントのみ残す動作に整理。
+- `nepl-web/src/lib.rs`
+  - `compile_wasm_with_entry` が `wasm` と `wat_comments` を返せるように変更。
+  - `compile_to_wat` はデバッグコメントを付与、`compile_to_wat_min` はデバッグコメントを除外して compiler/source コメントのみ付与。
+- `nodesrc/tests.js`
+  - 標準出力の `top_issues.error` を ANSI 除去・短文化（先頭3行/最大240文字）し、要点のみ表示するよう変更。
+  - Node warning の標準出力ノイズを抑制。
+
+## テスト実行結果
+- `NO_COLOR=true trunk build`: success
+- `node nodesrc/tests.js -i tests -o dist/tests.json`
+  - `total=312, passed=278, failed=34, errored=0`
+  - 失敗は主に高階関数系と compile_fail 期待差分で、実行基盤エラーはなし
+
+## 補足
+- `wat` は詳細NEPLデバッグコメントを含み、`wat-min` は詳細コメントを除外しつつ `attached-source` と compiler 情報コメントを保持する方針を確認済み。

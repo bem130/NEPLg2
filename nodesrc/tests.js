@@ -15,6 +15,10 @@ const os = require('node:os');
 const { parseFile } = require('./parser');
 const { createRunner, runSingle } = require('./run_test');
 
+// doctest 集計の標準出力は要約重視にする。
+process.removeAllListeners('warning');
+process.on('warning', () => {});
+
 function parseArgs(argv) {
     const inputs = [];
     let outPath = '';
@@ -200,8 +204,23 @@ function pickTopIssues(results, limit) {
         id: r.id,
         status: r.status,
         phase: r.phase || null,
-        error: r.error || null,
+        error: summarizeError(r.error),
     }));
+}
+
+function stripAnsi(s) {
+    return String(s || '').replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function summarizeError(raw) {
+    if (!raw) return null;
+    const text = stripAnsi(raw)
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+    if (text.length === 0) return null;
+    return text.slice(0, 3).join(' | ').slice(0, 240);
 }
 
 function collectResolvedDistDirs(results) {

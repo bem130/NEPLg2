@@ -250,7 +250,13 @@ fn execute(cli: Cli) -> Result<()> {
             None
         };
 
-        write_outputs(&base, &artifact.wasm, &emits, attached_source.as_ref())?;
+        write_outputs(
+            &base,
+            &artifact.wasm,
+            &artifact.wat_comments,
+            &emits,
+            attached_source.as_ref(),
+        )?;
     }
     if cli.run {
         let mut wasm_args = Vec::new();
@@ -469,6 +475,22 @@ fn prepend_attached_source_as_wat_comment(wat: &str, attached: &AttachedSource) 
     out
 }
 
+fn prepend_nepl_wat_debug_as_comment(wat: &str, debug_text: &str) -> String {
+    if debug_text.trim().is_empty() {
+        return wat.to_string();
+    }
+    let mut out = String::new();
+    out.push_str(";; ---- BEGIN NEPL WAT DEBUG ----\n");
+    for line in debug_text.lines() {
+        out.push_str(";; ");
+        out.push_str(line);
+        out.push('\n');
+    }
+    out.push_str(";; ---- END NEPL WAT DEBUG ----\n\n");
+    out.push_str(wat);
+    out
+}
+
 fn output_path(base: &Path, emit: Emit) -> PathBuf {
     match emit {
         Emit::Wasm => base.with_extension("wasm"),
@@ -478,7 +500,13 @@ fn output_path(base: &Path, emit: Emit) -> PathBuf {
     }
 }
 
-fn write_outputs(base: &Path, wasm: &[u8], emits: &BTreeSet<Emit>, attached_source: Option<&AttachedSource>) -> Result<()> {
+fn write_outputs(
+    base: &Path,
+    wasm: &[u8],
+    wat_debug: &str,
+    emits: &BTreeSet<Emit>,
+    attached_source: Option<&AttachedSource>,
+) -> Result<()> {
     if emits.contains(&Emit::Wasm) {
         let path = output_path(base, Emit::Wasm);
         write_bytes(&path, wasm)?;
@@ -486,6 +514,7 @@ fn write_outputs(base: &Path, wasm: &[u8], emits: &BTreeSet<Emit>, attached_sour
     if emits.contains(&Emit::Wat) {
         let path = output_path(base, Emit::Wat);
         let mut wat_text = make_wat_pretty(wasm)?;
+        wat_text = prepend_nepl_wat_debug_as_comment(&wat_text, wat_debug);
         if let Some(attached) = attached_source {
             wat_text = prepend_attached_source_as_wat_comment(&wat_text, attached);
         }
@@ -495,7 +524,6 @@ fn write_outputs(base: &Path, wasm: &[u8], emits: &BTreeSet<Emit>, attached_sour
     if emits.contains(&Emit::WatMin) {
         let path = output_path(base, Emit::WatMin);
         let mut wat_text = make_wat_min(wasm)?;
-        // minify の後にコメントを付加しないと、minify がコメントを消してしまう
         if let Some(attached) = attached_source {
             wat_text = prepend_attached_source_as_wat_comment(&wat_text, attached);
         }
@@ -1342,7 +1370,7 @@ mod tests {
         emits.insert(Emit::Wat);
         emits.insert(Emit::WatMin);
 
-        write_outputs(&base, wasm, &emits, None).expect("write outputs");
+        write_outputs(&base, wasm, "", &emits, None).expect("write outputs");
 
         let wasm_path = base.with_extension("wasm");
         let wat_path = base.with_extension("wat");

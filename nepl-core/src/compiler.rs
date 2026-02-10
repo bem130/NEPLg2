@@ -1,6 +1,9 @@
 #![no_std]
 extern crate std;
 
+use alloc::collections::BTreeMap;
+use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::ast;
@@ -80,6 +83,9 @@ impl Default for CompileOptions {
 #[derive(Debug, Clone)]
 pub struct CompilationArtifact {
     pub wasm: Vec<u8>,
+    /// WAT 向けの補助情報（関数・ローカル変数・型）。
+    /// 先頭コメントとして付与することを想定し、プレーンテキストで保持する。
+    pub wat_comments: String,
 }
 
 /// 解析済みモジュールを最終成果物へ変換する。
@@ -197,7 +203,128 @@ fn emit_wasm(
         ));
         return Err(CoreError::from_diagnostics(diagnostics));
     }
-    Ok(CompilationArtifact { wasm: bytes })
+    Ok(CompilationArtifact {
+        wasm: bytes,
+        wat_comments: build_wat_comments(types, hir_module),
+    })
+}
+
+/// WAT 先頭に付与するための補助情報を生成する。
+///
+/// 含める情報:
+/// - 関数名
+/// - 関数シグネチャ
+/// - 引数名と型
+/// - `let` で導入されたローカル変数名と型
+fn build_wat_comments(types: &crate::types::TypeCtx, module: &crate::hir::HirModule) -> String {
+    let mut out = String::new();
+    out.push_str("NEPL WAT debug info\n");
+    for func in &module.functions {
+        out.push_str(&format!(
+            "func {} : {}\n",
+            func.name,
+            types.type_to_string(func.func_ty)
+        ));
+        if !func.params.is_empty() {
+            out.push_str("  params:\n");
+            for p in &func.params {
+                out.push_str(&format!("    {} : {}\n", p.name, types.type_to_string(p.ty)));
+            }
+        }
+        let mut locals: BTreeMap<String, crate::types::TypeId> = BTreeMap::new();
+        if let crate::hir::HirBody::Block(block) = &func.body {
+            collect_block_locals(block, &mut locals);
+        }
+        if !locals.is_empty() {
+            out.push_str("  locals:\n");
+            for (name, ty) in locals {
+                out.push_str(&format!("    {} : {}\n", name, types.type_to_string(ty)));
+            }
+        }
+    }
+    out
+}
+
+fn collect_block_locals(
+    block: &crate::hir::HirBlock,
+    locals: &mut BTreeMap<String, crate::types::TypeId>,
+) {
+    for line in &block.lines {
+        collect_expr_locals(&line.expr, locals);
+    }
+}
+
+fn collect_expr_locals(
+    expr: &crate::hir::HirExpr,
+    locals: &mut BTreeMap<String, crate::types::TypeId>,
+) {
+    match &expr.kind {
+        crate::hir::HirExprKind::Let { name, value, .. } => {
+            locals.entry(name.clone()).or_insert(value.ty);
+            collect_expr_locals(value, locals);
+        }
+        crate::hir::HirExprKind::Set { value, .. } => {
+            collect_expr_locals(value, locals);
+        }
+        crate::hir::HirExprKind::Call { args, .. } => {
+            for arg in args {
+                collect_expr_locals(arg, locals);
+            }
+        }
+        crate::hir::HirExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_expr_locals(cond, locals);
+            collect_expr_locals(then_branch, locals);
+            collect_expr_locals(else_branch, locals);
+        }
+        crate::hir::HirExprKind::While { cond, body } => {
+            collect_expr_locals(cond, locals);
+            collect_expr_locals(body, locals);
+        }
+        crate::hir::HirExprKind::Match { scrutinee, arms } => {
+            collect_expr_locals(scrutinee, locals);
+            for arm in arms {
+                collect_expr_locals(&arm.body, locals);
+            }
+        }
+        crate::hir::HirExprKind::StructConstruct { fields, .. } => {
+            for f in fields {
+                collect_expr_locals(f, locals);
+            }
+        }
+        crate::hir::HirExprKind::TupleConstruct { items } => {
+            for item in items {
+                collect_expr_locals(item, locals);
+            }
+        }
+        crate::hir::HirExprKind::EnumConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                collect_expr_locals(p, locals);
+            }
+        }
+        crate::hir::HirExprKind::Intrinsic { args, .. } => {
+            for arg in args {
+                collect_expr_locals(arg, locals);
+            }
+        }
+        crate::hir::HirExprKind::AddrOf(inner)
+        | crate::hir::HirExprKind::Deref(inner) => {
+            collect_expr_locals(inner, locals);
+        }
+        crate::hir::HirExprKind::Block(block) => {
+            collect_block_locals(block, locals);
+        }
+        crate::hir::HirExprKind::Var(_)
+        | crate::hir::HirExprKind::LiteralI32(_)
+        | crate::hir::HirExprKind::LiteralF32(_)
+        | crate::hir::HirExprKind::LiteralBool(_)
+        | crate::hir::HirExprKind::LiteralStr(_)
+        | crate::hir::HirExprKind::Unit
+        | crate::hir::HirExprKind::Drop { .. } => {}
+    }
 }
 
 fn resolve_target(
