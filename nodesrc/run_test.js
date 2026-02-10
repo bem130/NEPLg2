@@ -13,8 +13,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { WASI } = require('node:wasi');
-const { candidateDistDirs, findFirstExistingDir } = require('./util_paths');
-const { loadCompilerFromDist } = require('./compiler_loader');
+const { candidateDistDirs } = require('./util_paths');
+const { loadCompilerFromCandidates } = require('./compiler_loader');
 
 function readStdinAll() {
     return new Promise((resolve) => {
@@ -118,11 +118,8 @@ function withConsoleSuppressed(fn) {
 }
 
 async function createRunner(distHint) {
-    const distDir = findFirstExistingDir(candidateDistDirs(distHint || ''));
-    if (!distDir) {
-        throw new Error('dist directory not found. Set NEPL_DIST or pass distHint.');
-    }
-    const loaded = await withConsoleSuppressed(() => loadCompilerFromDist(distDir));
+    const candidates = candidateDistDirs(distHint || '');
+    const loaded = await withConsoleSuppressed(() => loadCompilerFromCandidates(candidates));
     return loaded;
 }
 

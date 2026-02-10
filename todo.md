@@ -1,3 +1,41 @@
+2026-02-10 trunk build復旧後の優先実装計画
+
+現状把握
+- `NO_COLOR=true trunk build` は成功する
+- compiler artifact は `web/dist/nepl-web-*_bg.wasm` と `web/dist/nepl-web-*.js` に出力される
+- `node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests-after-trunk.json -j 4` は `total=326, errored=326`
+- 主因は `nodesrc/util_paths.js` の探索順序で、存在確認だけで `dist/` を選び、artifact 未存在のまま `nodesrc/compiler_loader.js` が失敗すること
+
+実装計画
+1. dist探索の根本修正
+- `candidateDistDirs` の「存在する最初のディレクトリ」を採用する方式をやめる
+- `compiler_loader` 側で `nepl-web-*.js` と `*_bg.wasm` のペアが存在するディレクトリのみ採用する
+- 複数候補がある場合は `web/dist` と `NEPL_DIST` を優先し、理由をエラーメッセージに出す
+
+2. テスト導線の強化
+- `nodesrc/tests.js` に `--dist` 指定時の検証ログを追加し、どの候補を採用したかをJSONに記録
+- `--dist` 未指定時に候補全滅なら、探索した全パスをまとめて表示して調査時間を減らす
+
+3. 回帰テストの追加
+- `dist/` は存在するがartifactなし、`web/dist/` にartifactあり、という今回の再現ケースを固定テスト化
+- `NEPL_DIST` 指定時の優先挙動をテスト化
+
+4. 手順とCI整合
+- `doc/testing.md` と workflow の実行例を、`trunk build` 後に `nodesrc/tests.js` が確実に同じ出力先を参照する書き方へ統一
+- 必要なら workflow 側で `--dist web/dist` を明示
+
+完了条件
+- `trunk build` 直後に `node nodesrc/tests.js ...` を `--dist` 省略で実行しても `errored=0`
+- 失敗が出る場合はテスト内容由来の `failed` のみになること
+
+進捗 (2026-02-10)
+- 1. dist探索の根本修正: 完了
+- 2. テスト導線の強化: 完了（`resolved_dist_dirs` をJSON出力に追加、stdoutに `dist.resolved` を表示）
+- 実測: `node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests-after-fix.json -j 4` で `passed=250, failed=76, errored=0`
+
+
+---
+
 cast関連の実装中 fnのalias用法
 
 <...> の中(型注釈や型引数として読む場所)で`::` PathSep を許可

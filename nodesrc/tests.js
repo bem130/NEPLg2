@@ -204,6 +204,15 @@ function pickTopIssues(results, limit) {
     }));
 }
 
+function collectResolvedDistDirs(results) {
+    const dirs = new Set();
+    for (const r of results) {
+        const d = r?.compiler?.distDir;
+        if (typeof d === 'string' && d.length > 0) dirs.add(d);
+    }
+    return Array.from(dirs).sort();
+}
+
 async function main() {
     const { help, inputs, outPath, distHint, jobs } = parseArgs(process.argv.slice(2));
     if (help || inputs.length === 0 || !outPath) {
@@ -218,12 +227,14 @@ async function main() {
 
     const results = await runAll(allCases, jobs, distHint);
     const summary = summarize(results);
+    const resolvedDistDirs = collectResolvedDistDirs(results);
 
     const out = {
         schema: 'neplg2-doctest/v1',
         generated_at: new Date().toISOString(),
         jobs,
         dist_hint: distHint || null,
+        resolved_dist_dirs: resolvedDistDirs,
         summary,
         results,
     };
@@ -234,6 +245,10 @@ async function main() {
 
     const topIssues = pickTopIssues(results, 5);
     console.log(JSON.stringify({
+        dist: {
+            hint: distHint || null,
+            resolved: resolvedDistDirs,
+        },
         summary,
         top_issues: topIssues,
     }, null, 2));

@@ -617,3 +617,28 @@
 - `node nodesrc/tests.js -i tutorials/getting_started/01_hello_world.n.md -o /tmp/one.json --dist web/dist -j 1`
 - `node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests.json --dist web/dist -j 4`
 - `NO_COLOR=true trunk build`（ネットワーク制限で依存取得に失敗し未完了）
+
+# 2026-02-10 作業メモ (trunk build 復旧後の現状把握)
+## 現状
+- `NO_COLOR=true trunk build` は成功。
+- ただし doctest 実行は `total=326, errored=326`。
+- 原因は dist 探索ロジックで、artifact の有無ではなくディレクトリ存在のみで `dist/` を採用してしまうこと。
+- 実際の compiler artifact は `web/dist/` に生成されている。
+
+## 対応方針
+- `todo.md` に、artifact ペア存在ベースの探索へ改修する実装計画を追加。
+- 回帰テストとドキュメント/CI整合まで含めて対応する。
+
+# 2026-02-10 作業メモ (dist探索の根本修正)
+## 修正内容
+- `nodesrc/compiler_loader.js` に `findCompilerDistDir` / `loadCompilerFromCandidates` を追加。
+- 候補ディレクトリの先頭採用を廃止し、`nepl-web-*.js` と `*_bg.wasm` のペアが存在する候補のみを採用するよう変更。
+- 候補全滅時は探索した全パスを含むエラーを返すよう変更。
+- `nodesrc/run_test.js` の `createRunner` を候補ベース解決へ変更。
+- `nodesrc/tests.js` に `resolved_dist_dirs` を JSON 出力として追加し、stdout の要点JSONにも `dist.resolved` を表示。
+
+## テスト実行結果
+- `NO_COLOR=true trunk build` (success)
+- `node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests-after-fix.json -j 4`
+  - `total=326, passed=250, failed=76, errored=0`
+  - `dist.resolved=["/mnt/d/project/NEPLg2/web/dist"]`

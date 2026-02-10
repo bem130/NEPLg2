@@ -52,6 +52,15 @@ function pickCompilerPair(distDir) {
     };
 }
 
+function findCompilerDistDir(candidateDirs) {
+    for (const d of candidateDirs) {
+        const pair = pickCompilerPair(d);
+        if (!pair) continue;
+        return { distDir: d, pair };
+    }
+    return null;
+}
+
 async function loadCompilerFromDist(distDir) {
     const pair = pickCompilerPair(distDir);
     if (!pair) {
@@ -80,7 +89,21 @@ async function loadCompilerFromDist(distDir) {
     };
 }
 
+async function loadCompilerFromCandidates(candidateDirs) {
+    const found = findCompilerDistDir(candidateDirs);
+    if (!found) {
+        const listed = candidateDirs.map(d => `- ${d}`).join('\n');
+        throw new Error(
+            'nepl-web compiler artifacts were not found in candidate directories.\n'
+            + `searched:\n${listed}`
+        );
+    }
+    return loadCompilerFromDist(found.distDir);
+}
+
 module.exports = {
+    findCompilerDistDir,
     pickCompilerPair,
+    loadCompilerFromCandidates,
     loadCompilerFromDist,
 };

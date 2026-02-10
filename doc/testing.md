@@ -108,13 +108,16 @@ If you extend stdlib behavior, add a matching `.nepl` test under
 Use this runner for doctests embedded in `.n.md` and `.nepl` documents:
 
 ```
-node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests.json --dist web/dist -j 4
+node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests.json -j 4
 ```
 
 Behavior summary:
 - Executes doctests in-process via `nodesrc/run_test.js` API (no child-process stdin IPC).
+- Resolves dist candidates by checking actual compiler artifacts (`nepl-web-*.js` + `*_bg.wasm`), not just directory existence.
 - Loads compiler artifacts once per worker to reduce initialization overhead.
 - Prints compact JSON to stdout with only key points:
+  - `dist.resolved`: resolved dist directories used by the run
   - `summary`: `total/passed/failed/errored`
   - `top_issues`: first 5 failing/errored cases with `id/status/phase/error`
 - Writes full result details to the JSON file specified by `-o`.
+- Full JSON includes `resolved_dist_dirs`.
