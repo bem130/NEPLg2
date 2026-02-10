@@ -26,7 +26,8 @@ function pickCompilerPair(distDir) {
         return null;
     }
 
-    // 同じプレフィックス（hash 部分）を優先して組にする
+    const pairs = [];
+    // 同じプレフィックス（hash 部分）で組にする
     // 例: nepl-web-xxxxx.js と nepl-web-xxxxx_bg.wasm
     for (const js of jsCandidates) {
         const m = js.match(/^(nepl-web-.*)\.js$/);
@@ -34,13 +35,27 @@ function pickCompilerPair(distDir) {
         const prefix = m[1];
         const want = prefix + '_bg.wasm';
         if (wasmCandidates.includes(want)) {
-            return {
+            const jsPath = path.join(distDir, js);
+            const wasmPath = path.join(distDir, want);
+            let mtime = 0;
+            try {
+                const jsMtime = fs.statSync(jsPath).mtimeMs;
+                const wasmMtime = fs.statSync(wasmPath).mtimeMs;
+                mtime = Math.max(jsMtime, wasmMtime);
+            } catch {}
+            pairs.push({
+                mtime,
                 jsPath: path.join(distDir, js),
                 wasmPath: path.join(distDir, want),
                 jsFile: js,
                 wasmFile: want,
-            };
+            });
         }
+    }
+
+    if (pairs.length > 0) {
+        pairs.sort((a, b) => b.mtime - a.mtime);
+        return pairs[0];
     }
 
     // 見つからなければ先頭同士で妥協
