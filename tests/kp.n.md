@@ -137,3 +137,51 @@ fn main <()*>()> ():
     writer_flush w;
     writer_free w;
 ```
+
+## kpread_to_kpwrite_f64
+
+neplg2:test[normalize_newlines]
+stdin: "3.5 -2.25 1e2\n"
+stdout: "3.500000\n-2.250000\n100.000000\n"
+```neplg2
+#entry main
+#indent 4
+#target wasi
+
+#import "kp/kpread" as *
+#import "kp/kpwrite" as *
+
+fn main <()*>()> ():
+    let sc <i32> scanner_new;
+    let a <f64> scanner_read_f64 sc;
+    let b <f64> scanner_read_f64 sc;
+    let c <f64> scanner_read_f64 sc;
+    let w <i32> writer_new;
+    writer_write_f64_ln w a;
+    writer_write_f64_ln w b;
+    writer_write_f64_ln w c;
+    writer_flush w;
+    writer_free w;
+```
+
+## kpread_to_kpwrite_f32
+
+neplg2:test[normalize_newlines]
+stdin: "1.25\n"
+stdout: "1.250000\n"
+```neplg2
+#entry main
+#indent 4
+#target wasi
+
+#import "kp/kpread" as *
+#import "kp/kpwrite" as *
+
+fn main <()*>()> ():
+    let sc <i32> scanner_new;
+    let v <f32> scanner_read_f32 sc;
+    let w <i32> writer_new;
+    writer_write_f32_ln w v;
+    writer_flush w;
+    writer_free w;
+```

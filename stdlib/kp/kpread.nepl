@@ -465,7 +465,8 @@ fn scanner_read_u64 <(i32)*>i64> (sc):
                                         if:
                                             le byte 57
                                             then:
-                                                let digit <i64> i64_extend_i32_u sub byte 48;
+                                                let d32 <i32> sub byte 48;
+                                                let digit <i64> i64_extend_i32_u d32;
                                                 let scaled <i64> i64_mul val i64_extend_i32_u 10;
                                                 set val i64_add scaled digit;
                                                 set p add p 1;
@@ -533,7 +534,8 @@ fn scanner_read_i64 <(i32)*>i64> (sc):
                                         if:
                                             le byte 57
                                             then:
-                                                let digit <i64> i64_extend_i32_u sub byte 48;
+                                                let d32 <i32> sub byte 48;
+                                                let digit <i64> i64_extend_i32_u d32;
                                                 let scaled <i64> i64_mul val i64_extend_i32_u 10;
                                                 set val i64_add scaled digit;
                                                 set p add p 1;
@@ -553,6 +555,200 @@ fn scanner_read_i64 <(i32)*>i64> (sc):
                 else:
                     val
 
+//: scanner_read_f64: 次のトークンを f64 として読み込む
+//:
+//: 目的:
+//: - 次の空白区切りトークンを 10 進浮動小数として読み込みます。
+//:
+//: 実装(アルゴリズム):
+//: - 整数部・小数部・指数部（e/E）を順に走査し、`f64` へ逐次反映します。
+//:
+//: 注意(重要):
+//: - `NaN` / `inf` 表記は扱いません。
+//: - 不正トークンは先頭時点で 0.0 を返します。
+//:
+//: 計算量:
+//: - O(桁数)
+fn scanner_read_f64 <(i32)*>f64> (sc):
+    scanner_skip_ws sc;
+    let buf <i32> load_i32 sc;
+    let buf_len <i32> load_i32 add sc 4;
+    let mut p <i32> load_i32 add sc 8;
+    if:
+        ge p buf_len
+        then:
+            f64_convert_i32_u 0
+        else:
+            let mut neg <i32> 0;
+            let b0 <i32> load_u8 add buf p;
+            if:
+                eq b0 45
+                then:
+                    set neg 1;
+                    set p add p 1;
+                else:
+                    if:
+                        eq b0 43
+                        then:
+                            set p add p 1;
+                        else:
+                            ();
+
+            let mut val <f64> f64_convert_i32_u 0;
+            let mut any_digit <i32> 0;
+            let ten <f64> f64_convert_i32_u 10;
+
+            let mut done_int <i32> 0;
+            while eq done_int 0:
+                if:
+                    lt p buf_len
+                    then:
+                        let byte <i32> load_u8 add buf p;
+                        if:
+                            and ge byte 48 le byte 57
+                            then:
+                                let d32 <i32> sub byte 48;
+                                let d <f64> f64_convert_i32_u d32;
+                                let scaled <f64> f64_mul val ten;
+                                let next_val <f64> f64_add scaled d;
+                                set val next_val;
+                                set p add p 1;
+                                set any_digit 1;
+                            else:
+                                set done_int 1;
+                    else:
+                        set done_int 1;
+
+            let mut has_dot <i32> 0;
+            if:
+                lt p buf_len
+                then:
+                    if:
+                        eq load_u8 add buf p 46
+                        then set has_dot 1
+                        else ();
+                else:
+                    ();
+            if:
+                eq has_dot 1
+                then:
+                    set p add p 1;
+                    let one <f64> f64_convert_i32_u 1;
+                    let mut place <f64> f64_div one ten;
+                    let mut done_frac <i32> 0;
+                    while eq done_frac 0:
+                        if:
+                            lt p buf_len
+                            then:
+                                let byte <i32> load_u8 add buf p;
+                                if:
+                                    and ge byte 48 le byte 57
+                                    then:
+                                        let d32 <i32> sub byte 48;
+                                        let d <f64> f64_convert_i32_u d32;
+                                        let addv <f64> f64_mul d place;
+                                        let next_val <f64> f64_add val addv;
+                                        set val next_val;
+                                        let next_place <f64> f64_div place ten;
+                                        set place next_place;
+                                        set p add p 1;
+                                        set any_digit 1;
+                                    else:
+                                        set done_frac 1;
+                            else:
+                                set done_frac 1;
+                else:
+                    ();
+
+            let mut has_exp <i32> 0;
+            if:
+                lt p buf_len
+                then:
+                    let ec <i32> load_u8 add buf p;
+                    if:
+                        or eq ec 101 eq ec 69
+                        then set has_exp 1
+                        else ();
+                else:
+                    ();
+            if:
+                eq has_exp 1
+                then:
+                    set p add p 1;
+                    let mut exp_neg <i32> 0;
+                    if:
+                        lt p buf_len
+                        then:
+                            let eb <i32> load_u8 add buf p;
+                            if:
+                                eq eb 45
+                                then:
+                                    set exp_neg 1;
+                                    set p add p 1;
+                                else:
+                                    if:
+                                        eq eb 43
+                                        then:
+                                            set p add p 1;
+                                        else:
+                                            ();
+                        else:
+                            ();
+
+                    let mut exp_val <i32> 0;
+                    let mut done_exp <i32> 0;
+                    while eq done_exp 0:
+                        if:
+                            lt p buf_len
+                            then:
+                                let byte <i32> load_u8 add buf p;
+                                if:
+                                    and ge byte 48 le byte 57
+                                    then:
+                                        set exp_val add mul exp_val 10 sub byte 48;
+                                        set p add p 1;
+                                    else:
+                                        set done_exp 1;
+                            else:
+                                set done_exp 1;
+
+                    let mut k <i32> 0;
+                    while lt k exp_val:
+                        do:
+                            if:
+                                eq exp_neg 1
+                                then:
+                                    set val f64_div val ten;
+                                else:
+                                    set val f64_mul val ten;
+                            set k add k 1;
+                else:
+                    ();
+
+            store_i32 add sc 8 p;
+            if:
+                eq any_digit 0
+                then:
+                    f64_convert_i32_u 0
+                else:
+                    if:
+                        eq neg 1
+                        then:
+                            f64_neg val
+                        else:
+                            val
+
+//: scanner_read_f32: 次のトークンを f32 として読み込む
+//:
+//: 目的:
+//: - `scanner_read_f64` の結果を `f32` に縮約して返します。
+//:
+//: 計算量:
+//: - O(桁数)
+fn scanner_read_f32 <(i32)*>f32> (sc):
+    let v64 <f64> scanner_read_f64 sc;
+    f32_demote_f64 v64
+
 //: scanner_read_vec_i64: n 個の i64 値を読み込む
 //:
 //: [目的/もくてき]:
@@ -564,31 +760,13 @@ fn scanner_read_i64 <(i32)*>i64> (sc):
 //: [計算量/けいさんりょう]:
 //: - O(n * 桁数)
 //:
-//: neplg2:test[skip]
-//: stdin: "3\n1000000000000 2 -3\n"
-//: stdout: "3\n"
-//: ```neplg2
-//:| #entry main
-//:| #target wasi
-//:| #import "kp/kpread" as *
-//:| #import "kp/kpwrite" as *
-//:| #import "alloc/vec" as *
-//: fn main <()*> ()> ():
-//:     let sc <i32> scanner_new;
-//:     let n <i32> scanner_read_i32 sc;
-//:     let v <Vec<i64>> scanner_read_vec_i64 sc n;
-//:     let w <i32> writer_new;
-//:     writer_write_i32 w vec_len<i64> v;
-//:     writer_writeln w;
-//:     writer_flush w;
-//:     writer_free w
-//: ```
 fn scanner_read_vec_i64 <(i32, i32)*>Vec<i64>> (sc, n):
     let mut v <Vec<i64>> vec_new<i64>;
     let mut i <i32> 0;
     while lt i n:
         do:
-            set v vec_push<i64> v scanner_read_i64 sc;
+            let x <i64> scanner_read_i64 sc;
+            set v vec_push<i64> v x;
             set i add i 1;
     v
 
@@ -617,7 +795,8 @@ fn scanner_read_vec_i32 <(i32, i32)*>Vec<i32>> (sc, n):
     let mut i <i32> 0;
     while lt i n:
         do:
-            set v vec_push<i32> v scanner_read_i32 sc;
+            let x <i32> scanner_read_i32 sc;
+            set v vec_push<i32> v x;
             set i add i 1;
     v
 
@@ -646,7 +825,8 @@ fn scanner_read_matrix_i32 <(i32, i32, i32)*>Vec<Vec<i32>>> (sc, h, w):
     let mut i <i32> 0;
     while lt i h:
         do:
-            set res vec_push<Vec<i32>> res scanner_read_vec_i32 sc w;
+            let row <Vec<i32>> scanner_read_vec_i32 sc w;
+            set res vec_push<Vec<i32>> res row;
             set i add i 1;
     res
 
@@ -698,7 +878,8 @@ fn scanner_read_all_i32 <(i32)*>Vec<i32>> (sc):
                     if:
                         or eq b 45 and ge b 48 le b 57
                         then:
-                            set out vec_push<i32> out scanner_read_i32 sc;
+                            let x <i32> scanner_read_i32 sc;
+                            set out vec_push<i32> out x;
                         else:
                             // Not an integer token; consume it to guarantee progress.
                             scanner_skip_token sc;
@@ -864,8 +1045,10 @@ fn scanner_read_interval_queries_i32 <(i32)*>IntervalQueriesInput> (sc):
     let mut i <i32> 0;
     while lt i q:
         do:
-            set left vec_push<i32> left scanner_read_i32 sc;
-            set right vec_push<i32> right scanner_read_i32 sc;
+            let l <i32> scanner_read_i32 sc;
+            let r <i32> scanner_read_i32 sc;
+            set left vec_push<i32> left l;
+            set right vec_push<i32> right r;
             set i add i 1;
 
     IntervalQueriesInput n q left right

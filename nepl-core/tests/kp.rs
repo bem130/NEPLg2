@@ -187,6 +187,54 @@ fn main <()*>()> ():
 }
 
 #[test]
+fn kpread_to_kpwrite_f64() {
+    let src = r#"
+#entry main
+#indent 4
+#target wasi
+
+#import "kp/kpread" as *
+#import "kp/kpwrite" as *
+
+fn main <()*>()> ():
+    let sc <i32> scanner_new;
+    let a <f64> scanner_read_f64 sc;
+    let b <f64> scanner_read_f64 sc;
+    let c <f64> scanner_read_f64 sc;
+    let w <i32> writer_new;
+    writer_write_f64_ln w a;
+    writer_write_f64_ln w b;
+    writer_write_f64_ln w c;
+    writer_flush w;
+    writer_free w;
+"#;
+    let out = run_main_capture_stdout_with_stdin(src, b"3.5 -2.25 1e2\n");
+    assert_eq!(out, "3.500000\n-2.250000\n100.000000\n");
+}
+
+#[test]
+fn kpread_to_kpwrite_f32() {
+    let src = r#"
+#entry main
+#indent 4
+#target wasi
+
+#import "kp/kpread" as *
+#import "kp/kpwrite" as *
+
+fn main <()*>()> ():
+    let sc <i32> scanner_new;
+    let v <f32> scanner_read_f32 sc;
+    let w <i32> writer_new;
+    writer_write_f32_ln w v;
+    writer_flush w;
+    writer_free w;
+"#;
+    let out = run_main_capture_stdout_with_stdin(src, b"1.25\n");
+    assert_eq!(out, "1.250000\n");
+}
+
+#[test]
 fn kpread_scanner_header_debug() {
     let src = r#"
 #entry main

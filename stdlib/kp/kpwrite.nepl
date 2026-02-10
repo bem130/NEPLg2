@@ -340,6 +340,81 @@ fn writer_write_i64 <(i32,i64)*>()> (w, v):
             writer_write_u64 w v;
             ()
 
+//: writer_write_f64_fixed: f64 を固定小数点で出力する
+//:
+//: 目的:
+//: - `v` を小数点以下 `precision` 桁で出力します。
+//:
+//: 実装:
+//: - 符号、整数部、少数部を順に出力します。
+//: - 少数部は 10 倍を繰り返して 1 桁ずつ生成します。
+//:
+//: 注意:
+//: - `NaN` / `inf` は未対応です。
+//:
+//: 計算量:
+//: - O(precision + 桁数)
+fn writer_write_f64_fixed <(i32,f64,i32)*>()> (w, v, precision):
+    let mut x <f64> v;
+    let zero <f64> f64_convert_i32_u 0;
+    let is_neg <bool> f64_lt x zero;
+    if:
+        is_neg
+        then:
+            writer_put_u8 w 45;
+            let nx <f64> f64_neg x;
+            set x nx;
+            ()
+        else:
+            ();
+
+    let int_part <i64> i64_trunc_f64_u x;
+    writer_write_u64 w int_part;
+
+    if:
+        le precision 0
+        then:
+            ()
+        else:
+            writer_put_u8 w 46;
+            let int_as_f64 <f64> f64_convert_i64_u int_part;
+            let mut frac <f64> f64_sub x int_as_f64;
+            let ten <f64> f64_convert_i32_u 10;
+            let mut i <i32> 0;
+            while lt i precision:
+                do:
+                    let frac10 <f64> f64_mul frac ten;
+                    set frac frac10;
+                    let digit <i32> i32_trunc_f64_u frac;
+                    writer_put_u8 w add 48 digit;
+                    let digit_f <f64> f64_convert_i32_u digit;
+                    let next_frac <f64> f64_sub frac digit_f;
+                    set frac next_frac;
+                    set i add i 1;
+            ()
+
+//: writer_write_f64: f64 を小数点以下 6 桁で出力する
+//:
+//: 計算量:
+//: - O(桁数)
+fn writer_write_f64 <(i32,f64)*>()> (w, v):
+    writer_write_f64_fixed w v 6
+
+//: writer_write_f32_fixed: f32 を固定小数点で出力する
+//:
+//: 計算量:
+//: - O(precision + 桁数)
+fn writer_write_f32_fixed <(i32,f32,i32)*>()> (w, v, precision):
+    let v64 <f64> f64_promote_f32 v;
+    writer_write_f64_fixed w v64 precision
+
+//: writer_write_f32: f32 を小数点以下 6 桁で出力する
+//:
+//: 計算量:
+//: - O(桁数)
+fn writer_write_f32 <(i32,f32)*>()> (w, v):
+    writer_write_f32_fixed w v 6
+
 //: writer_write_space: 半角スペースを 1 文字出力する
 //:
 //: [目的/もくてき]:
@@ -421,4 +496,14 @@ fn writer_write_i32_ln <(i32,i32)*>()> (w, v):
 //: ```
 fn writer_write_i64_ln <(i32,i64)*>()> (w, v):
     writer_write_i64 w v;
+    writer_writeln w
+
+//: writer_write_f64_ln: f64 を出力して改行する
+fn writer_write_f64_ln <(i32,f64)*>()> (w, v):
+    writer_write_f64 w v;
+    writer_writeln w
+
+//: writer_write_f32_ln: f32 を出力して改行する
+fn writer_write_f32_ln <(i32,f32)*>()> (w, v):
+    writer_write_f32 w v;
     writer_writeln w
