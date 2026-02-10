@@ -9,6 +9,8 @@ class NEPLg2LanguageProvider {
         this.resolve = null;
         this.semantics = null;
         this.analysisVersion = 0;
+        this.pendingTimer = null;
+        this.analyzeDelayMs = 80;
         this.lastUpdatePayload = null;
         this.definitionById = new Map();
         this.keywordCompletions = [
@@ -25,7 +27,15 @@ class NEPLg2LanguageProvider {
     updateText(text) {
         this.text = text || '';
         this.analysisVersion += 1;
-        this._analyzeAndPublish(this.analysisVersion);
+        if (this.pendingTimer != null) {
+            clearTimeout(this.pendingTimer);
+            this.pendingTimer = null;
+        }
+        const version = this.analysisVersion;
+        this.pendingTimer = setTimeout(() => {
+            this.pendingTimer = null;
+            this._analyzeAndPublish(version);
+        }, this.analyzeDelayMs);
     }
 
     _wasm() {
@@ -53,17 +63,67 @@ class NEPLg2LanguageProvider {
             return;
         }
 
+        const fallbackDiagnostics = [];
+        this.lex = { tokens: [], diagnostics: [] };
+        this.parse = null;
+        this.resolve = null;
+        this.semantics = null;
+
         try {
             this.lex = wasm.analyze_lex(this.text);
-            this.parse = typeof wasm.analyze_parse === 'function' ? wasm.analyze_parse(this.text) : null;
-            this.resolve = typeof wasm.analyze_name_resolution === 'function' ? wasm.analyze_name_resolution(this.text) : null;
-            this.semantics = typeof wasm.analyze_semantics === 'function' ? wasm.analyze_semantics(this.text) : null;
         } catch (e) {
-            console.error('[NEPLg2LanguageProvider] analyze failed:', e);
-            this.lex = { tokens: [], diagnostics: [] };
-            this.parse = null;
-            this.resolve = null;
-            this.semantics = null;
+            console.error('[NEPLg2LanguageProvider] analyze_lex failed:', e);
+            fallbackDiagnostics.push({
+                startIndex: 0,
+                endIndex: 0,
+                message: `analyze_lex failed: ${String(e?.message || e)}`,
+                severity: 'error',
+            });
+        }
+
+        if (typeof wasm.analyze_parse === 'function') {
+            try {
+                this.parse = wasm.analyze_parse(this.text);
+            } catch (e) {
+                const msg = String(e?.message || e);
+                console.error('[NEPLg2LanguageProvider] analyze_parse failed:', e);
+                fallbackDiagnostics.push({
+                    startIndex: 0,
+                    endIndex: 0,
+                    message: msg.includes('Maximum call stack size exceeded')
+                        ? 'parser recursion overflow: parse stage skipped for this source'
+                        : `analyze_parse failed: ${msg}`,
+                    severity: 'warning',
+                });
+            }
+        }
+
+        if (this.parse?.ok && typeof wasm.analyze_name_resolution === 'function') {
+            try {
+                this.resolve = wasm.analyze_name_resolution(this.text);
+            } catch (e) {
+                console.error('[NEPLg2LanguageProvider] analyze_name_resolution failed:', e);
+                fallbackDiagnostics.push({
+                    startIndex: 0,
+                    endIndex: 0,
+                    message: `analyze_name_resolution failed: ${String(e?.message || e)}`,
+                    severity: 'warning',
+                });
+            }
+        }
+
+        if (this.parse?.ok && typeof wasm.analyze_semantics === 'function') {
+            try {
+                this.semantics = wasm.analyze_semantics(this.text);
+            } catch (e) {
+                console.error('[NEPLg2LanguageProvider] analyze_semantics failed:', e);
+                fallbackDiagnostics.push({
+                    startIndex: 0,
+                    endIndex: 0,
+                    message: `analyze_semantics failed: ${String(e?.message || e)}`,
+                    severity: 'warning',
+                });
+            }
         }
 
         if (version !== this.analysisVersion) {
@@ -75,6 +135,7 @@ class NEPLg2LanguageProvider {
 
         const tokens = this._buildEditorTokens();
         const diagnostics = this._collectDiagnostics();
+        diagnostics.push(...fallbackDiagnostics);
         const foldingRanges = this._buildFoldingRanges();
         const semanticTokens = this._buildSemanticTokens();
         const inlayHints = this._buildInlayHints();

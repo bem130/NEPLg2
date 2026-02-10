@@ -1279,3 +1279,18 @@
 - `node nodesrc/analyze_source.js --stage parse -i examples/rpn.nepl -o /tmp/rpn-parse.json`
   - `RangeError: Maximum call stack size exceeded` は継続。
   - これは stack size 不足だけでなく、parser の再帰経路（`parse_prefix_expr` / `parse_block_after_colon` 周辺）に根因が残っていることを示す。
+
+# 2026-02-10 作業メモ (Editor 側の解析フォールト耐性改善)
+## 調査結果
+- `examples/rpn.nepl` を `nodesrc/analyze_source.js --stage parse` で直接解析しても同一の `Maximum call stack size exceeded` が再現した。
+- よって主因は editor の無限更新ではなく parser 側の再帰経路。
+
+## 実装
+- `web/src/language/neplg2/neplg2-provider.ts`
+  - 解析を段階化（`lex` → `parse` → `resolve` → `semantics`）し、各段を個別 `try/catch` で保護。
+  - `parse` が落ちても `lex` 結果を保持して、ハイライトや基本編集体験を維持。
+  - 入力更新時の解析を短時間デバウンス（80ms）して、重い入力時の連続同期解析を緩和。
+  - `Maximum call stack size exceeded` 発生時はフォールバック診断を出す。
+
+## 検証
+- `NO_COLOR=true trunk build` 成功。
