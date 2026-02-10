@@ -81,11 +81,12 @@ fn escape_html <(str)*>str> (s):
 //: - 実装に依存します。
 fn render_inlines <(Vec<Inline>)*>str> (v):
     let mut sb <StringBuilder> string_builder_new;
-    let n <i32> vec_len<Inline> v;
+    let n <i32> get v "len";
+    let v_data <i32> get v "data";
     let mut i <i32> 0;
     while lt i n:
         do:
-            let it <Inline> unwrap<Inline> vec_get<Inline> v i;
+            let it <Inline> load<Inline> add v_data mul i size_of<Inline>;
             match it:
                 Inline::Text s:
                     set sb sb_append sb escape_html s;
@@ -104,11 +105,13 @@ fn render_inlines <(Vec<Inline>)*>str> (v):
                     set sb sb_append sb "<span class=\"gloss-main\">";
                     set sb sb_append sb render_inlines parse_inlines get g "main";
                     set sb sb_append sb "</span>";
-                    let m <i32> vec_len<str> get g "subs";
+                    let subs <Vec<str>> get g "subs";
+                    let m <i32> get subs "len";
+                    let subs_data <i32> get subs "data";
                     let mut j <i32> 0;
                     while lt j m:
                         do:
-                            let ss <str> unwrap<str> vec_get<str> get g "subs" j;
+                            let ss <str> load<str> add subs_data mul j size_of<str>;
                             set sb sb_append sb "<span class=\"gloss-sub\">";
                             set sb sb_append sb render_inlines parse_inlines ss;
                             set sb sb_append sb "</span>";
@@ -132,11 +135,12 @@ fn render_inlines <(Vec<Inline>)*>str> (v):
 //: - 実装に依存します。
 fn render_nodes <(Vec<Node>)*>str> (nodes):
     let mut sb <StringBuilder> string_builder_new;
-    let n <i32> vec_len<Node> nodes;
+    let n <i32> get nodes "len";
+    let nodes_data <i32> get nodes "data";
     let mut i <i32> 0;
     while lt i n:
         do:
-            let nd <Node> unwrap<Node> vec_get<Node> nodes i;
+            let nd <Node> load<Node> add nodes_data mul i size_of<Node>;
             match nd:
                 Node::Hr:
                     set sb sb_append sb "<hr/>";
@@ -158,60 +162,97 @@ fn render_nodes <(Vec<Node>)*>str> (nodes):
                     set sb sb_append sb escape_html get cb "code";
                     set sb sb_append sb "</code></pre>";
                 Node::Section sec:
+                    let sec_mem <i32> alloc size_of<NestSection>;
+                    store<NestSection> sec_mem sec;
+                    let sec_level <i32> get load<NestSection> sec_mem "level";
+                    let sec_heading <Heading> get load<NestSection> sec_mem "heading";
+                    let sec_children <Vec<Node>> get load<NestSection> sec_mem "children";
+                    let heading_mem <i32> alloc size_of<Heading>;
+                    store<Heading> heading_mem sec_heading;
+                    let heading_level <i32> get load<Heading> heading_mem "level";
+                    let heading_inlines <Vec<Inline>> get load<Heading> heading_mem "inlines";
                     set sb sb_append sb "<section class=\"nest level-";
-                    set sb sb_append_i32 sb (get sec "level");
+                    set sb sb_append_i32 sb sec_level;
                     set sb sb_append sb "\">";
  
                     // Heading tag
                     if:
-                        eq get get sec "heading" "level" 1
+                        eq heading_level 1
                         then:
                             set sb sb_append sb "<h1>";
-                            set sb sb_append sb render_inlines get get sec "heading" "inlines";
+                            set sb sb_append sb render_inlines heading_inlines;
                             set sb sb_append sb "</h1>";
                             ()
                         else:
                             if:
-                                eq get get sec "heading" "level" 2
+                                eq heading_level 2
                                 then:
                                     set sb sb_append sb "<h2>";
-                                    set sb sb_append sb render_inlines get get sec "heading" "inlines";
+                                    set sb sb_append sb render_inlines heading_inlines;
                                     set sb sb_append sb "</h2>";
                                     ()
                                 else:
                                     if:
-                                        eq get get sec "heading" "level" 3
+                                        eq heading_level 3
                                         then:
                                             set sb sb_append sb "<h3>";
-                                            set sb sb_append sb render_inlines get get sec "heading" "inlines";
+                                            set sb sb_append sb render_inlines heading_inlines;
                                             set sb sb_append sb "</h3>";
                                             ()
                                         else:
                                             if:
-                                                eq get get sec "heading" "level" 4
+                                                eq heading_level 4
                                                 then:
                                                     set sb sb_append sb "<h4>";
-                                                    set sb sb_append sb render_inlines get get sec "heading" "inlines";
+                                                    set sb sb_append sb render_inlines heading_inlines;
                                                     set sb sb_append sb "</h4>";
                                                     ()
                                                 else:
                                                     if:
-                                                        eq get get sec "heading" "level" 5
+                                                        eq heading_level 5
                                                         then:
                                                             set sb sb_append sb "<h5>";
-                                                            set sb sb_append sb render_inlines get get sec "heading" "inlines";
+                                                            set sb sb_append sb render_inlines heading_inlines;
                                                             set sb sb_append sb "</h5>";
                                                             ()
                                                         else:
                                                             set sb sb_append sb "<h6>";
-                                                            set sb sb_append sb render_inlines get get sec "heading" "inlines";
+                                                            set sb sb_append sb render_inlines heading_inlines;
                                                             set sb sb_append sb "</h6>";
                                                             ();
  
-                    set sb sb_append sb render_nodes get sec "children";
+                    set sb sb_append sb render_nodes sec_children;
                     set sb sb_append sb "</section>";
             set i add i 1;
     sb_build sb
 
+//: render_document: `Document` AST を HTML 文字列へ変換する
+//:
+//: [目的/もくてき]:
+//: - nm/parser が返した AST をブラウザ表示可能な HTML へ変換します。
+//: - CLI の `--html` 出力や docs 生成で使用する最終段 API です。
+//:
+//: [実装/じっそう]:
+//: - `render_nodes` / `render_inlines` でノード種別ごとに再帰展開します。
+//: - 文字列部分は `escape_html` でエスケープし、math は `$...$` をそのまま保持します。
+//:
+//: [注意/ちゅうい]:
+//: - 生成 HTML は安全側の最小エスケープ実装です。属性ホワイトリスト等は今後拡張します。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(m)（m は出力 HTML バイト数）。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target wasm
+//:| #import "alloc/string" as *
+//:| #import "nm/parser" as *
+//:| #import "nm/html_gen" as *
+//: fn main <()->i32> ():
+//:     let d <Document> parse_markdown "# T\n\nx\n";
+//:     let h <str> render_document d;
+//:     if and str_starts_with h "<section" str_ends_with h "</section>" 0 1
+//: ```
 pub fn render_document <(Document)*>str> (doc):
     render_nodes get doc "nodes"

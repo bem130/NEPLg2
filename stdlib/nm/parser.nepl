@@ -226,8 +226,8 @@ fn trim_cr <(str)*>str> (s):
 //:
 //: [計算量/けいさんりょう]:
 //: - 実装に依存します。
-fn safe_line <(Vec<str>, i32)*>str> (lines, i):
-    trim_cr unwrap<str> vec_get<str> lines i
+fn safe_line <(i32, i32)*>str> (lines_data, i):
+    trim_cr load<str> add lines_data mul i size_of<str>
 
 //: close_one_section: 関数の概要
 //:
@@ -392,14 +392,13 @@ fn parse_heading <(str)*>Option<Heading>> (line):
 //:
 //: [計算量/けいさんりょう]:
 //: - 実装に依存します。
-fn parse_fence <(Vec<str>, i32)*>FenceRes> (lines, i0):
-    let t0 <str> str_trim safe_line lines i0;
+fn parse_fence <(i32, i32, i32)*>FenceRes> (lines_data, nlines, i0):
+    let t0 <str> str_trim safe_line lines_data i0;
     let info0 <str> str_slice t0 3 len t0;
     let info <str> str_trim info0;
 
     let mut sb <StringBuilder> string_builder_new;
     let mut i <i32> add i0 1;
-    let nlines <i32> vec_len<str> lines;
 
     let mut done <bool> false;
     while not done:
@@ -410,7 +409,7 @@ fn parse_fence <(Vec<str>, i32)*>FenceRes> (lines, i0):
                     set done true;
                     ()
                 else:
-                    let li <str> str_trim safe_line lines i;
+                    let li <str> str_trim safe_line lines_data i;
                     if:
                         str_starts_with li "```"
                         then:
@@ -418,7 +417,7 @@ fn parse_fence <(Vec<str>, i32)*>FenceRes> (lines, i0):
                             set done true;
                             ()
                         else:
-                            set sb sb_append sb safe_line lines i;
+                            set sb sb_append sb safe_line lines_data i;
                             set sb sb_append sb "\n";
                             set i add i 1;
                             ()
@@ -439,10 +438,9 @@ fn parse_fence <(Vec<str>, i32)*>FenceRes> (lines, i0):
 //:
 //: [計算量/けいさんりょう]:
 //: - 実装に依存します。
-fn parse_paragraph <(Vec<str>, i32)*>ParaRes> (lines, i0):
+fn parse_paragraph <(i32, i32, i32)*>ParaRes> (lines_data, nlines, i0):
     let mut sb <StringBuilder> string_builder_new;
     let mut i <i32> i0;
-    let nlines <i32> vec_len<str> lines;
 
     let mut done <bool> false;
     while not done:
@@ -453,7 +451,7 @@ fn parse_paragraph <(Vec<str>, i32)*>ParaRes> (lines, i0):
                     set done true;
                     ()
                 else:
-                    let raw <str> safe_line lines i;
+                    let raw <str> safe_line lines_data i;
                     let t <str> str_trim raw;
 
                     if:
@@ -676,15 +674,17 @@ fn parse_inlines <(str)*>Vec<Inline>> (s):
                                             let plast <str> str_slice s start j;
                                             set parts vec_push<str> parts plast;
 
+                                            let parts_len <i32> get parts "len";
                                             if:
-                                                ge vec_len<str> parts 2
+                                                ge parts_len 2
                                                 then:
-                                                    let main <str> unwrap<str> vec_get<str> parts 0;
+                                                    let parts_data <i32> get parts "data";
+                                                    let main <str> load<str> parts_data;
                                                     let mut subs <Vec<str>> vec_new<str>;
                                                     let mut idx <i32> 1;
-                                                    while lt idx vec_len<str> parts:
+                                                    while lt idx parts_len:
                                                         do:
-                                                            let p <str> unwrap<str> vec_get<str> parts idx;
+                                                            let p <str> load<str> add parts_data mul idx size_of<str>;
                                                             set subs vec_push<str> subs p;
                                                             set idx add idx 1;
                                                     let g <GlossInfo> GlossInfo main subs;
@@ -714,9 +714,39 @@ fn parse_inlines <(str)*>Vec<Inline>> (s):
 // Main block parser + Nest builder
 // -----------------------------
 
+//: parse_markdown: 拡張 Markdown 文字列を `Document` AST に変換する
+//:
+//: [目的/もくてき]:
+//: - 見出し Nest / 段落 / 水平線 / コードフェンスを解析し、後段処理で使える AST を生成します。
+//: - nm 系 API の入口として、HTML 変換・JSON 変換の双方から利用します。
+//:
+//: [実装/じっそう]:
+//: - 行単位で走査し、section stack で入れ子構造を管理します。
+//: - 行内要素（ruby/gloss/math）は `parse_inlines` に委譲します。
+//:
+//: [注意/ちゅうい]:
+//: - 現状は `Result` ではなく AST を直接返す設計です。診断回復は今後の拡張対象です。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(n)（n は入力サイズ）。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target wasm
+//:| #import "alloc/string" as *
+//:| #import "nm/parser" as *
+//: fn main <()->i32> ():
+//:     let d <Document> parse_markdown "# T\n\nx\n";
+//:     let j <str> document_to_json d;
+//:     if and str_starts_with j "{\"t\":\"doc\"" gt len j 0 0 1
+//: ```
 pub fn parse_markdown <(str)*>Document> (input):
     let lines <Vec<str>> str_split input "\n";
-    let nlines <i32> vec_len<str> lines;
+    let lines_mem <i32> alloc size_of<Vec<str>>;
+    store<Vec<str>> lines_mem lines;
+    let nlines <i32> get load<Vec<str>> lines_mem "len";
+    let lines_data <i32> get load<Vec<str>> lines_mem "data";
 
     let mut root <Vec<Node>> vec_new<Node>;
     let stk <i32> stack_new<NestSection>;
@@ -725,7 +755,7 @@ pub fn parse_markdown <(str)*>Document> (input):
 
     while lt i nlines:
         do:
-            let line <str> safe_line lines i;
+            let line <str> safe_line lines_data i;
             let t <str> str_trim line;
 
             if:
@@ -766,8 +796,10 @@ pub fn parse_markdown <(str)*>Document> (input):
                                     if:
                                         is_fence_start t
                                         then:
-                                            let fr <FenceRes> parse_fence lines i;
-                                            let node <Node> Node::CodeBlock get fr "cb";
+                                            let fr <FenceRes> parse_fence lines_data nlines i;
+                                            let fr_next_i <i32> get fr "next_i";
+                                            let fr_cb <CodeBlockInfo> get fr "cb";
+                                            let node <Node> Node::CodeBlock fr_cb;
 
                                             match stack_peek<NestSection> stk:
                                                 Option::Some top:
@@ -785,7 +817,7 @@ pub fn parse_markdown <(str)*>Document> (input):
                                                 Option::None:
                                                     set root vec_push<Node> root node;
                                                     ()
-                                            set i get fr "next_i";
+                                            set i fr_next_i;
                                             ()
                                         else:
                                             match parse_heading t:
@@ -800,8 +832,12 @@ pub fn parse_markdown <(str)*>Document> (input):
                                                     ()
                                                 Option::None:
                                                     // Paragraph
-                                                    let pr <ParaRes> parse_paragraph lines i;
-                                                    let pnode <Node> Node::Paragraph get pr "inlines";
+                                                    let pr <ParaRes> parse_paragraph lines_data nlines i;
+                                                    let pr_mem <i32> alloc size_of<ParaRes>;
+                                                    store<ParaRes> pr_mem pr;
+                                                    let pr_inlines <Vec<Inline>> get load<ParaRes> pr_mem "inlines";
+                                                    let pr_next_i <i32> get load<ParaRes> pr_mem "next_i";
+                                                    let pnode <Node> Node::Paragraph pr_inlines;
 
                                                     match stack_peek<NestSection> stk:
                                                         Option::Some top:
@@ -819,7 +855,7 @@ pub fn parse_markdown <(str)*>Document> (input):
                                                         Option::None:
                                                             set root vec_push<Node> root pnode;
                                                             ()
-                                                    set i get pr "next_i";
+                                                    set i pr_next_i;
                                                     ()
 
     set root close_all_sections stk root;
@@ -883,7 +919,8 @@ fn json_escape <(str)*>str> (s):
 fn inlines_to_json <(Vec<Inline>)*>str> (v):
     let mut sb <StringBuilder> string_builder_new;
     set sb sb_append sb "[";
-    let n <i32> vec_len<Inline> v;
+    let n <i32> get v "len";
+    let v_data <i32> get v "data";
     let mut i <i32> 0;
     while lt i n:
         do:
@@ -891,7 +928,7 @@ fn inlines_to_json <(Vec<Inline>)*>str> (v):
                 gt i 0
                 then set sb sb_append sb ","
                 else ()
-            let it <Inline> unwrap<Inline> vec_get<Inline> v i;
+            let it <Inline> load<Inline> add v_data mul i size_of<Inline>;
             match it:
                 Inline::Text s:
                     set sb sb_append sb "{\"t\":\"text\",\"s\":\"";
@@ -911,7 +948,9 @@ fn inlines_to_json <(Vec<Inline>)*>str> (v):
                     set sb sb_append sb "{\"t\":\"gloss\",\"main\":\"";
                     set sb sb_append sb json_escape get g "main";
                     set sb sb_append sb "\",\"subs\":[";
-                    let m <i32> vec_len<str> get g "subs";
+                    let subs <Vec<str>> get g "subs";
+                    let m <i32> get subs "len";
+                    let subs_data <i32> get subs "data";
                     let mut j <i32> 0;
                     while lt j m:
                         do:
@@ -919,7 +958,7 @@ fn inlines_to_json <(Vec<Inline>)*>str> (v):
                                 gt j 0
                                 then set sb sb_append sb ","
                                 else ()
-                            let ss <str> unwrap<str> vec_get<str> get g "subs" j;
+                            let ss <str> load<str> add subs_data mul j size_of<str>;
                             set sb sb_append sb "\"";
                             set sb sb_append sb json_escape ss;
                             set sb sb_append sb "\"";
@@ -948,10 +987,12 @@ fn node_to_json <(Node)*>str> (node):
         Node::Hr:
             sb_build sb_append sb "{\"t\":\"hr\"}"
         Node::CodeBlock cb:
+            let cb_info <str> get cb "info";
+            let cb_code <str> get cb "code";
             set sb sb_append sb "{\"t\":\"code\",\"info\":\"";
-            set sb sb_append sb json_escape get cb "info";
+            set sb sb_append sb json_escape cb_info;
             set sb sb_append sb "\",\"code\":\"";
-            set sb sb_append sb json_escape get cb "code";
+            set sb sb_append sb json_escape cb_code;
             set sb sb_append sb "\"}";
             sb_build sb
         Node::Paragraph inl:
@@ -960,16 +1001,25 @@ fn node_to_json <(Node)*>str> (node):
             set sb sb_append sb "}";
             sb_build sb
         Node::Section sec:
+            let sec_mem <i32> alloc size_of<NestSection>;
+            store<NestSection> sec_mem sec;
+            let sec_level <i32> get load<NestSection> sec_mem "level";
+            let sec_heading <Heading> get load<NestSection> sec_mem "heading";
+            let sec_children <Vec<Node>> get load<NestSection> sec_mem "children";
+            let heading_mem <i32> alloc size_of<Heading>;
+            store<Heading> heading_mem sec_heading;
+            let heading_level <i32> get load<Heading> heading_mem "level";
+            let heading_inlines <Vec<Inline>> get load<Heading> heading_mem "inlines";
             set sb sb_append sb "{\"t\":\"section\",\"level\":";
-            set sb sb_append_i32 sb get sec "level";
+            set sb sb_append_i32 sb sec_level;
             set sb sb_append sb ",\"heading\":";
             set sb sb_append sb "{\"level\":";
-            set sb sb_append_i32 sb get (get sec "heading") "level";
+            set sb sb_append_i32 sb heading_level;
             set sb sb_append sb ",\"inl\":";
-            set sb sb_append sb inlines_to_json get (get sec "heading") "inlines";
+            set sb sb_append sb inlines_to_json heading_inlines;
             set sb sb_append sb "}";
             set sb sb_append sb ",\"children\":";
-            set sb sb_append sb nodes_to_json get sec "children";
+            set sb sb_append sb nodes_to_json sec_children;
             set sb sb_append sb "}";
             sb_build sb
 
@@ -989,7 +1039,8 @@ fn node_to_json <(Node)*>str> (node):
 fn nodes_to_json <(Vec<Node>)*>str> (nodes):
     let mut sb <StringBuilder> string_builder_new;
     set sb sb_append sb "[";
-    let n <i32> vec_len<Node> nodes;
+    let n <i32> get nodes "len";
+    let nodes_data <i32> get nodes "data";
     let mut i <i32> 0;
     while lt i n:
         do:
@@ -997,12 +1048,38 @@ fn nodes_to_json <(Vec<Node>)*>str> (nodes):
                 gt i 0
                 then set sb sb_append sb ","
                 else ()
-            let nd <Node> unwrap<Node> vec_get<Node> nodes i;
+            let nd <Node> load<Node> add nodes_data mul i size_of<Node>;
             set sb sb_append sb node_to_json nd;
             set i add i 1;
     set sb sb_append sb "]";
     sb_build sb
 
+//: document_to_json: `Document` AST を JSON 文字列へ変換する
+//:
+//: [目的/もくてき]:
+//: - AST の内部構造を機械可読な JSON に変換して、デバッグ・テスト・CLI 出力に利用します。
+//:
+//: [実装/じっそう]:
+//: - ノード種別を `t` フィールドで表現し、子要素は再帰的にシリアライズします。
+//: - 文字列は `json_escape` で最小限のエスケープを適用します。
+//:
+//: [注意/ちゅうい]:
+//: - JSON スキーマは開発中であり、将来変更される可能性があります。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(m)（m は出力 JSON バイト数）。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target wasm
+//:| #import "alloc/string" as *
+//:| #import "nm/parser" as *
+//: fn main <()->i32> ():
+//:     let d <Document> parse_markdown "plain\n";
+//:     let j <str> document_to_json d;
+//:     if str_starts_with j "{\"t\":\"doc\"" 0 1
+//: ```
 pub fn document_to_json <(Document)*>str> (doc):
     let mut sb <StringBuilder> string_builder_new;
     set sb sb_append sb "{\"t\":\"doc\",\"nodes\":";

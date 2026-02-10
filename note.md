@@ -1,4 +1,24 @@
 # 状況メモ (2026-01-22)
+# 2026-02-10 作業メモ (nm 実装状況と doc comment 整備)
+- `nm` の現状:
+  - コンパイル段階の主要 move-check エラーは大きく削減したが、実行時 `memory access out of bounds` が残っており未完了。
+  - `tests/nm.n.md` の失敗は現在 OOB のみ（compile fail から run fail へ遷移）。
+- ドキュメントコメント整備:
+  - `stdlib/nm/parser.nepl`
+    - `parse_markdown`
+    - `document_to_json`
+  - `stdlib/nm/html_gen.nepl`
+    - `render_document`
+  - 上記に日本語説明（目的/実装/注意/計算量）と `neplg2:test` 例を追加。
+  - doctest 例は `fn main` を含む実行可能な形式へ修正済み。
+- テスト結果（nm 関連）:
+  - `node nodesrc/tests.js -i tests/nm.n.md -o /tmp/tests-nm.json -j 1`
+  - `summary: total=72, passed=67, failed=5, errored=0`
+  - 失敗理由はすべて `memory access out of bounds`
+- 次アクション:
+  - OOB の発生点を `nm/parser` の `load<...>` / `size_of<...>` 利用箇所から再切り分け。
+  - `Vec<T>` 要素アクセスを直接 `data + offset` で扱う方針の安全条件（境界・レイアウト）を明文化し、必要なら API に戻す。
+
 # 2026-02-10 作業メモ (nm 再現テスト追加と上流切り分け)
 - `tests/nm.n.md` を新規追加し、`nm/parser` + `nm/html_gen` の最小経路を固定した。
   - `nm_parse_markdown_json_basic`
