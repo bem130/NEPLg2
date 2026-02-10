@@ -440,8 +440,8 @@ enum Either<.A,.B>:
     Left <.A>
     Right <.B>
 
-fn pick <.A,.B> <(.A,.B,bool)->Either<.A,.B>> (a,b,cond):
-    if cond:
+fn pick <.A,.B> <(.A,.B,bool)->Either<.A,.B>> (a,b,flag):
+    if flag:
         Either::Left a
         else:
             Either::Right b
