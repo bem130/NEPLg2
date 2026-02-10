@@ -12,6 +12,8 @@ const path = require('node:path');
 const { parseFile, parseNmdAst } = require('./parser');
 const { renderHtml } = require('./html_gen');
 const { renderHtmlPlayground } = require('./html_gen_playground');
+const { candidateDistDirs } = require('./util_paths');
+const { findCompilerDistDir } = require('./compiler_loader');
 
 function parseArgs(argv) {
     const inputs = [];
@@ -46,6 +48,11 @@ function parseArgs(argv) {
 
 function ensureDir(p) {
     fs.mkdirSync(p, { recursive: true });
+}
+
+function copyFile(src, dst) {
+    ensureDir(path.dirname(dst));
+    fs.copyFileSync(src, dst);
 }
 
 function isFile(p) {
@@ -116,6 +123,7 @@ function main() {
     const outRootHtmlPlay = hasHtmlPlay ? path.resolve(outs.html_play) : null;
     if (outRootHtml) ensureDir(outRootHtml);
     if (outRootHtmlPlay) ensureDir(outRootHtmlPlay);
+    const htmlPlayAssets = outRootHtmlPlay ? prepareHtmlPlayAssets(outRootHtmlPlay) : null;
 
     let count = 0;
 
@@ -123,7 +131,7 @@ function main() {
         const inPath = path.resolve(input);
         if (isFile(inPath)) {
             const rel = path.basename(inPath);
-            count += genOne(inPath, rel, outRootHtml, outRootHtmlPlay);
+            count += genOne(inPath, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets);
             continue;
         }
         if (!isDir(inPath)) {
@@ -134,7 +142,7 @@ function main() {
         const files = walkFiles(inPath, excludeDirs).filter(p => p.endsWith('.n.md') || p.endsWith('.nepl'));
         for (const f of files) {
             const rel = path.relative(inPath, f);
-            count += genOne(f, rel, outRootHtml, outRootHtmlPlay);
+            count += genOne(f, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets);
         }
     }
 
@@ -147,7 +155,28 @@ function main() {
     console.log(`generated ${count} html file(s)`);
 }
 
-function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay) {
+function prepareHtmlPlayAssets(outRootHtmlPlay) {
+    const candidates = candidateDistDirs(null);
+    const found = findCompilerDistDir(candidates);
+    if (!found || !found.pair) {
+        const listed = candidates.map(d => `- ${d}`).join('\n');
+        throw new Error(
+            'html_play requires nepl-web compiler artifacts, but none were found.\n'
+            + `searched:\n${listed}\n`
+            + 'run trunk build first.'
+        );
+    }
+    const { pair } = found;
+    copyFile(pair.jsPath, path.join(outRootHtmlPlay, pair.jsFile));
+    copyFile(pair.wasmPath, path.join(outRootHtmlPlay, pair.wasmFile));
+    return {
+        jsFile: pair.jsFile,
+        wasmFile: pair.wasmFile,
+        sourceDistDir: found.distDir,
+    };
+}
+
+function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay, htmlPlayAssets) {
     const md = extractMarkdownForHtml(filePath);
     if (!md || md.trim().length === 0) {
         return 0;
@@ -171,10 +200,17 @@ function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay) {
     }
 
     if (outRootHtmlPlay) {
+        if (!htmlPlayAssets || !htmlPlayAssets.jsFile) {
+            throw new Error('internal error: html_play assets not prepared');
+        }
+        const depth = outRel.split('/').length - 1;
+        const prefix = depth > 0 ? '../'.repeat(depth) : './';
+        const moduleJsPath = `${prefix}${htmlPlayAssets.jsFile}`;
         const htmlPlay = renderHtmlPlayground(ast, {
             title,
             description: `${title} - NEPLg2 tutorial runnable document`,
             rewriteLinks: true,
+            moduleJsPath,
         });
         const outPathPlay = path.join(outRootHtmlPlay, outRel);
         ensureDir(path.dirname(outPathPlay));

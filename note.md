@@ -1532,3 +1532,16 @@
 - `dist/tutorials/getting_started/01_hello_world.html`
   - `og:title` / `og:description` / `twitter:*` メタが入ることを確認。
   - 実行ポップアップ用 DOM/CSS/JS（`#play-overlay`, `nm-runnable`）が出力されることを確認。
+
+## 追記 (ブラウザ実行前提の修正)
+- `web` では Node.js が使えないため、ランタイム探索を `index.html`/fetch 依存から撤去。
+- `nodesrc/cli.js` の `html_play` 生成時に、`nepl-web-*.js` と `nepl-web-*_bg.wasm` を
+  出力先ルートへコピーする処理を追加。
+- 各生成HTMLには、ファイルの相対深さに応じた `moduleJsPath`（例: `../nepl-web-*.js`）を埋め込み、
+  `import()` で直接 wasm-bindgen モジュールを読み込む方式へ変更。
+
+## 追記検証
+- `node nodesrc/cli.js -i tutorials -o html_play=dist/tutorials`
+  - `dist/tutorials/nepl-web-*.js` / `dist/tutorials/nepl-web-*_bg.wasm` が生成されることを確認。
+  - `dist/tutorials/getting_started/01_hello_world.html` が
+    `new URL('../nepl-web-*.js', location.href)` を参照し、`fetch(index.html)` が無いことを確認。

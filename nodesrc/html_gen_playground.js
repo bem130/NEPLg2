@@ -18,9 +18,10 @@ function renderBody(ast) {
     return renderNode(ast, { rewriteLinks: true });
 }
 
-function wrapHtmlPlayground(body, title, description) {
+function wrapHtmlPlayground(body, title, description, moduleJsPathOpt) {
     const t = title || 'NEPLg2 Tutorial';
     const d = description || 'NEPLg2 tutorial with interactive runnable examples.';
+    const moduleJsPath = (moduleJsPathOpt && String(moduleJsPathOpt)) || './nepl-web.js';
     return `<!doctype html>
 <html lang="ja">
 <head>
@@ -123,31 +124,11 @@ function nmToggleHidden(btn){
   btn.textContent = show ? '前置き( | 行)を隠す' : '前置き( | 行)を表示';
 }
 
-function detectBasePrefix() {
-  const p = location.pathname || '/';
-  const i = p.indexOf('/tutorials/');
-  if (i >= 0) {
-    return p.slice(0, i + 1);
-  }
-  const j = p.indexOf('/doc/');
-  if (j >= 0) {
-    return p.slice(0, j + 1);
-  }
-  return '/';
-}
-
 async function loadBindings() {
   if (window.wasmBindings && typeof window.wasmBindings.compile_source === 'function') {
     return window.wasmBindings;
   }
-  const base = detectBasePrefix();
-  const indexUrl = new URL('index.html', location.origin + base).toString();
-  const res = await fetch(indexUrl);
-  if (!res.ok) throw new Error('failed to load index.html for wasm module discovery');
-  const html = await res.text();
-  const m = html.match(/nepl-web-[a-f0-9]+\\.js/g);
-  if (!m || !m[0]) throw new Error('nepl-web module not found in index.html');
-  const modUrl = new URL(m[0], location.origin + base).toString();
+  const modUrl = new URL('${escapeHtml(moduleJsPath)}', location.href).toString();
   const mod = await import(modUrl);
   if (typeof mod.default === 'function') {
     await mod.default();
@@ -360,11 +341,11 @@ function renderHtmlPlayground(ast, opt) {
     const description = (opt && opt.description)
         ? opt.description
         : 'NEPLg2 tutorial with interactive runnable examples.';
+    const moduleJsPath = (opt && opt.moduleJsPath) ? String(opt.moduleJsPath) : './nepl-web.js';
     const body = renderBody(ast);
-    return wrapHtmlPlayground(body, title, description);
+    return wrapHtmlPlayground(body, title, description, moduleJsPath);
 }
 
 module.exports = {
     renderHtmlPlayground,
 };
-
