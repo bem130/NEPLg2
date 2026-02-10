@@ -1054,6 +1054,9 @@ impl Parser {
                         } else {
                             2
                         };
+                        if expected == 2 {
+                            Self::drop_if_optional_cond_marker(&mut items);
+                        }
                         match self.extract_if_layout_exprs(block.clone(), expected, colon_span) {
                             Ok(mut args) => {
                                 for mut a in args.drain(..) {
@@ -1520,6 +1523,9 @@ impl Parser {
                         } else {
                             2
                         };
+                        if expected == 2 {
+                            Self::drop_if_optional_cond_marker(&mut items);
+                        }
                         match self.extract_if_layout_exprs(block.clone(), expected, colon_span) {
                             Ok(mut args) => {
                                 for mut a in args.drain(..) {
@@ -2154,6 +2160,25 @@ impl Parser {
         }
     }
 
+    fn drop_if_optional_cond_marker(items: &mut Vec<PrefixItem>) {
+        let if_pos = items
+            .iter()
+            .position(|it| matches!(it, PrefixItem::Symbol(Symbol::If(_))));
+        let Some(if_pos) = if_pos else {
+            return;
+        };
+        let marker_pos = if_pos + 1;
+        if marker_pos >= items.len() {
+            return;
+        }
+        if matches!(
+            &items[marker_pos],
+            PrefixItem::Symbol(Symbol::Ident(id, _, _)) if id.name == "cond"
+        ) {
+            items.remove(marker_pos);
+        }
+    }
+
     fn while_layout_needs_cond(items: &[PrefixItem]) -> bool {
         let mut tail: Vec<&PrefixItem> = items.iter().collect();
         while let Some(PrefixItem::TypeAnnotation(_, _)) = tail.last().copied() {
@@ -2237,6 +2262,7 @@ impl Parser {
         };
 
         let mut next_unfilled = 0usize;
+        let mut last_role_idx: Option<usize> = None;
         for (role, stmts) in expanded {
             // Convert statements into a single PrefixExpr (wrapped in Block if multiple)
             let expr = if stmts.len() == 1 {
@@ -2265,10 +2291,16 @@ impl Parser {
                         return Err(Diagnostic::error("invalid marker in this if-layout form", expr.span));
                     }
                 };
+                if let Some(prev_idx) = last_role_idx {
+                    if idx < prev_idx {
+                        return Err(Diagnostic::error("invalid marker order in if-layout block", expr.span));
+                    }
+                }
                 if slots[idx].is_some() {
                     return Err(Diagnostic::error("duplicate marker in if-layout block", expr.span));
                 }
                 slots[idx] = Some(expr);
+                last_role_idx = Some(idx);
             } else {
                 while next_unfilled < expected && slots[next_unfilled].is_some() {
                     next_unfilled += 1;
@@ -2347,6 +2379,7 @@ impl Parser {
         };
 
         let mut next_unfilled = 0usize;
+        let mut last_role_idx: Option<usize> = None;
         for (role, expr) in entries {
             if let Some(r) = role {
                 let idx = match role_to_index(r) {
@@ -2355,10 +2388,16 @@ impl Parser {
                         return Err(Diagnostic::error("invalid marker in this if-layout form", expr.span));
                     }
                 };
+                if let Some(prev_idx) = last_role_idx {
+                    if idx < prev_idx {
+                        return Err(Diagnostic::error("invalid marker order in if-layout block", expr.span));
+                    }
+                }
                 if slots[idx].is_some() {
                     return Err(Diagnostic::error("duplicate marker in if-layout block", expr.span));
                 }
                 slots[idx] = Some(expr);
+                last_role_idx = Some(idx);
             } else {
                 while next_unfilled < expected && slots[next_unfilled].is_some() {
                     next_unfilled += 1;

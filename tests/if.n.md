@@ -186,6 +186,32 @@ fn main <()->i32> ():
     v
 ```
 
+## if_mixed_cond_then_block_else_block_multi_expr_in_block
+
+neplg2:test
+ret: 11
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let v <i32> if:
+        cond true
+        then:
+            // ここはthen:によるblock
+            5
+            11
+        else:
+            // ここはelse:によるblock
+            add 1 3;
+            add 5 6
+            12
+    v
+```
+
 ## if_mixed_layout_then_inline_else
 
 neplg2:test
@@ -885,4 +911,142 @@ fn main <()->i32> ():
     let else 1;
     let do 2;
     add else do
+```
+
+## if_cond_expr_colon_layout_then_else
+
+neplg2:test
+ret: 10
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let v <i32> if lt 1 2:
+        then 10
+        else 20
+    v
+```
+
+## if_cond_keyword_cond_expr_colon_layout_then_else
+
+neplg2:test
+ret: 40
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let v <i32> if cond lt 2 1:
+        then 30
+        else 40
+    v
+```
+
+## if_layout_marker_order_error_then_before_cond
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        then 1
+        cond true
+        else 2
+    v
+```
+
+## if_layout_then_marker_duplicate_error
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        cond true
+        then 1
+        then 2
+    v
+```
+
+## if_layout_cond_marker_duplicate_error
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        cond true
+        cond false
+        then 2
+        false 1
+    v
+```
+
+## if_layout_missing_else_error
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        cond true
+        then 1
+    v
+```
+
+
+## if_layout_missing_then_error
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        cond true
+        else 1
+    v
+```
+
+
+## if_layout_missing_then_error_2
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let v <i32> if:
+        cond false
+        else 1
+    v
 ```

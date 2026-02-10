@@ -1,4 +1,19 @@
 # 状況メモ (2026-01-22)
+# 2026-02-10 作業メモ (if.n.md 不足ケース追加と if-layout 補正)
+- `if.n.md` の不足ケースを追加:
+  - `if <cond_expr>:` 形式（`then/else` を改行で与える形）
+  - `if cond <cond_expr>:` 形式
+  - marker 順序違反 / duplicate / missing の `compile_fail`
+- parser 修正:
+  - `if` の `expected=2`（`if <cond_expr>:` 系）で、`if` 直後の任意 `cond` marker を除去して cond 式として解釈できるよう修正。
+  - `if-layout` の marker 順序チェックを追加し、`cond -> then -> else` の逆行をエラー化。
+- 検証:
+  - `NO_COLOR=true trunk build`: 成功
+  - `node nodesrc/tests.js -i tests/if.n.md -o /tmp/tests-if-added-missing3.json -j 1`
+    - `total=54, passed=54, failed=0, errored=0`
+  - `node nodesrc/tests.js -i tests/functions.n.md -o /tmp/tests-functions-after-ifcases.json -j 1`
+    - `total=16, passed=11, failed=5, errored=0`（失敗内訳は従来の高階関数/capture 系）
+
 # 2026-02-10 作業メモ (予約語の識別子禁止: cond/then/else/do, let/fn)
 - ユーザー指示に合わせて、`cond` / `then` / `else` / `do` を予約語として扱う実装を parser に追加。
   - `nepl-core/src/parser.rs`
