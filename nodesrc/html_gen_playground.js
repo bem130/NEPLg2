@@ -220,7 +220,7 @@ ul{margin:10px 0 10px 22px;}
   border:1px solid var(--border);
   border-radius:12px;
   padding:10px 10px 14px;
-  height:calc(100vh - 32px);
+  height:calc(100vh - 32px - 70px);
   overflow-y:auto;
   overscroll-behavior:contain;
   scrollbar-width:thin;
@@ -810,8 +810,14 @@ window.addEventListener('DOMContentLoaded', () => {
   const sidebar = document.querySelector('.doc-sidebar');
   const activeLink = sidebar ? sidebar.querySelector('.toc-link.active') : null;
   if (sidebar && activeLink) {
-    activeLink.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+    const sidebarRect = sidebar.getBoundingClientRect();
+    const activeRect = activeLink.getBoundingClientRect();
+    const currentTop = sidebar.scrollTop;
+    const activeTopInSidebar = activeRect.top - sidebarRect.top + currentTop;
+    const targetTop = activeTopInSidebar - (sidebar.clientHeight / 2) + (activeRect.height / 2);
+    sidebar.scrollTop = Math.max(0, targetTop);
   }
+  window.scrollTo(0, 0);
 });
 </script>
 </head>
