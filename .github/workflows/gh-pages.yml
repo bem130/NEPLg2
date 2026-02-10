@@ -127,7 +127,7 @@ jobs:
               run: |
                   set -o pipefail
                   # tutorials/{A}/{B}.n.md -> dist/tutorials/{A}/{B}.html
-                  node nodesrc/cli.js -i tutorials -o html=dist/tutorials 2>&1 | tee doc-build.log
+                  node nodesrc/cli.js -i tutorials -o html_play=dist/tutorials 2>&1 | tee doc-build.log
 
                   # stdlib/{A}/{B}.nepl -> dist/doc/stdlib/{A}/{B}.html
                   # テスト用の stdlib/tests はドキュメント出力から除外（必要なら外してOK）

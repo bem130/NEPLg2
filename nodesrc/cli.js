@@ -11,6 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { parseFile, parseNmdAst } = require('./parser');
 const { renderHtml } = require('./html_gen');
+const { renderHtmlPlayground } = require('./html_gen_playground');
 
 function parseArgs(argv) {
     const inputs = [];
@@ -104,13 +105,17 @@ function extractMarkdownForHtml(filePath) {
 
 function main() {
     const { help, inputs, outs, excludeDirs } = parseArgs(process.argv.slice(2));
-    if (help || inputs.length === 0 || !outs.html) {
-        console.log('Usage: node nodesrc/cli.js -i <input_dir_or_file> [-i ...] -o html=<output_dir> [--exclude-dir <name>]');
+    const hasHtml = Boolean(outs.html);
+    const hasHtmlPlay = Boolean(outs.html_play);
+    if (help || inputs.length === 0 || (!hasHtml && !hasHtmlPlay)) {
+        console.log('Usage: node nodesrc/cli.js -i <input_dir_or_file> [-i ...] -o html=<output_dir> [-o html_play=<output_dir>] [--exclude-dir <name>]');
         process.exit(help ? 0 : 2);
     }
 
-    const outRoot = path.resolve(outs.html);
-    ensureDir(outRoot);
+    const outRootHtml = hasHtml ? path.resolve(outs.html) : null;
+    const outRootHtmlPlay = hasHtmlPlay ? path.resolve(outs.html_play) : null;
+    if (outRootHtml) ensureDir(outRootHtml);
+    if (outRootHtmlPlay) ensureDir(outRootHtmlPlay);
 
     let count = 0;
 
@@ -118,7 +123,7 @@ function main() {
         const inPath = path.resolve(input);
         if (isFile(inPath)) {
             const rel = path.basename(inPath);
-            count += genOne(inPath, rel, outRoot);
+            count += genOne(inPath, rel, outRootHtml, outRootHtmlPlay);
             continue;
         }
         if (!isDir(inPath)) {
@@ -129,14 +134,20 @@ function main() {
         const files = walkFiles(inPath, excludeDirs).filter(p => p.endsWith('.n.md') || p.endsWith('.nepl'));
         for (const f of files) {
             const rel = path.relative(inPath, f);
-            count += genOne(f, rel, outRoot);
+            count += genOne(f, rel, outRootHtml, outRootHtmlPlay);
         }
     }
 
-    console.log(`generated ${count} html file(s) into ${outRoot}`);
+    if (outRootHtml) {
+        console.log(`generated html into ${outRootHtml}`);
+    }
+    if (outRootHtmlPlay) {
+        console.log(`generated html_play into ${outRootHtmlPlay}`);
+    }
+    console.log(`generated ${count} html file(s)`);
 }
 
-function genOne(filePath, relPath, outRoot) {
+function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay) {
     const md = extractMarkdownForHtml(filePath);
     if (!md || md.trim().length === 0) {
         return 0;
@@ -144,16 +155,34 @@ function genOne(filePath, relPath, outRoot) {
 
     const ast = parseNmdAst(md);
     const title = path.basename(filePath);
-    const html = renderHtml(ast, { title, rewriteLinks: true });
 
     const outRel = relPath
         .replace(/\.n\.md$/i, '.html')
         .replace(/\.nepl$/i, '.html');
 
-    const outPath = path.join(outRoot, outRel);
-    ensureDir(path.dirname(outPath));
-    fs.writeFileSync(outPath, html);
-    return 1;
+    let wrote = 0;
+
+    if (outRootHtml) {
+        const html = renderHtml(ast, { title, rewriteLinks: true });
+        const outPath = path.join(outRootHtml, outRel);
+        ensureDir(path.dirname(outPath));
+        fs.writeFileSync(outPath, html);
+        wrote += 1;
+    }
+
+    if (outRootHtmlPlay) {
+        const htmlPlay = renderHtmlPlayground(ast, {
+            title,
+            description: `${title} - NEPLg2 tutorial runnable document`,
+            rewriteLinks: true,
+        });
+        const outPathPlay = path.join(outRootHtmlPlay, outRel);
+        ensureDir(path.dirname(outPathPlay));
+        fs.writeFileSync(outPathPlay, htmlPlay);
+        wrote += 1;
+    }
+
+    return wrote;
 }
 
 if (require.main === module) {

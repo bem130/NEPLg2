@@ -1509,3 +1509,26 @@
   - `total: 116, passed: 116, failed: 0, errored: 0`
 - `node nodesrc/cli.js -i tutorials/getting_started -o html=dist/tutorials/getting_started`
   - `dist/tutorials/getting_started` に HTML 7 ファイルを再生成。
+
+# 2026-02-10 作業メモ (実行可能チュートリアル HTML ジェネレータ追加)
+## 実装
+- `nodesrc/html_gen_playground.js` を新規追加。
+  - 既存 `nodesrc/html_gen.js` は変更せず残したまま、実行ポップアップ付き HTML を生成する新系統を追加。
+  - `language-neplg2` のコードブロックをクリックすると、中央ポップアップの `textarea` エディタに展開。
+  - Run / Interrupt / Close と stdin / stdout パネルを提供。
+  - `nepl-web-*.js` を `index.html` から探索して動的 import し、`compile_source` でコンパイルして実行。
+  - 実行は Worker で行い、WASI `fd_read` / `fd_write` を最小実装して入出力を扱う。
+  - OGP/Twitter メタ (`title`, `description`) を出力。
+- `nodesrc/cli.js`
+  - 新出力モード `-o html_play=<output_dir>` を追加。
+  - 既存 `-o html=...` はそのまま維持し、両方同時出力も可能にした。
+- `.github/workflows/gh-pages.yml`
+  - tutorials の生成を `html_play` 出力へ切替。
+  - stdlib ドキュメントは従来どおり `html` 出力を継続。
+
+## 検証
+- `node nodesrc/cli.js -i tutorials/getting_started -o html_play=dist/tutorials/getting_started`
+  - 7 ファイル生成を確認。
+- `dist/tutorials/getting_started/01_hello_world.html`
+  - `og:title` / `og:description` / `twitter:*` メタが入ることを確認。
+  - 実行ポップアップ用 DOM/CSS/JS（`#play-overlay`, `nm-runnable`）が出力されることを確認。
