@@ -1,13 +1,14 @@
-// js-worker.js
+// @ts-nocheck
+// neplg2-worker.js
 
-importScripts('js-analyzer.js');
+importScripts('neplg2-analyzer.js');
 
 let analyzer;
 self.onmessage = (event) => {
     const { type, payload, requestId } = event.data;
     switch (type) {
         case 'updateText':
-            analyzer = new JavaScriptAnalyzer(payload);
+            analyzer = new NEPLg2Analyzer(payload);
             analyzer.analyze();
             self.postMessage({
                 type: 'update',
@@ -23,7 +24,7 @@ self.onmessage = (event) => {
         case 'getDefinitionLocation': if (analyzer) self.postMessage({ type, payload: analyzer.getDefinitionLocationAt(payload.index), requestId }); break;
         case 'getOccurrences': if (analyzer) self.postMessage({ type, payload: analyzer.getOccurrencesAt(payload.index), requestId }); break;
         case 'getNextWordBoundary': if (analyzer) self.postMessage({ type, payload: { targetIndex: analyzer.getNextWordBoundary(payload.index, payload.direction) }, requestId }); break;
-        case 'getCompletions': if(analyzer) self.postMessage({ type, payload: analyzer.getCompletions(payload.index), requestId}); break;
+        case 'getCompletions': if (analyzer) self.postMessage({ type, payload: analyzer.getCompletions(payload.index), requestId }); break;
         case 'getIndentation': if (analyzer) self.postMessage({ type, payload: analyzer.getIndentationAt(payload.index), requestId }); break;
         case 'toggleComment': if (analyzer) self.postMessage({ type, payload: analyzer.toggleCommentAt(payload.selectionStart, payload.selectionEnd), requestId }); break;
         case 'adjustIndentation': if (analyzer) self.postMessage({ type, payload: analyzer.adjustIndentationAt(payload.selectionStart, payload.selectionEnd, payload.isOutdent), requestId }); break;

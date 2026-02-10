@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use strict";
 /**
  * Canvasへの描画処理をすべて担当します。

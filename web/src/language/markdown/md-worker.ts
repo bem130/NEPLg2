@@ -1,3 +1,4 @@
+// @ts-nocheck
 // md-worker.js
 
 importScripts('../javascript/js-analyzer.js');

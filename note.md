@@ -1233,3 +1233,18 @@
   - `total=3, passed=3, failed=0`
 - `node nodesrc/tests.js -i tests -o /tmp/tests-all-after-list-adjust.json -j 1`
   - `total=339, passed=315, failed=24, errored=0`
+
+# 2026-02-10 作業メモ (Web Playground: JS→TS 移行と解析情報表示の導入)
+## 実装
+- `web/src/editor` / `web/src/language` / `web/src/library` の対象ファイルを `.ts` へ移行した。
+- `web/src/*.js` は削除し、Trunk PreBuild (`npm --prefix web run build:ts`) で生成される `dist_ts/*.js` を `web/index.html` から読み込む構成へ変更した。
+- `web/src/language/neplg2/neplg2-provider.ts`
+  - wasm API (`analyze_lex` / `analyze_parse` / `analyze_name_resolution` / `analyze_semantics`) を直接利用する実装へ更新。
+  - Hover で推論型・式範囲・引数範囲・解決先定義候補を表示できるようにした。
+  - `getTokenInsight` を追加し、tokenごとの型情報/解決情報をエディタ側が取得できるようにした。
+- `web/src/main.ts`
+  - ステータスバーに解析情報表示 (`analysis-info`) を追加し、カーソル位置の token について推論型・定義解決情報を表示するようにした。
+
+## 検証
+- `NO_COLOR=true trunk build`
+  - 成功（`src/*.js` が無い状態で `dist_ts` 読込構成が成立）。

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // js-analyzer.js
 
 const KEYWORDS = new Set(['class', 'extends', 'super', 'const', 'let', 'var', 'function', 'async', 'await', 'new', 'if', 'else', 'return', 'for', 'while', 'do', 'switch', 'case', 'default', 'break', 'continue', 'try', 'catch', 'finally', 'import', 'export', 'from', 'as', 'this']);

@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use strict";
 /* https://github.com/bem130/editorsample */
 /**

@@ -87,9 +87,19 @@ function start_app() {
     const stopBtn = document.getElementById('stop-button') as HTMLButtonElement;
 
     const cursorSpan = document.getElementById('cursor-pos') as HTMLSpanElement;
+    const statusLeft = document.querySelector('.status-left') as HTMLElement;
+    const analysisSpan = document.createElement('span');
+    analysisSpan.id = 'analysis-info';
+    analysisSpan.style.marginLeft = '12px';
+    analysisSpan.style.opacity = '0.9';
+    analysisSpan.textContent = '';
+    if (statusLeft) {
+        statusLeft.appendChild(analysisSpan);
+    }
 
     // --- Editor Setup ---
     const neplProvider = new NEPLg2LanguageProvider();
+    let cursorTicket = 0;
     const { editor } = CanvasEditorLibrary.createCanvasEditor({
         canvas: editorCanvas,
         textarea: editorTextarea,
@@ -99,9 +109,32 @@ function start_app() {
             nepl: neplProvider
         },
         initialLanguage: 'nepl',
-        onCursorChange: (index: number) => {
+        onCursorChange: async (index: number) => {
             const pos = editor.utils.getPosFromIndex(index, editor.lines);
             cursorSpan.textContent = `Ln ${pos.row + 1}, Col ${pos.col + 1}`;
+            const ticket = ++cursorTicket;
+            const insight = typeof neplProvider.getTokenInsight === 'function'
+                ? neplProvider.getTokenInsight(index)
+                : null;
+            if (ticket !== cursorTicket) {
+                return;
+            }
+            if (!insight) {
+                analysisSpan.textContent = '';
+                return;
+            }
+            const parts: string[] = [];
+            if (insight.inferredType) parts.push(`<${insight.inferredType}>`);
+            if (insight.resolvedDefinition) {
+                parts.push(`${insight.resolvedDefinition.kind}:${insight.resolvedDefinition.name}`);
+            } else if (insight.resolvedDefId != null) {
+                parts.push(`def#${insight.resolvedDefId}`);
+            }
+            if (insight.argIndex != null) parts.push(`arg${insight.argIndex}`);
+            if (Array.isArray(insight.candidateDefIds) && insight.candidateDefIds.length > 1) {
+                parts.push(`candidates=${insight.candidateDefIds.length}`);
+            }
+            analysisSpan.textContent = parts.join(' | ');
         }
     });
 

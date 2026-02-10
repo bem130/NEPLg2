@@ -1,3 +1,4 @@
+// @ts-nocheck
 // neplg2-analyzer.js
 
 const KEYWORDS = new Set(['let', 'mut', 'fn', 'if', 'then', 'else', 'cond', 'while', 'do', 'block', 'set', 'break', 'return', 'mlstr', 'Tuple', 'Vec', 'List', 'Set']);

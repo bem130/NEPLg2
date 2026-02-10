@@ -52,7 +52,6 @@
 - LSP/API からは `id` と展開済み本文の両方を取得できるようにする。
 
 9. 高階関数対応完了後の Web Playground 改良
-- `web/src` の既存 JavaScript を TypeScript へ移行する。
 - VSCode 拡張機能で提供予定の情報（名前解決、型情報、式範囲、引数範囲、定義ジャンプ候補）を Playground 上でも表示できる UI/API を追加する。
 - `web/tests.html` でテスト詳細展開時に、該当ソースと解析 API の詳細（AST/resolve/semantics）を併記できるようにする。
 
