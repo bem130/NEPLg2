@@ -592,3 +592,28 @@
 - `cargo run -p nepl-cli -- test`
 - nepl-web の stdlib 埋め込みを build.rs で自動生成するように変更し、/stdlib 配下の .nepl を網羅的に取り込むようにした。
 - `cargo build --target wasm32-unknown-unknown --manifest-path nepl-web/Cargo.toml --release` を実行し、nepl-web の stdlib 埋め込みがビルドで解決できることを確認した（ネットワークアクセスあり）。
+
+# 2026-02-10 作業メモ (nodesrc doctest 実行基盤の修正)
+## 修正内容
+- `nodesrc/tests.js` の実行方式を `child_process + stdin JSON` から、同一プロセスで `run_test.js` を直接呼び出す方式に変更。
+- `nodesrc/run_test.js` に `createRunner` / `runSingle` を追加し、テスト実行ロジックを再利用可能に整理。
+- 各 worker ごとに compiler を 1 回だけロードするようにして、不要な初期化ログとオーバーヘッドを削減。
+- compiler 側の大量ログがテスト標準出力に流れないよう、`console.*` を抑制するラッパを追加。
+- `nodesrc/tests.js` の標準出力を要点表示に変更し、`summary` と `top_issues`（先頭5件）を JSON で表示。
+
+## 原因
+- 現行環境で `child_process` 経由の stdin 受け渡しが成立せず、`run_test.js` が入力 JSON を受け取れないため、全件 `invalid json from run_test.js`（errored）になっていた。
+
+## 現状
+- doctest 実行自体は復旧。
+- 実行結果: `total=326, passed=250, failed=76, errored=0`。
+- 失敗 76 件は doctest の中身起因（`entry function is missing or ambiguous`、旧構文由来の `parenthesized expressions are not supported` など）。
+
+## plan.mdとの差分
+- plan.md の言語仕様に対する本体の未対応/差分により、一部 doctest が失敗している。
+- 今回はテスト基盤の全件 errored を解消し、失敗要因を `top_issues` で即座に確認できる状態まで改善した。
+
+## テスト実行結果
+- `node nodesrc/tests.js -i tutorials/getting_started/01_hello_world.n.md -o /tmp/one.json --dist web/dist -j 1`
+- `node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests.json --dist web/dist -j 4`
+- `NO_COLOR=true trunk build`（ネットワーク制限で依存取得に失敗し未完了）

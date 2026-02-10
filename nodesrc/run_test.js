@@ -98,37 +98,55 @@ function hasTag(tags, name) {
     return Array.isArray(tags) && tags.includes(name);
 }
 
-async function main() {
+function withConsoleSuppressed(fn) {
+    const origLog = console.log;
+    const origInfo = console.info;
+    const origWarn = console.warn;
+    const origError = console.error;
+    console.log = () => {};
+    console.info = () => {};
+    console.warn = () => {};
+    console.error = () => {};
+    try {
+        return fn();
+    } finally {
+        console.log = origLog;
+        console.info = origInfo;
+        console.warn = origWarn;
+        console.error = origError;
+    }
+}
+
+async function createRunner(distHint) {
+    const distDir = findFirstExistingDir(candidateDistDirs(distHint || ''));
+    if (!distDir) {
+        throw new Error('dist directory not found. Set NEPL_DIST or pass distHint.');
+    }
+    const loaded = await withConsoleSuppressed(() => loadCompilerFromDist(distDir));
+    return loaded;
+}
+
+async function runSingle(req, preloaded) {
     const t0 = Date.now();
     try {
-        const raw = await readStdinAll();
-        const req = JSON.parse(raw);
-
         const id = req.id || '';
         const source = req.source || '';
         const tags = Array.isArray(req.tags) ? req.tags : [];
         const stdinText = req.stdin || '';
-
-        const distHint = req.distHint || '';
-        const distDir = findFirstExistingDir(candidateDistDirs(distHint));
-        if (!distDir) {
-            throw new Error('dist directory not found. Set NEPL_DIST or pass distHint.');
-        }
-
-        const { api, meta } = await loadCompilerFromDist(distDir);
+        const loaded = preloaded || await createRunner(req.distHint || '');
+        const { api, meta } = loaded;
 
         let wasmU8 = null;
         let compileError = null;
         try {
-            wasmU8 = api.compile_source(source);
+            wasmU8 = withConsoleSuppressed(() => api.compile_source(source));
         } catch (e) {
             compileError = String(e?.message || e);
         }
 
-        // compile_fail
         if (hasTag(tags, 'compile_fail')) {
             const ok = (compileError !== null);
-            writeJson({
+            return {
                 ok,
                 id,
                 status: ok ? 'pass' : 'fail',
@@ -136,12 +154,11 @@ async function main() {
                 error: ok ? null : 'expected compile_fail, but compiled successfully',
                 compiler: { distDir: meta.distDir, js: meta.jsFile, wasm: meta.wasmFile },
                 duration_ms: Date.now() - t0,
-            });
-            return;
+            };
         }
 
         if (compileError !== null) {
-            writeJson({
+            return {
                 ok: false,
                 id,
                 status: 'fail',
@@ -149,16 +166,14 @@ async function main() {
                 error: compileError,
                 compiler: { distDir: meta.distDir, js: meta.jsFile, wasm: meta.wasmFile },
                 duration_ms: Date.now() - t0,
-            });
-            return;
+            };
         }
 
         const runRes = runWasiBytes(wasmU8, stdinText);
 
-        // should_panic: trap することを期待（WASI の exit_code は拾いにくいので trap 判定）
         if (hasTag(tags, 'should_panic')) {
             const ok = runRes.trapped;
-            writeJson({
+            return {
                 ok,
                 id,
                 status: ok ? 'pass' : 'fail',
@@ -169,13 +184,11 @@ async function main() {
                 runtime: { trapped: runRes.trapped, trapError: runRes.trapError },
                 compiler: { distDir: meta.distDir, js: meta.jsFile, wasm: meta.wasmFile },
                 duration_ms: Date.now() - t0,
-            });
-            return;
+            };
         }
 
-        // 通常: trap しないことを期待
         const ok = !runRes.trapped;
-        writeJson({
+        return {
             ok,
             id,
             status: ok ? 'pass' : 'fail',
@@ -186,18 +199,39 @@ async function main() {
             runtime: { trapped: runRes.trapped, trapError: runRes.trapError },
             compiler: { distDir: meta.distDir, js: meta.jsFile, wasm: meta.wasmFile },
             duration_ms: Date.now() - t0,
-        });
+        };
     } catch (e) {
-        writeJson({
+        return {
             ok: false,
             status: 'error',
             error: String(e?.stack || e?.message || e),
             duration_ms: Date.now() - t0,
-        });
+        };
+    }
+}
+
+async function main() {
+    const raw = await readStdinAll();
+    const req = JSON.parse(raw);
+    const result = await runSingle(req);
+    writeJson(result);
+    if (!result.ok) {
         process.exitCode = 1;
     }
 }
 
 if (require.main === module) {
-    main();
+    main().catch((e) => {
+        writeJson({
+            ok: false,
+            status: 'error',
+            error: String(e?.stack || e?.message || e),
+        });
+        process.exitCode = 1;
+    });
 }
+
+module.exports = {
+    createRunner,
+    runSingle,
+};

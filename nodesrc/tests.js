@@ -12,8 +12,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { spawn } = require('node:child_process');
 const { parseFile } = require('./parser');
+const { createRunner, runSingle } = require('./run_test');
 
 function parseArgs(argv) {
     const inputs = [];
@@ -105,64 +105,61 @@ function collectTestsFromPath(inputPath) {
     return cases;
 }
 
-function runOne(caseObj, distHint) {
-    return new Promise((resolve) => {
-        const child = spawn(process.execPath, [path.join(__dirname, 'run_test.js')], {
-            stdio: ['pipe', 'pipe', 'pipe'],
-        });
-
-        let stdout = '';
-        let stderr = '';
-        child.stdout.on('data', (c) => { stdout += c.toString('utf-8'); });
-        child.stderr.on('data', (c) => { stderr += c.toString('utf-8'); });
-
-        child.on('close', (code) => {
-            let parsed = null;
-            try {
-                parsed = JSON.parse(stdout);
-            } catch {
-                parsed = { ok: false, status: 'error', error: 'invalid json from run_test.js', raw_stdout: stdout, raw_stderr: stderr };
-            }
-
-            resolve({
-                ...parsed,
-                id: caseObj.id,
-                file: caseObj.file,
-                index: caseObj.index,
-                tags: caseObj.tags,
-                exit_code: code,
-                runner_stderr: stderr,
-            });
-        });
-
-        const req = {
-            id: caseObj.id,
-            source: caseObj.source,
-            tags: caseObj.tags,
-            stdin: '',
-            distHint,
-        };
-        child.stdin.write(JSON.stringify(req));
-        child.stdin.end();
-    });
-}
-
 async function runAll(cases, jobs, distHint) {
     const results = [];
     let idx = 0;
 
-    async function worker() {
+    async function worker(workerId) {
+        let loaded = null;
+        try {
+            loaded = await createRunner(distHint);
+        } catch (e) {
+            const err = String(e?.stack || e?.message || e);
+            while (true) {
+                const i = idx;
+                idx++;
+                if (i >= cases.length) break;
+                const c = cases[i];
+                results.push({
+                    ok: false,
+                    id: c.id,
+                    file: c.file,
+                    index: c.index,
+                    tags: c.tags,
+                    status: 'error',
+                    error: err,
+                    worker: workerId,
+                });
+            }
+            return;
+        }
+
         while (true) {
             const i = idx;
             idx++;
             if (i >= cases.length) break;
-            const r = await runOne(cases[i], distHint);
-            results.push(r);
+            const c = cases[i];
+            const req = {
+                id: c.id,
+                source: c.source,
+                tags: c.tags,
+                stdin: '',
+                distHint,
+            };
+            const r = await runSingle(req, loaded);
+            results.push({
+                ...r,
+                id: c.id,
+                file: c.file,
+                index: c.index,
+                tags: c.tags,
+                worker: workerId,
+            });
         }
     }
 
     const ws = [];
-    for (let i = 0; i < jobs; i++) ws.push(worker());
+    for (let i = 0; i < jobs; i++) ws.push(worker(i + 1));
     await Promise.all(ws);
 
     // 入力順に並べたいのでソート
@@ -195,6 +192,18 @@ function ensureDir(p) {
     fs.mkdirSync(p, { recursive: true });
 }
 
+function pickTopIssues(results, limit) {
+    const failed = results.filter(r => r.status === 'fail');
+    const errored = results.filter(r => r.status === 'error');
+    const ordered = [...errored, ...failed];
+    return ordered.slice(0, limit).map((r) => ({
+        id: r.id,
+        status: r.status,
+        phase: r.phase || null,
+        error: r.error || null,
+    }));
+}
+
 async function main() {
     const { help, inputs, outPath, distHint, jobs } = parseArgs(process.argv.slice(2));
     if (help || inputs.length === 0 || !outPath) {
@@ -223,8 +232,11 @@ async function main() {
     ensureDir(path.dirname(outAbs));
     fs.writeFileSync(outAbs, JSON.stringify(out, null, 2));
 
-    // CI で見やすいように要約を stdout に出す
-    console.log(`doctest: total=${summary.total} passed=${summary.passed} failed=${summary.failed} errored=${summary.errored}`);
+    const topIssues = pickTopIssues(results, 5);
+    console.log(JSON.stringify({
+        summary,
+        top_issues: topIssues,
+    }, null, 2));
 
     // 失敗があれば exit code を 1 にする（gh-pages では continue-on-error で許可する想定）
     if (summary.failed > 0 || summary.errored > 0) {

@@ -102,3 +102,19 @@ The current stdlib is intentionally minimal and i32-focused:
 
 If you extend stdlib behavior, add a matching `.nepl` test under
 `stdlib/tests` and ensure `cargo run -p nepl-cli -- test` stays green.
+
+## Node doctest runner (`nodesrc/tests.js`)
+
+Use this runner for doctests embedded in `.n.md` and `.nepl` documents:
+
+```
+node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests.json --dist web/dist -j 4
+```
+
+Behavior summary:
+- Executes doctests in-process via `nodesrc/run_test.js` API (no child-process stdin IPC).
+- Loads compiler artifacts once per worker to reduce initialization overhead.
+- Prints compact JSON to stdout with only key points:
+  - `summary`: `total/passed/failed/errored`
+  - `top_issues`: first 5 failing/errored cases with `id/status/phase/error`
+- Writes full result details to the JSON file specified by `-o`.
