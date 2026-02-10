@@ -1,0 +1,52 @@
+# LSP 向け解析 API（暫定）
+
+`nepl-web` の wasm 公開 API として、lexer/parser の結果を JSON 取得できる関数を追加した。
+
+## analyze_lex
+
+- シグネチャ: `analyze_lex(source: string): object`
+- 返却内容:
+  - `stage`: `"lex"`
+  - `ok`: エラー診断がなければ `true`
+  - `indent_width`
+  - `tokens[]`
+    - `kind`
+    - `value`（一部 token のみ）
+    - `debug`
+    - `span`
+      - `file_id`
+      - `start`, `end`（byte offset）
+      - `start_line`, `start_col`, `end_line`, `end_col`
+  - `diagnostics[]`
+
+## analyze_parse
+
+- シグネチャ: `analyze_parse(source: string): object`
+- 返却内容:
+  - `stage`: `"parse"`
+  - `ok`
+  - `tokens[]`
+  - `lex_diagnostics[]`
+  - `diagnostics[]`
+  - `module`
+    - `indent_width`
+    - `directives_count`
+    - `root`（Block/Stmt/Expr/PrefixItem の木）
+    - `debug`（AST の pretty 文字列）
+
+## Node での利用
+
+`nodesrc/analyze_source.js` から呼び出せる。
+
+```bash
+node nodesrc/analyze_source.js --stage lex -i tests/functions.n.md -o /tmp/functions-lex.json
+node nodesrc/analyze_source.js --stage parse -i tests/functions.n.md -o /tmp/functions-parse.json
+```
+
+## 今後
+
+- typecheck 後の token ごとの型情報
+- 定義ジャンプ情報（import 先を含む）
+- Inlay Hint 向けの式範囲・引数範囲
+
+を順次追加する。

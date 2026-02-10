@@ -1,13 +1,17 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use js_sys::{Reflect, Uint8Array};
+use nepl_core::ast::{Block, Directive, FnBody, PrefixExpr, PrefixItem, Stmt};
 use nepl_core::diagnostic::{Diagnostic, Severity};
 use nepl_core::error::CoreError;
+use nepl_core::lexer::{lex, Token, TokenKind};
 use nepl_core::loader::{Loader, SourceMap};
+use nepl_core::parser::parse_tokens;
+use nepl_core::span::{FileId, Span};
 use nepl_core::{compile_module, CompileOptions, CompileTarget};
 use wasmprinter::print_bytes;
 use wasm_bindgen::prelude::*;
-use js_sys::{Reflect, Uint8Array};
 
 const NEPLG2_REPO_URL: &str = "https://github.com/neknaj/NEPLg2/";
 const NEPLG2_COMMIT_BASE_URL: &str = "https://github.com/neknaj/NEPLg2/commit/";
@@ -222,6 +226,594 @@ fn parse_emit_list(emit: JsValue) -> Result<Vec<String>, JsValue> {
         return Ok(out);
     }
     Err(JsValue::from_str("emit must be a string or an array of strings"))
+}
+
+fn line_col_of(source: &str, byte_pos: u32) -> (u32, u32) {
+    let mut line = 0u32;
+    let mut col = 0u32;
+    let mut seen = 0u32;
+    for ch in source.chars() {
+        if seen >= byte_pos {
+            break;
+        }
+        let len = ch.len_utf8() as u32;
+        if seen + len > byte_pos {
+            break;
+        }
+        seen += len;
+        if ch == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
+}
+
+fn span_to_js(source: &str, span: Span) -> JsValue {
+    let obj = js_sys::Object::new();
+    let (start_line, start_col) = line_col_of(source, span.start);
+    let (end_line, end_col) = line_col_of(source, span.end);
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("file_id"),
+        &JsValue::from_f64(span.file_id.0 as f64),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("start"),
+        &JsValue::from_f64(span.start as f64),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("end"),
+        &JsValue::from_f64(span.end as f64),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("start_line"),
+        &JsValue::from_f64(start_line as f64),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("start_col"),
+        &JsValue::from_f64(start_col as f64),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("end_line"),
+        &JsValue::from_f64(end_line as f64),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("end_col"),
+        &JsValue::from_f64(end_col as f64),
+    );
+    obj.into()
+}
+
+fn token_kind_name(kind: &TokenKind) -> &'static str {
+    match kind {
+        TokenKind::Indent => "Indent",
+        TokenKind::Dedent => "Dedent",
+        TokenKind::Newline => "Newline",
+        TokenKind::Eof => "Eof",
+        TokenKind::Colon => "Colon",
+        TokenKind::Semicolon => "Semicolon",
+        TokenKind::Pipe => "Pipe",
+        TokenKind::LParen => "LParen",
+        TokenKind::RParen => "RParen",
+        TokenKind::Comma => "Comma",
+        TokenKind::LAngle => "LAngle",
+        TokenKind::RAngle => "RAngle",
+        TokenKind::Arrow(_) => "Arrow",
+        TokenKind::PathSep => "PathSep",
+        TokenKind::At => "At",
+        TokenKind::Dot => "Dot",
+        TokenKind::Ampersand => "Ampersand",
+        TokenKind::Star => "Star",
+        TokenKind::Minus => "Minus",
+        TokenKind::Equals => "Equals",
+        TokenKind::Ident(_) => "Ident",
+        TokenKind::IntLiteral(_) => "IntLiteral",
+        TokenKind::FloatLiteral(_) => "FloatLiteral",
+        TokenKind::BoolLiteral(_) => "BoolLiteral",
+        TokenKind::StringLiteral(_) => "StringLiteral",
+        TokenKind::UnitLiteral => "UnitLiteral",
+        TokenKind::KwFn => "KwFn",
+        TokenKind::KwLet => "KwLet",
+        TokenKind::KwMut => "KwMut",
+        TokenKind::KwSet => "KwSet",
+        TokenKind::KwIf => "KwIf",
+        TokenKind::KwWhile => "KwWhile",
+        TokenKind::KwStruct => "KwStruct",
+        TokenKind::KwEnum => "KwEnum",
+        TokenKind::KwMatch => "KwMatch",
+        TokenKind::KwTrait => "KwTrait",
+        TokenKind::KwImpl => "KwImpl",
+        TokenKind::KwFor => "KwFor",
+        TokenKind::KwPub => "KwPub",
+        TokenKind::KwBlock => "KwBlock",
+        TokenKind::KwTuple => "KwTuple",
+        TokenKind::KwMlstr => "KwMlstr",
+        TokenKind::DirEntry(_) => "DirEntry",
+        TokenKind::DirTarget(_) => "DirTarget",
+        TokenKind::DirImport(_) => "DirImport",
+        TokenKind::DirUse(_) => "DirUse",
+        TokenKind::DirIfTarget(_) => "DirIfTarget",
+        TokenKind::DirIfProfile(_) => "DirIfProfile",
+        TokenKind::DirWasm => "DirWasm",
+        TokenKind::DirIndentWidth(_) => "DirIndentWidth",
+        TokenKind::DirInclude(_) => "DirInclude",
+        TokenKind::DirExtern { .. } => "DirExtern",
+        TokenKind::DirIntrinsic => "DirIntrinsic",
+        TokenKind::DirPrelude(_) => "DirPrelude",
+        TokenKind::DirNoPrelude => "DirNoPrelude",
+        TokenKind::WasmText(_) => "WasmText",
+        TokenKind::MlstrLine(_) => "MlstrLine",
+    }
+}
+
+fn token_extra(kind: &TokenKind) -> Option<String> {
+    match kind {
+        TokenKind::Arrow(e) => Some(format!("{:?}", e)),
+        TokenKind::Ident(v)
+        | TokenKind::IntLiteral(v)
+        | TokenKind::FloatLiteral(v)
+        | TokenKind::StringLiteral(v)
+        | TokenKind::DirEntry(v)
+        | TokenKind::DirTarget(v)
+        | TokenKind::DirImport(v)
+        | TokenKind::DirUse(v)
+        | TokenKind::DirIfTarget(v)
+        | TokenKind::DirIfProfile(v)
+        | TokenKind::DirInclude(v)
+        | TokenKind::DirPrelude(v)
+        | TokenKind::WasmText(v)
+        | TokenKind::MlstrLine(v) => Some(v.clone()),
+        TokenKind::BoolLiteral(v) => Some(v.to_string()),
+        TokenKind::DirIndentWidth(v) => Some(v.to_string()),
+        TokenKind::DirExtern {
+            module,
+            name,
+            func,
+            signature,
+        } => Some(format!(
+            "module={module}, name={name}, func={func}, signature={signature}"
+        )),
+        _ => None,
+    }
+}
+
+fn token_to_js(source: &str, token: &Token) -> JsValue {
+    let obj = js_sys::Object::new();
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("kind"),
+        &JsValue::from_str(token_kind_name(&token.kind)),
+    );
+    let _ = Reflect::set(
+        &obj,
+        &JsValue::from_str("debug"),
+        &JsValue::from_str(&format!("{:?}", token.kind)),
+    );
+    let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, token.span));
+    if let Some(extra) = token_extra(&token.kind) {
+        let _ = Reflect::set(
+            &obj,
+            &JsValue::from_str("value"),
+            &JsValue::from_str(&extra),
+        );
+    }
+    obj.into()
+}
+
+fn diagnostics_to_js(source: &str, diagnostics: &[Diagnostic]) -> JsValue {
+    let arr = js_sys::Array::new();
+    for d in diagnostics {
+        let obj = js_sys::Object::new();
+        let severity = match d.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        let _ = Reflect::set(
+            &obj,
+            &JsValue::from_str("severity"),
+            &JsValue::from_str(severity),
+        );
+        let _ = Reflect::set(
+            &obj,
+            &JsValue::from_str("code"),
+            &d.code
+                .map(JsValue::from_str)
+                .unwrap_or(JsValue::NULL),
+        );
+        let _ = Reflect::set(
+            &obj,
+            &JsValue::from_str("message"),
+            &JsValue::from_str(&d.message),
+        );
+        let _ = Reflect::set(
+            &obj,
+            &JsValue::from_str("primary"),
+            &span_to_js(source, d.primary.span),
+        );
+
+        let secondary = js_sys::Array::new();
+        for s in &d.secondary {
+            let sub = js_sys::Object::new();
+            let _ = Reflect::set(
+                &sub,
+                &JsValue::from_str("span"),
+                &span_to_js(source, s.span),
+            );
+            let _ = Reflect::set(
+                &sub,
+                &JsValue::from_str("message"),
+                &s.message
+                    .as_ref()
+                    .map(|m| JsValue::from_str(m))
+                    .unwrap_or(JsValue::NULL),
+            );
+            secondary.push(&sub);
+        }
+        let _ = Reflect::set(&obj, &JsValue::from_str("secondary"), &secondary);
+        arr.push(&obj);
+    }
+    arr.into()
+}
+
+fn expr_to_js(source: &str, expr: &PrefixExpr) -> JsValue {
+    let obj = js_sys::Object::new();
+    let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("PrefixExpr"));
+    let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, expr.span));
+    let items = js_sys::Array::new();
+    for item in &expr.items {
+        items.push(&prefix_item_to_js(source, item));
+    }
+    let _ = Reflect::set(&obj, &JsValue::from_str("items"), &items);
+    obj.into()
+}
+
+fn block_to_js(source: &str, block: &Block) -> JsValue {
+    let obj = js_sys::Object::new();
+    let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("Block"));
+    let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, block.span));
+    let items = js_sys::Array::new();
+    for stmt in &block.items {
+        items.push(&stmt_to_js(source, stmt));
+    }
+    let _ = Reflect::set(&obj, &JsValue::from_str("items"), &items);
+    obj.into()
+}
+
+fn directive_name(d: &Directive) -> &'static str {
+    match d {
+        Directive::Entry { .. } => "Entry",
+        Directive::Target { .. } => "Target",
+        Directive::Import { .. } => "Import",
+        Directive::Use { .. } => "Use",
+        Directive::IfTarget { .. } => "IfTarget",
+        Directive::IfProfile { .. } => "IfProfile",
+        Directive::IndentWidth { .. } => "IndentWidth",
+        Directive::Extern { .. } => "Extern",
+        Directive::Include { .. } => "Include",
+        Directive::Prelude { .. } => "Prelude",
+        Directive::NoPrelude { .. } => "NoPrelude",
+    }
+}
+
+fn stmt_to_js(source: &str, stmt: &Stmt) -> JsValue {
+    let obj = js_sys::Object::new();
+    match stmt {
+        Stmt::Directive(d) => {
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str("Directive"),
+            );
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("name"),
+                &JsValue::from_str(directive_name(d)),
+            );
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("debug"),
+                &JsValue::from_str(&format!("{:?}", d)),
+            );
+        }
+        Stmt::FnDef(def) => {
+            let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("FnDef"));
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("name"),
+                &JsValue::from_str(&def.name.name),
+            );
+            match &def.body {
+                FnBody::Parsed(block) => {
+                    let _ = Reflect::set(&obj, &JsValue::from_str("body"), &block_to_js(source, block));
+                }
+                FnBody::Wasm(block) => {
+                    let _ = Reflect::set(
+                        &obj,
+                        &JsValue::from_str("body"),
+                        &JsValue::from_str(&format!("{:?}", block)),
+                    );
+                }
+            }
+        }
+        Stmt::FnAlias(alias) => {
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str("FnAlias"),
+            );
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("name"),
+                &JsValue::from_str(&alias.name.name),
+            );
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("target"),
+                &JsValue::from_str(&alias.target.name),
+            );
+        }
+        Stmt::StructDef(def) => {
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str("StructDef"),
+            );
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("name"),
+                &JsValue::from_str(&def.name.name),
+            );
+        }
+        Stmt::EnumDef(def) => {
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str("EnumDef"),
+            );
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("name"),
+                &JsValue::from_str(&def.name.name),
+            );
+        }
+        Stmt::Wasm(block) => {
+            let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("Wasm"));
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("debug"),
+                &JsValue::from_str(&format!("{:?}", block)),
+            );
+        }
+        Stmt::Trait(def) => {
+            let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("Trait"));
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("name"),
+                &JsValue::from_str(&def.name.name),
+            );
+        }
+        Stmt::Impl(def) => {
+            let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("Impl"));
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("debug"),
+                &JsValue::from_str(&format!("{:?}", def)),
+            );
+        }
+        Stmt::Expr(expr) => {
+            let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("Expr"));
+            let _ = Reflect::set(&obj, &JsValue::from_str("expr"), &expr_to_js(source, expr));
+        }
+        Stmt::ExprSemi(expr, span) => {
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str("ExprSemi"),
+            );
+            let _ = Reflect::set(&obj, &JsValue::from_str("expr"), &expr_to_js(source, expr));
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("semi_span"),
+                &span
+                    .map(|s| span_to_js(source, s))
+                    .unwrap_or(JsValue::NULL),
+            );
+        }
+    }
+    obj.into()
+}
+
+fn prefix_item_to_js(source: &str, item: &PrefixItem) -> JsValue {
+    let obj = js_sys::Object::new();
+    match item {
+        PrefixItem::Symbol(sym) => {
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str("Symbol"),
+            );
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("debug"),
+                &JsValue::from_str(&format!("{:?}", sym)),
+            );
+        }
+        PrefixItem::Literal(lit, span) => {
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str("Literal"),
+            );
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("debug"),
+                &JsValue::from_str(&format!("{:?}", lit)),
+            );
+            let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, *span));
+        }
+        PrefixItem::TypeAnnotation(ty, span) => {
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str("TypeAnnotation"),
+            );
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("debug"),
+                &JsValue::from_str(&format!("{:?}", ty)),
+            );
+            let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, *span));
+        }
+        PrefixItem::Block(block, span) => {
+            let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("Block"));
+            let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, *span));
+            let _ = Reflect::set(&obj, &JsValue::from_str("block"), &block_to_js(source, block));
+        }
+        PrefixItem::Match(m, span) => {
+            let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("Match"));
+            let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, *span));
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("debug"),
+                &JsValue::from_str(&format!("{:?}", m)),
+            );
+        }
+        PrefixItem::Pipe(span) => {
+            let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("Pipe"));
+            let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, *span));
+        }
+        PrefixItem::Tuple(values, span) => {
+            let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("Tuple"));
+            let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, *span));
+            let arr = js_sys::Array::new();
+            for e in values {
+                arr.push(&expr_to_js(source, e));
+            }
+            let _ = Reflect::set(&obj, &JsValue::from_str("items"), &arr);
+        }
+        PrefixItem::Group(expr, span) => {
+            let _ = Reflect::set(&obj, &JsValue::from_str("kind"), &JsValue::from_str("Group"));
+            let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, *span));
+            let _ = Reflect::set(&obj, &JsValue::from_str("expr"), &expr_to_js(source, expr));
+        }
+        PrefixItem::Intrinsic(expr, span) => {
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("kind"),
+                &JsValue::from_str("Intrinsic"),
+            );
+            let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, *span));
+            let _ = Reflect::set(
+                &obj,
+                &JsValue::from_str("debug"),
+                &JsValue::from_str(&format!("{:?}", expr)),
+            );
+        }
+    }
+    obj.into()
+}
+
+/// 入力ソースを字句解析し、token 列と診断を JSON で返します。
+///
+/// VSCode 拡張や LSP 実装で、構文解析前の結果を可視化するための API です。
+#[wasm_bindgen]
+pub fn analyze_lex(source: &str) -> JsValue {
+    let file_id = FileId(0);
+    let lex_result = lex(file_id, source);
+    let out = js_sys::Object::new();
+    let token_arr = js_sys::Array::new();
+    for token in &lex_result.tokens {
+        token_arr.push(&token_to_js(source, token));
+    }
+    let diagnostics = diagnostics_to_js(source, &lex_result.diagnostics);
+    let has_error = lex_result
+        .diagnostics
+        .iter()
+        .any(|d| d.severity == Severity::Error);
+    let _ = Reflect::set(&out, &JsValue::from_str("stage"), &JsValue::from_str("lex"));
+    let _ = Reflect::set(
+        &out,
+        &JsValue::from_str("ok"),
+        &JsValue::from_bool(!has_error),
+    );
+    let _ = Reflect::set(&out, &JsValue::from_str("tokens"), &token_arr);
+    let _ = Reflect::set(
+        &out,
+        &JsValue::from_str("indent_width"),
+        &JsValue::from_f64(lex_result.indent_width as f64),
+    );
+    let _ = Reflect::set(&out, &JsValue::from_str("diagnostics"), &diagnostics);
+    out.into()
+}
+
+/// 入力ソースを構文解析し、token・AST 木構造・診断を JSON で返します。
+///
+/// lexer/parser の結果確認や、エディタ拡張での構文可視化に利用します。
+#[wasm_bindgen]
+pub fn analyze_parse(source: &str) -> JsValue {
+    let file_id = FileId(0);
+    let lex_result = lex(file_id, source);
+    let token_arr = js_sys::Array::new();
+    for token in &lex_result.tokens {
+        token_arr.push(&token_to_js(source, token));
+    }
+    let lex_diagnostics = diagnostics_to_js(source, &lex_result.diagnostics);
+    let parse_result = parse_tokens(file_id, lex_result);
+    let diagnostics = diagnostics_to_js(source, &parse_result.diagnostics);
+
+    let out = js_sys::Object::new();
+    let _ = Reflect::set(
+        &out,
+        &JsValue::from_str("stage"),
+        &JsValue::from_str("parse"),
+    );
+    let _ = Reflect::set(&out, &JsValue::from_str("tokens"), &token_arr);
+    let _ = Reflect::set(
+        &out,
+        &JsValue::from_str("lex_diagnostics"),
+        &lex_diagnostics,
+    );
+    let _ = Reflect::set(&out, &JsValue::from_str("diagnostics"), &diagnostics);
+
+    if let Some(module) = parse_result.module {
+        let module_obj = js_sys::Object::new();
+        let _ = Reflect::set(
+            &module_obj,
+            &JsValue::from_str("indent_width"),
+            &JsValue::from_f64(module.indent_width as f64),
+        );
+        let _ = Reflect::set(
+            &module_obj,
+            &JsValue::from_str("directives_count"),
+            &JsValue::from_f64(module.directives.len() as f64),
+        );
+        let _ = Reflect::set(
+            &module_obj,
+            &JsValue::from_str("root"),
+            &block_to_js(source, &module.root),
+        );
+        let _ = Reflect::set(
+            &module_obj,
+            &JsValue::from_str("debug"),
+            &JsValue::from_str(&format!("{:#?}", module)),
+        );
+        let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(true));
+        let _ = Reflect::set(&out, &JsValue::from_str("module"), &module_obj);
+    } else {
+        let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(false));
+        let _ = Reflect::set(&out, &JsValue::from_str("module"), &JsValue::NULL);
+    }
+
+    out.into()
 }
 
 fn compile_outputs_impl(

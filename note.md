@@ -1,4 +1,29 @@
 # 状況メモ (2026-01-22)
+# 2026-02-10 作業メモ (lexer/parser 解析API追加)
+- VSCode 拡張計画（todo.md の LSP / VSCode 項）を再確認し、上流解析を可視化する API を先に追加した。
+- `nepl-web/src/lib.rs` に wasm 公開関数を追加:
+  - `analyze_lex(source)`:
+    - token 列（kind/value/debug/span）
+    - diagnostics（severity/message/code/span）
+    - span の byte 範囲と line/col を返す
+  - `analyze_parse(source)`:
+    - token 列
+    - lex/parse diagnostics
+    - module の木構造（Block/Stmt/Expr/PrefixItem の再帰 JSON）
+    - debug 用の AST pretty 文字列
+- Node 側に `nodesrc/analyze_source.js` を追加し、dist の wasm API を使って解析結果を取得できるようにした。
+  - `--stage lex|parse`
+  - `-i <file>` または `--source`
+  - `-o <json>`
+- 実行確認:
+  - `NO_COLOR=true trunk build`: 成功
+  - `node nodesrc/analyze_source.js --stage lex -i tests/functions.n.md -o /tmp/functions-lex.json`: 成功
+  - `node nodesrc/analyze_source.js --stage parse -i tests/functions.n.md -o /tmp/functions-parse.json`: 成功
+- 回帰確認:
+  - `node nodesrc/tests.js -i tests -o /tmp/tests-current.json -j 4`
+  - summary: `total=312, passed=249, failed=63, errored=0`
+  - 主要失敗は既知の block/typecheck 系（今回の API 追加では未着手）
+
 # 2026-02-10 作業メモ (namespace再設計着手)
 - plan.md の再確認:
   - `fn` は `let` の糖衣構文

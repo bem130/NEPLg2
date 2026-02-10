@@ -28,6 +28,11 @@
 - 実装進捗・結果・失敗分析は `note.md` のみに記録する。
 - `todo.md` は未完了タスクのみを保持し、完了項目は即時削除する。
 
+6. VSCode/LSP API 拡張（phase 2）
+- `analyze_lex` / `analyze_parse` の出力を基盤として、token 単位の型情報 API を追加する。
+- 定義ジャンプ（同一ファイル→import 先ファイル）を返す API を設計・実装する。
+- Hover/Inlay Hint 用に「式範囲」「引数範囲」「推論型」を返す API を typecheck 後段で追加する。
+
 ---
 ### 以下編集禁止
 
