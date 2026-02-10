@@ -3096,9 +3096,8 @@ impl Parser {
             }
 
             if let Some(expr) = self.parse_prefix_expr() {
-                if self.consume_if(&TokenKind::Semicolon) {
-                    let s_span = self.peek_span().unwrap_or(expr.span);
-                    items.push(Stmt::ExprSemi(expr, Some(s_span)));
+                if expr.trailing_semis > 0 {
+                    items.push(Stmt::ExprSemi(expr.clone(), expr.trailing_semi_span));
                 } else {
                     items.push(Stmt::Expr(expr));
                 }

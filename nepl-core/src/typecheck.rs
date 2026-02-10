@@ -193,6 +193,7 @@ pub fn typecheck(
                         arity: params.len(),
                         builtin: None,
                         type_param_bounds: Vec::new(),
+                        captures: Vec::new(),
                     },
                 });
                 externs.push(HirExtern {
@@ -313,6 +314,7 @@ pub fn typecheck(
                             arity: params.len(),
                             builtin: None,
                             type_param_bounds: Vec::new(),
+                            captures: Vec::new(),
                         },
                     });
                     
@@ -329,6 +331,7 @@ pub fn typecheck(
                             arity: params.len(),
                             builtin: None,
                             type_param_bounds: Vec::new(),
+                            captures: Vec::new(),
                         },
                     });
                 }
@@ -394,6 +397,7 @@ pub fn typecheck(
                         arity: fs.len(),
                         builtin: None,
                         type_param_bounds: Vec::new(),
+                        captures: Vec::new(),
                     },
                 });
 
@@ -473,6 +477,7 @@ pub fn typecheck(
                         arity: params.len(),
                         builtin: None,
                         type_param_bounds: Vec::new(),
+                        captures: Vec::new(),
                     },
                 });
             }
@@ -564,6 +569,7 @@ pub fn typecheck(
                     arity: info.fields.len(),
                     builtin: None,
                     type_param_bounds: Vec::new(),
+                    captures: Vec::new(),
                 },
             });
         }
@@ -649,6 +655,7 @@ pub fn typecheck(
                         arity: params.len(),
                         builtin: None,
                         type_param_bounds: bounds_vec.clone(),
+                        captures: Vec::new(),
                     },
                 });
             } else {
@@ -678,19 +685,21 @@ pub fn typecheck(
         }
         let mut target_infos = Vec::new();
         for target in targets {
-            let (symbol, effect, arity, builtin, bounds) = match &target.kind {
+            let (symbol, effect, arity, builtin, bounds, captures) = match &target.kind {
                 BindingKind::Func {
                     symbol,
                     effect,
                     arity,
                     builtin,
                     type_param_bounds,
+                    captures,
                 } => (
                     symbol.clone(),
                     *effect,
                     *arity,
                     *builtin,
                     type_param_bounds.clone(),
+                    captures.clone(),
                 ),
                 _ => {
                     diagnostics.push(Diagnostic::error(
@@ -700,9 +709,9 @@ pub fn typecheck(
                     continue;
                 }
             };
-            target_infos.push((target.ty, symbol, effect, arity, builtin, bounds));
+            target_infos.push((target.ty, symbol, effect, arity, builtin, bounds, captures));
         }
-        for (ty, symbol, effect, arity, builtin, bounds) in target_infos {
+        for (ty, symbol, effect, arity, builtin, bounds, captures) in target_infos {
             if let Some(existing) = env.lookup(&alias.name.name) {
                 if !matches!(existing.kind, BindingKind::Func { .. }) {
                     diagnostics.push(Diagnostic::error(
@@ -725,6 +734,7 @@ pub fn typecheck(
                     arity,
                     builtin,
                     type_param_bounds: bounds,
+                    captures,
                 },
             });
         }
@@ -798,6 +808,8 @@ pub fn typecheck(
             match check_function(
                 f,
                 f_ty,
+                entry.as_ref().map(|n| n == &f.name.name).unwrap_or(false),
+                &[],
                 &mut ctx,
                 &mut env,
                 &mut label_env,
@@ -928,6 +940,8 @@ pub fn typecheck(
                 let mut func = match check_function(
                     m,
                     expected_sig,
+                    false,
+                    &[],
                     &mut ctx,
                     &mut env,
                     &mut label_env,
@@ -1034,6 +1048,8 @@ pub fn typecheck(
 fn check_function(
     f: &FnDef,
     func_ty: TypeId,
+    is_entry: bool,
+    captured_params: &[(String, TypeId)],
     ctx: &mut TypeCtx,
     env: &mut Env,
     labels: &mut LabelEnv,
@@ -1062,7 +1078,7 @@ fn check_function(
             return Err(diags);
         }
     };
-    if params_ty.len() != f.params.len() {
+    if params_ty.len() != captured_params.len() + f.params.len() {
         diags.push(Diagnostic::error(
             "parameter count mismatch with signature",
             f.name.span,
@@ -1071,7 +1087,17 @@ fn check_function(
     }
 
     env.push_scope();
-    for (param, ty) in f.params.iter().zip(params_ty.iter()) {
+    for (name, ty) in captured_params.iter() {
+        let _ = env.insert_local(Binding {
+            name: name.clone(),
+            ty: *ty,
+            mutable: false,
+            defined: true,
+            moved: false,
+            kind: BindingKind::Var,
+        });
+    }
+    for (param, ty) in f.params.iter().zip(params_ty.iter().skip(captured_params.len())) {
         let _ = env.insert_local(Binding {
             name: param.name.clone(),
             ty: *ty,
@@ -1089,7 +1115,7 @@ fn check_function(
             labels,
             string_table: strings,
             diagnostics: Vec::new(),
-            current_effect: effect,
+            current_effect: if is_entry { Effect::Impure } else { effect },
             enums,
             structs,
             instantiations,
@@ -1133,16 +1159,28 @@ fn check_function(
         Ok(HirFunction {
             name: out_name,
             func_ty, // assigned here
-            params: f
-                .params
-                .iter()
-                .zip(params_ty.iter())
-                .map(|(p, ty)| HirParam {
-                    name: p.name.clone(),
-                    ty: *ty,
-                    mutable: false,
-                })
-                .collect(),
+            params: {
+                let mut out = Vec::new();
+                for (name, ty) in captured_params.iter() {
+                    out.push(HirParam {
+                        name: name.clone(),
+                        ty: *ty,
+                        mutable: false,
+                    });
+                }
+                for (p, ty) in f
+                    .params
+                    .iter()
+                    .zip(params_ty.iter().skip(captured_params.len()))
+                {
+                    out.push(HirParam {
+                        name: p.name.clone(),
+                        ty: *ty,
+                        mutable: false,
+                    });
+                }
+                out
+            },
             result: result_ty,
             effect,
             body,
@@ -1174,6 +1212,129 @@ struct BlockChecker<'a> {
 }
 
 impl<'a> BlockChecker<'a> {
+    fn user_visible_arity(&self, func_expr: &HirExpr, total_param_len: usize) -> usize {
+        if let HirExprKind::Var(name) = &func_expr.kind {
+            let bindings = self.env.lookup_all(name);
+            if !bindings.is_empty() {
+                let mut cap_len: Option<usize> = None;
+                for b in bindings {
+                    if let BindingKind::Func { captures, .. } = &b.kind {
+                        match cap_len {
+                            Some(prev) if prev != captures.len() => return total_param_len,
+                            Some(_) => {}
+                            None => cap_len = Some(captures.len()),
+                        }
+                    }
+                }
+                if let Some(c) = cap_len {
+                    return total_param_len.saturating_sub(c);
+                }
+            }
+        }
+        total_param_len
+    }
+
+    fn collect_bound_names_from_prefix(expr: &PrefixExpr, out: &mut BTreeSet<String>) {
+        for item in &expr.items {
+            match item {
+                PrefixItem::Symbol(Symbol::Let { name, .. }) => {
+                    out.insert(name.name.clone());
+                }
+                PrefixItem::Block(b, _) => {
+                    Self::collect_bound_names_from_block(b, out);
+                }
+                PrefixItem::Match(m, _) => {
+                    for arm in &m.arms {
+                        if let Some(b) = &arm.bind {
+                            out.insert(b.name.clone());
+                        }
+                        Self::collect_bound_names_from_block(&arm.body, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn collect_bound_names_from_block(block: &Block, out: &mut BTreeSet<String>) {
+        for stmt in &block.items {
+            match stmt {
+                Stmt::Expr(e) | Stmt::ExprSemi(e, _) => {
+                    Self::collect_bound_names_from_prefix(e, out);
+                }
+                Stmt::FnDef(f) => {
+                    out.insert(f.name.name.clone());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn collect_ref_names_from_prefix(expr: &PrefixExpr, out: &mut BTreeSet<String>) {
+        for item in &expr.items {
+            match item {
+                PrefixItem::Symbol(Symbol::Ident(id, _, _)) => {
+                    out.insert(id.name.clone());
+                }
+                PrefixItem::Block(b, _) => {
+                    Self::collect_ref_names_from_block(b, out);
+                }
+                PrefixItem::Match(m, _) => {
+                    Self::collect_ref_names_from_prefix(&m.scrutinee, out);
+                    for arm in &m.arms {
+                        Self::collect_ref_names_from_block(&arm.body, out);
+                    }
+                }
+                PrefixItem::Tuple(items, _) => {
+                    for it in items {
+                        Self::collect_ref_names_from_prefix(it, out);
+                    }
+                }
+                PrefixItem::Group(inner, _) => {
+                    Self::collect_ref_names_from_prefix(inner, out);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn collect_ref_names_from_block(block: &Block, out: &mut BTreeSet<String>) {
+        for stmt in &block.items {
+            match stmt {
+                Stmt::Expr(e) | Stmt::ExprSemi(e, _) => {
+                    Self::collect_ref_names_from_prefix(e, out);
+                }
+                Stmt::FnDef(_) => {}
+                _ => {}
+            }
+        }
+    }
+
+    fn collect_nested_fn_captures(&self, f: &FnDef) -> Vec<(String, TypeId)> {
+        let FnBody::Parsed(body) = &f.body else {
+            return Vec::new();
+        };
+        let mut refs = BTreeSet::new();
+        let mut bounds = BTreeSet::new();
+        for p in &f.params {
+            bounds.insert(p.name.clone());
+        }
+        Self::collect_bound_names_from_block(body, &mut bounds);
+        Self::collect_ref_names_from_block(body, &mut refs);
+        let mut captures = Vec::new();
+        for name in refs {
+            if bounds.contains(&name) || name == f.name.name {
+                continue;
+            }
+            if let Some(b) = self.env.lookup_any(&name) {
+                if matches!(b.kind, BindingKind::Var) {
+                    captures.push((name, b.ty));
+                }
+            }
+        }
+        captures
+    }
+
     fn find_outer_function_consumer(
         &self,
         stack: &[StackEntry],
@@ -1365,9 +1526,7 @@ impl<'a> BlockChecker<'a> {
         base_depth: usize,
         new_scope: bool,
     ) -> Option<(HirBlock, Option<TypeId>)> {
-        // block always allows side effects for now (matches user request "allow side effects in block")
         let old_effect = self.current_effect;
-        self.current_effect = Effect::Impure;
 
         if new_scope {
             self.env.push_scope();
@@ -1404,8 +1563,23 @@ impl<'a> BlockChecker<'a> {
                     ));
                     continue;
                 }
-                let ty = type_from_expr(self.ctx, self.labels, &f.signature);
-                if let TypeKind::Function { params, effect, .. } = self.ctx.get(ty) {
+                let base_ty = type_from_expr(self.ctx, self.labels, &f.signature);
+                let captures = self.collect_nested_fn_captures(f);
+                let mut ty = base_ty;
+                if let TypeKind::Function {
+                    type_params,
+                    params,
+                    result,
+                    effect,
+                } = self.ctx.get(base_ty)
+                {
+                    if !captures.is_empty() {
+                        let mut lifted_params = captures.iter().map(|(_, t)| *t).collect::<Vec<_>>();
+                        lifted_params.extend(params.iter().copied());
+                        ty = self
+                            .ctx
+                            .function(type_params.clone(), lifted_params, result, effect);
+                    }
                     let _ = self.env.insert_local(Binding {
                         name: f.name.name.clone(),
                         ty,
@@ -1418,6 +1592,7 @@ impl<'a> BlockChecker<'a> {
                             arity: params.len(),
                             builtin: None,
                             type_param_bounds: Vec::new(),
+                            captures,
                         },
                     });
                 }
@@ -1460,6 +1635,11 @@ impl<'a> BlockChecker<'a> {
                         Some((typed, dropped_from_prefix)) => {
                             let is_last_expr = Some(idx) == last_expr_idx;
                             let mut drop_result = !is_last_expr;
+                            if matches!(stmt, Stmt::ExprSemi(_, _)) {
+                                // `;` explicitly discards the statement value even
+                                // when it appears on the last line of a block.
+                                drop_result = true;
+                            }
 
                             if dropped_from_prefix {
                                 self.diagnostics.push(Diagnostic::error(
@@ -1505,7 +1685,7 @@ impl<'a> BlockChecker<'a> {
                 Stmt::Directive(_) => {}
                 Stmt::FnAlias(_) => {}
                 Stmt::FnDef(f) => {
-                    let f_ty = {
+                    let (f_ty, captures) = {
                         let bindings = self.env.lookup_all(&f.name.name);
                         let funcs: Vec<&Binding> = bindings
                             .into_iter()
@@ -1515,7 +1695,11 @@ impl<'a> BlockChecker<'a> {
                             continue;
                         }
                         if funcs.len() == 1 {
-                            funcs[0].ty
+                            let caps = match &funcs[0].kind {
+                                BindingKind::Func { captures, .. } => captures.clone(),
+                                _ => Vec::new(),
+                            };
+                            (funcs[0].ty, caps)
                         } else {
                             let mut tmp_labels = LabelEnv::new();
                             for tp in &f.type_params {
@@ -1525,14 +1709,25 @@ impl<'a> BlockChecker<'a> {
                             let sig_ty = type_from_expr(self.ctx, &mut tmp_labels, &f.signature);
                             let sig_key = function_signature_string(self.ctx, sig_ty);
                             let mut matched: Option<TypeId> = None;
-                            for binding in funcs {
+                            for binding in &funcs {
                                 if function_signature_string(self.ctx, binding.ty) == sig_key {
                                     matched = Some(binding.ty);
                                     break;
                                 }
                             }
                             match matched {
-                                Some(ty) => ty,
+                                Some(ty) => {
+                                    let mut caps = Vec::new();
+                                    for b in &funcs {
+                                        if b.ty == ty {
+                                            if let BindingKind::Func { captures, .. } = &b.kind {
+                                                caps = captures.clone();
+                                            }
+                                            break;
+                                        }
+                                    }
+                                    (ty, caps)
+                                }
                                 None => {
                                     self.diagnostics.push(Diagnostic::error(
                                         "function signature does not match any overload",
@@ -1555,6 +1750,8 @@ impl<'a> BlockChecker<'a> {
                     match check_function(
                         f,
                         f_ty,
+                        false,
+                        captures.as_slice(),
                         self.ctx,
                         self.env,
                         self.labels,
@@ -2622,11 +2819,12 @@ impl<'a> BlockChecker<'a> {
                     continue;
                 }
             };
-            if stack.len() < func_pos + 1 + params.len() {
+            let needed_args = self.user_visible_arity(&stack[func_pos].expr, params.len());
+            if stack.len() < func_pos + 1 + needed_args {
                 break;
             };
             let expected_ret = expected.and_then(|(target, base_len)| {
-                let new_len = stack.len().saturating_sub(params.len());
+                let new_len = stack.len().saturating_sub(needed_args);
                 if new_len == base_len + 1 {
                     Some(target)
                 } else {
@@ -2634,7 +2832,7 @@ impl<'a> BlockChecker<'a> {
                 }
             });
             let mut args = Vec::new();
-            for _ in 0..params.len() {
+            for _ in 0..needed_args {
                 args.push(stack.remove(func_pos + 1));
             }
 
@@ -2714,11 +2912,12 @@ impl<'a> BlockChecker<'a> {
                     continue;
                 }
             };
-            if stack.len() < func_pos + 1 + params.len() {
+            let needed_args = self.user_visible_arity(&stack[func_pos].expr, params.len());
+            if stack.len() < func_pos + 1 + needed_args {
                 break;
             }
             let expected_ret = expected.and_then(|(target, base_len)| {
-                let new_len = stack.len().saturating_sub(params.len());
+                let new_len = stack.len().saturating_sub(needed_args);
                 if new_len == base_len + 1 {
                     Some(target)
                 } else {
@@ -2726,7 +2925,7 @@ impl<'a> BlockChecker<'a> {
                 }
             });
             let mut args = Vec::new();
-            for _ in 0..params.len() {
+            for _ in 0..needed_args {
                 args.push(stack.remove(func_pos + 1));
             }
 
@@ -3020,19 +3219,7 @@ impl<'a> BlockChecker<'a> {
         type_args: Vec<TypeId>,
         expected_ret: Option<TypeId>,
     ) -> Option<StackEntry> {
-        let mut check_effect_now = true;
-        if let HirExprKind::Var(name) = &func.expr.kind {
-            let bindings = self.env.lookup_all(name);
-            if !bindings.is_empty()
-                && bindings
-                    .iter()
-                    .all(|b| matches!(b.kind, BindingKind::Func { .. }))
-            {
-                check_effect_now = false;
-            }
-        }
-        if check_effect_now
-            && matches!(self.current_effect, Effect::Pure)
+        if matches!(self.current_effect, Effect::Pure)
             && matches!(effect, Effect::Impure)
         {
             self.diagnostics.push(Diagnostic::error(
@@ -3383,6 +3570,10 @@ impl<'a> BlockChecker<'a> {
                     let mut candidates: Vec<&Binding> = Vec::new();
                     let mut mismatch_count = false;
                     for binding in &bindings {
+                        let capture_len = match &binding.kind {
+                            BindingKind::Func { captures, .. } => captures.len(),
+                            _ => 0,
+                        };
                         let mut tmp_ctx = self.ctx.clone();
                         let inst_ty = if !explicit_type_args.is_empty() {
                             let func_data = if let TypeKind::Function {
@@ -3428,11 +3619,15 @@ impl<'a> BlockChecker<'a> {
                             } => (params, result, effect),
                             _ => continue,
                         };
-                        if c_params.len() != args.len() {
+                        if c_params.len() < capture_len {
+                            continue;
+                        }
+                        let user_params = &c_params[capture_len..];
+                        if user_params.len() != args.len() {
                             continue;
                         }
                         let mut ok = true;
-                        for (arg, pty) in args.iter().zip(c_params.iter()) {
+                        for (arg, pty) in args.iter().zip(user_params.iter()) {
                             if tmp_ctx.unify(arg.ty, *pty).is_err() {
                                 ok = false;
                                 break;
@@ -3522,14 +3717,26 @@ impl<'a> BlockChecker<'a> {
                         } => (params, result, effect),
                         _ => return None,
                     };
-                    if c_params.len() != args.len() {
+                    let captures = match &binding.kind {
+                        BindingKind::Func { captures, .. } => captures.clone(),
+                        _ => Vec::new(),
+                    };
+                    if c_params.len() < captures.len() {
+                        self.diagnostics.push(Diagnostic::error(
+                            "internal error: capture arity mismatch",
+                            func.expr.span,
+                        ));
+                        return None;
+                    }
+                    let user_params = &c_params[captures.len()..];
+                    if user_params.len() != args.len() {
                         self.diagnostics.push(Diagnostic::error(
                             "argument count mismatch",
                             func.expr.span,
                         ));
                         return None;
                     }
-                    for (arg, param_ty) in args.iter().zip(c_params.iter()) {
+                    for (arg, param_ty) in args.iter().zip(user_params.iter()) {
                         if self.ctx.unify(arg.ty, *param_ty).is_err() {
                             self.diagnostics.push(Diagnostic::error(
                                 "argument type mismatch",
@@ -3658,6 +3865,15 @@ impl<'a> BlockChecker<'a> {
                         BindingKind::Func { symbol, builtin, .. } => (symbol.clone(), builtin),
                         _ => (name.clone(), &None),
                     };
+                    let mut final_args: Vec<HirExpr> = Vec::new();
+                    for (cap_name, cap_ty) in captures.iter() {
+                        final_args.push(HirExpr {
+                            ty: *cap_ty,
+                            kind: HirExprKind::Var(cap_name.clone()),
+                            span: func.expr.span,
+                        });
+                    }
+                    final_args.extend(args.iter().map(|a| a.expr.clone()));
                     let callee = if builtin.is_some() {
                         FuncRef::Builtin(callee_name.clone())
                     } else {
@@ -3676,7 +3892,7 @@ impl<'a> BlockChecker<'a> {
                             ty: resolved_result,
                             kind: HirExprKind::Call {
                                 callee,
-                                args: args.into_iter().map(|a| a.expr).collect(),
+                                args: final_args,
                             },
                             span: func.expr.span,
                         },
@@ -3737,6 +3953,7 @@ enum BindingKind {
         arity: usize,
         builtin: Option<BuiltinKind>,
         type_param_bounds: Vec<Vec<String>>,
+        captures: Vec<(String, TypeId)>,
     },
 }
 
@@ -3852,6 +4069,15 @@ impl Env {
                         return Some(symbol.clone());
                     }
                 }
+            }
+        }
+        None
+    }
+
+    fn lookup_any(&self, name: &str) -> Option<&Binding> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(b) = scope.iter().rev().find(|b| b.name == name) {
+                return Some(b);
             }
         }
         None

@@ -1007,6 +1007,60 @@ fn ref_trace_to_js(source: &str, rf: &NameRefTrace) -> JsValue {
     obj.into()
 }
 
+fn name_resolution_payload_to_js(source: &str, trace: &NameResolutionTrace) -> JsValue {
+    let payload = js_sys::Object::new();
+
+    let defs = js_sys::Array::new();
+    for def in &trace.defs {
+        defs.push(&def_trace_to_js(source, def));
+    }
+    let refs = js_sys::Array::new();
+    for rf in &trace.refs {
+        refs.push(&ref_trace_to_js(source, rf));
+    }
+
+    let by_name = js_sys::Object::new();
+    let mut names = BTreeMap::<String, (Vec<usize>, Vec<usize>)>::new();
+    for d in &trace.defs {
+        names.entry(d.name.clone()).or_default().0.push(d.id);
+    }
+    for (idx, r) in trace.refs.iter().enumerate() {
+        names.entry(r.name.clone()).or_default().1.push(idx);
+    }
+    for (name, (def_ids, ref_ids)) in names {
+        let name_obj = js_sys::Object::new();
+        let d_arr = js_sys::Array::new();
+        for id in def_ids {
+            d_arr.push(&JsValue::from_f64(id as f64));
+        }
+        let r_arr = js_sys::Array::new();
+        for id in ref_ids {
+            r_arr.push(&JsValue::from_f64(id as f64));
+        }
+        let _ = Reflect::set(&name_obj, &JsValue::from_str("definitions"), &d_arr);
+        let _ = Reflect::set(&name_obj, &JsValue::from_str("references"), &r_arr);
+        let _ = Reflect::set(&by_name, &JsValue::from_str(&name), &name_obj);
+    }
+
+    let policy = js_sys::Object::new();
+    let _ = Reflect::set(
+        &policy,
+        &JsValue::from_str("selection"),
+        &JsValue::from_str("nearest_scope_first"),
+    );
+    let _ = Reflect::set(
+        &policy,
+        &JsValue::from_str("hoist"),
+        &JsValue::from_str("fn and non-mut let"),
+    );
+
+    let _ = Reflect::set(&payload, &JsValue::from_str("definitions"), &defs);
+    let _ = Reflect::set(&payload, &JsValue::from_str("references"), &refs);
+    let _ = Reflect::set(&payload, &JsValue::from_str("by_name"), &by_name);
+    let _ = Reflect::set(&payload, &JsValue::from_str("policy"), &policy);
+    payload.into()
+}
+
 fn semantic_expr_to_js(source: &str, se: &SemanticExprTrace) -> JsValue {
     let obj = js_sys::Object::new();
     let _ = Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(se.id as f64));
@@ -1414,56 +1468,12 @@ pub fn analyze_name_resolution(source: &str) -> JsValue {
     if let Some(module) = parse_result.module {
         let mut trace = NameResolutionTrace::new();
         trace_block(&mut trace, &module.root);
-
-        let defs = js_sys::Array::new();
-        for def in &trace.defs {
-            defs.push(&def_trace_to_js(source, def));
-        }
-        let refs = js_sys::Array::new();
-        for rf in &trace.refs {
-            refs.push(&ref_trace_to_js(source, rf));
-        }
-
-        let by_name = js_sys::Object::new();
-        let mut names = BTreeMap::<String, (Vec<usize>, Vec<usize>)>::new();
-        for d in &trace.defs {
-            names.entry(d.name.clone()).or_default().0.push(d.id);
-        }
-        for (idx, r) in trace.refs.iter().enumerate() {
-            names.entry(r.name.clone()).or_default().1.push(idx);
-        }
-        for (name, (def_ids, ref_ids)) in names {
-            let name_obj = js_sys::Object::new();
-            let d_arr = js_sys::Array::new();
-            for id in def_ids {
-                d_arr.push(&JsValue::from_f64(id as f64));
-            }
-            let r_arr = js_sys::Array::new();
-            for id in ref_ids {
-                r_arr.push(&JsValue::from_f64(id as f64));
-            }
-            let _ = Reflect::set(&name_obj, &JsValue::from_str("definitions"), &d_arr);
-            let _ = Reflect::set(&name_obj, &JsValue::from_str("references"), &r_arr);
-            let _ = Reflect::set(&by_name, &JsValue::from_str(&name), &name_obj);
-        }
-
-        let policy = js_sys::Object::new();
-        let _ = Reflect::set(
-            &policy,
-            &JsValue::from_str("selection"),
-            &JsValue::from_str("nearest_scope_first"),
-        );
-        let _ = Reflect::set(
-            &policy,
-            &JsValue::from_str("hoist"),
-            &JsValue::from_str("fn and non-mut let"),
-        );
-
+        let payload = name_resolution_payload_to_js(source, &trace);
         let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(true));
-        let _ = Reflect::set(&out, &JsValue::from_str("definitions"), &defs);
-        let _ = Reflect::set(&out, &JsValue::from_str("references"), &refs);
-        let _ = Reflect::set(&out, &JsValue::from_str("by_name"), &by_name);
-        let _ = Reflect::set(&out, &JsValue::from_str("policy"), &policy);
+        let _ = Reflect::set(&out, &JsValue::from_str("definitions"), &Reflect::get(&payload, &JsValue::from_str("definitions")).unwrap_or(JsValue::NULL));
+        let _ = Reflect::set(&out, &JsValue::from_str("references"), &Reflect::get(&payload, &JsValue::from_str("references")).unwrap_or(JsValue::NULL));
+        let _ = Reflect::set(&out, &JsValue::from_str("by_name"), &Reflect::get(&payload, &JsValue::from_str("by_name")).unwrap_or(JsValue::NULL));
+        let _ = Reflect::set(&out, &JsValue::from_str("policy"), &Reflect::get(&payload, &JsValue::from_str("policy")).unwrap_or(JsValue::NULL));
     } else {
         let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(false));
         let _ = Reflect::set(&out, &JsValue::from_str("definitions"), &js_sys::Array::new());
@@ -1505,6 +1515,10 @@ pub fn analyze_semantics(source: &str) -> JsValue {
         .any(|d| matches!(d.severity, Severity::Error));
 
     if let Some(module) = &parse_result.module {
+        let mut resolve_trace = NameResolutionTrace::new();
+        trace_block(&mut resolve_trace, &module.root);
+        let resolve_payload = name_resolution_payload_to_js(source, &resolve_trace);
+
         let (target, mut target_diags) = resolve_target_for_analysis(module);
         has_error |= target_diags
             .iter()
@@ -1544,6 +1558,54 @@ pub fn analyze_semantics(source: &str) -> JsValue {
             let expr_arr = js_sys::Array::new();
             for ex in &exprs {
                 expr_arr.push(&semantic_expr_to_js(source, ex));
+            }
+
+            let token_res_arr = js_sys::Array::new();
+            for (tok_idx, token) in tokens.iter().enumerate() {
+                let mut best_ref: Option<&NameRefTrace> = None;
+                for rf in &resolve_trace.refs {
+                    if span_contains(rf.span, token.span) {
+                        if let Some(prev) = best_ref {
+                            if span_width(rf.span) < span_width(prev.span) {
+                                best_ref = Some(rf);
+                            }
+                        } else {
+                            best_ref = Some(rf);
+                        }
+                    }
+                }
+                let item = js_sys::Object::new();
+                let _ = Reflect::set(
+                    &item,
+                    &JsValue::from_str("token_index"),
+                    &JsValue::from_f64(tok_idx as f64),
+                );
+                if let Some(rf) = best_ref {
+                    let _ = Reflect::set(&item, &JsValue::from_str("name"), &JsValue::from_str(&rf.name));
+                    let _ = Reflect::set(&item, &JsValue::from_str("ref_span"), &span_to_js(source, rf.span));
+                    let _ = Reflect::set(
+                        &item,
+                        &JsValue::from_str("resolved_def_id"),
+                        &rf.resolved_def_id
+                            .map(|v| JsValue::from_f64(v as f64))
+                            .unwrap_or(JsValue::NULL),
+                    );
+                    let cand = js_sys::Array::new();
+                    for id in &rf.candidate_def_ids {
+                        cand.push(&JsValue::from_f64(*id as f64));
+                    }
+                    let _ = Reflect::set(&item, &JsValue::from_str("candidate_def_ids"), &cand);
+                } else {
+                    let _ = Reflect::set(&item, &JsValue::from_str("name"), &JsValue::NULL);
+                    let _ = Reflect::set(&item, &JsValue::from_str("ref_span"), &JsValue::NULL);
+                    let _ = Reflect::set(&item, &JsValue::from_str("resolved_def_id"), &JsValue::NULL);
+                    let _ = Reflect::set(
+                        &item,
+                        &JsValue::from_str("candidate_def_ids"),
+                        &js_sys::Array::new(),
+                    );
+                }
+                token_res_arr.push(&item);
             }
 
             let mut token_semantics = Vec::<SemanticTokenTrace>::new();
@@ -1592,6 +1654,8 @@ pub fn analyze_semantics(source: &str) -> JsValue {
             let _ = Reflect::set(&out, &JsValue::from_str("expressions"), &expr_arr);
             let _ = Reflect::set(&out, &JsValue::from_str("token_semantics"), &token_sem_arr);
             let _ = Reflect::set(&out, &JsValue::from_str("functions"), &function_arr);
+            let _ = Reflect::set(&out, &JsValue::from_str("name_resolution"), &resolve_payload);
+            let _ = Reflect::set(&out, &JsValue::from_str("token_resolution"), &token_res_arr);
         } else {
             let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(false));
             let _ = Reflect::set(&out, &JsValue::from_str("expressions"), &js_sys::Array::new());
@@ -1601,6 +1665,8 @@ pub fn analyze_semantics(source: &str) -> JsValue {
                 &js_sys::Array::new(),
             );
             let _ = Reflect::set(&out, &JsValue::from_str("functions"), &js_sys::Array::new());
+            let _ = Reflect::set(&out, &JsValue::from_str("name_resolution"), &resolve_payload);
+            let _ = Reflect::set(&out, &JsValue::from_str("token_resolution"), &js_sys::Array::new());
         }
     } else {
         let diagnostics = diagnostics_to_js(source, &all_diags);
@@ -1613,6 +1679,8 @@ pub fn analyze_semantics(source: &str) -> JsValue {
             &js_sys::Array::new(),
         );
         let _ = Reflect::set(&out, &JsValue::from_str("functions"), &js_sys::Array::new());
+        let _ = Reflect::set(&out, &JsValue::from_str("name_resolution"), &JsValue::NULL);
+        let _ = Reflect::set(&out, &JsValue::from_str("token_resolution"), &js_sys::Array::new());
     }
 
     out.into()
