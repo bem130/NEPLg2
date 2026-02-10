@@ -7,11 +7,47 @@
 //: [注意/ちゅうい]:
 //: - 詳細な関数別ドキュメントは段階的に追記します。
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target wasi
-//: ()
+//:| #import "std/test" as *
+//:| #import "alloc/vec" as *
+//: fn main <()*>()> ():
+//:     assert_eq_i32 0 vec_len vec_new<i32>;
+//:     let a0 vec_new<i32>;
+//:     let a1 vec_push<i32> a0 10;
+//:     let a2 vec_push<i32> a1 20;
+//:     assert_eq_i32 2 vec_len a2;
+//:     let b0 vec_new<i32>;
+//:     let b1 vec_push<i32> b0 10;
+//:     let b2 vec_push<i32> b1 20;
+//:     match vec_get<i32> b2 1:
+//:         Option::Some x:
+//:             assert_eq_i32 20 x;
+//:         Option::None:
+//:             assert false;
+//: ```
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target wasi
+//:| #import "std/test" as *
+//:| #import "alloc/vec" as *
+//: fn main <()*>()> ():
+//:     let v0 vec_with_capacity<i32> 2;
+//:     let v1 vec_push<i32> v0 1;
+//:     let v2 vec_push<i32> v1 2;
+//:     match vec_get<i32> v2 0:
+//:         Option::Some x:
+//:             assert_eq_i32 1 x;
+//:         Option::None:
+//:             assert false;
+//:     let w0 vec_with_capacity<i32> 2;
+//:     let w1 vec_push<i32> w0 1;
+//:     let w2 vec_push<i32> w1 2;
+//:     assert is_none<i32> vec_get<i32> w2 3;
 //: ```
 
 #indent 4

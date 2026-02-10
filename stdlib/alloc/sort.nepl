@@ -7,11 +7,47 @@
 //: [注意/ちゅうい]:
 //: - 詳細な関数別ドキュメントは段階的に追記します。
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target wasi
-//: ()
+//:| #import "std/test" as *
+//:| #import "alloc/sort" as *
+//:| #import "alloc/vec" as *
+//:| #import "core/math" as *
+//: fn mk <()*>Vec<i32>> ():
+//:     let v0 vec_new<i32>;
+//:     let v1 vec_push<i32> v0 3;
+//:     let v2 vec_push<i32> v1 1;
+//:     vec_push<i32> v2 2
+//:
+//: fn sorted3 <()*>Vec<i32>> ():
+//:     let v0 vec_new<i32>;
+//:     let v1 vec_push<i32> v0 1;
+//:     let v2 vec_push<i32> v1 2;
+//:     vec_push<i32> v2 3
+//:
+//: fn main <()*>()> ():
+//:     sort_quick<i32> mk;
+//:     assert sort_is_sorted<i32> sorted3;
+//: ```
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target wasi
+//:| #import "std/test" as *
+//:| #import "alloc/sort" as *
+//:| #import "alloc/vec" as *
+//:| #import "core/math" as *
+//: fn main <()*>()> ():
+//:     let u0 vec_new<i32>;
+//:     let u1 vec_push<i32> u0 4;
+//:     let u2 vec_push<i32> u1 3;
+//:     let u3 vec_push<i32> u2 2;
+//:     let u4 vec_push<i32> u3 1;
+//:     sort_merge<i32> u4;
+//:     assert true;
 //: ```
 
 #indent 4
@@ -246,6 +282,7 @@ fn sort_swap <.T> <(Vec<.T>,i32,i32)*>()> (v, i, j):
 //: - 実装に依存します。
 fn sort_is_sorted <.T: Ord> <(Vec<.T>)*>bool> (v):
     let n <i32> get v "len"
+    let data_ptr <i32> get v "data"
     if:
         le n 1
         then true
@@ -254,8 +291,8 @@ fn sort_is_sorted <.T: Ord> <(Vec<.T>)*>bool> (v):
             let mut ok <bool> true
             while and ok lt i n:
                 do:
-                    let a <.T> sort_get_unchecked<.T> v sub i 1;
-                    let b <.T> sort_get_unchecked<.T> v i;
+                    let a <.T> sort_get_unchecked_data<.T> data_ptr sub i 1;
+                    let b <.T> sort_get_unchecked_data<.T> data_ptr i;
                     if:
                         sort_lt<.T> b a
                         then set ok false
@@ -765,14 +802,14 @@ fn sort_heap <.T: Ord> <(Vec<.T>)*>()> (v):
                         lt start 0
                         then set done0 1
                         else:
-                            sort_heap_sift_down_data data_ptr start n;
+                            sort_heap_sift_down_data<.T> data_ptr start n;
                             set start sub start 1;
                             ();
             let mut end <i32> sub n 1;
             while lt 0 end:
                 do:
                     sort_swap_data<.T> data_ptr 0 end;
-                    sort_heap_sift_down_data data_ptr 0 end;
+                    sort_heap_sift_down_data<.T> data_ptr 0 end;
                     set end sub end 1;
             ()
 
@@ -834,8 +871,8 @@ fn sort_merge_range_data <.T: Ord> <(i32,i32,i32,i32)*>()> (data_ptr, buf, l, r)
         then ()
         else:
             let mid <i32> div_s add l r 2;
-            sort_merge_range_data data_ptr buf l mid;
-            sort_merge_range_data data_ptr buf mid r;
+            sort_merge_range_data<.T> data_ptr buf l mid;
+            sort_merge_range_data<.T> data_ptr buf mid r;
 
             let mut i0 <i32> l;
             while lt i0 r:
@@ -902,7 +939,7 @@ fn sort_merge <.T: Ord> <(Vec<.T>)*>()> (v):
         else:
             let bytes <i32> mul n size_of<.T>
             let buf <i32> alloc bytes
-            sort_merge_range_data data_ptr buf 0 n;
+            sort_merge_range_data<.T> data_ptr buf 0 n;
             dealloc buf bytes;
             ()
 

@@ -41,6 +41,25 @@
 //: fn main <()*>()> ():
 //:     unwrap none<i32>;
 //: ```
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target wasi
+//:| #import "std/test" as *
+//:| #import "core/option" as *
+//:| #import "core/math" as *
+//: fn inc <(i32)->i32> (x):
+//:     add x 1
+//:
+//: fn main <()*>()> ():
+//:     let a0 option_map some 9 inc;
+//:     let a1 option_map some 9 inc;
+//:     let b option_map none<i32> inc;
+//:     assert is_some a0;
+//:     assert is_none b;
+//:     assert_eq_i32 10 unwrap a1;
+//: ```
 
 
 

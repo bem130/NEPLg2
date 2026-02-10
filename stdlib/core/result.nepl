@@ -53,6 +53,26 @@
 //:     let r <i32> "text";
 //:     r
 //: ```
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target wasi
+//:| #import "std/test" as *
+//:| #import "core/result" as *
+//:| #import "core/math" as *
+//: fn inc <(i32)->i32> (x):
+//:     add x 1
+//:
+//: fn strlen <(str)->i32> (s):
+//:     4
+//:
+//: fn main <()*>()> ():
+//:     let a map ok<i32,str> 9 inc;
+//:     let b map_err err<i32,str> "oops" strlen;
+//:     assert_eq_i32 10 unwrap_ok a;
+//:     assert_eq_i32 4 unwrap_err b;
+//: ```
 
 
 

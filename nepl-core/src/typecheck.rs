@@ -1382,10 +1382,33 @@ impl<'a> BlockChecker<'a> {
     fn type_param_has_bound(&self, ty: TypeId, trait_name: &str) -> bool {
         let resolved = self.ctx.resolve_id(ty);
         if let Some(bounds) = self.type_param_bounds.get(&resolved) {
-            bounds.iter().any(|b| b == trait_name)
-        } else {
-            false
+            return bounds.iter().any(|b| b == trait_name);
         }
+
+        // 型変数が他の型変数へ束縛された場合、resolve 後の TypeId が
+        // 直接 type_param_bounds に存在しないことがあるため、正規化後 ID でも照合する。
+        if self.type_param_bounds.iter().any(|(tp, bounds)| {
+            self.ctx.resolve_id(*tp) == resolved && bounds.iter().any(|b| b == trait_name)
+        }) {
+            return true;
+        }
+
+        // `.T` の明示型引数が同一スコープの別 TypeId として現れる経路があるため、
+        // 型変数ラベルが一致する場合も同じ境界として扱う。
+        let label = match self.ctx.get(resolved) {
+            TypeKind::Var(v) => v.label.clone(),
+            _ => None,
+        };
+        let Some(label) = label else {
+            return false;
+        };
+        self.type_param_bounds.iter().any(|(tp, bounds)| {
+            let same_label = match self.ctx.get(self.ctx.resolve_id(*tp)) {
+                TypeKind::Var(v) => v.label.as_deref() == Some(label.as_str()),
+                _ => false,
+            };
+            same_label && bounds.iter().any(|b| b == trait_name)
+        })
     }
 
     fn trait_bound_satisfied(&self, trait_name: &str, ty: TypeId) -> bool {
@@ -1952,6 +1975,24 @@ impl<'a> BlockChecker<'a> {
                                 BindingKind::Func { .. } => !*forced_value,
                                 _ => true,
                             };
+                            let explicit_args = match binding.kind {
+                                BindingKind::Func { .. } => {
+                                    let mut args = Vec::new();
+                                    for arg_expr in type_args {
+                                        args.push(type_from_expr(self.ctx, self.labels, arg_expr));
+                                    }
+                                    args
+                                }
+                                _ => {
+                                    if !type_args.is_empty() {
+                                        self.diagnostics.push(Diagnostic::error(
+                                            "type arguments are not allowed for variables",
+                                            id.span,
+                                        ));
+                                    }
+                                    Vec::new()
+                                }
+                            };
                             stack.push(StackEntry {
                                 ty,
                                 expr: HirExpr {
@@ -1959,7 +2000,7 @@ impl<'a> BlockChecker<'a> {
                                     kind: HirExprKind::Var(id.name.clone()),
                                     span: id.span,
                                 },
-                                type_args: Vec::new(),
+                                type_args: explicit_args,
                                 assign: None,
                                 auto_call,
                             });
@@ -3865,6 +3906,7 @@ impl<'a> BlockChecker<'a> {
                         return None;
                     }
 
+                    let raw_type_args = resolved_args.clone();
                     resolved_args = resolved_args
                         .into_iter()
                         .map(|t| self.ctx.resolve_id(t))
@@ -3878,10 +3920,14 @@ impl<'a> BlockChecker<'a> {
                         if !type_param_bounds.is_empty()
                             && type_param_bounds.len() == resolved_args.len()
                         {
-                            for (bounds, arg) in type_param_bounds.iter().zip(resolved_args.iter())
+                            for (bounds, (raw_arg, resolved_arg)) in type_param_bounds
+                                .iter()
+                                .zip(raw_type_args.iter().zip(resolved_args.iter()))
                             {
                                 for b in bounds {
-                                    if !self.trait_bound_satisfied(b, *arg) {
+                                    if !self.trait_bound_satisfied(b, *raw_arg)
+                                        && !self.trait_bound_satisfied(b, *resolved_arg)
+                                    {
                                         self.diagnostics.push(Diagnostic::error(
                                             format!("type does not satisfy trait bound '{}'", b),
                                             func.expr.span,
@@ -4337,9 +4383,6 @@ fn type_from_expr(ctx: &mut TypeCtx, labels: &mut LabelEnv, t: &TypeExpr) -> Typ
         TypeExpr::Str => ctx.str(),
         TypeExpr::Never => ctx.never(),
         TypeExpr::Named(name) => {
-            if let Some(id) = labels.get(name) {
-                return *id;
-            }
             match name.as_str() {
                 "i32" => ctx.i32(),
                 "u8" => ctx.u8(),
@@ -4348,6 +4391,9 @@ fn type_from_expr(ctx: &mut TypeCtx, labels: &mut LabelEnv, t: &TypeExpr) -> Typ
                 "str" => ctx.str(),
                 "never" => ctx.never(),
                 _ => {
+                    if let Some(id) = labels.get(name) {
+                        return *id;
+                    }
                     if let Some(id) = ctx.lookup_named(name) {
                         id
                     } else {

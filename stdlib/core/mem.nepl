@@ -32,6 +32,20 @@
 //:     assert_eq_i32 8 align8 8;
 //:     assert_eq_i32 16 align8 9;
 //: ```
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target wasi
+//:| #import "std/test" as *
+//:| #import "core/mem" as *
+//: fn main <()*>()> ():
+//:     let p alloc 4;
+//:     assert ne 0 p;
+//:     store_i32 p 123;
+//:     assert_eq_i32 123 load_i32 p;
+//:     dealloc p 4;
+//: ```
 
 
 
