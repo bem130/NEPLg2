@@ -1745,3 +1745,26 @@
   - 成功
 - `node nodesrc/tests.js -i tests/kp.n.md -o tests/output/kp_current.json -j 1`
   - `total=116, passed=116, failed=0, errored=0`
+
+# 2026-02-10 作業メモ (cast/kp 最終調整)
+## 実装
+- `stdlib/alloc/string.nepl`
+  - `fn cast from_i32;` / `fn cast to_i32;` を削除。
+  - `cast` 名の過剰な公開を減らし、`core/cast` 側のオーバーロード解決を安定化。
+- `stdlib/core/cast.nepl`
+  - 文字列変換連携を `string::from_*` / `string::to_*` に統一した状態を維持。
+  - `alloc/string` の公開 `cast` 依存を持たない構造へ整理。
+
+## 検証
+- `NO_COLOR=true trunk build`
+  - 成功
+- `node nodesrc/tests.js -i tests/numerics.n.md -o tests/output/numerics_current.json -j 1`
+  - `total=122, passed=122, failed=0, errored=0`
+- `node nodesrc/tests.js -i tests/kp.n.md -o tests/output/kp_current.json -j 1`
+  - `total=117, passed=117, failed=0, errored=0`
+- `cargo test --test kp -q`
+  - `14 passed, 0 failed`
+- `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 1`
+  - `total=465, passed=458, failed=7, errored=0`
+  - 今回解消: `tests/numerics.n.md::doctest#3`（ambiguous overload）
+  - 既存残件: `ret_f64_example`, `selfhost_req` 系, `sort` 一部, `string` 一部
