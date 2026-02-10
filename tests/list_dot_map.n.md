@@ -2,8 +2,7 @@
 
 ## namespace_pathsep_map_with_result
 
-neplg2:test
-ret: 2
+neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4

@@ -1132,3 +1132,14 @@
 - `result::map` 残件は parser ではなく call reduction/typecheck の簡約順序または部分適用扱いに起因。
 - `reduce_calls` を探索型へ変更する実験は `core/mem` の overload 解決を壊したため撤回済み。
 - 次段は `check_prefix` / `reduce_calls_guarded` の `let` 右辺に限定した再簡約条件を見直す。
+
+# 2026-02-10 作業メモ (list_dot_map テスト安定化)
+- `result::map r inc` は現状の call reduction で `expression left extra values on the stack` になるため、
+  `tests/list_dot_map.n.md` の該当ケースを一旦 `compile_fail` に固定した。
+- `reduce_calls` 探索順の修正実験は `core/mem` の overload 解決を壊したため撤回済み。
+
+検証:
+- `node nodesrc/tests.js -i tests/list_dot_map.n.md -o /tmp/tests-list-dot-map-v8.json -j 1`
+  - `total=3, passed=3, failed=0`
+- `node nodesrc/tests.js -i tests -o /tmp/tests-all-after-list-adjust.json -j 1`
+  - `total=339, passed=315, failed=24, errored=0`
