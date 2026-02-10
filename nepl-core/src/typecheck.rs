@@ -2208,7 +2208,7 @@ impl<'a> BlockChecker<'a> {
                     // Treat blocks uniformly; parser now desugars `if:`/`if <cond>:`
                     // layout forms into ordinary prefix items, so the checker
                     // should not special-case `if` here.
-                    let (blk, val_ty) = self.check_block(b, stack.len(), true)?;
+                    let (blk, val_ty) = self.check_block(b, 0, true)?;
                     if let Some(ty) = val_ty {
                         stack.push(StackEntry {
                             ty,

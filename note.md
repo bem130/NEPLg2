@@ -1,4 +1,19 @@
 # 状況メモ (2026-01-22)
+# 2026-02-10 作業メモ (block 引数位置の根本修正)
+- `tests/block_single_line.n.md` の `doctest#8/#9` を起点に、`add block 1 block 2` と `if true block 1 else block 2` の失敗要因を解析。
+- 原因:
+  - parser 上では `add [Block 1] [Block 2]` の AST が得られているのに、typecheck で `expression left extra values on the stack` が出る。
+  - `PrefixItem::Block` の型検査が `check_block(b, stack.len(), true)` になっており、外側式のスタック深さを block 内評価へ持ち込んでいた。
+  - その結果、引数位置 block の内部で外側スタックが混入し、簡約判定が崩れていた。
+- 修正:
+  - `nepl-core/src/typecheck.rs` の `PrefixItem::Block` 分岐を `check_block(b, 0, true)` に変更し、block を独立式として検査するよう統一。
+  - parser 側は `block` の後続判定を限定追加（`block`/`else` 連接のみ継続）し、既存の `block:` 文境界は維持。
+- 計測:
+  - `NO_COLOR=true trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -o /tmp/tests-after-typecheck-blockbase.json -j 4`
+  - summary: `total=312, passed=273, failed=39, errored=0`
+  - ベースライン `/tmp/tests-latest.json` (`passed=271`) から `block_single_line` の 2 件だけ改善、追加失敗なし。
+
 # 2026-02-10 作業メモ (上流修正 継続: parser/typecheck)
 - 失敗分類を再実施し、上流（lexer/parser）と typecheck の境界を切り分けた。
   - 起点: `/tmp/tests-current.json` = `total=312, passed=249, failed=63, errored=0`
@@ -16,6 +31,9 @@
 - 計測:
   - `/tmp/tests-after-upstream-pass.json` = `total=312, passed=261, failed=51, errored=0`
   - `/tmp/tests-after-option-fix.json` = `total=312, passed=271, failed=41, errored=0`
+- 追加修正:
+  - `parse_single_line_block` を「`;` が無い場合は 1 文で終了」へ変更し、単行 block の文境界を明示化。
+  - ただし `add block 1 block 2` / `if true block 1 else block 2` は、prefix 1文の内側で `block` を再帰的に取り込む挙動が残り、未解決（残 fail 2）。
 - 残課題（次段）:
   - `tests/functions.n.md`（11 fail）: nested fn / function-literal / alias / entry 生成整合
   - `tests/neplg2.n.md`（8 fail）と `tests/selfhost_req.n.md`（5 fail）: namespace と callable 解決の構造問題

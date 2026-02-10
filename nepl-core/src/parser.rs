@@ -1177,12 +1177,20 @@ impl Parser {
                         let block = self.parse_block_after_colon()?;
                         let bspan = block.span;
                         items.push(PrefixItem::Block(block, bspan));
+                        break;
                     } else {
                         let block = self.parse_single_line_block(span)?;
                         let bspan = block.span;
                         items.push(PrefixItem::Block(block, bspan));
+                        let continue_outer = match self.peek_kind() {
+                            Some(TokenKind::KwBlock) => true,
+                            Some(TokenKind::Ident(name)) if name == "else" => true,
+                            _ => false,
+                        };
+                        if !continue_outer {
+                            break;
+                        }
                     }
-                    break;
                 }
                 TokenKind::KwMlstr => {
                     let span = self.next().unwrap().span;
@@ -2677,6 +2685,47 @@ impl Parser {
             while self.consume_if(&TokenKind::Semicolon) {} // Skip empty statements/leading semicolons
             if self.is_end(&TokenEnd::Line) {
                 break;
+            }
+
+            if matches!(
+                self.peek_kind(),
+                Some(
+                    TokenKind::IntLiteral(_)
+                        | TokenKind::FloatLiteral(_)
+                        | TokenKind::BoolLiteral(_)
+                        | TokenKind::UnitLiteral
+                        | TokenKind::StringLiteral(_)
+                )
+            ) {
+                let next_kind = self.peek_kind_at(1);
+                let should_stop_after_literal = matches!(
+                    next_kind,
+                    Some(TokenKind::KwBlock)
+                        | Some(TokenKind::KwIf)
+                        | Some(TokenKind::KwWhile)
+                        | Some(TokenKind::KwMatch)
+                        | Some(TokenKind::At)
+                        | Some(TokenKind::Ident(_))
+                        | Some(TokenKind::LParen)
+                );
+                if should_stop_after_literal {
+                    let tok = self.next().unwrap();
+                    let lit = match tok.kind {
+                        TokenKind::IntLiteral(v) => Literal::Int(v),
+                        TokenKind::FloatLiteral(v) => Literal::Float(v),
+                        TokenKind::BoolLiteral(b) => Literal::Bool(b),
+                        TokenKind::StringLiteral(s) => Literal::Str(s),
+                        TokenKind::UnitLiteral => Literal::Unit,
+                        _ => unreachable!(),
+                    };
+                    items.push(Stmt::Expr(PrefixExpr {
+                        items: vec![PrefixItem::Literal(lit, tok.span)],
+                        trailing_semis: 0,
+                        trailing_semi_span: None,
+                        span: tok.span,
+                    }));
+                    break;
+                }
             }
 
             if let Some(expr) = self.parse_prefix_expr() {
