@@ -51,6 +51,11 @@
 - VSCode 拡張機能で提供予定の情報（名前解決、型情報、式範囲、引数範囲、定義ジャンプ候補）を Playground 上でも表示できる UI/API を追加する。
 - `web/tests.html` でテスト詳細展開時に、該当ソースと解析 API の詳細（AST/resolve/semantics）を併記できるようにする。
 
+10. `examples/nm.nepl` / `stdlib/nm/parser` のデバッグ
+- `examples/nm.nepl` を起点に、`stdlib/nm/parser` の不具合再現手順を固定する。
+- `nodesrc/analyze_source.js --stage lex|parse` とコンパイラ診断を併用し、lexer/parser/typecheck のどこで崩れているかを切り分ける。
+- 既存修正で自然治癒しているかを再検証し、未解決なら最小再現テストを `tests/` に追加してから根本修正する。
+
 ---
 ### 以下編集禁止
 

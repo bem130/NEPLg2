@@ -1090,3 +1090,45 @@
 ## 再確認（コミット前）
 - `node nodesrc/tests.js -i tests -o /tmp/tests-all-before-commit.json -j 1`
   - `total=336, passed=311, failed=25, errored=0`
+
+# 2026-02-10 作業メモ (フィールドアクセス解決の補強)
+## 実装
+- `nepl-core/src/typecheck.rs`
+  - `obj.field` 形式の識別子（例: `s.v`, `h.hash`）を変数 + フィールド参照として解決する経路を追加。
+  - `resolve_field_access` を再利用し、`load` 連鎖へ lower することで `undefined identifier` を回避。
+
+## 部分テスト
+- `node nodesrc/tests.js -i tests/pipe_operator.n.md -o /tmp/tests-pipe-after-dot-field.json -j 1`
+  - `total=20, passed=16, failed=4`
+  - `s.v` 由来の `undefined identifier` は解消し、残件は pipe 本体/型注釈整合。
+- `node nodesrc/tests.js -i tests/selfhost_req.n.md -o /tmp/tests-selfhost-after-dot-field.json -j 1`
+  - `total=6, passed=2, failed=4`
+  - `h.hash` 起因の失敗は解消し、残件は高階関数経路/仕様未実装（inherent impl 等）。
+
+## 全体再計測
+- `node nodesrc/tests.js -i tests -o /tmp/tests-all-after-field-access.json -j 1`
+  - `total=336, passed=311, failed=25, errored=0`
+  - 件数は据え置きだが、失敗原因の質が上流寄りに整理された。
+
+# 2026-02-10 作業メモ (名前空間 pathsep と高階関数周辺の切り分け)
+- ユーザー要望に合わせて `tests/list_dot_map.n.md` を追加し、以下を明示した。
+  - `result::...` / `as *` の現状挙動確認
+  - `list.map` のドット形式は未対応（compile_fail）
+- typecheck の上流修正:
+  - `Symbol::Ident` 解決で、`ns::name` が trait/enum でない場合に `name` へフォールバックできる経路を追加。
+  - trait 呼び出しは `FuncRef::Trait` へ寄せる修正を継続（`Show::show` の unknown function は解消）。
+  - 未束縛型引数を含む instantiation を予約しないようにし、`unsupported indirect call signature` の発生条件を縮小。
+- codegen 側の補助修正:
+  - `TypeKind::Var` の wasm valtype を `i32` として扱うよう変更（call_indirect 署名生成停止の回避）。
+
+現状の確認:
+- `NO_COLOR=true trunk build`: 成功
+- `node nodesrc/tests.js -i tests/list_dot_map.n.md -o /tmp/tests-list-dot-map-v6.json -j 1`
+  - `total=3, passed=2, failed=1`
+  - 残件: `result::map r inc` が `expression left extra values on the stack`
+- 全体 (`/tmp/tests-all-current.json`): `total=339, passed=315, failed=24`
+
+判断:
+- `result::map` 残件は parser ではなく call reduction/typecheck の簡約順序または部分適用扱いに起因。
+- `reduce_calls` を探索型へ変更する実験は `core/mem` の overload 解決を壊したため撤回済み。
+- 次段は `check_prefix` / `reduce_calls_guarded` の `let` 右辺に限定した再簡約条件を見直す。

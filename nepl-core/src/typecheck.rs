@@ -1937,8 +1937,10 @@ impl<'a> BlockChecker<'a> {
                 }
                 PrefixItem::Symbol(sym) => match sym {
                     Symbol::Ident(id, type_args, forced_value) => {
-
-                        if let Some(binding) = self.env.lookup(&id.name) {
+                        if let Some(entry) = self.resolve_dotted_field_symbol(id, *forced_value) {
+                            stack.push(entry);
+                            last_expr = Some(stack.last().unwrap().expr.clone());
+                        } else if let Some(binding) = self.env.lookup(&id.name) {
                             let ty = binding.ty;
                             let auto_call = match binding.kind {
                                 BindingKind::Func { .. } => !*forced_value,
@@ -1957,7 +1959,20 @@ impl<'a> BlockChecker<'a> {
                             });
                             last_expr = Some(stack.last().unwrap().expr.clone());
                         } else {
-                            let bindings = self.env.lookup_all(&id.name);
+                            let mut lookup_name = id.name.clone();
+                            let mut bindings = self.env.lookup_all(&lookup_name);
+                            if bindings.is_empty() {
+                                if let Some((ns, member)) = parse_variant_name(&id.name) {
+                                    if !self.enums.contains_key(ns) && !self.traits.contains_key(ns)
+                                    {
+                                        let alt = self.env.lookup_all(member);
+                                        if !alt.is_empty() {
+                                            lookup_name = member.to_string();
+                                            bindings = alt;
+                                        }
+                                    }
+                                }
+                            }
                             if !bindings.is_empty() {
                                 if let Some(binding) =
                                     bindings.iter().find(|b| matches!(b.kind, BindingKind::Var))
@@ -1973,7 +1988,7 @@ impl<'a> BlockChecker<'a> {
                                         ty,
                                         expr: HirExpr {
                                             ty,
-                                            kind: HirExprKind::Var(id.name.clone()),
+                                            kind: HirExprKind::Var(lookup_name.clone()),
                                             span: id.span,
                                         },
                                         type_args: Vec::new(),
@@ -2030,7 +2045,7 @@ impl<'a> BlockChecker<'a> {
                                         ty,
                                         expr: HirExpr {
                                             ty,
-                                            kind: HirExprKind::Var(id.name.clone()),
+                                            kind: HirExprKind::Var(lookup_name.clone()),
                                             span: id.span,
                                         },
                                         type_args: explicit_args,
@@ -2858,6 +2873,72 @@ impl<'a> BlockChecker<'a> {
                 break;
             }
         }
+    }
+
+    fn resolve_dotted_field_symbol(&mut self, id: &Ident, forced_value: bool) -> Option<StackEntry> {
+        if !id.name.contains('.') || id.name.contains("::") {
+            return None;
+        }
+
+        let mut parts = id.name.split('.');
+        let base_name = parts.next()?;
+        let base_binding = self.env.lookup(base_name)?;
+        if !matches!(base_binding.kind, BindingKind::Var) {
+            return None;
+        }
+
+        let mut current = HirExpr {
+            ty: base_binding.ty,
+            kind: HirExprKind::Var(base_name.to_string()),
+            span: id.span,
+        };
+        let mut current_ty = base_binding.ty;
+
+        for field_name in parts {
+            let (field_ty, offset) = self.resolve_field_access(
+                current_ty,
+                FieldIdx::Name(field_name.to_string()),
+                id.span,
+            )?;
+            let addr_expr = if offset == 0 {
+                current
+            } else {
+                HirExpr {
+                    ty: self.ctx.i32(),
+                    kind: HirExprKind::Intrinsic {
+                        name: "add".to_string(),
+                        type_args: vec![self.ctx.i32()],
+                        args: vec![
+                            current,
+                            HirExpr {
+                                ty: self.ctx.i32(),
+                                kind: HirExprKind::LiteralI32(offset as i32),
+                                span: id.span,
+                            },
+                        ],
+                    },
+                    span: id.span,
+                }
+            };
+            current = HirExpr {
+                ty: field_ty,
+                kind: HirExprKind::Intrinsic {
+                    name: "load".to_string(),
+                    type_args: vec![field_ty],
+                    args: vec![addr_expr],
+                },
+                span: id.span,
+            };
+            current_ty = field_ty;
+        }
+
+        Some(StackEntry {
+            ty: current_ty,
+            expr: current,
+            type_args: Vec::new(),
+            assign: None,
+            auto_call: !forced_value,
+        })
     }
 
     fn reduce_calls_guarded(
@@ -3874,10 +3955,30 @@ impl<'a> BlockChecker<'a> {
                         });
                     }
                     final_args.extend(args.iter().map(|a| a.expr.clone()));
+                    let mut trait_callee: Option<FuncRef> = None;
+                    if let Some((trait_name, method_name)) = parse_variant_name(name) {
+                        if let Some(trait_info) = self.traits.get(trait_name) {
+                            if trait_info.methods.get(method_name).is_some() {
+                                if let Some(first) = args.first() {
+                                    trait_callee = Some(FuncRef::Trait {
+                                        trait_name: trait_name.to_string(),
+                                        method: method_name.to_string(),
+                                        self_ty: self.ctx.resolve_id(first.ty),
+                                    });
+                                }
+                            }
+                        }
+                    }
                     let callee = if builtin.is_some() {
                         FuncRef::Builtin(callee_name.clone())
+                    } else if let Some(tc) = trait_callee {
+                        tc
                     } else {
-                        if !resolved_args.is_empty() {
+                        if !resolved_args.is_empty()
+                            && resolved_args
+                                .iter()
+                                .all(|t| !type_contains_unbound_var(self.ctx, *t))
+                        {
                             self.instantiations
                                 .entry(callee_name.clone())
                                 .or_insert_with(Vec::new)
@@ -3905,12 +4006,74 @@ impl<'a> BlockChecker<'a> {
         }
 
 
+        if let HirExprKind::Var(name) = &func.expr.kind {
+            if self.env.lookup_all(name).is_empty() {
+                if let Some((trait_name, method_name)) = parse_variant_name(name) {
+                    if let Some(trait_info) = self.traits.get(trait_name) {
+                        if trait_info.methods.get(method_name).is_some() {
+                            if args.is_empty() {
+                                self.diagnostics.push(Diagnostic::error(
+                                    "trait method call requires receiver argument",
+                                    func.expr.span,
+                                ));
+                                return None;
+                            }
+                            let self_ty = self.ctx.resolve_id(args[0].ty);
+                            if !self.trait_bound_satisfied(trait_name, self_ty) {
+                                self.diagnostics.push(Diagnostic::error(
+                                    format!(
+                                        "type does not satisfy trait bound '{}'",
+                                        trait_name
+                                    ),
+                                    func.expr.span,
+                                ));
+                                return None;
+                            }
+                            if matches!(self.current_effect, Effect::Pure)
+                                && matches!(effect, Effect::Impure)
+                            {
+                                self.diagnostics.push(Diagnostic::error(
+                                    "pure context cannot call impure function",
+                                    func.expr.span,
+                                ));
+                                return None;
+                            }
+                            let resolved_result = self.ctx.resolve_id(result);
+                            return Some(StackEntry {
+                                ty: resolved_result,
+                                expr: HirExpr {
+                                    ty: resolved_result,
+                                    kind: HirExprKind::Call {
+                                        callee: FuncRef::Trait {
+                                            trait_name: trait_name.to_string(),
+                                            method: method_name.to_string(),
+                                            self_ty,
+                                        },
+                                        args: args.into_iter().map(|a| a.expr).collect(),
+                                    },
+                                    span: func.expr.span,
+                                },
+                                type_args: Vec::new(),
+                                assign: None,
+                                auto_call: true,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
         // Fallback: function value call (`call_indirect` in wasm backend)
-        let resolved_params: Vec<TypeId> = params
-            .into_iter()
-            .map(|t| self.ctx.resolve_id(t))
+        let resolved_params: Vec<TypeId> = args
+            .iter()
+            .map(|a| self.ctx.resolve_id(a.ty))
             .collect();
-        let resolved_result = self.ctx.resolve_id(result);
+        let mut resolved_result = self.ctx.resolve_id(result);
+        if let Some(expected) = expected_ret {
+            if self.ctx.unify(resolved_result, expected).is_ok() {
+                resolved_result = self.ctx.resolve_id(expected);
+            }
+        }
         Some(StackEntry {
             ty: resolved_result,
             expr: HirExpr {
