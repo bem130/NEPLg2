@@ -651,13 +651,58 @@ function highlightArticleNeplBlocks() {
     'fn','let','mut','set','if','then','else','cond','while','do',
     'break','continue','return','match','case','import','export',
     'type','struct','enum','trait','impl','for','in','as','use',
-    'pub','mod','const','static','unsafe','async','await','yield'
+    'pub','mod','const','static','unsafe','async','await','yield',
+    'block','tuple'
   ]);
   const builtins = new Set([
-    'i32','i64','u32','u64','f32','f64','bool','str','char',
-    'add','sub','mul','div','mod','eq','ne','lt','le','gt','ge',
-    'i32_add','i32_sub','i32_mul','i32_div_s','i32_div_u',
-    'println','print','readln','assert_eq_i32','test_checked'
+    // Types
+    'i32','i64','u32','u64','u8','f32','f64','bool','str','char','void','unit',
+    // Core Math
+    'add','sub','mul','div','div_s','div_u','mod','mod_s','rem_s','rem_u',
+    'eq','ne','lt','le','gt','ge','and','or','not','xor',
+    'i32_add','i32_sub','i32_mul','i32_div_s','i32_div_u','i32_rem_s','i32_rem_u',
+    'i32_and','i32_or','i32_xor','i32_shl','i32_shr_s','i32_shr_u',
+    'i32_clz','i32_ctz','i32_popcnt','i32_eq','i32_ne','i32_lt_s','i32_lt_u',
+    'i32_le_s','i32_le_u','i32_gt_s','i32_gt_u','i32_ge_s','i32_ge_u',
+    'i64_add','i64_sub','i64_mul','i64_div_s','i64_div_u','i64_rem_s','i64_rem_u',
+    'i64_and','i64_or','i64_xor','i64_shl','i64_shr_s','i64_shr_u',
+    'i64_extend_i32_s','i64_extend_i32_u',
+    'f32_add','f32_sub','f32_mul','f32_div','f32_sqrt','f32_abs','f32_neg',
+    'f32_ceil','f32_floor','f32_trunc','f32_nearest','f32_min','f32_max',
+    'f32_copysign','f32_eq','f32_ne','f32_lt','f32_le','f32_gt','f32_ge',
+    'f64_add','f64_sub','f64_mul','f64_div','f64_sqrt','f64_abs','f64_neg',
+    'f64_ceil','f64_floor','f64_trunc','f64_nearest','f64_min','f64_max',
+    'f64_copysign','f64_eq','f64_ne','f64_lt','f64_le','f64_gt','f64_ge',
+    // Memory
+    'load','store','load_i32','store_i32','load_u8','store_u8',
+    'alloc','dealloc','realloc',
+    // IO
+    'print','println','print_i32','println_i32','read_line','read_all',
+    // Cast
+    'cast','bitcast','from_i32','to_i32',
+    // Test
+    'assert','assert_eq_i32','test_checked','test_fail',
+    // Stdlib - Vec
+    'vec_new','vec_push','vec_get','vec_len','vec_cap','vec_is_empty',
+    'vec_set','vec_pop','vec_clear','vec_free',
+    // Stdlib - String
+    'len','concat','concat3','str_eq','str_slice','str_trim','str_split',
+    'str_starts_with','str_ends_with','string_builder_new','sb_append',
+    'sb_append_i32','sb_build',
+    // Stdlib - Option/Result
+    'some','none','is_some','is_none','unwrap','unwrap_or','option_map',
+    'ok','err','is_ok','is_err','unwrap_ok','unwrap_err','result_context',
+    // Stdlib - Collections
+    'hashmap_new','hashmap_insert','hashmap_get','hashmap_contains','hashmap_remove','hashmap_len','hashmap_free',
+    'hashset_new','hashset_insert','hashset_contains','hashset_remove','hashset_len','hashset_free',
+    'btreemap_new','btreemap_insert','btreemap_get','btreemap_contains','btreemap_remove','btreemap_len','btreemap_clear','btreemap_free',
+    'btreeset_new','btreeset_insert','btreeset_contains','btreeset_remove','btreeset_len','btreeset_clear','btreeset_free',
+    'list_nil','list_cons','list_head','list_tail','list_len','list_get','list_free','list_reverse',
+    'stack_new','stack_push','stack_pop','stack_peek','stack_len','stack_is_empty','stack_clear','stack_free',
+    // Stdlib - KP
+    'scanner_new','scanner_read_i32','scanner_read_f64','scanner_read_f32',
+    'writer_new','writer_write_i32','writer_write_i64','writer_write_f64_ln',
+    'writer_write_f32_ln','writer_write_str','writer_writeln','writer_flush','writer_free'
   ]);
 
   function hl(code) {
@@ -677,9 +722,24 @@ function highlightArticleNeplBlocks() {
           i += s.length;
           continue;
         }
+        if (ln[i] === '#') {
+            let j = i + 1;
+            while (j < ln.length && /[a-zA-Z0-9_]/.test(ln[j])) j++;
+            const tok = ln.slice(i, j);
+            if (j > i + 1) {
+                 out += '<span class="nm-syn-keyword">' + esc(tok) + '</span>';
+                 i = j;
+                 continue;
+            }
+        }
         if (/[0-9]/.test(ln[i])) {
           let j = i;
-          while (j < ln.length && /[0-9.]/.test(ln[j])) j++;
+          if (ln[i] === '0' && (ln[i+1] === 'x' || ln[i+1] === 'X')) {
+             j += 2;
+             while (j < ln.length && /[0-9a-fA-F]/.test(ln[j])) j++;
+          } else {
+             while (j < ln.length && /[0-9.]/.test(ln[j])) j++;
+          }
           out += '<span class="nm-syn-number">' + esc(ln.slice(i, j)) + '</span>';
           i = j;
           continue;
