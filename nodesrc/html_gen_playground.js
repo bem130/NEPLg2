@@ -658,13 +658,36 @@ function highlightArticleNeplBlocks() {
   }
 
   for (const code of document.querySelectorAll('pre.nm-code > code.language-neplg2')) {
-    code.innerHTML = hl(code.textContent);
+    const nodes = Array.from(code.childNodes);
+    const frag = document.createDocumentFragment();
+    for (const node of nodes) {
+      if (node.nodeType === 3) {
+        const span = document.createElement('span');
+        span.innerHTML = hl(node.textContent);
+        while (span.firstChild) frag.appendChild(span.firstChild);
+      } else if (node.nodeType === 1 && node.classList.contains('nm-hidden')) {
+        const span = document.createElement('span');
+        span.className = 'nm-hidden';
+        span.style.display = 'none';
+        span.innerHTML = hl(node.textContent);
+        frag.appendChild(span);
+      } else {
+        frag.appendChild(node.cloneNode(true));
+      }
+    }
+    code.innerHTML = '';
+    code.appendChild(frag);
   }
 }
 
 function findDoctestStdinFor(pre) {
   let p = pre.nextElementSibling;
-  while (p && p.classList && p.classList.contains('nm-doctest-block')) {
+  while (p) {
+    if (p.classList.contains('nm-toggle')) {
+      p = p.nextElementSibling;
+      continue;
+    }
+    if (!p.classList.contains('nm-doctest-block')) break;
     for (const row of p.querySelectorAll('.nm-doctest-row')) {
       const badge = row.querySelector('.nm-doctest-badge');
       const pre2 = row.querySelector('.nm-doctest-pre');
@@ -678,8 +701,9 @@ function findDoctestStdinFor(pre) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  for (const pre of document.querySelectorAll('pre.nm-code > code')) {
-    const lines = (pre.textContent || '').split('\\n');
+  for (const code of document.querySelectorAll('pre.nm-code > code')) {
+    if (code.querySelector('.nm-hidden')) continue;
+    const lines = (code.textContent || '').split('\\n');
     if (lines.length > 25) {
       const keep = 10;
       const frag = document.createDocumentFragment();
@@ -691,18 +715,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         frag.appendChild(span);
       }
-      pre.textContent = '';
-      pre.appendChild(frag);
+      code.textContent = '';
+      code.appendChild(frag);
       
       const btn = document.createElement('button');
       btn.className = 'nm-toggle';
       btn.textContent = '全て表示';
       btn.onclick = () => nmToggleHidden(btn);
-      pre.parentElement.insertAdjacentElement('afterend', btn);
+      code.parentElement.insertAdjacentElement('afterend', btn);
     }
   }
 
   highlightArticleNeplBlocks();
+
+  for (const code of document.querySelectorAll('pre.nm-code > code')) {
+    const pre = code.parentElement;
+    if (pre.nextElementSibling && pre.nextElementSibling.classList.contains('nm-toggle')) continue;
+    const hidden = code.querySelectorAll('.nm-hidden');
+    if (hidden.length > 0) {
+      for (const n of hidden) n.style.display = 'none';
+      const btn = document.createElement('button');
+      btn.className = 'nm-toggle';
+      btn.textContent = '全て表示';
+      btn.onclick = () => nmToggleHidden(btn);
+      pre.insertAdjacentElement('afterend', btn);
+    }
+  }
 
   const overlay = document.getElementById('play-overlay');
   const title = document.getElementById('play-title');
