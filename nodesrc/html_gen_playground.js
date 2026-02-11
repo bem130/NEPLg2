@@ -170,6 +170,8 @@ ul{margin:10px 0 10px 22px;}
 .nm-syn-function{color:#73daca;}
 .nm-syn-operator{color:#c0caf5;}
 .nm-syn-punctuation{color:#a9b1d6;}
+.nm-syn-type{color:#e5c07b;}
+.nm-syn-constant{color:#bb9af7;}
 .nm-code-inline{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);border-radius:8px;padding:1px 6px;}
 .nm-gloss, .nm-ruby{ruby-position:over;}
 .nm-gloss rt{font-size:0.72em;color:var(--muted);line-height:1.1;}
@@ -654,9 +656,14 @@ function highlightArticleNeplBlocks() {
     'pub','mod','const','static','unsafe','async','await','yield',
     'block','tuple'
   ]);
-  const builtins = new Set([
-    // Types
+  const types = new Set([
     'i32','i64','u32','u64','u8','f32','f64','bool','str','char','void','unit',
+    'Result','Option','Vec','String','StringBuilder','List','Set','Self'
+  ]);
+  const constants = new Set([
+    'true','false','Ok','Err','Some','None'
+  ]);
+  const builtins = new Set([
     // Core Math
     'add','sub','mul','div','div_s','div_u','mod','mod_s','rem_s','rem_u',
     'eq','ne','lt','le','gt','ge','and','or','not','xor',
@@ -750,10 +757,12 @@ function highlightArticleNeplBlocks() {
           const tok = ln.slice(i, j);
           if (kwds.has(tok)) {
             out += '<span class="nm-syn-keyword">' + esc(tok) + '</span>';
+          } else if (types.has(tok)) {
+            out += '<span class="nm-syn-type">' + esc(tok) + '</span>';
+          } else if (constants.has(tok)) {
+            out += '<span class="nm-syn-constant">' + esc(tok) + '</span>';
           } else if (builtins.has(tok)) {
             out += '<span class="nm-syn-function">' + esc(tok) + '</span>';
-          } else if (tok === 'true' || tok === 'false') {
-            out += '<span class="nm-syn-boolean">' + esc(tok) + '</span>';
           } else {
             out += esc(tok);
           }
