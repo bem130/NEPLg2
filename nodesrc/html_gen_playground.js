@@ -230,6 +230,29 @@ ul{margin:10px 0 10px 22px;}
 #play-title{font-weight:600; flex:1;}
 .play-btn{padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:#0f141b; color:var(--fg); cursor:pointer;transition:all 0.2s;}
 .play-btn:hover{border-color:#355186;}
+@keyframes nm-spin {
+  to { transform: rotate(360deg); }
+}
+.play-btn.running {
+  color: var(--accent);
+  border-color: var(--accent);
+  cursor: wait;
+  padding-right: 32px;
+  position: relative;
+}
+.play-btn.running::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  margin-top: -7px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: nm-spin 1s linear infinite;
+}
 #play-editor{
   display:grid; grid-template-columns:1fr 40%;
   min-height:0;
@@ -805,17 +828,29 @@ document.addEventListener('DOMContentLoaded', () => {
     status.textContent = text;
   }
 
+  function setRunningState(active) {
+    running = active;
+    if (active) {
+      runBtn.textContent = 'Running';
+      runBtn.classList.add('running');
+    } else {
+      runBtn.textContent = 'Run';
+      runBtn.classList.remove('running');
+    }
+  }
+
   function stopRun(message) {
     if (worker) {
       worker.terminate();
       worker = null;
     }
-    running = false;
+    setRunningState(false);
     if (message) setStatus(message, 'err');
   }
 
   runBtn.onclick = async () => {
     if (running) return;
+    setRunningState(true);
     setStdoutText('');
     stdoutHexLines = [];
     setStatus('compiling...', '');
@@ -823,6 +858,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('[Tutorial Runner] stdin:\\n' + (stdin.value || ''));
     try {
       const bindings = await loadBindings();
+      if (!running) return; // stopped during load
       let wasmBytes = null;
       if (typeof bindings.compile_source_with_vfs === 'function') {
         wasmBytes = bindings.compile_source_with_vfs('/virtual/entry.nepl', src.value, __TUTORIAL_VFS_OVERRIDES__);
@@ -834,7 +870,6 @@ document.addEventListener('DOMContentLoaded', () => {
       setStatus('running...', '');
       const blob = new Blob([makeWorkerScript()], { type: 'text/javascript' });
       worker = new Worker(URL.createObjectURL(blob));
-      running = true;
       worker.onmessage = (ev) => {
         const msg = ev.data || {};
         if (msg.type === 'stdout') {
@@ -844,14 +879,14 @@ document.addEventListener('DOMContentLoaded', () => {
           stdoutHexLines.push(line);
           console.log('[Tutorial Runner] stdout bytes:', line);
         } else if (msg.type === 'done') {
-          running = false;
+          setRunningState(false);
           setStatus('done', 'ok');
           console.log('[Tutorial Runner] stdout:\\n' + stdoutText);
           console.log('[Tutorial Runner] stdout bytes all:\\n' + stdoutHexLines.join('\\n'));
           worker && worker.terminate();
           worker = null;
         } else if (msg.type === 'error') {
-          running = false;
+          setRunningState(false);
           setStatus('runtime error', 'err');
           setStdoutText(stdoutText + '\\n[error] ' + String(msg.message || ''));
           console.log('[Tutorial Runner] runtime error:', String(msg.message || ''));
@@ -863,7 +898,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       worker.postMessage({ wasmBytes, stdinText: stdin.value || '' });
     } catch (e) {
-      running = false;
+      setRunningState(false);
       setStatus('compile failed', 'err');
       setStdoutText(stdoutText + '[compile error] ' + String((e && e.message) || e));
       console.log('[Tutorial Runner] compile failed:', String((e && e.message) || e));
