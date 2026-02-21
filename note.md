@@ -1,3 +1,24 @@
+# 2026-02-21 作業メモ (シャドーイング: callable 解決の回帰修正)
+- 背景:
+  - `tests/shadowing.n.md` の pending ケース（`value_name_and_callable_name_can_coexist_currently_fails` / `imported_function_name_shadowed_by_parameter_currently_fails`）を通常テストへ昇格するため、`typecheck` の識別子解決を調整。
+- 実装:
+  - `nepl-core/src/typecheck.rs` に `Env::lookup_callable_any` を追加。
+  - 呼び出しヘッド位置の識別子解決で、同名 value が現在スコープにあっても outer callable を参照できる経路を追加。
+  - ただし適用範囲は限定し、以下条件を満たす場合のみ有効化:
+    - `forced_value == false`
+    - `stack.is_empty()`（先頭解決）
+    - `expr.items.get(idx + 1).is_some()`（実際に後続項があり呼び出し文脈）
+- 失敗分析:
+  - 当初は適用範囲が広すぎ、`if cond: ok` の `ok` を callable に誤解決して全体回帰（stdlib 側 `if condition must be bool`）が発生。
+  - 上記条件で呼び出しヘッドに限定し、回帰を解消。
+- テスト:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests/shadowing.n.md -o tests/output/shadowing_current.json -j 1`: `185/185 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `554/554 pass`
+  - `node nodesrc/tests.js -i tests/neplg2.n.md -o tests/output/neplg2_current.json -j 1`: `202/202 pass`
+- 補足:
+  - 共有されていた `tests/neplg2.n.md::doctest#6/#7` の compile fail は現時点で再現せず、当該ファイルは全件 pass。
+
 # 2026-02-21 作業メモ (target=wasm で WASI 無効化)
 - 要件反映:
   - `nepl-cli/src/main.rs` の自動昇格ロジック（`std/stdio` import を検出して `wasi` にする挙動）を削除。

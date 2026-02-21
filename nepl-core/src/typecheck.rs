@@ -2213,7 +2213,20 @@ impl<'a> BlockChecker<'a> {
                         if let Some(entry) = self.resolve_dotted_field_symbol(id, *forced_value) {
                             stack.push(entry);
                             last_expr = Some(stack.last().unwrap().expr.clone());
-                        } else if let Some(binding) = self.env.lookup(&id.name) {
+                        } else if let Some(binding) = {
+                            // In head position of a prefix expression, prefer callable symbols
+                            // over value symbols when both names coexist in the same scope.
+                            // This keeps `add add 1` semantics stable even if `add` is also a value.
+                            let preferred_callable = if !*forced_value
+                                && stack.is_empty()
+                                && expr.items.get(idx + 1).is_some()
+                            {
+                                self.env.lookup_callable_any(&id.name)
+                            } else {
+                                None
+                            };
+                            preferred_callable.or_else(|| self.env.lookup(&id.name))
+                        } {
                             let ty = binding.ty;
                             let auto_call = match binding.kind {
                                 BindingKind::Func { .. } => !*forced_value,
@@ -4616,6 +4629,19 @@ impl Env {
             .into_iter()
             .filter(|b| matches!(b.kind, BindingKind::Func { .. }))
             .collect()
+    }
+
+    fn lookup_callable_any(&self, name: &str) -> Option<&Binding> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(b) = scope
+                .iter()
+                .rev()
+                .find(|b| b.name == name && b.defined && matches!(b.kind, BindingKind::Func { .. }))
+            {
+                return Some(b);
+            }
+        }
+        None
     }
 
     fn lookup_callable(&self, name: &str) -> Option<&Binding> {

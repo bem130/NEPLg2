@@ -129,7 +129,7 @@ fn main <()->i32> ():
 
 ## value_name_and_callable_name_can_coexist_currently_fails
 
-neplg2:test[compile_fail]
+neplg2:test
 ret: 10
 ```neplg2
 #entry main
@@ -137,9 +137,12 @@ ret: 10
 #target wasm
 #import "core/math" as *
 
+fn plus <(i32,i32)->i32> (a, b):
+    add a b
+
 fn main <()->i32> ():
-    let add <i32> 9;
-    add add 1
+    let plus <i32> 9;
+    plus plus 1
 ```
 
 ## triple_nested_shadowing_prefers_nearest
@@ -206,7 +209,7 @@ fn main <()->i32> ():
 
 ## imported_function_name_shadowed_by_parameter_currently_fails
 
-neplg2:test[compile_fail]
+neplg2:test
 ret: 8
 ```neplg2
 #entry main
