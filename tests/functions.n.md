@@ -355,6 +355,26 @@ fn main <()->i32> ():
     f 5
 ```
 
+## function_value_capture_not_supported_without_at
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn apply <(i32,(i32)->i32)->i32> (val, func):
+    func val
+
+fn main <()->i32> ():
+    let y 10;
+    fn add_y (x):
+        add x y
+    apply 5 add_y
+```
+
 ## function_purity_check_pure_calls_impure
 
 neplg2:test[compile_fail]

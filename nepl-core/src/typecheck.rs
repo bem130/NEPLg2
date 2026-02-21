@@ -4511,8 +4511,42 @@ impl<'a> BlockChecker<'a> {
         // Fallback: function value call (`call_indirect` in wasm backend)
         // This path is limited to actual function-typed values (including explicit `@fn`).
         let allow_indirect = match &func.expr.kind {
-            HirExprKind::FnValue(_) => true,
-            HirExprKind::Var(_) => matches!(self.ctx.get(func.ty), TypeKind::Function { .. }),
+            HirExprKind::FnValue(name) => {
+                let has_capture = self
+                    .env
+                    .lookup_all_callables(name)
+                    .iter()
+                    .any(|b| matches!(&b.kind, BindingKind::Func { captures, .. } if !captures.is_empty()));
+                if has_capture {
+                    self.diagnostics.push(Diagnostic::error(
+                        "capturing function cannot be used as a function value yet",
+                        func.expr.span,
+                    ));
+                    false
+                } else {
+                    true
+                }
+            }
+            HirExprKind::Var(name) => {
+                if !matches!(self.ctx.get(func.ty), TypeKind::Function { .. }) {
+                    false
+                } else {
+                    let has_capture = self
+                        .env
+                        .lookup_all_callables(name)
+                        .iter()
+                        .any(|b| matches!(&b.kind, BindingKind::Func { captures, .. } if !captures.is_empty()));
+                    if has_capture {
+                        self.diagnostics.push(Diagnostic::error(
+                            "capturing function cannot be passed as a function value yet",
+                            func.expr.span,
+                        ));
+                        false
+                    } else {
+                        true
+                    }
+                }
+            }
             _ => matches!(self.ctx.get(func.ty), TypeKind::Function { .. }),
         };
         if !allow_indirect {

@@ -2617,3 +2617,18 @@
 - 結果:
   - 旧 tuple type 記法 reject と全体回帰の両立を確認。
   - `todo.md` の「旧タプル記法の完全移行」項目は完了として削除。
+
+# 2026-02-22 作業メモ (capture 関数値の bare symbol 経路も拒否)
+- 背景:
+  - `@fn` 経路では capture あり関数値を拒否済みだったが、`apply 5 add_y` のような bare symbol の関数値渡し経路に同等のガードが不足していた。
+- 実施:
+  - `nepl-core/src/typecheck.rs`
+    - call_indirect fallback 判定で `HirExprKind::Var(name)` かつ function-typed の場合にも callable 定義を確認し、capture ありならエラー化。
+    - エラーメッセージ: `capturing function cannot be passed as a function value yet`
+  - `tests/functions.n.md`
+    - `function_value_capture_not_supported_without_at` (`compile_fail`) を追加。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: 全件 pass（実行時点の総数）。
+- 位置づけ:
+  - closure conversion 未実装フェーズでの「通ってはいけない capture 関数値流入」を `@` / bare symbol の両経路で統一的に封止。
