@@ -191,6 +191,7 @@ pub fn typecheck(
                     name: func.name.clone(),
                     ty,
                     mutable: false,
+                    no_shadow: false,
                     defined: true,
                     moved: false,
                     span: *span,
@@ -313,6 +314,7 @@ pub fn typecheck(
                         name: v.name.clone(),
                         ty: func_ty,
                         mutable: false,
+                        no_shadow: false,
                         defined: true,
                         moved: false,
                         span: e.name.span,
@@ -331,6 +333,7 @@ pub fn typecheck(
                         name: format!("{}::{}", e.name.name, v.name),
                         ty: func_ty,
                         mutable: false,
+                        no_shadow: false,
                         defined: true,
                         moved: false,
                         span: e.name.span,
@@ -398,6 +401,7 @@ pub fn typecheck(
                     name: s.name.name.clone(),
                     ty: constructor_ty,
                     mutable: false,
+                    no_shadow: false,
                     defined: true,
                     moved: false,
                     span: s.name.span,
@@ -479,6 +483,7 @@ pub fn typecheck(
                     name: vname.clone(),
                     ty: func_ty,
                     mutable: false,
+                    no_shadow: false,
                     defined: true,
                     moved: false,
                     span: Span::dummy(),
@@ -572,6 +577,7 @@ pub fn typecheck(
                 name: name.clone(),
                 ty: func_ty,
                 mutable: false,
+                no_shadow: false,
                 defined: true,
                 moved: false,
                 span: Span::dummy(),
@@ -630,7 +636,6 @@ pub fn typecheck(
                 effect,
             } = ctx.get(ty)
             {
-                env.remove_duplicate_func(&f.name.name, ty, &ctx);
                 if let Some(existing) = env.lookup(&f.name.name) {
                     if !matches!(existing.kind, BindingKind::Func { .. }) {
                         diagnostics.push(Diagnostic::error(
@@ -650,6 +655,31 @@ pub fn typecheck(
                 if crate::log::is_verbose() {
                     std::eprintln!("typecheck: registering global func {}", f.name.name);
                 }
+                if let Some(blocked) = shadow_blocked_by_nonshadow(&env, &f.name.name) {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "cannot shadow non-shadowable symbol '{}'",
+                            f.name.name
+                        ),
+                        f.name.span,
+                    ));
+                    diagnostics.push(
+                        Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                            .with_secondary_label(f.name.span, Some("shadow attempt".into())),
+                    );
+                    continue;
+                }
+                if f.no_shadow && env.lookup_any(&f.name.name).is_some() {
+                    diagnostics.push(Diagnostic::error(
+                        format!(
+                            "noshadow declaration '{}' conflicts with existing symbol",
+                            f.name.name
+                        ),
+                        f.name.span,
+                    ));
+                    continue;
+                }
+                env.remove_duplicate_func(&f.name.name, ty, &ctx);
                 let symbol = if type_contains_unbound_var(&ctx, ty) {
                     f.name.name.clone()
                 } else {
@@ -659,6 +689,7 @@ pub fn typecheck(
                     name: f.name.name.clone(),
                     ty,
                     mutable: false,
+                    no_shadow: f.no_shadow,
                     defined: true,
                     moved: false,
                     span: f.name.span,
@@ -734,11 +765,36 @@ pub fn typecheck(
                     break;
                 }
             }
+            if let Some(blocked) = shadow_blocked_by_nonshadow(&env, &alias.name.name) {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "cannot shadow non-shadowable symbol '{}'",
+                        alias.name.name
+                    ),
+                    alias.name.span,
+                ));
+                diagnostics.push(
+                    Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                        .with_secondary_label(alias.name.span, Some("shadow attempt".into())),
+                );
+                break;
+            }
+            if alias.no_shadow && env.lookup_any(&alias.name.name).is_some() {
+                diagnostics.push(Diagnostic::error(
+                    format!(
+                        "noshadow declaration '{}' conflicts with existing symbol",
+                        alias.name.name
+                    ),
+                    alias.name.span,
+                ));
+                break;
+            }
             env.remove_duplicate_func(&alias.name.name, ty, &ctx);
             env.insert_global(Binding {
                 name: alias.name.name.clone(),
                 ty,
                 mutable: false,
+                no_shadow: alias.no_shadow,
                 defined: true,
                 moved: false,
                 span: alias.name.span,
@@ -1110,6 +1166,7 @@ fn check_function(
             name: name.clone(),
             ty: *ty,
             mutable: false,
+            no_shadow: false,
             defined: true,
             moved: false,
             span: f.name.span,
@@ -1122,6 +1179,7 @@ fn check_function(
             name: param.name.clone(),
             ty: *ty,
             mutable: false,
+            no_shadow: false,
             defined: true,
             moved: false,
             span: param.span,
@@ -1598,8 +1656,30 @@ impl<'a> BlockChecker<'a> {
                 if let Some(PrefixItem::Symbol(Symbol::Let {
                     name,
                     mutable: false,
+                    no_shadow,
                 })) = items.first()
                 {
+                    if let Some(blocked) = shadow_blocked_by_nonshadow(self.env, &name.name) {
+                        self.diagnostics.push(Diagnostic::error(
+                            format!("cannot shadow non-shadowable symbol '{}'", name.name),
+                            name.span,
+                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                                .with_secondary_label(name.span, Some("shadow attempt".into())),
+                        );
+                        continue;
+                    }
+                    if *no_shadow && self.env.lookup_any(&name.name).is_some() {
+                        self.diagnostics.push(Diagnostic::error(
+                            format!(
+                                "noshadow declaration '{}' conflicts with existing symbol",
+                                name.name
+                            ),
+                            name.span,
+                        ));
+                        continue;
+                    }
                     let ty = self.ctx.fresh_var(None);
                     emit_shadow_warning(
                         &mut self.diagnostics,
@@ -1612,6 +1692,7 @@ impl<'a> BlockChecker<'a> {
                         name: name.name.clone(),
                         ty,
                         mutable: false,
+                        no_shadow: *no_shadow,
                         defined: false,
                         moved: false,
                         span: name.span,
@@ -1639,6 +1720,27 @@ impl<'a> BlockChecker<'a> {
                     effect,
                 } = self.ctx.get(base_ty)
                 {
+                    if let Some(blocked) = shadow_blocked_by_nonshadow(self.env, &f.name.name) {
+                        self.diagnostics.push(Diagnostic::error(
+                            format!("cannot shadow non-shadowable symbol '{}'", f.name.name),
+                            f.name.span,
+                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                                .with_secondary_label(f.name.span, Some("shadow attempt".into())),
+                        );
+                        continue;
+                    }
+                    if f.no_shadow && self.env.lookup_any(&f.name.name).is_some() {
+                        self.diagnostics.push(Diagnostic::error(
+                            format!(
+                                "noshadow declaration '{}' conflicts with existing symbol",
+                                f.name.name
+                            ),
+                            f.name.span,
+                        ));
+                        continue;
+                    }
                     if !captures.is_empty() {
                         let mut lifted_params = captures.iter().map(|(_, t)| *t).collect::<Vec<_>>();
                         lifted_params.extend(params.iter().copied());
@@ -1657,6 +1759,7 @@ impl<'a> BlockChecker<'a> {
                         name: f.name.name.clone(),
                         ty,
                         mutable: false,
+                        no_shadow: f.no_shadow,
                         defined: true,
                         moved: false,
                         span: f.name.span,
@@ -2193,12 +2296,64 @@ impl<'a> BlockChecker<'a> {
                             }
                         }
                     }
-                    Symbol::Let { name, mutable } => {
+                    Symbol::Let {
+                        name,
+                        mutable,
+                        no_shadow,
+                    } => {
                         // Use current-scope lookup so `let` always creates a local binding
                         // (shadowing outer bindings) rather than reusing an outer binding.
                         let ty = if let Some(b) = self.env.lookup_current(&name.name) {
+                            if b.no_shadow && b.span != name.span {
+                                self.diagnostics.push(Diagnostic::error(
+                                    format!("cannot shadow non-shadowable symbol '{}'", name.name),
+                                    name.span,
+                                ));
+                                self.diagnostics.push(
+                                    Diagnostic::error(
+                                        "non-shadowable declaration is here",
+                                        b.span,
+                                    )
+                                    .with_secondary_label(
+                                        name.span,
+                                        Some("shadow attempt".into()),
+                                    ),
+                                );
+                                return None;
+                            }
                             b.ty
                         } else {
+                            if let Some(blocked) = shadow_blocked_by_nonshadow(self.env, &name.name)
+                            {
+                                self.diagnostics.push(Diagnostic::error(
+                                    format!(
+                                        "cannot shadow non-shadowable symbol '{}'",
+                                        name.name
+                                    ),
+                                    name.span,
+                                ));
+                                self.diagnostics.push(
+                                    Diagnostic::error(
+                                        "non-shadowable declaration is here",
+                                        blocked.span,
+                                    )
+                                    .with_secondary_label(
+                                        name.span,
+                                        Some("shadow attempt".into()),
+                                    ),
+                                );
+                                return None;
+                            }
+                            if *no_shadow && self.env.lookup_any(&name.name).is_some() {
+                                self.diagnostics.push(Diagnostic::error(
+                                    format!(
+                                        "noshadow declaration '{}' conflicts with existing symbol",
+                                        name.name
+                                    ),
+                                    name.span,
+                                ));
+                                return None;
+                            }
                             let t = self.ctx.fresh_var(None);
                             emit_shadow_warning(
                                 &mut self.diagnostics,
@@ -2211,6 +2366,7 @@ impl<'a> BlockChecker<'a> {
                                 name: name.name.clone(),
                                 ty: t,
                                 mutable: *mutable,
+                                no_shadow: *no_shadow,
                                 defined: false,
                                 moved: false,
                                 span: name.span,
@@ -2818,7 +2974,7 @@ impl<'a> BlockChecker<'a> {
         // produce a `Let` HIR node (e.g. for layout/colon forms), lower it
         // here: update the hoisted binding, mark it defined, and return a
         // `Let` expression so downstream codegen sees a stable binding.
-        if let Some(PrefixItem::Symbol(Symbol::Let { name, mutable })) = expr.items.first() {
+        if let Some(PrefixItem::Symbol(Symbol::Let { name, mutable, .. })) = expr.items.first() {
             if !matches!(result_expr.kind, HirExprKind::Let { .. }) {
                 // If RHS remains on stack (auto_call disabled for `let`), use it as
                 // the binding value directly.
@@ -3236,6 +3392,7 @@ impl<'a> BlockChecker<'a> {
                             name: bind.name.clone(),
                             ty: pty,
                             mutable: false,
+                            no_shadow: false,
                             defined: true,
                             moved: false,
                             span: bind.span,
@@ -4242,6 +4399,7 @@ struct Binding {
     name: String,
     ty: TypeId,
     mutable: bool,
+    no_shadow: bool,
     defined: bool,
     moved: bool,
     span: Span,
@@ -4462,6 +4620,11 @@ fn emit_shadow_warning(
             span,
         ));
     }
+}
+
+fn shadow_blocked_by_nonshadow<'a>(env: &'a Env, name: &str) -> Option<&'a Binding> {
+    env.lookup_any(name)
+        .and_then(|b| if b.no_shadow && b.defined { Some(b) } else { None })
 }
 
 type LabelEnv = BTreeMap<String, TypeId>;

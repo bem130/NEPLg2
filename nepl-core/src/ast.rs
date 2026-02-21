@@ -88,7 +88,11 @@ pub enum PrefixItem {
 pub enum Symbol {
     /// `forced_value=true` when parsed from `@ident`.
     Ident(Ident, Vec<TypeExpr>, bool),
-    Let { name: Ident, mutable: bool },
+    Let {
+        name: Ident,
+        mutable: bool,
+        no_shadow: bool,
+    },
     Set { name: Ident },
     If(Span),
     While(Span),
@@ -108,6 +112,7 @@ pub struct Block {
 pub struct FnDef {
     pub vis: Visibility,
     pub name: Ident,
+    pub no_shadow: bool,
     pub type_params: Vec<TypeParam>,
     pub signature: TypeExpr,
     pub params: Vec<Ident>,
@@ -119,6 +124,7 @@ pub struct FnDef {
 pub struct FnAlias {
     pub vis: Visibility,
     pub name: Ident,
+    pub no_shadow: bool,
     pub target: Ident,
 }
 

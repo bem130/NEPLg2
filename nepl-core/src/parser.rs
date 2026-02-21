@@ -143,6 +143,7 @@ impl Parser {
         let fn_def = FnDef {
             vis: Visibility::Private,
             name: name_ident.clone(),
+            no_shadow: false,
             type_params: Vec::new(),
             signature: Self::infer_signature_from_params(params.len()),
             params,
@@ -647,7 +648,14 @@ impl Parser {
         let saved_pos = self.pos;
         let saved_diags_len = self.diagnostics.len();
 
-        if !self.consume_if(&TokenKind::KwLet) {
+        if !self.check(&TokenKind::KwLet) {
+            return None;
+        }
+        let let_span = self.next().unwrap().span;
+        let (is_mut, no_shadow) = self.parse_let_modifiers(let_span);
+        if is_mut {
+            self.pos = saved_pos;
+            self.diagnostics.truncate(saved_diags_len);
             return None;
         }
         let (name, nspan) = match self.expect_ident() {
@@ -713,6 +721,7 @@ impl Parser {
         Some(Stmt::FnDef(FnDef {
             vis: Visibility::Private,
             name: Ident { name, span: nspan },
+            no_shadow,
             type_params: Vec::new(),
             signature: signature
                 .unwrap_or_else(|| Self::infer_signature_from_params(params.len())),
@@ -837,7 +846,8 @@ impl Parser {
 
     fn parse_fn(&mut self) -> Option<Stmt> {
         let vis = self.parse_visibility();
-        let fn_span = self.expect_with_span(&TokenKind::KwFn)?;
+        let _fn_span = self.expect_with_span(&TokenKind::KwFn)?;
+        let no_shadow = self.consume_if(&TokenKind::KwNoShadow);
         let name_tok = self.expect_ident()?;
         let name = Ident {
             name: name_tok.0.clone(),
@@ -858,7 +868,12 @@ impl Parser {
                 span: target_tok.1,
             };
             self.expect(&TokenKind::Semicolon)?;
-            return Some(Stmt::FnAlias(FnAlias { vis, name, target }));
+            return Some(Stmt::FnAlias(FnAlias {
+                vis,
+                name,
+                no_shadow,
+                target,
+            }));
         }
 
         // If next is LAngle, it could be generics OR signature.
@@ -922,6 +937,7 @@ impl Parser {
         Some(Stmt::FnDef(FnDef {
             vis,
             name,
+            no_shadow,
             type_params,
             signature,
             params,
@@ -1318,13 +1334,14 @@ impl Parser {
                     items.extend(parsed);
                 }
                 TokenKind::KwLet => {
-                    let _ = self.next();
-                    let is_mut = self.consume_if(&TokenKind::KwMut);
+                    let let_span = self.next().unwrap().span;
+                    let (is_mut, no_shadow) = self.parse_let_modifiers(let_span);
                     let (name, span) = self.expect_ident()?;
                     self.consume_if(&TokenKind::Equals);
                     items.push(PrefixItem::Symbol(Symbol::Let {
                         name: Ident { name, span },
                         mutable: is_mut,
+                        no_shadow,
                     }));
                 }
                 TokenKind::KwSet => {
@@ -1808,13 +1825,14 @@ impl Parser {
                     items.extend(parsed);
                 }
                 TokenKind::KwLet => {
-                    let _ = self.next();
-                    let is_mut = self.consume_if(&TokenKind::KwMut);
+                    let let_span = self.next().unwrap().span;
+                    let (is_mut, no_shadow) = self.parse_let_modifiers(let_span);
                     let (name, span) = self.expect_ident()?;
                     self.consume_if(&TokenKind::Equals);
                     items.push(PrefixItem::Symbol(Symbol::Let {
                         name: Ident { name, span },
                         mutable: is_mut,
+                        no_shadow,
                     }));
                 }
                 TokenKind::KwSet => {
@@ -2032,12 +2050,13 @@ impl Parser {
                     items.push(ident_item);
                 }
                 TokenKind::KwLet => {
-                    let _ = self.next();
-                    let is_mut = self.consume_if(&TokenKind::KwMut);
+                    let let_span = self.next().unwrap().span;
+                    let (is_mut, no_shadow) = self.parse_let_modifiers(let_span);
                     let (name, span) = self.expect_ident()?;
                     items.push(PrefixItem::Symbol(Symbol::Let {
                         name: Ident { name, span },
                         mutable: is_mut,
+                        no_shadow,
                     }));
                 }
                 TokenKind::KwSet => {
@@ -2971,6 +2990,29 @@ impl Parser {
     // ------------------------------------------------------------------
     // helpers
     // ------------------------------------------------------------------
+
+    fn parse_let_modifiers(&mut self, let_span: Span) -> (bool, bool) {
+        let mut is_mut = false;
+        let mut no_shadow = false;
+        loop {
+            if self.consume_if(&TokenKind::KwMut) {
+                is_mut = true;
+                continue;
+            }
+            if self.consume_if(&TokenKind::KwNoShadow) {
+                no_shadow = true;
+                continue;
+            }
+            break;
+        }
+        if is_mut && no_shadow {
+            self.diagnostics.push(Diagnostic::error(
+                "noshadow cannot be used with let mut",
+                let_span,
+            ));
+        }
+        (is_mut, no_shadow)
+    }
 
     fn parse_ident_symbol_item(
         &mut self,

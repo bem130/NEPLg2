@@ -260,6 +260,53 @@ fn main <()->i32> ():
     sum
 ```
 
+## let_noshadow_rejects_shadowing
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let noshadow x <i32> 1;
+    let x <i32> 2;
+    add x 1
+```
+
+## fn_noshadow_rejects_shadowing
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+#target wasm
+#import "core/math" as *
+
+fn noshadow f <(i32)->i32> (x):
+    add x 1
+
+fn f <(i32)->i32> (x):
+    add x 2
+
+fn main <()->i32> ():
+    f 0
+```
+
+## let_mut_noshadow_is_invalid
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let mut noshadow x <i32> 1;
+    x
+```
+
 ## shadowing_import_alias_and_value_in_local_block
 
 neplg2:test

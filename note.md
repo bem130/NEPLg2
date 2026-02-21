@@ -1940,3 +1940,18 @@
 
 ## 補足
 - `tests` 全体 (`--no-stdlib`) 実行では既存の下流課題（ret_f64/selfhost/sort など）で失敗が残るが、今回の lexer/parser 変更で新規回帰は確認されていない。
+
+# 2026-02-21 作業メモ (noshadow 導入完了と回帰修正)
+- `noshadow` を lexer/parser/typecheck/web API まで一貫して実装。
+  - lexer: `KwNoShadow` を追加。
+  - parser: `let` 修飾子に `noshadow` を追加。`let mut noshadow` は parse error。
+  - parser: `fn noshadow <name>` を受理し、AST に `no_shadow` を保持。
+  - typecheck: `Binding.no_shadow` を導入し、`noshadow` 宣言の上書きを compile error 化。
+- 名前解決/型検査の既存動作を壊さないため、同一スコープの通常 `let` 再束縛（`let lst ...; let lst ...;`）は維持。
+  - ただし既存束縛が `no_shadow` の場合のみ、同名宣言を拒否する。
+- Web 側のトークン API も `KwNoShadow` に追従。
+- テスト追加:
+  - `tests/shadowing.n.md` に `noshadow` の compile_fail ケースを追加。
+- 検証結果:
+  - `NO_COLOR=false trunk build` 成功
+  - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json` で `547/547 passed`

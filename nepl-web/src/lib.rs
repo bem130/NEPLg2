@@ -349,6 +349,7 @@ fn token_kind_name(kind: &TokenKind) -> &'static str {
         TokenKind::KwFn => "KwFn",
         TokenKind::KwLet => "KwLet",
         TokenKind::KwMut => "KwMut",
+        TokenKind::KwNoShadow => "KwNoShadow",
         TokenKind::KwSet => "KwSet",
         TokenKind::KwIf => "KwIf",
         TokenKind::KwWhile => "KwWhile",
@@ -967,7 +968,7 @@ fn hoist_block_defs(trace: &mut NameResolutionTrace, block: &Block) {
                 trace.define(def.name.name.clone(), "fn", def.name.span);
             }
             Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => {
-                if let Some(PrefixItem::Symbol(Symbol::Let { name, mutable })) = expr.items.first() {
+                if let Some(PrefixItem::Symbol(Symbol::Let { name, mutable, .. })) = expr.items.first() {
                     if !*mutable {
                         trace.define(name.name.clone(), "let_hoisted", name.span);
                     }
@@ -990,7 +991,7 @@ fn trace_match_arm(trace: &mut NameResolutionTrace, arm: &MatchArm) {
 fn trace_prefix_expr(trace: &mut NameResolutionTrace, expr: &PrefixExpr) {
     for (idx, item) in expr.items.iter().enumerate() {
         match item {
-            PrefixItem::Symbol(Symbol::Let { name, mutable }) => {
+            PrefixItem::Symbol(Symbol::Let { name, mutable, .. }) => {
                 if *mutable {
                     trace.define(name.name.clone(), "let_mut", name.span);
                 }
