@@ -2161,3 +2161,15 @@
 - 次段:
   - `tests/tuple_new_syntax.n.md` の tuple 型注釈ケースを「新記法での等価検証」へ再設計。
   - その後 `tutorials` 内の不要な tuple 型注釈を同様に削減する。
+
+# 2026-02-22 作業メモ (tutorial 19 pipe の実行失敗修正)
+- 背景:
+  - `tutorials/getting_started/19_pipe_operator.n.md` 更新後、`doctest#2` が `divide by zero` で失敗。
+- 根因:
+  - `let v` ブロックの外に `3 |> mul 2` がこぼれており、意図した「1本のパイプ連結」になっていなかった。
+- 修正:
+  - `pipe chain` サンプルを単一ブロック内の連結へ整理。
+  - `3 |> mul 2 |> add 6` として `assert_eq_i32 12 v` を満たす例に更新。
+- 検証:
+  - `node nodesrc/tests.js -i tutorials/getting_started/19_pipe_operator.n.md -o tests/output/tutorial_pipe19_current.json -j 1`: `167/167 pass`
+  - `node nodesrc/tests.js -i tutorials/getting_started -o tests/output/tutorials_getting_started.json -j 4`: `223/223 pass`

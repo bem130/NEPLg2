@@ -24,7 +24,7 @@ fn main <()*>()> ():
 
 ## 複数段の変換を連結する
 
-式を左から順に追えるので、段階的な変換が読みやすくなります。
+式を左からうえから順に追えるので、段階的な変換が読みやすくなります。
 
 neplg2:test
 ```neplg2
@@ -37,11 +37,9 @@ neplg2:test
 
 fn main <()*>()> ():
     let v <i32> block:
-        1
-        |> add 2
-        |> add 3
-    3
-    |> mul 2
+        3
+        |> mul 2
+        |> add 6
     assert_eq_i32 12 v
     test_checked "pipe chain"
 ```
