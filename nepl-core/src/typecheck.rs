@@ -152,7 +152,11 @@ pub fn typecheck(
     let mut externs: Vec<HirExtern> = Vec::new();
     let mut instantiations: BTreeMap<String, Vec<Vec<TypeId>>> = BTreeMap::new();
     let mut pending_if: Option<bool> = None;
-    for d in &module.directives {
+    for item in &module.root.items {
+        let Stmt::Directive(d) = item else {
+            pending_if = None;
+            continue;
+        };
         if let Some(allowed) = gate_allows(d, target, profile) {
             pending_if = Some(allowed);
             continue;
