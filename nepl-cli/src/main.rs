@@ -174,12 +174,6 @@ fn execute(cli: Cli) -> Result<()> {
         }
     };
 
-    // Auto-upgrade to WASI if stdio is imported and user did not explicitly pick wasm/wasi.
-    let has_stdio_import = module.directives.iter().any(
-        |d| matches!(d, nepl_core::ast::Directive::Import { path, .. } if path == "std/stdio"),
-    );
-
-
     let cli_target = cli.target.as_deref().map(|t| {
         if t == "wasi" {
             CompileTarget::Wasi
@@ -187,24 +181,8 @@ fn execute(cli: Cli) -> Result<()> {
             CompileTarget::Wasm
         }
     });
-    let target_override = cli_target.or_else(|| {
-        if has_stdio_import {
-            Some(CompileTarget::Wasi)
-        } else {
-            None
-        }
-    });
-    let module_decl_target = module.directives.iter().find_map(|d| {
-        if let nepl_core::ast::Directive::Target { target, .. } = d {
-            match target.as_str() {
-                "wasi" => Some(CompileTarget::Wasi),
-                "wasm" => Some(CompileTarget::Wasm),
-                _ => None,
-            }
-        } else {
-            None
-        }
-    });
+    let target_override = cli_target;
+    let module_decl_target = detect_module_target(&module);
     let run_target = target_override
         .or(module_decl_target)
         .unwrap_or(CompileTarget::Wasm);
@@ -664,227 +642,28 @@ fn run_wasm(
         .collect();
 
     let mut linker: Linker<AllocState> = Linker::new(&engine);
-    // Env prints for legacy wasm target
-    linker.func_wrap("env", "print_i32", |x: i32| {
-        println!("{x}");
-    })?;
-    linker.func_wrap(
-        "env",
-        "print_str",
-        |caller: Caller<'_, AllocState>, ptr: i32| {
-            let memory = caller
-                .get_export("memory")
-                .and_then(|e| e.into_memory())
-                .expect("memory export not found");
-            let data = memory.data(&caller);
-            let offset = ptr as usize;
-            if offset + 4 > data.len() {
-                return;
-            }
-            let len = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
-            let start = offset + 4;
-            if start + len > data.len() {
-                return;
-            }
-            let bytes = &data[start..start + len];
-            let text = std::str::from_utf8(bytes).unwrap_or("<invalid utf8>");
-            print!("{text}");
-        },
-    )?;
-    // Provide host-side allocator exports under `nepl_alloc` for development/runtime.
-    // Simple free-list allocator using two conventions:
-    // - linear memory[0..4): heap_ptr (u32)
-    // - linear memory[4..8): free_list_head (u32) -- we manage this in host state as well
-    linker.func_wrap(
-        "nepl_alloc",
-        "alloc",
-        |mut caller: Caller<'_, AllocState>, size: i32| -> i32 {
-            let header = 8u32; // header stores [size:u32][next:u32]
-            let size = size as u32;
-            let total = ((size + header + 7) / 8) * 8; // align to 8
-            let mem = match caller.get_export("memory").and_then(|e| e.into_memory()) {
-                Some(m) => m,
-                None => return -1,
-            };
-
-            // Snapshot memory for reads
-            let data = mem.data(&caller);
-
-            // Traverse free list
-            let mut prev_ptr: Option<u32> = None;
-            let mut cur = {
-                // read free_head from memory if present, else from host state
-                if data.len() >= 8 {
-                    u32::from_le_bytes(data[4..8].try_into().unwrap())
-                } else {
-                    caller.data().free_head
-                }
-            };
-            while cur != 0 {
-                if (cur as usize) + 4 > data.len() {
-                    break;
-                }
-                let blk_sz =
-                    u32::from_le_bytes(data[cur as usize..cur as usize + 4].try_into().unwrap());
-                let next = u32::from_le_bytes(
-                    data[cur as usize + 4..cur as usize + 8].try_into().unwrap(),
-                );
-                if blk_sz >= total {
-                    // remove from free list
-                    if let Some(prev) = prev_ptr {
-                        let bytes = next.to_le_bytes();
-                        mem.write(&mut caller, (prev + 4) as usize, &bytes).ok();
-                    } else {
-                        // update head
-                        let bytes = next.to_le_bytes();
-                        mem.write(&mut caller, 4usize, &bytes).ok();
-                    }
-                    // possibly split: if remaining space large enough, create new free block
-                    let remain = blk_sz - total;
-                    if remain >= 16 {
-                        let new_blk = cur + total;
-                        let new_sz_bytes = remain.to_le_bytes();
-                        mem.write(&mut caller, new_blk as usize, &new_sz_bytes).ok();
-                        let new_next = next.to_le_bytes();
-                        mem.write(&mut caller, (new_blk + 4) as usize, &new_next)
-                            .ok();
-                        // set allocated block size to total
-                        let total_bytes = total.to_le_bytes();
-                        mem.write(&mut caller, cur as usize, &total_bytes).ok();
-                    }
-                    // return payload pointer
-                    let payload = cur + header;
-                    return payload as i32;
-                }
-                prev_ptr = Some(cur);
-                cur = next;
-            }
-
-            // No free block found — bump allocate from heap_ptr at addr 0
-            let data2 = mem.data(&caller);
-            if data2.len() < 4 {
-                return 0;
-            }
-            let heap_ptr = u32::from_le_bytes(data2[0..4].try_into().unwrap());
-            let alloc_start = ((heap_ptr + 7) / 8) * 8;
-            let new_heap = alloc_start.saturating_add(total);
-            if new_heap as usize > data2.len() {
-                // Out of memory in host-managed environment — failure
-                return 0;
-            }
-            // write header size
-            let total_bytes = total.to_le_bytes();
-            mem.write(&mut caller, alloc_start as usize, &total_bytes)
-                .ok();
-            // store new heap_ptr
-            let nb = new_heap.to_le_bytes();
-            mem.write(&mut caller, 0usize, &nb).ok();
-            return (alloc_start + header) as i32;
-        },
-    )?;
-
-    linker.func_wrap(
-        "nepl_alloc",
-        "dealloc",
-        |mut caller: Caller<'_, AllocState>, ptr: i32, size: i32| {
-            let header = 8u32;
-            let ptr = ptr as u32;
-            let _size = size as u32;
-            let mem = match caller.get_export("memory").and_then(|e| e.into_memory()) {
-                Some(m) => m,
-                None => return,
-            };
-            if ptr < header {
-                return;
-            }
-            let header_ptr = ptr - header;
-            // read current free_head
-            let data = mem.data(&caller);
-            let cur_head = if data.len() >= 8 {
-                u32::from_le_bytes(data[4..8].try_into().unwrap())
-            } else {
-                caller.data().free_head
-            };
-            // write block header: size and next
-            let sz_bytes = ((_size + header + 7) / 8 * 8).to_le_bytes();
-            mem.write(&mut caller, header_ptr as usize, &sz_bytes).ok();
-            let next_bytes = cur_head.to_le_bytes();
-            mem.write(&mut caller, (header_ptr + 4) as usize, &next_bytes)
-                .ok();
-            // update free_head in memory
-            mem.write(&mut caller, 4usize, &header_ptr.to_le_bytes())
-                .ok();
-        },
-    )?;
-
-    linker.func_wrap(
-        "nepl_alloc",
-        "realloc",
-        |mut caller: Caller<'_, AllocState>, ptr: i32, old_size: i32, new_size: i32| -> i32 {
-            let ptr = ptr as u32;
-            let old = old_size as u32;
-            let new = new_size as u32;
-            let mem = match caller.get_export("memory").and_then(|e| e.into_memory()) {
-                Some(m) => m,
-                None => return -1,
-            };
-            // allocate new block
-            let header = 8u32;
-            let total_new = ((new + header + 7) / 8) * 8;
-            let data = mem.data(&caller);
-            let heap_ptr = if data.len() >= 4 {
-                u32::from_le_bytes(data[0..4].try_into().unwrap())
-            } else {
-                0
-            };
-            let alloc_start = ((heap_ptr + 7) / 8) * 8;
-            let new_heap = alloc_start.saturating_add(total_new);
-            if new_heap as usize > data.len() {
-                return 0;
-            }
-            mem.write(&mut caller, alloc_start as usize, &total_new.to_le_bytes())
-                .ok();
-            mem.write(&mut caller, 0usize, &new_heap.to_le_bytes()).ok();
-            let new_ptr = alloc_start + header;
-            // copy min(old,new)
-            let copy_len = core::cmp::min(old, new) as usize;
-            if copy_len > 0 {
-                let src = ptr as usize;
-                let dst = new_ptr as usize;
-                let snapshot = mem.data(&caller).to_vec();
-                if src + copy_len <= snapshot.len() && dst + copy_len <= snapshot.len() {
-                    let slice = &snapshot[src..src + copy_len];
-                    mem.write(&mut caller, dst, slice).ok();
+    match target {
+        CompileTarget::Wasi => {
+            for import in module.imports() {
+                if import.module() != "wasi_snapshot_preview1" {
+                    return Err(anyhow::anyhow!(
+                        "unsupported non-WASI import {}::{} (only wasi_snapshot_preview1 is allowed)",
+                        import.module(),
+                        import.name()
+                    ));
                 }
             }
-            // dealloc old
-            if ptr != 0 {
-                let hdr = ptr - header;
-                let sz = if (hdr as usize) + 4 <= mem.data(&caller).len() {
-                    u32::from_le_bytes(
-                        mem.data(&caller)[hdr as usize..hdr as usize + 4]
-                            .try_into()
-                            .unwrap(),
-                    )
-                } else {
-                    0
-                };
-                let sz_bytes = sz.to_le_bytes();
-                // push to free list
-                let cur_head = if mem.data(&caller).len() >= 8 {
-                    u32::from_le_bytes(mem.data(&caller)[4..8].try_into().unwrap())
-                } else {
-                    caller.data().free_head
-                };
-                mem.write(&mut caller, (hdr + 4) as usize, &cur_head.to_le_bytes())
-                    .ok();
-                mem.write(&mut caller, hdr as usize, &sz_bytes).ok();
-                mem.write(&mut caller, 4usize, &hdr.to_le_bytes()).ok();
+        }
+        CompileTarget::Wasm => {
+            if let Some(import) = module.imports().next() {
+                return Err(anyhow::anyhow!(
+                    "wasm target does not allow host imports during run: {}::{} (use #target wasi or --target wasi)",
+                    import.module(),
+                    import.name()
+                ));
             }
-            new_ptr as i32
-        },
-    )?;
-
+        }
+    }
     if matches!(target, CompileTarget::Wasi) {
         linker.func_wrap(
             "wasi_snapshot_preview1",
@@ -1188,17 +967,6 @@ fn run_wasm(
                 0
             },
         )?;
-    } else {
-        // If wasm target imports WASI, warn and fail fast
-        for import in module.imports() {
-            if import.module() == "wasi_snapshot_preview1" {
-                return Err(anyhow::anyhow!(
-                    "module requires WASI (import {}::{}) – re-run with --target wasi",
-                    import.module(),
-                    import.name()
-                ));
-            }
-        }
     }
     let mut store = Store::new(
         &engine,
@@ -1230,6 +998,36 @@ fn run_wasm(
             "exported main function missing or has wrong type"
         ))
     }
+}
+
+fn detect_module_target(module: &nepl_core::ast::Module) -> Option<CompileTarget> {
+    if let Some(target) = module.directives.iter().find_map(|d| {
+        if let nepl_core::ast::Directive::Target { target, .. } = d {
+            match target.as_str() {
+                "wasi" => Some(CompileTarget::Wasi),
+                "wasm" => Some(CompileTarget::Wasm),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }) {
+        return Some(target);
+    }
+
+    module.root.items.iter().find_map(|stmt| {
+        if let nepl_core::ast::Stmt::Directive(nepl_core::ast::Directive::Target { target, .. }) =
+            stmt
+        {
+            match target.as_str() {
+                "wasi" => Some(CompileTarget::Wasi),
+                "wasm" => Some(CompileTarget::Wasm),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    })
 }
 
 fn stdlib_root() -> Result<PathBuf> {

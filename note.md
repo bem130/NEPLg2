@@ -1,3 +1,20 @@
+# 2026-02-21 作業メモ (target=wasm で WASI 無効化)
+- 要件反映:
+  - `nepl-cli/src/main.rs` の自動昇格ロジック（`std/stdio` import を検出して `wasi` にする挙動）を削除。
+  - `target=wasm` のときは WASI を有効化しないように修正。
+  - `target=wasi` のときのみ `wasi_snapshot_preview1` import を許可し、WASI 関数を linker に登録。
+- 実装詳細:
+  - `execute`:
+    - `target_override` を CLI 指定のみに限定。
+    - 実行ターゲット推定を `detect_module_target` へ切り出し（`module.directives` と `module.root.items` の双方を確認）。
+  - `run_wasm`:
+    - `CompileTarget::Wasm` では import が存在した時点でエラー化。
+    - `CompileTarget::Wasi` でのみ `args_sizes_get` / `args_get` / `path_open` / `fd_read` / `fd_close` / `fd_write` を登録。
+- 検証:
+  - `cargo test -p nepl-cli`: pass
+  - `#target wasm + #import "std/stdio"`: compile error（`WASI import not allowed for wasm target`）を確認。
+  - `#target wasi + #import "std/stdio"`: 実行成功（`println "hi"` が出力）を確認。
+
 # 2026-02-21 作業メモ (fs 衝突修正 + 回帰テスト追加)
 - `tests/selfhost_req.n.md` の compile fail を起点に `std/fs` の根因を修正。
   - `std/fs` の WASI extern 名が他モジュール（`std/stdio` など）と衝突しうるため、`wasi_path_open` / `wasi_fd_read` / `wasi_fd_close` に内部名を固有化。
