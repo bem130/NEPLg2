@@ -2080,3 +2080,23 @@
 - 検証:
   - `NO_COLOR=false trunk build`: 成功
   - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 4`: `547/547 pass`
+
+# 2026-02-22 作業メモ (nm-compile 失敗の根因修正: extern/entry 収集経路の統合)
+- 背景:
+  - CI (`nm-compile`) で `stdlib/std/env/cliarg.nepl` の `args_sizes_get` / `args_get` が `undefined identifier` になる失敗を確認。
+  - 同時に `expression left extra values on the stack` が連鎖して発生。
+- 根因:
+  - `typecheck` の先行ディレクティブ処理が `module.root.items` の `Stmt::Directive` のみを走査しており、
+    ローダー経由で `module.directives` 側に保持された `#extern` を取りこぼす経路があった。
+- 修正:
+  - `nepl-core/src/typecheck.rs` でディレクティブ適用処理を共通化。
+  - `module.directives` と `module.root.items` の双方を適用対象にし、span キーで重複適用を抑止。
+  - これにより `#extern wasi_snapshot_preview1 args_sizes_get/args_get` が安定して環境へ登録されるようにした。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests/neplg2.n.md -o tests/output/neplg2_current.json -j 2`: `200/200 pass`
+  - `cargo run -p nepl-cli -- --target wasi --profile debug --input examples/nm.nepl --output /tmp/ci-nm`: `compile_module returned Ok`
+  - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 4`: `547/547 pass`
+- 位置づけ:
+  - 仕様変更（`target=wasm` で WASI 無効）後の回帰であり、上流（typecheck 入り口）で根本修正。
+  - 次段は固定方針どおり lexer/parser の旧仕様残骸整理を優先する。

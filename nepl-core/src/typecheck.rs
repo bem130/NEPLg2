@@ -150,21 +150,28 @@ pub fn typecheck(
 
     let mut entry = None;
     let mut externs: Vec<HirExtern> = Vec::new();
+    let mut seen_directive_spans: BTreeSet<(u32, u32, u32)> = BTreeSet::new();
     let mut instantiations: BTreeMap<String, Vec<Vec<TypeId>>> = BTreeMap::new();
-    let mut pending_if: Option<bool> = None;
-    for item in &module.root.items {
-        let Stmt::Directive(d) = item else {
-            pending_if = None;
-            continue;
-        };
-        if let Some(allowed) = gate_allows(d, target, profile) {
-            pending_if = Some(allowed);
-            continue;
-        }
-        let allowed = pending_if.unwrap_or(true);
-        pending_if = None;
+    let mut apply_directive = |d: &Directive, allowed: bool| {
         if !allowed {
-            continue;
+            return;
+        }
+        let sp = match d {
+            Directive::Entry { name } => name.span,
+            Directive::Extern { span, .. } => *span,
+            Directive::Target { span, .. } => *span,
+            Directive::Import { span, .. } => *span,
+            Directive::Use { span, .. } => *span,
+            Directive::IfTarget { span, .. } => *span,
+            Directive::IfProfile { span, .. } => *span,
+            Directive::IndentWidth { span, .. } => *span,
+            Directive::Include { span, .. } => *span,
+            Directive::Prelude { span, .. } => *span,
+            Directive::NoPrelude { span } => *span,
+        };
+        let key = (sp.file_id.0, sp.start, sp.end);
+        if !seen_directive_spans.insert(key) {
+            return;
         }
         if let Directive::Entry { name } = d {
             entry = Some(name.name.clone());
@@ -181,7 +188,7 @@ pub fn typecheck(
                     "WASI import not allowed for wasm target (use #target wasi)",
                     *span,
                 ));
-                continue;
+                return;
             }
             let ty = type_from_expr(&mut ctx, &mut label_env, signature);
             if let TypeKind::Function {
@@ -224,6 +231,24 @@ pub fn typecheck(
                 ));
             }
         }
+    };
+
+    for d in &module.directives {
+        apply_directive(d, true);
+    }
+    let mut pending_if: Option<bool> = None;
+    for item in &module.root.items {
+        let Stmt::Directive(d) = item else {
+            pending_if = None;
+            continue;
+        };
+        if let Some(allowed) = gate_allows(d, target, profile) {
+            pending_if = Some(allowed);
+            continue;
+        }
+        let allowed = pending_if.unwrap_or(true);
+        pending_if = None;
+        apply_directive(d, allowed);
     }
 
     // Builtins are defined in stdlib (e.g. std/mem) or via #extern.
