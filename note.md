@@ -1,3 +1,28 @@
+# 2026-02-21 作業メモ (non-mut let 前方参照の実装完了)
+- 背景:
+  - `plan.md` 仕様では「巻き上げは `mut` なし `let` と `fn` のみに適用」だが、`let y add x 4; let x 5` が `unknown variable x` で失敗していた。
+- 根因:
+  - `typecheck` 側の解決だけでなく、`codegen_wasm` 側のローカル割当が「出現順登録」だったため、
+    後方 `let x` の前で `Var(x)` を生成すると `unknown variable` で失敗していた。
+- 実装:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `gen_block` のスコープ開始直後に `predeclare_block_locals` を追加。
+    - ブロック内の `HirExprKind::Let` を先行走査し、`LocalMap` に事前登録。
+  - `nepl-core/src/typecheck.rs`
+    - `lookup_value_for_read` を導入し、読み取り時の non-mut hoist fallback 経路を整理（自己初期化は除外）。
+  - `tests/shadowing.n.md`
+    - `hoist_nonmut_let_allows_forward_reference` を `neplg2:test`（ret: 9）へ戻し、通過を確認。
+- 結果:
+  - `mut let` 前方参照は引き続き compile_fail。
+  - `non-mut let` と `fn` の前方参照は通過。
+- `todo.md` 反映:
+  - 完了した「`let`/`fn` の巻き上げ統一」サブ項目を削除。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests/shadowing.n.md -i tests/functions.n.md -i tests/neplg2.n.md -o tests/output/namespace_phase_current.json -j 1`: `243/243 pass`
+  - `node tests/tree/run.js`: `7/7 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `558/558 pass`
+
 # 2026-02-21 作業メモ (巻き上げ仕様の回帰テスト追加と現状固定)
 - 目的:
   - `todo.md` の「`let`/`fn` 巻き上げ統一」に向け、現状挙動をテストで固定して差分を可視化。

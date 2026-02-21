@@ -816,6 +816,7 @@ fn gen_block(
     // erase the function's return value. In future the HIR should be
     // evolved to explicitly separate `result_expr` from drop lines.
     locals.begin_scope();
+    predeclare_block_locals(ctx, block, locals);
     let mut last_val: Option<ValType> = None;
     for line in &block.lines {
         let val = gen_expr(ctx, &line.expr, name_map, sig_map, strings, locals, insts, diags);
@@ -833,6 +834,14 @@ fn gen_block(
     }
     locals.end_scope();
     Some(last_val)
+}
+
+fn predeclare_block_locals(ctx: &TypeCtx, block: &HirBlock, locals: &mut LocalMap) {
+    for line in &block.lines {
+        if let HirExprKind::Let { name, value, .. } = &line.expr.kind {
+            let _ = locals.ensure_local(name.clone(), value.ty, ctx);
+        }
+    }
 }
 
 fn gen_expr(

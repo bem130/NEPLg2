@@ -8,7 +8,6 @@
 
 1. 名前解決・名前空間の再設計（最優先）
 - `typecheck` の環境を `ValueNs`（変数）と `CallableNs`（関数/alias）に分離する。
-- `let`/`fn` の巻き上げを plan.md 準拠で統一する（`mut` なし `let` と `fn` のみ）。
 - nested `fn`/`let` を呼び出し可能にする経路を確立する（`tests/functions.n.md`）。
 - 関数値（`@fn` / 関数を値として渡すケース）を HIR で明示表現し、解決規則を固定する。
 
