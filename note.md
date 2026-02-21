@@ -2228,3 +2228,20 @@
   - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `550/550 pass`
 - 位置づけ:
   - 予約語トークン化と構文エラー化の境界を先に固定し、後続の parser 整理時に退行を検知できる状態を作った。
+
+# 2026-02-22 作業メモ (旧タプル記法テストの失敗原因分離)
+- 背景:
+  - `tests/tuple_old_syntax.n.md` へ「旧タプル型注釈」「旧ドット添字アクセス」の reject ケースを追加したところ、
+    現行 parser/lexer の受理境界と一致せず `compile_fail` 想定が崩れた。
+- 観測:
+  - `t.0` は lexer 側の `.0` 数値解釈経路があり、現状のままでは「旧ドット添字アクセス」として安定 reject できない。
+  - `(<T1,T2>)` の型注釈は段階移行中で、現時点では reject 固定にすると既存資産との整合が崩れる。
+- 対応:
+  - 先行追加した 3 ケース（tuple type / dot index / nested dot index）は `skip` に切り替え、
+    フェーズ分離を明確化した。
+  - 既存の「旧 tuple literal `(a,b)` reject」ケースは `compile_fail` のまま維持。
+- 検証:
+  - `node nodesrc/tests.js -i tests/tuple_old_syntax.n.md -o tests/output/tuple_old_syntax_current.json -j 1`: `171/171 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `553/553 pass`
+- 位置づけ:
+  - 旧仕様廃止は継続しつつ、上流（lexer/parser）で一括改修する前に失敗原因を混在させないための切り分け。

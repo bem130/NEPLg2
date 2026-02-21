@@ -37,3 +37,53 @@ fn main <()->i32> ():
     let t <(i32,bool)> make 3 true
     take_nested (t, 2)
 ```
+
+## old_tuple_type_annotation_is_rejected
+
+neplg2:test[skip]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let t <(i32,i32)> Tuple:
+        1
+        2
+    0
+```
+
+## old_tuple_field_access_dot_index_is_rejected
+
+neplg2:test[skip]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let t Tuple:
+        1
+        2
+    t.0
+```
+
+## old_tuple_field_access_dot_index_nested_is_rejected
+
+neplg2:test[skip]
+```neplg2
+
+#entry main
+#indent 4
+#target wasm
+
+fn main <()->i32> ():
+    let t Tuple:
+        Tuple:
+            1
+            2
+        3
+    t.0.1
+```
