@@ -655,7 +655,25 @@ pub fn typecheck(
                 if crate::log::is_verbose() {
                     std::eprintln!("typecheck: registering global func {}", f.name.name);
                 }
+                if let Some(prev) = find_same_signature_func(&env, &f.name.name, ty, &ctx) {
+                    diagnostics.push(
+                        Diagnostic::warning(
+                            format!(
+                                "function '{}' with same signature is redefined (treated as shadowing)",
+                                f.name.name
+                            ),
+                            f.name.span,
+                        )
+                        .with_secondary_label(
+                            prev.span,
+                            Some("previous definition with same signature".into()),
+                        ),
+                    );
+                }
                 if let Some(blocked) = shadow_blocked_by_nonshadow(&env, &f.name.name) {
+                    if is_callable_binding(blocked) {
+                        // 関数同名はオーバーロードとして扱う（noshadow でも許可）。
+                    } else {
                     diagnostics.push(Diagnostic::error(
                         format!(
                             "cannot shadow non-shadowable symbol '{}'",
@@ -668,8 +686,14 @@ pub fn typecheck(
                             .with_secondary_label(f.name.span, Some("shadow attempt".into())),
                     );
                     continue;
+                    }
                 }
-                if f.no_shadow && env.lookup_any(&f.name.name).is_some() {
+                if f.no_shadow
+                    && env
+                        .lookup_all(&f.name.name)
+                        .iter()
+                        .any(|b| !is_callable_binding(b))
+                {
                     diagnostics.push(Diagnostic::error(
                         format!(
                             "noshadow declaration '{}' conflicts with existing symbol",
@@ -756,6 +780,21 @@ pub fn typecheck(
             target_infos.push((target.ty, symbol, effect, arity, builtin, bounds, captures));
         }
         for (ty, symbol, effect, arity, builtin, bounds, captures) in target_infos {
+            if let Some(prev) = find_same_signature_func(&env, &alias.name.name, ty, &ctx) {
+                diagnostics.push(
+                    Diagnostic::warning(
+                        format!(
+                            "function alias '{}' with same signature is redefined (treated as shadowing)",
+                            alias.name.name
+                        ),
+                        alias.name.span,
+                    )
+                    .with_secondary_label(
+                        prev.span,
+                        Some("previous definition with same signature".into()),
+                    ),
+                );
+            }
             if let Some(existing) = env.lookup(&alias.name.name) {
                 if !matches!(existing.kind, BindingKind::Func { .. }) {
                     diagnostics.push(Diagnostic::error(
@@ -766,6 +805,9 @@ pub fn typecheck(
                 }
             }
             if let Some(blocked) = shadow_blocked_by_nonshadow(&env, &alias.name.name) {
+                if is_callable_binding(blocked) {
+                    // 関数同名はオーバーロードとして扱う（noshadow でも許可）。
+                } else {
                 diagnostics.push(Diagnostic::error(
                     format!(
                         "cannot shadow non-shadowable symbol '{}'",
@@ -778,8 +820,14 @@ pub fn typecheck(
                         .with_secondary_label(alias.name.span, Some("shadow attempt".into())),
                 );
                 break;
+                }
             }
-            if alias.no_shadow && env.lookup_any(&alias.name.name).is_some() {
+            if alias.no_shadow
+                && env
+                    .lookup_all(&alias.name.name)
+                    .iter()
+                    .any(|b| !is_callable_binding(b))
+            {
                 diagnostics.push(Diagnostic::error(
                     format!(
                         "noshadow declaration '{}' conflicts with existing symbol",
@@ -1721,6 +1769,9 @@ impl<'a> BlockChecker<'a> {
                 } = self.ctx.get(base_ty)
                 {
                     if let Some(blocked) = shadow_blocked_by_nonshadow(self.env, &f.name.name) {
+                        if is_callable_binding(blocked) {
+                            // 関数同名はオーバーロードとして扱う（noshadow でも許可）。
+                        } else {
                         self.diagnostics.push(Diagnostic::error(
                             format!("cannot shadow non-shadowable symbol '{}'", f.name.name),
                             f.name.span,
@@ -1730,8 +1781,15 @@ impl<'a> BlockChecker<'a> {
                                 .with_secondary_label(f.name.span, Some("shadow attempt".into())),
                         );
                         continue;
+                        }
                     }
-                    if f.no_shadow && self.env.lookup_any(&f.name.name).is_some() {
+                    if f.no_shadow
+                        && self
+                            .env
+                            .lookup_all(&f.name.name)
+                            .iter()
+                            .any(|b| !is_callable_binding(b))
+                    {
                         self.diagnostics.push(Diagnostic::error(
                             format!(
                                 "noshadow declaration '{}' conflicts with existing symbol",
@@ -4625,6 +4683,23 @@ fn emit_shadow_warning(
 fn shadow_blocked_by_nonshadow<'a>(env: &'a Env, name: &str) -> Option<&'a Binding> {
     env.lookup_any(name)
         .and_then(|b| if b.no_shadow && b.defined { Some(b) } else { None })
+}
+
+fn is_callable_binding(binding: &Binding) -> bool {
+    matches!(binding.kind, BindingKind::Func { .. })
+}
+
+fn find_same_signature_func<'a>(
+    env: &'a Env,
+    name: &str,
+    ty: TypeId,
+    ctx: &TypeCtx,
+) -> Option<&'a Binding> {
+    let target_sig = function_signature_string(ctx, ty);
+    env.lookup_all(name).into_iter().find(|b| {
+        matches!(b.kind, BindingKind::Func { .. })
+            && function_signature_string(ctx, b.ty) == target_sig
+    })
 }
 
 type LabelEnv = BTreeMap<String, TypeId>;

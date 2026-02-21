@@ -67,6 +67,12 @@
 - `nm/parser` の型名衝突（構造体名と enum variant 名）を整理し、名前解決の曖昧さを排除する。
 - `examples/nm.nepl` は `std/env/cliarg` を使った引数処理で `--ast`/`--html` の双方を回帰テスト化する。
 
+11. `examples/js_interpreter` の実装（言語機能安定後）
+- `examples/js_interpreter` に JavaScript インタプリタを実装し、実用規模のプログラムを動かして stdlib の不足を抽出する。
+- このフェーズでは言語仕様は変更せず、stdlib の再設計・改良のみを行う（優先順位・演算子仕様などは現状維持）。
+- Node.js の実行結果と突き合わせる回帰テストを追加し、同値性を継続検証する。
+- インタプリタ実装で不足した API は `stdlib/*` と `tests/*` に段階追加し、動作保証を固定する。
+
 ---
 ### 以下編集禁止
 

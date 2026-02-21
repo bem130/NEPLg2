@@ -275,9 +275,10 @@ fn main <()->i32> ():
     add x 1
 ```
 
-## fn_noshadow_rejects_shadowing
+## fn_same_signature_shadowing_warns_and_latest_wins
 
-neplg2:test[compile_fail]
+neplg2:test
+ret: 2
 ```neplg2
 #entry main
 #indent 4
@@ -307,19 +308,6 @@ fn main <()->i32> ():
     x
 ```
 
-## std_result_noshadow_unwrap_ok
-
-neplg2:test[compile_fail]
-```neplg2
-#entry main
-#indent 4
-#target wasm
-#import "core/result" as *
-
-fn main <()->i32> ():
-    let unwrap_ok <i32> 1;
-    unwrap_ok
-```
 
 ## shadowing_import_alias_and_value_in_local_block
 

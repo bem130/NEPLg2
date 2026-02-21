@@ -1979,3 +1979,20 @@
 - 検証:
   - `NO_COLOR=false trunk build` 成功
   - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json` で `548/548 passed`
+
+# 2026-02-21 作業メモ (shadow と overload の扱い整理)
+- 仕様調整:
+  - 関数の同名定義でシグネチャが異なる場合はオーバーロードとして許可。
+  - 同名かつ同一シグネチャの場合のみ「shadowing 扱いの warning」を出す。
+  - 同名関数再定義をエラーにはしない。
+- `noshadow` の関数適用ルールを調整:
+  - `noshadow fn` でも関数同名（オーバーロード）は許可。
+  - 変数/値名前空間との衝突は従来通り拒否。
+- 利用頻度の高い一般名に対する方針変更:
+  - `unwrap` / `unwrap_ok` / `unwrap_err` を `noshadow` 対象から外した。
+  - これに伴い `tests/shadowing.n.md` の unwrap 系 compile_fail ケースを削除。
+- テスト更新:
+  - `fn_noshadow_rejects_shadowing` を `fn_same_signature_shadowing_warns_and_latest_wins` に更新し、成功ケースとして固定（`ret: 2`）。
+- 検証:
+  - `NO_COLOR=false trunk build` 成功
+  - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json` で `547/547 passed`
