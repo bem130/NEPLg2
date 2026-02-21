@@ -811,6 +811,7 @@ fn println_color <(str,str)*>()> (color, s):
 //: fn main <()*>()> ():
 //:     debug "sample";
 //: ```
+#if[profile=debug]
 fn debug <(str)*>()> (s):
     print s;
     ()
@@ -847,6 +848,7 @@ fn debug <(str)*>()> (s):
 //: fn main <()*>()> ():
 //:     debug_color "sample" "sample";
 //: ```
+#if[profile=debug]
 fn debug_color <(str,str)*>()> (color, s):
     print_color color s;
     ()
@@ -883,7 +885,8 @@ fn debug_color <(str,str)*>()> (color, s):
 //: fn main <()*>()> ():
 //:     debug "sample";
 //: ```
-fn debug <(str)*>()> (_s):
+#if[profile=release]
+fn __debug_release_noop <(str)*>()> (_s):
     ()
 
 //: debug_color: 色付きデバッグ出力（release では無効）
@@ -917,7 +920,8 @@ fn debug <(str)*>()> (_s):
 //: fn main <()*>()> ():
 //:     debug_color "sample" "sample";
 //: ```
-fn debug_color <(str,str)*>()> (_color, _s):
+#if[profile=release]
+fn __debug_color_release_noop <(str,str)*>()> (_color, _s):
     ()
 
 #if[profile=debug]
@@ -952,6 +956,7 @@ fn debug_color <(str,str)*>()> (_color, _s):
 //: fn main <()*>()> ():
 //:     debugln "sample";
 //: ```
+#if[profile=debug]
 fn debugln <(str)*>()> (s):
     println s;
     ()
@@ -988,6 +993,7 @@ fn debugln <(str)*>()> (s):
 //: fn main <()*>()> ():
 //:     debugln_color "sample" "sample";
 //: ```
+#if[profile=debug]
 fn debugln_color <(str,str)*>()> (color, s):
     print_color color s;
     print "\n";
@@ -1025,7 +1031,8 @@ fn debugln_color <(str,str)*>()> (color, s):
 //: fn main <()*>()> ():
 //:     debugln "sample";
 //: ```
-fn debugln <(str)*>()> (_s):
+#if[profile=release]
+fn __debugln_release_noop <(str)*>()> (_s):
     ()
 
 //: debugln_color: 色付きデバッグ出力（release では無効）
@@ -1059,5 +1066,6 @@ fn debugln <(str)*>()> (_s):
 //: fn main <()*>()> ():
 //:     debugln_color "sample" "sample";
 //: ```
-fn debugln_color <(str,str)*>()> (_color, _s):
+#if[profile=release]
+fn __debugln_color_release_noop <(str,str)*>()> (_color, _s):
     ()

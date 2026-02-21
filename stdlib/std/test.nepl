@@ -227,6 +227,7 @@ fn i32_to_str <(i32)*>str> (v):
 //: fn main <()*>()> ():
 //:     test_print_fail "sample";
 //: ```
+#if[target=wasi]
 fn test_print_fail <(str)*>()> (msg):
     let m0 <str> concat "FAIL: " msg;
     println_color ansi_red m0
@@ -263,6 +264,7 @@ fn test_print_fail <(str)*>()> (msg):
 //: fn main <()*>()> ():
 //:     test_checked "sample";
 //: ```
+#if[target=wasm]
 fn test_checked <(str)*>()> (msg):
     let m0 <str> concat "Checked -wasm- " msg;
     println_color ansi_green m0
@@ -301,6 +303,7 @@ fn test_checked <(str)*>()> (msg):
 //: fn main <()*>()> ():
 //:     test_checked "sample";
 //: ```
+#if[target=wasi]
 fn test_checked <(str)*>()> (msg):
     print_color ansi_green "Checked ";
     println msg;
@@ -337,6 +340,7 @@ fn test_checked <(str)*>()> (msg):
 //: fn main <()*>()> ():
 //:     test_print_fail "sample";
 //: ```
+#if[target=wasm]
 fn test_print_fail <(str)*>()> (msg):
     ()
 

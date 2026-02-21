@@ -2005,3 +2005,24 @@
   - `todo.md` は未完了タスクのみ（名前空間/高階関数/LSP/診断体系/Web強化/js_interpreter）に再構成。
 - 現時点の回帰確認:
   - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json` の最新結果は pass 維持（直近実行: `547/547`）。
+
+# 2026-02-22 作業メモ (profile/target ゲートと stdlib 重複定義の回帰修正)
+- 症状:
+  - doctest で `debug_color` / `debugln_color` / `test_checked` / `test_print_fail` の同一シグネチャ再定義 warning が compile fail 扱いになっていた。
+  - `functions.n.md` などの失敗と混在していたため、まず warning 起点を切り分けた。
+- 原因:
+  - `#if[...]` の直後に `//:` ドキュメントコメントが挟まる箇所で、条件付き定義が意図どおりに限定されず重複定義が同時有効になっていた。
+- 修正:
+  - `stdlib/std/stdio.nepl`:
+    - 条件付き関数定義に対して `#if[profile=...]` を定義直前へ再配置。
+    - release 側の同名実装は内部名 (`__debug_*_release_noop`) に退避し、シグネチャ衝突を除去。
+  - `stdlib/std/test.nepl`:
+    - `#if[target=...]` を関数定義直前へ再配置し、意図したターゲット限定で定義されるよう修正。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - 対象再現テスト:
+    - `node nodesrc/tests.js -i tests/functions.n.md -i stdlib/core/option.nepl -i stdlib/core/result.nepl ...`
+    - `191/191 pass`
+  - 全体:
+    - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 4`
+    - `547/547 pass`
