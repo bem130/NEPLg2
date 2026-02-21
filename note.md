@@ -2064,3 +2064,19 @@
 - 検証:
   - `NO_COLOR=false trunk build`: 成功
   - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 4`: `547/547 pass`
+
+# 2026-02-22 作業メモ (名前解決再設計: Value/Callable API 明確化 第2段)
+- 目的:
+  - ValueNs/CallableNs 分離へ向けて、`Env` の検索 API を明確化し、関数呼び出し経路の分岐を読みやすくする。
+- 実装:
+  - `Env` に以下を追加:
+    - `lookup_value(name)`
+    - `lookup_callable(name)`
+  - 既存 `lookup_all` は「最内スコープ優先」のまま維持し、`lookup_value/lookup_callable` はその結果から kind を選ぶ設計にした（解決規則は維持）。
+  - `find_same_signature_func` は callable 専用検索を使うよう整理。
+  - `check_call_or_letset` 系の分岐で、`lookup_all + var 判定` を `lookup_all_callables` / `lookup_value` に置換。
+- 結果:
+  - 挙動を変えずに Value/Callable の責務をコード上で分離できる形へ前進。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 4`: `547/547 pass`

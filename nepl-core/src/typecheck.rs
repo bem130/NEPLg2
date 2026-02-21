@@ -2226,9 +2226,7 @@ impl<'a> BlockChecker<'a> {
                                 }
                             }
                             if !bindings.is_empty() {
-                                if let Some(binding) =
-                                    bindings.iter().find(|b| matches!(b.kind, BindingKind::Var))
-                                {
+                                if let Some(binding) = self.env.lookup_value(&lookup_name) {
                                     if !type_args.is_empty() {
                                         self.diagnostics.push(Diagnostic::error(
                                             "type arguments are not allowed for variables",
@@ -3980,18 +3978,9 @@ impl<'a> BlockChecker<'a> {
 
         // General call or let/set
         if let HirExprKind::Var(name) = &func.expr.kind {
-            let bindings = self.env.lookup_all(name);
+            let bindings = self.env.lookup_all_callables(name);
             if !bindings.is_empty() {
-                if let Some(_binding) = bindings.iter().find(|b| matches!(b.kind, BindingKind::Var))
                 {
-                    if !matches!(self.ctx.get(func.ty), TypeKind::Function { .. }) {
-                        self.diagnostics.push(Diagnostic::error(
-                            "variable is not callable",
-                            func.expr.span,
-                        ));
-                        return None;
-                    }
-                } else {
                     let explicit_type_args = type_args.clone();
                     let use_expected = expected_ret.is_some() && bindings.len() > 1;
                     let mut candidates: Vec<&Binding> = Vec::new();
@@ -4411,6 +4400,14 @@ impl<'a> BlockChecker<'a> {
                         }
                     }
                 }
+            } else if self.env.lookup_value(name).is_some() {
+                if !matches!(self.ctx.get(func.ty), TypeKind::Function { .. }) {
+                    self.diagnostics.push(Diagnostic::error(
+                        "variable is not callable",
+                        func.expr.span,
+                    ));
+                    return None;
+                }
             }
         }
 
@@ -4569,11 +4566,21 @@ impl Env {
         Vec::new()
     }
 
+    fn lookup_value(&self, name: &str) -> Option<&Binding> {
+        self.lookup_all(name)
+            .into_iter()
+            .find(|b| matches!(b.kind, BindingKind::Var))
+    }
+
     fn lookup_all_callables(&self, name: &str) -> Vec<&Binding> {
         self.lookup_all(name)
             .into_iter()
             .filter(|b| matches!(b.kind, BindingKind::Func { .. }))
             .collect()
+    }
+
+    fn lookup_callable(&self, name: &str) -> Option<&Binding> {
+        self.lookup_all_callables(name).into_iter().next()
     }
 
     /// 同名候補から型シグネチャ一致の関数シンボルを返す。
@@ -4582,15 +4589,10 @@ impl Env {
     /// hoist した symbol と最終的な HIR 名の不整合を防ぐ。
     fn lookup_func_symbol(&self, name: &str, ty: TypeId, ctx: &TypeCtx) -> Option<String> {
         let target_sig = function_signature_string(ctx, ty);
-        for scope in self.scopes.iter().rev() {
-            for binding in scope.iter().rev() {
-                if binding.name != name || !binding.defined {
-                    continue;
-                }
-                if let BindingKind::Func { symbol, .. } = &binding.kind {
-                    if function_signature_string(ctx, binding.ty) == target_sig {
-                        return Some(symbol.clone());
-                    }
+        for binding in self.lookup_all_callables(name) {
+            if let BindingKind::Func { symbol, .. } = &binding.kind {
+                if function_signature_string(ctx, binding.ty) == target_sig {
+                    return Some(symbol.clone());
                 }
             }
         }
