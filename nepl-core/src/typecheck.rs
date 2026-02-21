@@ -4429,8 +4429,6 @@ fn is_important_shadow_symbol(name: &str) -> bool {
             | "le"
             | "gt"
             | "ge"
-            | "map"
-            | "len"
     )
 }
 
@@ -4442,14 +4440,13 @@ fn emit_shadow_warning(
     kind: &str,
 ) {
     if let Some(shadowed) = env.lookup_outer_defined(name) {
-        let message = if is_important_shadow_symbol(name) {
-            format!(
-                "important symbol '{}' is shadowed by local {}",
-                name, kind
-            )
-        } else {
-            format!("'{}' shadows an outer definition", name)
-        };
+        if !is_important_shadow_symbol(name) {
+            return;
+        }
+        let message = format!(
+            "important symbol '{}' is shadowed by local {}",
+            name, kind
+        );
         let mut diag = Diagnostic::warning(message, span);
         diag = diag.with_secondary_label(
             shadowed.span,

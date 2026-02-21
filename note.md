@@ -1819,7 +1819,8 @@
   - `Binding` に `span` を追加し、shadow 警告の二次ラベル（元定義位置）を出せるようにした。
   - `Env::lookup_outer_defined` を追加し、現在スコープ外の定義候補を参照できるようにした。
   - `emit_shadow_warning` を追加し、束縛導入時（`let` / `let mut` / `fn` / parameter / match bind）に shadow を検知して warning を生成するようにした。
-  - 重要シンボル（`print`, `println`, `add`, `len` など）については、外側候補が見つからない場合でも「stdlib 記号を隠しうる」warning を生成するようにした。
+  - 重要シンボル（`print`, `println`, `add` など）については、外側候補が見つからない場合でも「stdlib 記号を隠しうる」warning を生成するようにした。
+  - warning ノイズ抑制のため、非重要シンボル（例: `ok`, `len`）の shadow では compiler warning を出さない方針に調整した。
   - `check_function` の返却を `CheckedFunction` 化し、warning を返しつつコンパイル対象関数は生成し続けるように修正した。
     - 以前は warning を含むだけで `Err` 扱いになり、関数が落ちていた。
     - 現在は `Error` のみ `Err`、warning は `diagnostics` として上位へ伝播する。
