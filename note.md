@@ -2290,3 +2290,17 @@
   - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `554/554 pass`
 - 位置づけ:
   - 旧仕様撤去フェーズの前段として、テストを「旧 literal 失敗」「旧 type 失敗」に分離しやすい状態へ整理。
+
+# 2026-02-22 作業メモ (旧 tuple type parser 即時 reject の試行とロールバック)
+- 試行:
+  - `parse_type_expr` の `(...)` 非関数分岐で、旧 tuple type 記法を parser 段階で即時エラー化する変更を適用。
+- 結果:
+  - `tests/tuple_old_syntax.n.md` 単体では意図どおり失敗検出できたが、
+    `stdlib` の広範な箇所で旧 tuple type 依存が残っており、`33` 件の compile failure を誘発。
+  - 失敗の中心は「段階移行前に parser だけを先に厳格化した」ことによる時期不整合。
+- 判断:
+  - 固定指示どおり局所対応を避け、段階移行方針を優先するため parser 即時 reject 変更はロールバック。
+  - 現時点は「資産側（tests/stdlib/tutorials）の旧 type 依存削減」先行を継続する。
+- 再検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `554/554 pass`
