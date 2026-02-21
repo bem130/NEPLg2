@@ -417,6 +417,90 @@ fn store_u8 <(i32,i32)*>()> (p, v):
         local.get $v
         i32.store8
 
+//: memset_u8: バイト列を同じ値で埋める
+//:
+//: 目的:
+//: - `ptr` から `len` バイトを `value`（下位 8bit）で埋めます。
+//:
+//: 実装(アルゴリズム):
+//: - 0..len を順に走査し、`store_u8` で書き込みます。
+//:
+//: 注意(重要):
+//: - `ptr` は少なくとも `len` バイトの有効領域を指している必要があります。
+//:
+//: 計算量:
+//: - O(len)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target wasi
+//:| #import "std/test" as *
+//:| #import "core/mem" as *
+//: fn main <()*>()> ():
+//:     let p <i32> alloc 8;
+//:     memset_u8 p 8 65;
+//:     assert_eq_i32 65 load_u8 add p 0;
+//:     assert_eq_i32 65 load_u8 add p 7;
+//:     dealloc p 8;
+//: ```
+fn memset_u8 <(i32,i32,i32)*>()> (ptr, len, value):
+    let mut i <i32> 0;
+    while lt i len:
+        do:
+            store_u8 add ptr i value;
+            set i add i 1;
+
+//: fill_u8: `memset_u8` の同義 API
+//:
+//: 目的:
+//: - 競プロ向けの名前でバイト埋め API を提供します。
+//:
+//: 実装(アルゴリズム):
+//: - `memset_u8` を呼び出す薄いラッパです。
+//:
+//: 注意(重要):
+//: - `value` は下位 8bit が使用されます。
+//:
+//: 計算量:
+//: - O(len)
+fn fill_u8 <(i32,i32,i32)*>()> (ptr, len, value):
+    memset_u8 ptr len value
+
+//: fill_i32: `i32` 配列を同じ値で埋める
+//:
+//: 目的:
+//: - `ptr` から `count` 個の `i32` 要素を `value` で埋めます。
+//:
+//: 実装(アルゴリズム):
+//: - 0..count を順に走査し、`store_i32` で書き込みます。
+//:
+//: 注意(重要):
+//: - `ptr` は少なくとも `count * 4` バイトの有効領域を指している必要があります。
+//:
+//: 計算量:
+//: - O(count)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target wasi
+//:| #import "std/test" as *
+//:| #import "core/mem" as *
+//: fn main <()*>()> ():
+//:     let p <i32> alloc 16;
+//:     fill_i32 p 4 42;
+//:     assert_eq_i32 42 load_i32 add p 0;
+//:     assert_eq_i32 42 load_i32 add p 12;
+//:     dealloc p 16;
+//: ```
+fn fill_i32 <(i32,i32,i32)*>()> (ptr, count, value):
+    let mut i <i32> 0;
+    while lt i count:
+        do:
+            store_i32 add ptr mul i 4 value;
+            set i add i 1;
+
 //: size_of: 型のサイズを取得する
 //:
 //: 目的:

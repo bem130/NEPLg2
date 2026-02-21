@@ -2793,3 +2793,20 @@
     - `kpsearch_unique_and_count` を追加して、`count_equal_range_i32` と `unique_sorted_i32` の同時回帰を検証。
   - `todo_kp.md`
     - 完了した `unique` / `count_equal_range` 項目を削除（未完了のみ保持）。
+
+# 2026-02-22 作業メモ (core/mem の初期化 API 追加)
+- 目的:
+  - `todo_kp.md` の「fill_u8 / fill_i32 / memset 相当」を完了させる。
+- 実装:
+  - `stdlib/core/mem.nepl`
+    - `memset_u8(ptr, len, value)` を追加。
+    - `fill_u8(ptr, len, value)` を追加（`memset_u8` の同義ラッパ）。
+    - `fill_i32(ptr, count, value)` を追加。
+    - 日本語ドキュメントコメント + doctest を追加。
+  - `tests/mem_fill.n.md`
+    - `memset_u8_basic`
+    - `fill_i32_basic`
+    - `fill_u8_alias`
+    の 3 ケースを追加。
+  - `todo_kp.md`
+    - 完了した初期化 API 項目を削除（未完了のみ保持）。

@@ -35,7 +35,6 @@
 - 必要であれば stable sort を追加する。
 
 6. 二分探索と頻出ユーティリティ
-- `fill_u8` / `fill_i32` / `memset` 相当の初期化 API を追加する。
 
 7. Vec API の in-place 化
 - `vec_push_in_place` を追加し、競プロ向け推奨 API とする。
