@@ -229,9 +229,9 @@ fn string_builder_new <()*>StringBuilder> ():
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn sb_append <(StringBuilder,str)*>StringBuilder> (sb, s):
-    let parts <Vec<str>> get sb "parts";
-    let parts2 <Vec<str>> vec_push<str> parts s;
-    StringBuilder parts2
+    get sb "parts"
+    |> vec_push<str> s
+    |> StringBuilder
 
 // sb_append_i32: i32 を追加する
 //
@@ -260,8 +260,8 @@ fn sb_append <(StringBuilder,str)*>StringBuilder> (sb, s):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn sb_append_i32 <(StringBuilder,i32)*>StringBuilder> (sb, v):
-    let s <str> from_i32 v;
-    sb_append sb s
+    sb
+    |> sb_append from_i32 v
 
 // sb_build: 文字列を生成する
 //

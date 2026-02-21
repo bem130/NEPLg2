@@ -2183,3 +2183,19 @@
 - 検証:
   - `node nodesrc/tests.js -i tests/tuple_new_syntax.n.md -o tests/output/tuple_new_syntax_current.json -j 1`: `185/185 pass`
   - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 4`: `547/547 pass`
+
+# 2026-02-22 作業メモ (stdlib 改行 pipe リファクタ: StringBuilder)
+- 背景:
+  - `stdlib` リファクタで「複雑データ処理に改行 pipe を活用」の方針に沿って、`StringBuilder` 周辺を段階的に移行開始。
+- 実施:
+  - `stdlib/alloc/string.nepl`
+    - `sb_append` を `get sb "parts" |> vec_push<str> s |> StringBuilder` へ整理。
+    - `sb_append_i32` を `sb |> sb_append from_i32 v` へ変更（`StringBuilder` を pipe 左辺に固定）。
+- 根因と修正:
+  - 初回実装で `from_i32 v |> sb_append sb` としてしまい、pipe 規則（左辺が第1引数）により引数順が逆転。
+  - その結果 `no matching overload found` が発生したため、`sb` を左辺にする形へ修正して根本解消。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `547/547 pass`
+- 運用更新:
+  - `todo.md` 方針に「stdlib リファクタ時は `stdlib/kp` を参照し、複雑処理で改行 pipe を優先」ルールを追記。
