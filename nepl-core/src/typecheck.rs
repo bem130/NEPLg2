@@ -4478,6 +4478,20 @@ impl<'a> BlockChecker<'a> {
         }
 
         // Fallback: function value call (`call_indirect` in wasm backend)
+        // This path is limited to actual function-typed values (including explicit `@fn`).
+        let allow_indirect = match &func.expr.kind {
+            HirExprKind::FnValue(_) => true,
+            HirExprKind::Var(_) => matches!(self.ctx.get(func.ty), TypeKind::Function { .. }),
+            _ => matches!(self.ctx.get(func.ty), TypeKind::Function { .. }),
+        };
+        if !allow_indirect {
+            self.diagnostics.push(Diagnostic::error(
+                "indirect call requires a function value",
+                func.expr.span,
+            ));
+            return None;
+        }
+
         let resolved_params: Vec<TypeId> = args
             .iter()
             .map(|a| self.ctx.resolve_id(a.ty))

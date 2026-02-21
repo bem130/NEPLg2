@@ -31,12 +31,15 @@ fn main <()->i32> ():
         assert.equal(!!sem?.ok, true, 'semantics should succeed');
         const exprs = Array.isArray(sem?.expressions) ? sem.expressions : [];
         const hasIndirect = exprs.some((e) => e?.kind === 'CallIndirect');
+        const hasFnValue = exprs.some((e) => e?.kind === 'FnValue');
         assert.ok(hasIndirect, 'function value call should lower to CallIndirect');
+        assert.ok(hasFnValue, '@fn should appear as explicit FnValue node');
 
         return {
-            checked: 3,
+            checked: 4,
             expr_count: exprs.length,
             has_call_indirect: hasIndirect,
+            has_fn_value: hasFnValue,
         };
     },
 };

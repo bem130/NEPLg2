@@ -1,3 +1,23 @@
+# 2026-02-22 作業メモ (`call_indirect` フォールバックの厳密化)
+- 目的:
+  - 高階関数の呼び出し経路で、曖昧な下位フォールバックを減らし、`FnValue` 中心の規則へ固定する。
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - `CallIndirect` fallback にガードを追加:
+      - `FnValue` は許可
+      - それ以外は「関数型として型付け済み」の場合のみ許可
+      - 非関数型は `indirect call requires a function value` を返して停止
+  - `tests/tree/08_function_value_call_indirect.js`
+    - 既存の `CallIndirect` 確認に加えて `FnValue` ノード存在を検証
+- `todo.md` 反映:
+  - 高階関数項目から完了済みの
+    - 「`_unknown` フォールバック廃止」
+    を削除。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node tests/tree/run.js`: `8/8 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `559/559 pass`
+
 # 2026-02-22 作業メモ (`@fn` の HIR 明示化)
 - 目的:
   - `todo.md` 最優先項目だった「関数値（`@fn`）を HIR で明示表現」を完了し、`Var` と意味論を分離する。
