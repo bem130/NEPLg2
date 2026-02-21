@@ -2198,4 +2198,21 @@
   - `NO_COLOR=false trunk build`: 成功
   - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `547/547 pass`
 - 運用更新:
-  - `todo.md` 方針に「stdlib リファクタ時は `stdlib/kp` を参照し、複雑処理で改行 pipe を優先」ルールを追記。
+  - `todo.md` 方針に「stdlib のドキュメントコメント/ドキュメントテストは `stdlib/kp` の記述スタイルを参照して統一」を追記。
+
+# 2026-02-22 作業メモ (tree API テスト強化: オーバーロードとシャドー診断)
+- 背景:
+  - 固定指示にある「上流からの修正」と LSP/デバッグ向け API 検証を進めるため、
+    `tests/tree` でオーバーロードとシャドー診断の境界を明示的に固定した。
+- 実施:
+  - `tests/tree/05_overload_shadow_diagnostics.js` を追加。
+  - 検証内容:
+    - `analyze_name_resolution` では、純粋オーバーロード（同名・異なるシグネチャ）を warning 扱いしないこと。
+    - `analyze_semantics` では、同一シグネチャ再定義を warning として報告すること。
+- 検証:
+  - `node tests/tree/run.js`: `5/5 pass`
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `548/548 pass`
+- 位置づけ:
+  - 上流 API（lex/parse/resolve/semantics）の診断境界をテスト化し、
+    今後の名前解決再設計での退行を防ぐための基盤整備。
