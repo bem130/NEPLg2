@@ -2632,3 +2632,17 @@
   - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: 全件 pass（実行時点の総数）。
 - 位置づけ:
   - closure conversion 未実装フェーズでの「通ってはいけない capture 関数値流入」を `@` / bare symbol の両経路で統一的に封止。
+
+# 2026-02-22 作業メモ (profile ゲート回帰テストの追加)
+- 背景:
+  - CI で `#if[profile=...]` 周辺の退行が疑われるログがあったため、debug/release 両方の compile 成否を固定する API テストが必要だった。
+- 実施:
+  - `tests/tree/09_profile_gate_compile.js` を追加。
+  - `compile_source_with_profile` を使い、以下を検証:
+    - debug gated 定義は debug で通り、release で `undefined identifier` になる。
+    - release gated 定義は release で通り、debug で `undefined identifier` になる。
+    - release 側に未知識別子を含む定義は debug でスキップされ、コンパイルが通る。
+- 検証:
+  - `node tests/tree/run.js`: `9/9 pass`
+- 位置づけ:
+  - 条件付きコンパイルの仕様境界を tree/API 層で固定し、再発を早期検知できるようにした。
