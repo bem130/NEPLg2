@@ -254,7 +254,7 @@ ret: 20
 #import "core/field" as *
 
 struct Wrapper:
-    pair <(i32,i32)>
+    pair <.Pair>
 
 fn main <()->i32> ():
     let w Wrapper Tuple:

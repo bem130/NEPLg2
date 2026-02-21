@@ -2274,3 +2274,19 @@
   - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `554/554 pass`
 - 位置づけ:
   - 上流変更（parser）に対する LSP/デバッグ API の回帰網を強化し、段階移行中の仕様境界を明示固定。
+
+# 2026-02-22 作業メモ (旧 tuple type 注釈の段階削減: テスト資産整理)
+- 背景:
+  - parser で旧 tuple type 記法を最終 reject する前に、テスト側の不要依存を減らして失敗原因を分離する必要がある。
+- 実施:
+  - `tests/tuple_new_syntax.n.md`
+    - `struct Wrapper` のフィールド型を `pair <(i32,i32)>` から `pair <.Pair>` へ変更。
+    - 値構築は `Tuple:` のまま維持し、旧 tuple type 記法への依存を削減。
+  - `tests/tuple_old_syntax.n.md`
+    - `old_tuple_literal_construct_is_rejected` から旧 tuple type 注釈を除去し、
+      旧 tuple literal `(3, true)` 単独で失敗原因を固定。
+- 検証:
+  - `node nodesrc/tests.js -i tests/tuple_new_syntax.n.md -i tests/tuple_old_syntax.n.md -o tests/output/tuple_migration_current.json -j 1`: `192/192 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `554/554 pass`
+- 位置づけ:
+  - 旧仕様撤去フェーズの前段として、テストを「旧 literal 失敗」「旧 type 失敗」に分離しやすい状態へ整理。

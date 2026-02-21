@@ -27,15 +27,9 @@ neplg2:test[compile_fail]
 #indent 4
 #target wasm
 
-fn make <.A,.B> <(.A,.B)->(.A,.B)> (a,b):
-    (a, b)
-
-fn take_nested <(((i32,bool),i32))->i32> (t):
-    9
-
 fn main <()->i32> ():
-    let t <(i32,bool)> make 3 true
-    take_nested (t, 2)
+    let t (3, true)
+    0
 ```
 
 ## old_tuple_type_annotation_is_rejected
