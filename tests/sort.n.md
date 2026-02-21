@@ -131,3 +131,31 @@ fn main <()->i32> ():
         v
     if and not before after 10 0
 ```
+
+## sort_i32_ptr_basic
+
+neplg2:test
+ret: 1234
+```neplg2
+#entry main
+#indent 4
+#target wasm
+#import "alloc/sort" as *
+#import "core/mem" as *
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let p <i32> alloc 16;
+    store_i32 add p 0 4;
+    store_i32 add p 4 1;
+    store_i32 add p 8 3;
+    store_i32 add p 12 2;
+    sort_i32 p 4;
+    let b0 <bool> eq load_i32 add p 0 1;
+    let b1 <bool> eq load_i32 add p 4 2;
+    let b2 <bool> eq load_i32 add p 8 3;
+    let b3 <bool> eq load_i32 add p 12 4;
+    let ok <bool> and b0 and b1 and b2 b3;
+    dealloc p 16;
+    if ok 1234 0
+```

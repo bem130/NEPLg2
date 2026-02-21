@@ -38,7 +38,6 @@
 - `kpwrite` / `stdio` / `string` の重複実装を統合する。
 
 5. ソート/API の競プロ最適化
-- `sort_i32(ptr, n)` などの薄いラッパを追加する。
 - `sort_in_place(&mut Vec<T>)` または `sort_slice(ptr, len)` を追加し、Vec消費型を縮小する。
 - 非比較ソートとして `counting_sort`（整数限定）を追加する。
 - `radix_sort`（32-bit 整数）を追加する。

@@ -2768,3 +2768,15 @@
     - `vec_data_ptr` の基本回帰を追加（`vec_new` 直後に `> 0` を確認）。
   - `todo.md`
     - 完了した `vec_len/vec_data_ptr` の read-only 経路項目を削除し、未完了を slice 風 API に絞った。
+
+# 2026-02-22 作業メモ (sort ポインタ薄ラッパの追加)
+- 目的:
+  - `todo_kp.md` の「競プロ向けソート API 薄ラッパ」を前進させる。
+- 実装:
+  - `stdlib/alloc/sort.nepl`
+    - `sort_slice_quick <.T: Ord> <(i32,i32)*>()>` を追加。
+    - `sort_i32 <(i32,i32)*>()>` を追加（`sort_slice_quick<i32>` の薄ラッパ）。
+  - `tests/sort.n.md`
+    - `sort_i32_ptr_basic` を追加し、`alloc` + `store_i32` で作った配列が昇順化されることを検証。
+  - `todo_kp.md`
+    - 完了した `sort_i32(ptr, n)` 項目を削除（未完了のみ保持）。

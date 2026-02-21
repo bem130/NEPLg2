@@ -943,6 +943,44 @@ fn sort_merge <.T: Ord> <(Vec<.T>)*>()> (v):
             dealloc buf bytes;
             ()
 
+//: sort_slice_quick: 生ポインタ配列を quick sort で並べ替える
+//:
+//: [目的/もくてき]:
+//: - `data_ptr` から始まる長さ `len` の連続領域を in-place で昇順ソートします。
+//:
+//: [実装/じっそう]:
+//: - `sort_quick_range_data` を直接呼び出す薄いラッパです。
+//:
+//: [注意/ちゅうい]:
+//: - `data_ptr` は `.T` の `len` 要素ぶん有効である必要があります。
+//: - メモリ所有権・境界チェックは呼び出し側が管理します。
+//:
+//: [計算量/けいさんりょう]:
+//: - 平均 O(n log n), 最悪 O(n^2)
+fn sort_slice_quick <.T: Ord> <(i32,i32)*>()> (data_ptr, len):
+    if:
+        le len 1
+        then ()
+        else:
+            sort_quick_range_data<.T> data_ptr 0 sub len 1;
+            ()
+
+//: sort_i32: `i32` 配列ポインタを in-place で昇順ソートする
+//:
+//: [目的/もくてき]:
+//: - 競技プログラミング向けに `sort_i32(ptr, n)` の薄い API を提供します。
+//:
+//: [実装/じっそう]:
+//: - `sort_slice_quick<i32>` を呼び出します。
+//:
+//: [注意/ちゅうい]:
+//: - `data_ptr` は `n` 個の `i32` が格納された有効な領域である必要があります。
+//:
+//: [計算量/けいさんりょう]:
+//: - 平均 O(n log n), 最悪 O(n^2)
+fn sort_i32 <(i32,i32)*>()> (data_ptr, n):
+    sort_slice_quick<i32> data_ptr n
+
 
 // sort: デフォルトは quick sort
 //: sort: 主な用途
