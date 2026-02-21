@@ -878,11 +878,7 @@ pub fn typecheck(
         }
         if let Stmt::FnDef(f) = item {
             let f_ty = {
-                let bindings = env.lookup_all(&f.name.name);
-                let mut funcs: Vec<&Binding> = bindings
-                    .into_iter()
-                    .filter(|b| matches!(b.kind, BindingKind::Func { .. }))
-                    .collect();
+                let mut funcs: Vec<&Binding> = env.lookup_all_callables(&f.name.name);
                 if funcs.is_empty() {
                     // The function was not hoisted (due to a prior error such as
                     // duplicate name). Skip type-checking its body to avoid panics.
@@ -1353,7 +1349,7 @@ struct BlockChecker<'a> {
 impl<'a> BlockChecker<'a> {
     fn user_visible_arity(&self, func_expr: &HirExpr, total_param_len: usize) -> usize {
         if let HirExprKind::Var(name) = &func_expr.kind {
-            let bindings = self.env.lookup_all(name);
+            let bindings = self.env.lookup_all_callables(name);
             if !bindings.is_empty() {
                 let mut cap_len: Option<usize> = None;
                 for b in bindings {
@@ -1925,11 +1921,7 @@ impl<'a> BlockChecker<'a> {
                 Stmt::FnAlias(_) => {}
                 Stmt::FnDef(f) => {
                     let (f_ty, captures) = {
-                        let bindings = self.env.lookup_all(&f.name.name);
-                        let funcs: Vec<&Binding> = bindings
-                            .into_iter()
-                            .filter(|b| matches!(b.kind, BindingKind::Func { .. }))
-                            .collect();
+                        let funcs: Vec<&Binding> = self.env.lookup_all_callables(&f.name.name);
                         if funcs.is_empty() {
                             continue;
                         }
@@ -4577,6 +4569,13 @@ impl Env {
         Vec::new()
     }
 
+    fn lookup_all_callables(&self, name: &str) -> Vec<&Binding> {
+        self.lookup_all(name)
+            .into_iter()
+            .filter(|b| matches!(b.kind, BindingKind::Func { .. }))
+            .collect()
+    }
+
     /// 同名候補から型シグネチャ一致の関数シンボルを返す。
     ///
     /// typecheck 本体と HIR 生成で関数名決定ロジックを共有し、
@@ -4700,7 +4699,7 @@ fn find_same_signature_func<'a>(
     ctx: &TypeCtx,
 ) -> Option<&'a Binding> {
     let target_sig = function_signature_string(ctx, ty);
-    env.lookup_all(name).into_iter().find(|b| {
+    env.lookup_all_callables(name).into_iter().find(|b| {
         matches!(b.kind, BindingKind::Func { .. })
             && function_signature_string(ctx, b.ty) == target_sig
     })

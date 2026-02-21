@@ -2048,3 +2048,19 @@
 - 検証:
   - `NO_COLOR=false trunk build`: 成功
   - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 4`: `547/547 pass`
+
+# 2026-02-22 作業メモ (名前解決再設計: 関数候補検索の整理 第1段)
+- 目的:
+  - `todo.md` 最優先項目（ValueNs/CallableNs 分離）に向けて、挙動を変えない範囲で関数候補検索ロジックを整理。
+- 実装:
+  - `Env` に `lookup_all_callables` を追加。
+  - 関数候補抽出で `lookup_all + filter(Func)` を繰り返していた箇所を `lookup_all_callables` へ置換。
+    - top-level `FnDef` の `f_ty` 決定
+    - nested `FnDef` の `f_ty/captures` 決定
+    - `user_visible_arity` の capture 数計算
+  - `find_same_signature_func` を `lookup_all_callables` ベースへ変更。
+- 結果:
+  - 機能変更なしで重複ロジックを削減し、次段の名前空間分離（Value/Callable）に進める基盤を作成。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 4`: `547/547 pass`
