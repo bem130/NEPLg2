@@ -34,7 +34,7 @@ fn main <()->i32> ():
 
 ## old_tuple_type_annotation_is_rejected
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
 ```neplg2
 
 #entry main

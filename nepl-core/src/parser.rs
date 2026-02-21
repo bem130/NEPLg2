@@ -2965,6 +2965,11 @@ impl Parser {
                             effect: eff_copy,
                         })
                     } else if saw_comma || params.len() > 1 {
+                        self.diagnostics.push(Diagnostic::error(
+                            "legacy tuple type '(T1, T2, ...)' is removed; use inferred tuple type from 'Tuple:' value",
+                            lp_span,
+                        ));
+                        // Keep Tuple node for parser recovery so downstream can continue analysis.
                         Some(TypeExpr::Tuple(params))
                     } else {
                         params.into_iter().next()

@@ -2325,3 +2325,19 @@
 - 検証:
   - `node nodesrc/tests.js -i tests/tuple_new_syntax.n.md -o tests/output/tuple_new_syntax_current.json -j 1`: `187/187 pass`
   - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `554/554 pass`
+
+# 2026-02-22 作業メモ (旧 tuple type 記法 reject の再適用完了)
+- 背景:
+  - 旧 tuple type 記法の parser reject は以前、`stdlib` 側依存で崩れて一度ロールバックしていた。
+- 実施:
+  - `nepl-core/src/parser.rs` の `parse_type_expr` で、`(...)` の非関数 tuple type をエラー化。
+  - 併せてテスト資産を移行:
+    - `tests/pipe_operator.n.md` の `pipe_tuple_source` を `fn f <.T> <(.T)->i32>` へ変更
+    - `tests/tuple_new_syntax.n.md` の `tuple_as_function_arg` を `fn take <.T> <(.T)->i32>` へ変更
+    - `tests/tuple_old_syntax.n.md` の `old_tuple_type_annotation_is_rejected` を `compile_fail` に復帰
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `554/554 pass`
+- 結果:
+  - 旧 tuple type 記法 reject と全体回帰の両立を確認。
+  - `todo.md` の「旧タプル記法の完全移行」項目は完了として削除。

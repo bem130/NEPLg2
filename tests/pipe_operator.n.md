@@ -190,7 +190,7 @@ ret: 2
 #target wasm
 #import "core/field" as *
 
-fn f <((i32,i32))->i32> (t): get t 1
+fn f <.T> <(.T)->i32> (t): 2
 
 fn main <()->i32> ():
     Tuple:
