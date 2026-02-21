@@ -2216,3 +2216,15 @@
 - 位置づけ:
   - 上流 API（lex/parse/resolve/semantics）の診断境界をテスト化し、
     今後の名前解決再設計での退行を防ぐための基盤整備。
+
+# 2026-02-22 作業メモ (lexer/parser 上流回帰: 予約語の識別子禁止)
+- 背景:
+  - 固定指示の「上流から修正」に沿って、lexer/parser の予約語境界を compile-fail テストで明示固定した。
+- 実施:
+  - `tests/keywords_reserved.n.md` を追加。
+  - `cond/then/else/do/let/fn` を識別子として使うケースをすべて `compile_fail` で追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/keywords_reserved.n.md -o tests/output/keywords_reserved_current.json -j 1`: `172/172 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `550/550 pass`
+- 位置づけ:
+  - 予約語トークン化と構文エラー化の境界を先に固定し、後続の parser 整理時に退行を検知できる状態を作った。
