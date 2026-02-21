@@ -1,3 +1,22 @@
+# 2026-02-21 作業メモ (ValueNs/CallableNs 分離の段階導入: Env スコープを物理分離)
+- 目的:
+  - `todo.md` 最優先項目（`ValueNs` と `CallableNs` の分離）をデータ構造レベルで前進させる。
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - `Env.scopes: Vec<Vec<Binding>>` を廃止し、`Scope { values, callables }` に変更。
+    - `BindingKind` に `is_var` / `is_callable` を追加し、挿入先を一元判定。
+    - `insert_global` / `insert_local` / `remove_duplicate_func` / 各 lookup を新構造に対応。
+    - ローカル規則:
+      - value は同名 value/callable があると禁止
+      - callable は同名 value があると禁止（同名 callable はオーバーロードとして許可）
+- 効果:
+  - 名前空間分離が「呼び出し側の慣習」から「環境データ構造」へ移行。
+  - 今後の ValueNs/CallableNs 完成（巻き上げ・shadow policy の厳密化）に向けた基盤を確立。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests/shadowing.n.md -i tests/functions.n.md -i tests/neplg2.n.md -o tests/output/namespace_envsplit_current.json -j 1`: `240/240 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `555/555 pass`
+
 # 2026-02-21 作業メモ (ValueNs/CallableNs 分離の段階導入: 旧 lookup ラッパ削除)
 - 目的:
   - `typecheck` 内で残っていた曖昧な `lookup`/`lookup_all` 参照を除去し、用途別 API への統一を進める。

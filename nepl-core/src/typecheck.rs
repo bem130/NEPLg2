@@ -4512,75 +4512,103 @@ enum BindingKind {
     },
 }
 
+impl BindingKind {
+    fn is_var(&self) -> bool {
+        matches!(self, BindingKind::Var)
+    }
+
+    fn is_callable(&self) -> bool {
+        matches!(self, BindingKind::Func { .. })
+    }
+}
+
+#[derive(Debug, Default)]
+struct Scope {
+    values: Vec<Binding>,
+    callables: Vec<Binding>,
+}
+
 #[derive(Debug)]
 struct Env {
-    scopes: Vec<Vec<Binding>>,
+    scopes: Vec<Scope>,
 }
 
 impl Env {
     fn new() -> Self {
         Self {
-            scopes: vec![Vec::new()],
+            scopes: vec![Scope::default()],
         }
     }
 
     fn push_scope(&mut self) {
-        self.scopes.push(Vec::new());
+        self.scopes.push(Scope::default());
     }
 
     fn pop_scope(&mut self) {
         self.scopes.pop();
     }
 
+    fn insert_into_scope(scope: &mut Scope, binding: Binding) {
+        if binding.kind.is_var() {
+            scope.values.push(binding);
+        } else {
+            scope.callables.push(binding);
+        }
+    }
+
     fn insert_global(&mut self, binding: Binding) {
         if let Some(scope) = self.scopes.first_mut() {
-            scope.push(binding);
+            Self::insert_into_scope(scope, binding);
         }
     }
 
     fn remove_duplicate_func(&mut self, name: &str, ty: TypeId, ctx: &TypeCtx) {
         let target = function_signature_string(ctx, ty);
         if let Some(scope) = self.scopes.first_mut() {
-            scope.retain(|b| {
-                if b.name != name {
+            scope.callables.retain(|b| {
+                if b.name != name || !b.kind.is_callable() {
                     return true;
                 }
-                if let BindingKind::Func { .. } = b.kind {
-                    let existing = function_signature_string(ctx, b.ty);
-                    existing != target
-                } else {
-                    true
-                }
+                let existing = function_signature_string(ctx, b.ty);
+                existing != target
             });
         }
     }
 
     fn insert_local(&mut self, binding: Binding) -> Result<(), ()> {
         if let Some(scope) = self.scopes.last_mut() {
-            if scope.iter().any(|b| b.name == binding.name) {
-                let has_var = scope
-                    .iter()
-                    .any(|b| b.name == binding.name && matches!(b.kind, BindingKind::Var));
-                let new_is_var = matches!(binding.kind, BindingKind::Var);
-                if has_var || new_is_var {
+            let has_value = scope.values.iter().any(|b| b.name == binding.name);
+            let has_callable = scope.callables.iter().any(|b| b.name == binding.name);
+            if binding.kind.is_var() {
+                if has_value || has_callable {
                     return Err(());
                 }
+                scope.values.push(binding);
+            } else {
+                if has_value {
+                    return Err(());
+                }
+                scope.callables.push(binding);
             }
-            scope.push(binding);
         }
         Ok(())
     }
 
     fn lookup_current(&self, name: &str) -> Option<&Binding> {
-        self.scopes
-            .last()
-            .and_then(|scope| scope.iter().rev().find(|b| b.name == name))
+        self.scopes.last().and_then(|scope| {
+            scope
+                .values
+                .iter()
+                .rev()
+                .find(|b| b.name == name)
+                .or_else(|| scope.callables.iter().rev().find(|b| b.name == name))
+        })
     }
 
     fn lookup_current_mut(&mut self, name: &str) -> Option<&mut Binding> {
         self.scopes
             .last_mut()
-            .and_then(|scope| scope.iter_mut().rev().find(|b| b.name == name))
+            .and_then(|scope| scope.values.iter_mut().rev().find(|b| b.name == name))
     }
 
     fn lookup_any_defined(&self, name: &str) -> Option<&Binding> {
@@ -4588,7 +4616,19 @@ impl Env {
         // that are not yet defined. This prevents the RHS of a hoisted
         // `let` from accidentally seeing the placeholder binding.
         for scope in self.scopes.iter().rev() {
-            if let Some(b) = scope.iter().rev().find(|b| b.name == name && b.defined) {
+            if let Some(b) = scope
+                .values
+                .iter()
+                .rev()
+                .find(|b| b.name == name && b.defined)
+                .or_else(|| {
+                    scope
+                        .callables
+                        .iter()
+                        .rev()
+                        .find(|b| b.name == name && b.defined)
+                })
+            {
                 return Some(b);
             }
         }
@@ -4598,9 +4638,16 @@ impl Env {
     fn lookup_all_any_defined(&self, name: &str) -> Vec<&Binding> {
         for scope in self.scopes.iter().rev() {
             let mut items: Vec<&Binding> = scope
+                .values
                 .iter()
                 .filter(|b| b.name == name && b.defined)
                 .collect();
+            items.extend(
+                scope
+                    .callables
+                    .iter()
+                    .filter(|b| b.name == name && b.defined),
+            );
             if !items.is_empty() {
                 return items;
             }
@@ -4624,9 +4671,10 @@ impl Env {
     fn lookup_callable_any(&self, name: &str) -> Option<&Binding> {
         for scope in self.scopes.iter().rev() {
             if let Some(b) = scope
+                .callables
                 .iter()
                 .rev()
-                .find(|b| b.name == name && b.defined && matches!(b.kind, BindingKind::Func { .. }))
+                .find(|b| b.name == name && b.defined)
             {
                 return Some(b);
             }
@@ -4659,7 +4707,19 @@ impl Env {
             return None;
         }
         for scope in self.scopes[..self.scopes.len() - 1].iter().rev() {
-            if let Some(binding) = scope.iter().rev().find(|b| b.name == name && b.defined) {
+            if let Some(binding) = scope
+                .values
+                .iter()
+                .rev()
+                .find(|b| b.name == name && b.defined)
+                .or_else(|| {
+                    scope
+                        .callables
+                        .iter()
+                        .rev()
+                        .find(|b| b.name == name && b.defined)
+                })
+            {
                 return Some(binding);
             }
         }
@@ -4668,7 +4728,13 @@ impl Env {
 
     fn lookup_any(&self, name: &str) -> Option<&Binding> {
         for scope in self.scopes.iter().rev() {
-            if let Some(b) = scope.iter().rev().find(|b| b.name == name) {
+            if let Some(b) = scope
+                .values
+                .iter()
+                .rev()
+                .find(|b| b.name == name)
+                .or_else(|| scope.callables.iter().rev().find(|b| b.name == name))
+            {
                 return Some(b);
             }
         }
@@ -4677,8 +4743,8 @@ impl Env {
 
     fn lookup_mut(&mut self, name: &str) -> Option<&mut Binding> {
         for scope in self.scopes.iter_mut().rev() {
-            if let Some(pos) = scope.iter().rposition(|b| b.name == name) {
-                return scope.get_mut(pos);
+            if let Some(pos) = scope.values.iter().rposition(|b| b.name == name) {
+                return scope.values.get_mut(pos);
             }
         }
         None
