@@ -150,7 +150,7 @@ ret: 3
 #target wasm
 #import "core/field" as *
 
-fn make <()->(i32,i32)> ():
+fn make <()->.Pair> ():
     Tuple:
         3
         4

@@ -2315,3 +2315,13 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/alloc/vec.nepl -i tests/tuple_new_syntax.n.md -o tests/output/vec_tuple_migration_current.json -j 1`: `201/201 pass`
   - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `554/554 pass`
+
+# 2026-02-22 作業メモ (tuple_new_syntax の戻り型注釈移行)
+- 実施:
+  - `tests/tuple_new_syntax.n.md` の `make` 関数で、戻り型注釈を
+    `<()->(i32,i32)>` から `<()->.Pair>` へ変更。
+- 目的:
+  - parser 最終段階で旧 tuple type を reject する前に、テスト資産の旧型注釈依存を段階的に削減する。
+- 検証:
+  - `node nodesrc/tests.js -i tests/tuple_new_syntax.n.md -o tests/output/tuple_new_syntax_current.json -j 1`: `187/187 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `554/554 pass`
