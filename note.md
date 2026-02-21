@@ -2817,3 +2817,30 @@
 - 実施:
   - 空になった `二分探索と頻出ユーティリティ` セクションを削除。
   - 既存テスト（`tests/kp_i64.n.md`）で境界値を担保できているため、`64-bit 最小機能の提供` セクションを削除。
+
+# 2026-02-22 作業メモ (intrinsic/i64-f64 codegen 安定化と両系統テスト追加)
+- 目的:
+  - `cargo test` で発生していた `invalid wasm generated` を根本原因から解消する。
+  - `tests/*.n.md` と `nepl-core/tests/*.rs` の両系統で intrinsic 回帰を追加する。
+- 原因特定:
+  - wasm validation 失敗の対象関数特定のため、`compiler.rs` に offset -> function body の特定診断を追加。
+  - その結果、`dealloc_safe` と `i128_add` 周辺で codegen の型スタック不整合を確認。
+- 実装:
+  - `nepl-core/src/codegen_wasm.rs`
+    - Enum payload のレイアウトを `i32/f32` と `i64/f64` で分離し、unit payload（実体なし）のときは値ストアを行わないよう修正。
+    - `match` の payload bind で `i64/f64` load を追加し、unit payload bind は wasm load/store を発行しないよう修正。
+    - `#intrinsic "load"/"store"` に `i64/f64` を追加。
+    - unit ローカルが wasm local index を破壊する不具合を修正（unit は wasm local slot を確保しない、`set` 生成時に値型なしなら `local.set` を出さない）。
+  - `nepl-core/src/compiler.rs`
+    - wasm validation エラー時に `func_index/defined_func_index/name/body_range` を出す診断を追加。
+- テスト追加:
+  - `nepl-core/tests/intrinsic.rs` を新規追加（cargo test側）。
+    - `size_of/align_of`（i64/f64）
+    - `load/store`（i64/f64）
+    - unit payload（`Result<(), str>::Ok ()`）の stack/local 整合
+  - `tests/intrinsic.n.md` を新規追加（nodesrc doctest側）。
+    - 上記と同等観点を `.n.md` に追加。
+- 検証（直列）:
+  1. `cargo test -p nepl-core --test intrinsic` -> pass
+  2. `NO_COLOR=false trunk build` -> pass
+  3. `node nodesrc/tests.js -i tests/intrinsic.n.md -o tests/output/intrinsic.json` -> pass (`183/183`)

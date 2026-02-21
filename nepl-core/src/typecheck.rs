@@ -1594,7 +1594,7 @@ impl<'a> BlockChecker<'a> {
             } => match idx {
                 FieldIdx::Index(i) => {
                     if i < fields.len() {
-                        Some((fields[i], i * 4))
+                        Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                     } else {
                         self.diagnostics.push(Diagnostic::error(
                             format!("struct index out of bounds: {}", i),
@@ -1605,7 +1605,7 @@ impl<'a> BlockChecker<'a> {
                 }
                 FieldIdx::Name(name) => {
                     if let Some(i) = field_names.iter().position(|n| *n == name) {
-                        Some((fields[i], i * 4))
+                        Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                     } else {
                         self.diagnostics.push(Diagnostic::error(
                             format!("struct has no field {}", name),
@@ -1618,7 +1618,7 @@ impl<'a> BlockChecker<'a> {
             TypeKind::Tuple { items } => match idx {
                 FieldIdx::Index(i) => {
                     if i < items.len() {
-                        Some((items[i], i * 4))
+                        Some((items[i], composite_field_offset_bytes(self.ctx, &items, i)))
                     } else {
                         self.diagnostics.push(Diagnostic::error(
                             format!("tuple index out of bounds: {}", i),
@@ -1630,7 +1630,7 @@ impl<'a> BlockChecker<'a> {
                 FieldIdx::Name(name) => {
                     if let Ok(i) = name.parse::<usize>() {
                         if i < items.len() {
-                            Some((items[i], i * 4))
+                            Some((items[i], composite_field_offset_bytes(self.ctx, &items, i)))
                         } else {
                             self.diagnostics.push(Diagnostic::error(
                                 format!("tuple index out of bounds: {}", i),
@@ -1667,7 +1667,10 @@ impl<'a> BlockChecker<'a> {
                         match idx {
                             FieldIdx::Index(i) => {
                                 if i < substituted_fields.len() {
-                                    Some((substituted_fields[i], i * 4))
+                                    Some((
+                                        substituted_fields[i],
+                                        composite_field_offset_bytes(self.ctx, &substituted_fields, i),
+                                    ))
                                 } else {
                                     self.diagnostics.push(Diagnostic::error(
                                         format!("generic struct index out of bounds: {}", i),
@@ -1678,7 +1681,10 @@ impl<'a> BlockChecker<'a> {
                             }
                             FieldIdx::Name(name) => {
                                 if let Some(i) = field_names.iter().position(|n| *n == name) {
-                                    Some((substituted_fields[i], i * 4))
+                                    Some((
+                                        substituted_fields[i],
+                                        composite_field_offset_bytes(self.ctx, &substituted_fields, i),
+                                    ))
                                 } else {
                                     self.diagnostics.push(Diagnostic::error(
                                         format!("generic struct has no field {}", name),
@@ -4870,6 +4876,21 @@ impl Env {
         }
         None
     }
+}
+
+fn type_storage_size_bytes(ctx: &TypeCtx, ty: TypeId) -> usize {
+    match ctx.get(ctx.resolve_id(ty)) {
+        TypeKind::Named(name) if name == "i64" || name == "u64" || name == "f64" => 8,
+        _ => 4,
+    }
+}
+
+fn composite_field_offset_bytes(ctx: &TypeCtx, field_tys: &[TypeId], index: usize) -> usize {
+    field_tys
+        .iter()
+        .take(index)
+        .map(|t| type_storage_size_bytes(ctx, *t))
+        .sum()
 }
 
 // ---------------------------------------------------------------------

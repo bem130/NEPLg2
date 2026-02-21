@@ -17,7 +17,7 @@ use crate::passes;
 use crate::span::FileId;
 use crate::span::Span;
 use crate::typecheck;
-use wasmparser::Validator;
+use wasmparser::{Imports, Parser, Payload, TypeRef, Validator};
 
 /// コンパイル対象プラットフォーム。
 ///
@@ -197,16 +197,106 @@ fn emit_wasm(
 
     let mut validator = Validator::new();
     if let Err(err) = validator.validate_all(&bytes) {
-        diagnostics.push(Diagnostic::error(
-            alloc::format!("invalid wasm generated: {}", err),
-            Span::dummy(),
-        ));
+        let err_msg = alloc::format!("invalid wasm generated: {}", err);
+        diagnostics.push(Diagnostic::error(err_msg.clone(), Span::dummy()));
+        if let Some(offset) = parse_wasm_error_offset(&err_msg) {
+            if let Some(loc) = locate_wasm_function_at_offset(&bytes, offset) {
+                let near_name = hir_module
+                    .functions
+                    .get(loc.defined_func_index as usize)
+                    .map(|f| f.name.as_str())
+                    .unwrap_or("<unknown>");
+                diagnostics.push(Diagnostic::warning(
+                    alloc::format!(
+                        "validation failed near function body: func_index={}, defined_func_index={}, name={}, body_range=0x{:x}..0x{:x}",
+                        loc.func_index, loc.defined_func_index, near_name, loc.body_start, loc.body_end
+                    ),
+                    Span::dummy(),
+                ));
+            }
+        }
         return Err(CoreError::from_diagnostics(diagnostics));
     }
     Ok(CompilationArtifact {
         wasm: bytes,
         wat_comments: build_wat_comments(types, hir_module),
     })
+}
+
+#[derive(Debug, Clone, Copy)]
+struct WasmFuncLocation {
+    func_index: u32,
+    defined_func_index: u32,
+    body_start: usize,
+    body_end: usize,
+}
+
+fn parse_wasm_error_offset(message: &str) -> Option<usize> {
+    let marker = "offset 0x";
+    let start = message.find(marker)? + marker.len();
+    let hex = message[start..]
+        .chars()
+        .take_while(|c| c.is_ascii_hexdigit())
+        .collect::<String>();
+    if hex.is_empty() {
+        return None;
+    }
+    usize::from_str_radix(&hex, 16).ok()
+}
+
+fn locate_wasm_function_at_offset(bytes: &[u8], offset: usize) -> Option<WasmFuncLocation> {
+    let mut imported_func_count: u32 = 0;
+    let mut defined_func_index: u32 = 0;
+    for payload in Parser::new(0).parse_all(bytes) {
+        let Ok(payload) = payload else {
+            return None;
+        };
+        match payload {
+            Payload::ImportSection(reader) => {
+                for imp in reader {
+                    let Ok(imp) = imp else {
+                        return None;
+                    };
+                    match imp {
+                        Imports::Single(_, import) => {
+                            if matches!(import.ty, TypeRef::Func(_) | TypeRef::FuncExact(_)) {
+                                imported_func_count += 1;
+                            }
+                        }
+                        Imports::Compact1 { items, .. } => {
+                            for item in items {
+                                let Ok(item) = item else {
+                                    return None;
+                                };
+                                if matches!(item.ty, TypeRef::Func(_) | TypeRef::FuncExact(_)) {
+                                    imported_func_count += 1;
+                                }
+                            }
+                        }
+                        Imports::Compact2 { ty, names, .. } => {
+                            if matches!(ty, TypeRef::Func(_) | TypeRef::FuncExact(_)) {
+                                imported_func_count += names.count();
+                            }
+                        }
+                    }
+                }
+            }
+            Payload::CodeSectionEntry(body) => {
+                let range = body.range();
+                if offset >= range.start && offset < range.end {
+                    return Some(WasmFuncLocation {
+                        func_index: imported_func_count + defined_func_index,
+                        defined_func_index,
+                        body_start: range.start,
+                        body_end: range.end,
+                    });
+                }
+                defined_func_index += 1;
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// WAT 先頭に付与するための補助情報を生成する。
