@@ -13,6 +13,10 @@
 - 関数値（`@fn` / 関数を値として渡すケース）を HIR で明示表現し、`CallableNs` と整合する解決規則にする。
 - ローカル束縛と import/alias の同名衝突で、ローカル側が常に優先されるシャドーイング規則を実装・固定する（`kpread` の `len` 系再発防止）。
 - 名前解決 API で「最終選択シンボル + 競合候補（shadowed）」を取得可能にし、LSP/デバッグ表示で確認できるようにする。
+- シャドーイングはエラーにせず合法のまま維持しつつ、`print` / `println` / `add` など重要 stdlib 記号が shadow された場合は `info`/`warn` 診断を出せるようにする（無効化可能）。
+- LSP/解析 API で「shadow 発生箇所一覧（選択された定義・隠れた候補・重要度）」を取得できるようにする。
+- 宣言修飾子として「シャドー不可（上書き不可）」を導入する（対象は immutable の `let` / `fn` のみ。`let mut` には適用しない）。
+- stdlib 側では `result` など基盤 API の immutable 定義にシャドー不可修飾を付与し、同名再定義時は compile error にする。
 
 2. エントリ解決の厳密化
 - entry 関数が「名前解決済み」かつ「codegen 対象として生成済み」であることを検証する。
@@ -150,16 +154,16 @@ if[target=nasm|(wasm&wasip1&wasix)]
 ```
 こんな感じ
 
-NASM target, C targetの追加
-stdlib/coreとstdlib/allocはNASMとCとWASMの全部に対応させる
-stdlib/stdはNASMとCとWASM&WASIP1の全部に対応させる
+NASM target, LLVM IR target, C targetの追加
+stdlib/coreとstdlib/allocはNASMとLLVMとCとWASMの全部に対応させる
+stdlib/stdはNASMとLLVMとCとWASM&WASIP1の全部に対応させる
 WASIp2やWASIXが必要な機能はstdlib/platformsで扱う
 また、今後のtarget追加があった時に柔軟に対応できるような設計とする
 
 targetのエイリアスの追加
 
-coreはnasm|c|wasm
-stdはnasm|c|(wasm&wasip1)
+coreはnasm|llvm|c|wasm
+stdはnasm|llvm|c|(wasm&wasip1)
 ```
 if[target=core]
 if[target=std]

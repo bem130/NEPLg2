@@ -1769,6 +1769,25 @@
   - 今回解消: `tests/numerics.n.md::doctest#3`（ambiguous overload）
   - 既存残件: `ret_f64_example`, `selfhost_req` 系, `sort` 一部, `string` 一部
 
+# 2026-02-21 作業メモ (shadowing テスト網羅化)
+## 実装
+- `tests/shadowing.n.md` を新規作成・拡張。
+  - ローカル値が import 名を shadow するケース
+  - ネストブロックの最内優先
+  - ローカル関数が import 関数を shadow
+  - outer/inner 関数 shadow
+  - 引数名とローカル let の shadow
+  - while/match/branch を含むスコープケース
+  - 現状未対応の「値名と callable 名の共存」等は `compile_fail` として固定
+- `todo.md` を更新。
+  - シャドー不可修飾子は immutable の `let`/`fn` のみに適用
+  - `let mut` は対象外
+  - 重要 stdlib 記号 shadow 時の warn/info と LSP API 取得タスクを明記
+
+## 検証
+- `node nodesrc/tests.js -i tests/shadowing.n.md -o tests/output/shadowing_current.json -j 1`
+  - `total=176, passed=176, failed=0, errored=0`
+
 
 # 2026-02-19 作業メモ (stdlib ドキュメント整備と履歴整理)
 ## 実装
