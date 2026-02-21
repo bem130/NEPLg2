@@ -1,3 +1,29 @@
+# 2026-02-22 作業メモ (`@fn` の HIR 明示化)
+- 目的:
+  - `todo.md` 最優先項目だった「関数値（`@fn`）を HIR で明示表現」を完了し、`Var` と意味論を分離する。
+- 実装:
+  - `nepl-core/src/hir.rs`
+    - `HirExprKind::FnValue(String)` を追加。
+  - `nepl-core/src/typecheck.rs`
+    - `Symbol::Ident(..., forced_value=true)` かつ callable 解決時に `HirExprKind::FnValue` を生成。
+    - 既存の value 識別子は引き続き `HirExprKind::Var` を生成。
+  - `nepl-core/src/codegen_wasm.rs`
+    - `FnValue` を関数テーブル index (`i32.const fidx`) へ明示 lowering。
+  - `nepl-core/src/monomorphize.rs`
+    - `FnValue` の単相化（関数名の instantiation/mangled 名解決）に対応。
+  - `nepl-web/src/lib.rs`
+    - semantics API の kind 列挙と式走査に `FnValue` を追加。
+  - `nepl-core/src/compiler.rs` / `nepl-core/src/passes/move_check.rs`
+    - 新 variant に追従（網羅性・挙動維持）。
+- テスト:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `559/559 pass`
+  - 途中で `tests/functions.n.md::doctest#14` が一時失敗（`unknown function value add_op`）したが、
+    `FnValue` の単相化フォールバック不足が原因であり、`monomorphize` 修正後に解消。
+- `todo.md` 反映:
+  - 完了項目（`@fn` の HIR 明示化）を削除。
+  - 番号を繰り上げて未完了のみへ整理。
+
 # 2026-02-22 作業メモ (tree API 回帰追加 + todo 整理)
 - 目的:
   - 上流（parse/semantics API）で `@fn` 関数値の挙動を固定し、次フェーズの HIR 明示化作業の土台を作る。

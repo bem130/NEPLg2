@@ -324,6 +324,7 @@ fn collect_expr_locals(
             collect_block_locals(block, locals);
         }
         crate::hir::HirExprKind::Var(_)
+        | crate::hir::HirExprKind::FnValue(_)
         | crate::hir::HirExprKind::LiteralI32(_)
         | crate::hir::HirExprKind::LiteralF32(_)
         | crate::hir::HirExprKind::LiteralBool(_)

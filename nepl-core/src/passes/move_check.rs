@@ -164,6 +164,7 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
         HirExprKind::Var(name) => {
             ctx.check_use(name, expr.span, is_copy);
         }
+        HirExprKind::FnValue(_) => {}
         HirExprKind::Call { callee, args } => match callee {
             FuncRef::Builtin(name) | FuncRef::User(name, _) if name == "if" => {
                 if args.len() == 3 {

@@ -2232,6 +2232,12 @@ impl<'a> BlockChecker<'a> {
                                 BindingKind::Func { .. } => !*forced_value,
                                 _ => true,
                             };
+                            let hir_kind = match binding.kind {
+                                BindingKind::Func { .. } if *forced_value => {
+                                    HirExprKind::FnValue(id.name.clone())
+                                }
+                                _ => HirExprKind::Var(id.name.clone()),
+                            };
                             let explicit_args = match binding.kind {
                                 BindingKind::Func { .. } => {
                                     let mut args = Vec::new();
@@ -2254,7 +2260,7 @@ impl<'a> BlockChecker<'a> {
                                 ty,
                                 expr: HirExpr {
                                     ty,
-                                    kind: HirExprKind::Var(id.name.clone()),
+                                    kind: hir_kind,
                                     span: id.span,
                                 },
                                 type_args: explicit_args,
@@ -2290,7 +2296,11 @@ impl<'a> BlockChecker<'a> {
                                         ty,
                                         expr: HirExpr {
                                             ty,
-                                            kind: HirExprKind::Var(lookup_name.clone()),
+                                            kind: if *forced_value {
+                                                HirExprKind::FnValue(lookup_name.clone())
+                                            } else {
+                                                HirExprKind::Var(lookup_name.clone())
+                                            },
                                             span: id.span,
                                         },
                                         type_args: Vec::new(),
@@ -2372,7 +2382,11 @@ impl<'a> BlockChecker<'a> {
                                             ty: inst_ty,
                                             expr: HirExpr {
                                                 ty: inst_ty,
-                                                kind: HirExprKind::Var(id.name.clone()),
+                                                kind: if *forced_value {
+                                                    HirExprKind::FnValue(id.name.clone())
+                                                } else {
+                                                    HirExprKind::Var(id.name.clone())
+                                                },
                                                 span: id.span,
                                             },
                                             type_args: args,

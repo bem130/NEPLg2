@@ -83,6 +83,8 @@ pub enum HirExprKind {
     LiteralStr(u32),
     Unit,
     Var(String),
+    /// Explicit function-value reference created by `@fn_name`.
+    FnValue(String),
     Call {
         callee: FuncRef,
         args: Vec<HirExpr>,

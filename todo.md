@@ -6,43 +6,40 @@
 - 実装進捗・結果・失敗分析は `note.md` に記録し、`todo.md` は未完了のみを保持する。
 - stdlib のドキュメントコメント/ドキュメントテストは `stdlib/kp` の記述スタイルを参照して統一する。
 
-1. 名前解決・名前空間の再設計（最優先）
-- 関数値（`@fn` / 関数を値として渡すケース）を HIR で明示表現し、解決規則を固定する。
-
-2. 高階関数・call_indirect
+1. 高階関数・call_indirect
 - 関数値呼び出し (`func val`) の `_unknown` フォールバックを廃止する。
 - WASM table + `call_indirect` で non-capture 高階関数を動作させる。
 - capture あり関数値は closure conversion の設計を確定して段階導入する。
 
-3. シャドーイング運用の完成
+2. シャドーイング運用の完成
 - オーバーロードとシャドーの判定を最終仕様で固定する（同一シグネチャのみ shadow warning）。
 - `noshadow` の適用範囲を stdlib で段階拡大し、運用ルールを文書化する。
 
-4. sort/generics と Vec 読み取り設計
+3. sort/generics と Vec 読み取り設計
 - `tests/sort.n.md` を起点に `stdlib/alloc/sort.nepl` の move-check 問題を根本解消する。
 - `sort_*` API と move 規則の整合を見直し、必要なら API/実装/テストを再設計する。
 - `Vec` の read-only 経路（`vec_len`/`vec_data_ptr`/slice 風 API）を再設計する。
 
-5. LSP/API 拡張（phase 2）
+4. LSP/API 拡張（phase 2）
 - `analyze_name_resolution` を拡張し、import/alias/use 跨ぎの解決候補と最終選択を返す。
 - token 単位の型情報 API に定義ジャンプ情報（import 先含む）を統合する。
 - Hover/Inlay Hint 向けに式範囲・引数範囲・推論型・関連 doc comment を返す API を追加する。
 
-6. 診断体系の再整理
+5. 診断体系の再整理
 - エラーをテーブルで一元管理する（短い数値ID + 詳細メッセージ）。
 - 診断生成側は `ErrorId` を返し、表示層で `id -> 本文` を解決する構造に整理する。
 - LSP/API から `id` と展開済み本文の両方を取得できるようにする。
 
-7. Web Playground / tests.html 強化
+6. Web Playground / tests.html 強化
 - VSCode 拡張予定の情報（名前解決/型情報/式範囲/定義ジャンプ候補）を Playground で表示する。
 - `web/tests.html` の詳細展開時にソースと解析結果（AST/resolve/semantics）を併記する。
 
-8. `examples/js_interpreter` 実装（言語仕様固定後）
+7. `examples/js_interpreter` 実装（言語仕様固定後）
 - `examples/js_interpreter` に JavaScript インタプリタを実装する。
 - 言語仕様は変更せず、stdlib の再設計・改良のみで不足を埋める。
 - Node.js 実行結果との同値性回帰テストを追加する。
 
-9. stdlib の段階的リファクタリング（言語仕様安定後）
+8. stdlib の段階的リファクタリング（言語仕様安定後）
 - `stdlib/kp` のドキュメントコメント/ドキュメントテスト形式を基準に、他 stdlib へ統一展開する。
 - 複雑データ処理の箇所を中心に改行 `|>` パイプを活用し、可読性とメモリ安全性を両立する。
 

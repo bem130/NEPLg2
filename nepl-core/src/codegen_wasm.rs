@@ -177,6 +177,7 @@ fn collect_indirect_sigs(
         | HirExprKind::LiteralBool(_)
         | HirExprKind::LiteralStr(_)
         | HirExprKind::Var(_)
+        | HirExprKind::FnValue(_)
         | HirExprKind::Drop { .. } => {}
     }
 }
@@ -894,6 +895,18 @@ fn gen_expr(
             } else {
                 diags.push(Diagnostic::error(
                     format!("unknown variable {}", name),
+                    expr.span,
+                ));
+                None
+            }
+        }
+        HirExprKind::FnValue(name) => {
+            if let Some(fidx) = find_function_value_index(name_map, name) {
+                insts.push(Instruction::I32Const(fidx as i32));
+                Some(ValType::I32)
+            } else {
+                diags.push(Diagnostic::error(
+                    format!("unknown function value {}", name),
                     expr.span,
                 ));
                 None
