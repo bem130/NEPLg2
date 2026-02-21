@@ -1,3 +1,24 @@
+# 2026-02-22 作業メモ (tree API 回帰追加 + todo 整理)
+- 目的:
+  - 上流（parse/semantics API）で `@fn` 関数値の挙動を固定し、次フェーズの HIR 明示化作業の土台を作る。
+  - `todo.md` を未完了項目のみへ整理する。
+- 変更:
+  - 追加: `tests/tree/08_function_value_call_indirect.js`
+    - `@inc` が forced-value として parse されることを確認。
+    - 関数値呼び出しが `CallIndirect` として semantics に出ることを確認。
+  - 更新: `todo.md`
+    - 完了済みの
+      - `ValueNs/CallableNs` 分離
+      - nested `fn`/`let` 呼び出し経路
+      を最優先項目から削除。
+    - 未完了として `@fn` HIR 明示化を残置。
+    - stdlib リファクタリング（`kp` 形式統一 + 複雑処理で改行パイプ活用）を追記。
+- 共有された CI エラー (`args_sizes_get` 未定義) について:
+  - ローカル再現コマンド
+    - `cargo run -p nepl-cli -- --target wasi --profile debug --input examples/nm.nepl --output target/ci-nm`
+  - 結果: `compile_module returned Ok`（再現せず）。
+  - 判定: 直近差分で解消済み、または古い CI ログである可能性が高い。引き続き workflow 側の再実行で監視する。
+
 # 2026-02-21 作業メモ (non-mut let 前方参照の実装完了)
 - 背景:
   - `plan.md` 仕様では「巻き上げは `mut` なし `let` と `fn` のみに適用」だが、`let y add x 4; let x 5` が `unknown variable x` で失敗していた。
