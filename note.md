@@ -2683,3 +2683,18 @@
   - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `564/564 pass`
 - 位置づけ:
   - 旧記法廃止の境界を lexer/parser API 層で固定し、将来の parser 変更で受理が戻る退行を検知できるようにした。
+
+# 2026-02-22 作業メモ (noshadow と overload の整合修正)
+- 背景:
+  - `fn noshadow` を callable 全体で禁止する変更を試した結果、既存仕様（オーバーロード許可）と衝突して `tests/shadowing.n.md` の退行を引き起こした。
+- 実施:
+  - `nepl-core/src/typecheck.rs`
+    - `shadow_blocked_by_nonshadow` 判定で callable 同士は引き続き許可し、
+      value 側の non-shadowable 宣言に対する遮断のみ維持。
+  - `tests/shadowing.n.md`
+    - `fn_same_signature_shadowing_warns_and_latest_wins` を元の期待（warning + 後勝ち）へ戻し、仕様と一致させた。
+- 検証:
+  - `node nodesrc/tests.js -i tests/shadowing.n.md -o tests/output/shadowing_current.json -j 1`: `193/193 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `564/564 pass`
+- 位置づけ:
+  - 「オーバーロードは許可、同一シグネチャ再定義のみ shadow 扱い」という現行方針に戻し、局所的な過剰制限を解消。
