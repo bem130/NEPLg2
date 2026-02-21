@@ -2026,3 +2026,25 @@
   - 全体:
     - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 4`
     - `547/547 pass`
+
+# 2026-02-22 作業メモ (nepl-web API と cli.js の責務分離)
+- 要件反映:
+  - `nepl-web/src/lib.rs` は API 提供のみに限定し、Node/FS への直接アクセスは持たない構成にした。
+  - FS から stdlib を読む責務は JS 側（`nodesrc/cli.js`）に分離。
+- `nepl-web/src/lib.rs` 変更:
+  - 既存の「バンドル stdlib 使用（デフォルト）」は維持。
+  - 新規 API:
+    - `get_bundled_stdlib_vfs()`: wasm にバンドルされた stdlib を `/stdlib/...` 形式 VFS で返す。
+    - `compile_source_with_vfs_and_stdlib(...)`
+    - `compile_source_with_vfs_stdlib_and_profile(...)`
+  - これにより、外部（Node/ブラウザ）が stdlib ソース選択を担えるようになった。
+- `nodesrc/cli.js` 変更:
+  - `loadStdlibVfsFromFs(stdlibRootDir)` を追加（ローカル FS から `/stdlib/...` VFS を構築）。
+  - `loadBundledStdlibVfs(api)` を追加（wasm バンドル stdlib 取得）。
+  - `compileWithLocalStdlib(api, ...)` を追加（ローカル stdlib を使ってコンパイル API を呼ぶ）。
+- 呼び出し側更新:
+  - `nodesrc/html_gen_playground.js` で新 API を優先使用するよう更新。
+  - `web/src/main.ts` で `get_bundled_stdlib_vfs` を優先し、旧 `get_stdlib_files` はフォールバックに変更。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 4`: `547/547 pass`

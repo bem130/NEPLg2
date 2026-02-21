@@ -71,6 +71,79 @@ function isDir(p) {
     }
 }
 
+function toPosixPath(p) {
+    return String(p).replace(/\\/g, '/');
+}
+
+function loadStdlibVfsFromFs(stdlibRootDir) {
+    const root = path.resolve(stdlibRootDir);
+    if (!isDir(root)) {
+        throw new Error(`stdlib root not found: ${root}`);
+    }
+    const out = {};
+    const files = walkFiles(root, []);
+    for (const f of files) {
+        if (!f.endsWith('.nepl')) continue;
+        const rel = toPosixPath(path.relative(root, f));
+        out[`/stdlib/${rel}`] = fs.readFileSync(f, 'utf8');
+    }
+    return out;
+}
+
+function compileWithLocalStdlib(api, {
+    entryPath = '/virtual/entry.nepl',
+    source,
+    vfs = {},
+    stdlibRootDir = path.resolve(process.cwd(), 'stdlib'),
+    profile = 'debug',
+}) {
+    const stdlibVfs = loadStdlibVfsFromFs(stdlibRootDir);
+    if (typeof api.compile_source_with_vfs_stdlib_and_profile === 'function') {
+        return api.compile_source_with_vfs_stdlib_and_profile(
+            entryPath,
+            source,
+            vfs,
+            stdlibVfs,
+            profile,
+        );
+    }
+    if (typeof api.compile_source_with_vfs_and_stdlib === 'function') {
+        return api.compile_source_with_vfs_and_stdlib(
+            entryPath,
+            source,
+            vfs,
+            stdlibVfs,
+        );
+    }
+    if (typeof api.compile_source_with_vfs_and_profile === 'function') {
+        return api.compile_source_with_vfs_and_profile(
+            entryPath,
+            source,
+            { ...stdlibVfs, ...vfs },
+            profile,
+        );
+    }
+    if (typeof api.compile_source_with_vfs === 'function') {
+        return api.compile_source_with_vfs(entryPath, source, { ...stdlibVfs, ...vfs });
+    }
+    throw new Error('compiler API not found: compile_source_with_*');
+}
+
+function loadBundledStdlibVfs(api) {
+    if (typeof api.get_bundled_stdlib_vfs === 'function') {
+        return api.get_bundled_stdlib_vfs();
+    }
+    if (typeof api.get_stdlib_files === 'function') {
+        const vfs = {};
+        const entries = api.get_stdlib_files();
+        for (const [rel, content] of entries) {
+            vfs[`/stdlib/${toPosixPath(rel)}`] = String(content);
+        }
+        return vfs;
+    }
+    throw new Error('compiler API not found: get_bundled_stdlib_vfs/get_stdlib_files');
+}
+
 function walkFiles(root, excludeDirs) {
     const out = [];
     function rec(cur) {
@@ -471,3 +544,9 @@ if (require.main === module) {
         process.exit(1);
     }
 }
+
+module.exports = {
+    compileWithLocalStdlib,
+    loadBundledStdlibVfs,
+    loadStdlibVfsFromFs,
+};

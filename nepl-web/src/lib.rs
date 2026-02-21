@@ -1974,6 +1974,20 @@ pub fn get_stdlib_files() -> JsValue {
 }
 
 #[wasm_bindgen]
+pub fn get_bundled_stdlib_vfs() -> JsValue {
+    let obj = js_sys::Object::new();
+    for (path, content) in stdlib_entries() {
+        let key = format!("/stdlib/{path}");
+        let _ = Reflect::set(
+            &obj,
+            &JsValue::from_str(&key),
+            &JsValue::from_str(content),
+        );
+    }
+    obj.into()
+}
+
+#[wasm_bindgen]
 pub fn get_example_files() -> JsValue {
     let entries = example_entries();
     let arr = js_sys::Array::new();
@@ -2013,7 +2027,7 @@ fn compile_wasm_with_entry(
     source: &str,
     vfs: Option<JsValue>,
 ) -> Result<CompiledWasm, String> {
-    compile_wasm_with_entry_and_profile(entry_path, source, vfs, None)
+    compile_wasm_with_entry_and_profile_and_stdlib(entry_path, source, vfs, None, None)
 }
 
 fn parse_profile(profile: &str) -> Option<BuildProfile> {
@@ -2030,10 +2044,13 @@ fn compile_wasm_with_entry_and_profile(
     vfs: Option<JsValue>,
     profile: Option<BuildProfile>,
 ) -> Result<CompiledWasm, String> {
-    let stdlib_root = PathBuf::from("/stdlib");
-    let mut sources = stdlib_sources(&stdlib_root);
-    
-    // VFS ファイルが渡された場合は sources にマージする
+    compile_wasm_with_entry_and_profile_and_stdlib(entry_path, source, vfs, None, profile)
+}
+
+fn merge_vfs_sources(
+    sources: &mut BTreeMap<PathBuf, String>,
+    vfs: Option<JsValue>,
+) {
     if let Some(vfs_val) = vfs {
         if vfs_val.is_object() {
             let entries = js_sys::Object::entries(&vfs_val.into());
@@ -2047,6 +2064,21 @@ fn compile_wasm_with_entry_and_profile(
             }
         }
     }
+}
+
+fn compile_wasm_with_entry_and_profile_and_stdlib(
+    entry_path: &str,
+    source: &str,
+    vfs: Option<JsValue>,
+    stdlib_vfs: Option<JsValue>,
+    profile: Option<BuildProfile>,
+) -> Result<CompiledWasm, String> {
+    let stdlib_root = PathBuf::from("/stdlib");
+    let mut sources = stdlib_sources(&stdlib_root);
+    // stdlib 差し替えが指定された場合は、先に上書きで適用する
+    merge_vfs_sources(&mut sources, stdlib_vfs);
+    // 呼び出し元 VFS は最後に適用する
+    merge_vfs_sources(&mut sources, vfs);
 
     #[cfg(target_arch = "wasm32")]
     web_sys::console::log_1(&format!("Loader context contains {} files", sources.len()).into());
@@ -2086,6 +2118,24 @@ fn compile_wasm_with_entry_and_profile(
 }
 
 #[wasm_bindgen]
+pub fn compile_source_with_vfs_and_stdlib(
+    entry_path: &str,
+    source: &str,
+    vfs: JsValue,
+    stdlib_vfs: JsValue,
+) -> Result<Vec<u8>, JsValue> {
+    compile_wasm_with_entry_and_profile_and_stdlib(
+        entry_path,
+        source,
+        Some(vfs),
+        Some(stdlib_vfs),
+        None,
+    )
+    .map(|a| a.wasm)
+    .map_err(|msg| JsValue::from_str(&msg))
+}
+
+#[wasm_bindgen]
 pub fn compile_source_with_profile(source: &str, profile: &str) -> Result<Vec<u8>, JsValue> {
     let parsed = parse_profile(profile)
         .ok_or_else(|| JsValue::from_str("invalid profile (expected 'debug' or 'release')"))?;
@@ -2106,6 +2156,27 @@ pub fn compile_source_with_vfs_and_profile(
     compile_wasm_with_entry_and_profile(entry_path, source, Some(vfs), Some(parsed))
         .map(|a| a.wasm)
         .map_err(|msg| JsValue::from_str(&msg))
+}
+
+#[wasm_bindgen]
+pub fn compile_source_with_vfs_stdlib_and_profile(
+    entry_path: &str,
+    source: &str,
+    vfs: JsValue,
+    stdlib_vfs: JsValue,
+    profile: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let parsed = parse_profile(profile)
+        .ok_or_else(|| JsValue::from_str("invalid profile (expected 'debug' or 'release')"))?;
+    compile_wasm_with_entry_and_profile_and_stdlib(
+        entry_path,
+        source,
+        Some(vfs),
+        Some(stdlib_vfs),
+        Some(parsed),
+    )
+    .map(|a| a.wasm)
+    .map_err(|msg| JsValue::from_str(&msg))
 }
 
 fn render_core_error(err: CoreError, sm: &SourceMap) -> String {

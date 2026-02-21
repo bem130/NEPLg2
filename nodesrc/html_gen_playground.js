@@ -934,7 +934,31 @@ document.addEventListener('DOMContentLoaded', () => {
       const bindings = await loadBindings();
       if (!running) return; // stopped during load
       let wasmBytes = null;
-      if (typeof bindings.compile_source_with_vfs === 'function') {
+      if (typeof bindings.compile_source_with_vfs_stdlib_and_profile === 'function'
+          && typeof bindings.get_bundled_stdlib_vfs === 'function') {
+        const bundledStdlib = bindings.get_bundled_stdlib_vfs();
+        wasmBytes = bindings.compile_source_with_vfs_stdlib_and_profile(
+          '/virtual/entry.nepl',
+          src.value,
+          __TUTORIAL_VFS_OVERRIDES__,
+          bundledStdlib,
+          'debug'
+        );
+        console.log('[Tutorial Runner] compile_source_with_vfs_stdlib_and_profile overrides:', Object.keys(__TUTORIAL_VFS_OVERRIDES__).length);
+      } else if (typeof bindings.compile_source_with_vfs_and_stdlib === 'function'
+          && typeof bindings.get_bundled_stdlib_vfs === 'function') {
+        const bundledStdlib = bindings.get_bundled_stdlib_vfs();
+        wasmBytes = bindings.compile_source_with_vfs_and_stdlib(
+          '/virtual/entry.nepl',
+          src.value,
+          __TUTORIAL_VFS_OVERRIDES__,
+          bundledStdlib
+        );
+        console.log('[Tutorial Runner] compile_source_with_vfs_and_stdlib overrides:', Object.keys(__TUTORIAL_VFS_OVERRIDES__).length);
+      } else if (typeof bindings.compile_source_with_vfs_and_profile === 'function') {
+        wasmBytes = bindings.compile_source_with_vfs_and_profile('/virtual/entry.nepl', src.value, __TUTORIAL_VFS_OVERRIDES__, 'debug');
+        console.log('[Tutorial Runner] compile_source_with_vfs_and_profile overrides:', Object.keys(__TUTORIAL_VFS_OVERRIDES__).length);
+      } else if (typeof bindings.compile_source_with_vfs === 'function') {
         wasmBytes = bindings.compile_source_with_vfs('/virtual/entry.nepl', src.value, __TUTORIAL_VFS_OVERRIDES__);
         console.log('[Tutorial Runner] compile_source_with_vfs overrides:', Object.keys(__TUTORIAL_VFS_OVERRIDES__).length);
       } else {

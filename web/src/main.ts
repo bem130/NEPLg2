@@ -38,7 +38,14 @@ function start_app() {
             console.log("[Playground] WASM initSync complete.");
 
             // Mount stdlib into VFS
-            if (wasm.get_stdlib_files) {
+            if (wasm.get_bundled_stdlib_vfs) {
+                const stdlibVfs = wasm.get_bundled_stdlib_vfs();
+                if (stdlibVfs && typeof stdlibVfs === 'object') {
+                    for (const [p, content] of Object.entries(stdlibVfs)) {
+                        vfs.writeFile(String(p), String(content ?? ''));
+                    }
+                }
+            } else if (wasm.get_stdlib_files) {
                 const stdlibFiles = wasm.get_stdlib_files();
                 if (stdlibFiles && Array.isArray(stdlibFiles)) {
                     for (const [path, content] of stdlibFiles) {
