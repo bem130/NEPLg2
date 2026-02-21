@@ -250,7 +250,30 @@ impl Parser {
                 break;
             }
 
-            let mut stmt = self.parse_stmt()?;
+            let mut stmt = match self.parse_stmt() {
+                Some(s) => s,
+                None => {
+                    // Error recovery: skip tokens until a statement boundary and continue parsing
+                    // the rest of the block so multiple diagnostics can be reported.
+                    prev_has_if = false;
+                    loop {
+                        if self.is_eof() {
+                            break;
+                        }
+                        match self.peek_kind() {
+                            Some(TokenKind::Newline) | Some(TokenKind::Semicolon) => {
+                                self.next();
+                                break;
+                            }
+                            Some(TokenKind::Dedent) if matches!(end, TokenEnd::Dedent) => break,
+                            _ => {
+                                self.next();
+                            }
+                        }
+                    }
+                    continue;
+                }
+            };
 
             // Glued Else Logic: merge 'else:' marker statements into preceding 'if:' expressions.
             // O(1) check using prev_has_if flag and peek_role_from_expr

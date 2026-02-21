@@ -2717,3 +2717,20 @@
   - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `565/565 pass`
 - 位置づけ:
   - 上流（parser）の予約語制約を API テストで固定し、診断品質と回復時の可読性を改善。
+
+# 2026-02-22 作業メモ (parser 回復強化: 複数行の予約語誤用を継続報告)
+- 背景:
+  - 予約語を識別子位置に置いた `let` が連続すると、最初の `parse_stmt` 失敗で block 解析が打ち切られ、後続行の診断が欠落していた。
+- 実施:
+  - `nepl-core/src/parser.rs`
+    - `parse_block_until_internal` の `parse_stmt()` 失敗時を `?` で即 return せず、
+      行境界 (`Newline` / `Semicolon`) までトークンを捨てる回復処理へ変更。
+    - これにより同一ブロック内で複数エラーを継続収集可能にした。
+  - `tests/tree/13_parser_multi_error_recovery.js` 追加。
+    - `let cond` / `let then` / `let else` の3連続誤用で、3件の予約語診断が得られることを固定。
+- 検証 (直列実行):
+  1. `NO_COLOR=false trunk build`
+  2. `node tests/tree/run.js` -> `13/13 pass`
+  3. `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1` -> `566/566 pass`
+- 運用メモ:
+  - 指示に合わせ、`trunk build` とテストは今後も必ず直列で実行する。
