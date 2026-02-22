@@ -50,6 +50,11 @@
 - `clang 21.1.0 + linux native` の初期要件を保ちつつ、将来の複数 LLVM バージョン/複数 native target へ拡張可能な設定モデルを設計する。
 - `llvm` 向け syscall 分岐を OS 別（linux/win/mac）に分離できるよう、target 条件式の OS 軸（例: `#if[target=llvm&linux]`）を設計・実装する。
 
+10. 到達関数のみを codegen する最適化（wasm/llvm 共通）
+- import しただけで未使用の関数を出力しないよう、関数単位の到達解析を厳密化する。
+- `HirBody::LlvmIr` 内の `call @...` 参照も解析対象に含め、必要関数だけを残す。
+- 未到達除去後も `stdlib/core` / `stdlib/alloc` の実行互換（wasm/llvm）を崩さない回帰テストを追加する。
+
 ---
 ### 以下編集禁止
 

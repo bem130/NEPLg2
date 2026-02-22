@@ -1,12 +1,12 @@
 #indent 4
 
 #if[target=wasm]
-#extern "wasi_snapshot_preview1" "fd_read" fn fd_read <(i32,i32,i32,i32)->i32>
+#extern "wasi_snapshot_preview1" "fd_read" fn fd_read <(i32,i32,i32,i32)*>i32>
 #if[target=wasm]
-#extern "wasi_snapshot_preview1" "fd_write" fn fd_write <(i32,i32,i32,i32)->i32>
+#extern "wasi_snapshot_preview1" "fd_write" fn fd_write <(i32,i32,i32,i32)*>i32>
 
 #if[target=llvm]
-#extern "c" "syscall" fn __nepl_syscall <(i64,i64,i64,i64,i64,i64,i64)->i64>
+#extern "c" "syscall" fn __nepl_syscall <(i64,i64,i64,i64,i64,i64,i64)*>i64>
 
 #import "core/mem" as *
 #import "core/math" as *
@@ -29,11 +29,22 @@
 //: - 文字列長に比例
 
 #if[target=llvm]
-fn __linux_syscall_rw <(i32,i32,i32,i32)->i64> (nr,fd,ptr,len):
-    __nepl_syscall i64_extend_i32_u nr i64_extend_i32_u fd i64_extend_i32_u ptr i64_extend_i32_u len i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0
+fn __linux_syscall_rw <(i32,i32,i32,i32)*>i64> (nr,fd,ptr,len):
+    #llvmir:
+        define i64 @__linux_syscall_rw(i32 %nr, i32 %fd, i32 %ptr, i32 %len) {
+        entry:
+            %nr64 = zext i32 %nr to i64
+            %fd64 = zext i32 %fd to i64
+            %len64 = zext i32 %len to i64
+            %idx = zext i32 %ptr to i64
+            %buf = getelementptr [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
+            %buf64 = ptrtoint ptr %buf to i64
+            %ret = call i64 @__nepl_syscall(i64 %nr64, i64 %fd64, i64 %buf64, i64 %len64, i64 0, i64 0, i64 0)
+            ret i64 %ret
+        }
 
 #if[target=llvm]
-fn fd_write <(i32,i32,i32,i32)->i32> (_fd,iovs,iovs_len,nwritten_ptr):
+fn fd_write <(i32,i32,i32,i32)*>i32> (_fd,iovs,iovs_len,nwritten_ptr):
     let mut total <i32> 0;
     let mut iov_idx <i32> 0;
     let mut err <i32> 0;
@@ -73,7 +84,7 @@ fn fd_write <(i32,i32,i32,i32)->i32> (_fd,iovs,iovs_len,nwritten_ptr):
     err
 
 #if[target=llvm]
-fn fd_read <(i32,i32,i32,i32)->i32> (_fd,iovs,iovs_len,nread_ptr):
+fn fd_read <(i32,i32,i32,i32)*>i32> (_fd,iovs,iovs_len,nread_ptr):
     let mut total <i32> 0;
     let mut iov_idx <i32> 0;
     let mut err <i32> 0;

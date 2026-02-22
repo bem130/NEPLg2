@@ -3456,3 +3456,24 @@
   - 直近で `llvm` は `link_llvm_cli` の大量失敗（未定義シンボル/`libm` 未リンク）を削減。
   - 現在の主失敗は `run_llvm_cli(SIGSEGV)` と、一部の `compile_llvm_cli`（型効果/名前解決由来）に集約。
   - 次段は `core/mem` と `alloc/*` のランタイム整合（線形メモリ運用）を優先して進める。
+
+# 2026-02-22 作業メモ (LLVM 到達解析/alias 修正の継続)
+- 目的:
+  - `link_llvm_cli` の未定義シンボルを上流（`codegen_llvm`）で削減する。
+  - `#llvmir` 関数の raw 定義名と mangled 呼び出し名の不一致を吸収する。
+- 実装:
+  - `nepl-core/src/codegen_llvm.rs`
+    - mangled 名の base 抽出を修正（先頭 `__` を含む関数名を正しく扱う）。
+    - raw `#llvmir` 関数で「raw は base 名のみ定義」の場合に、mangled 名への wrapper を自動生成。
+    - `HirBody::LlvmIr` の `call @...` を到達解析へ追加し、raw 内部の依存関数も reachable に含める。
+    - `llvm_output_has_function` を `define/declare` 行のみ判定するよう修正（`call` 行誤検知を除去）。
+  - `todo.md`
+    - wasm/llvm 共通の「未到達関数を出力しない（関数単位 tree-shaking）」タスクを追加。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/list.nepl ... --runner llvm --llvm-all --assert-io`
+    - 変更前: `104/200 pass`
+    - 変更後: `195/200 pass`
+  - 残件（同コマンド）:
+    - `__nepl_syscall` 未定義 2件
+    - `unknown variable 'inc__i32__i32__pure'` 2件
+    - `kpdsu` の実行出力差分 1件

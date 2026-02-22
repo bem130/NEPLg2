@@ -370,11 +370,14 @@ fn try_lower_entry_from_hir(
     };
 
     let mut sigs = collect_hir_signatures(&types, &hir);
-    let reachable = collect_reachable_functions(&hir, resolved_entry.as_str());
+    let mut reachable = collect_reachable_functions(&hir, resolved_entry.as_str());
+    extend_reachable_with_runtime_helpers(&mut reachable, &hir, &sigs);
 
+    let mut declared_extern_symbols: BTreeSet<String> = BTreeSet::new();
     for ex in &hir.externs {
         if reachable.iter().any(|n| n == &ex.local_name) {
-            let name = ll_symbol(ex.local_name.as_str());
+            let local_name = ll_symbol(ex.local_name.as_str());
+            let external_name = ll_symbol(ex.name.as_str());
             let params = ex
                 .params
                 .iter()
@@ -382,7 +385,38 @@ fn try_lower_entry_from_hir(
                 .collect::<Vec<_>>()
                 .join(", ");
             let ret = llty_for_type(&types, ex.result).ir();
-            out.push_str(&format!("declare {} {}({})\n", ret, name, params));
+            if declared_extern_symbols.insert(ex.name.clone()) {
+                out.push_str(&format!("declare {} {}({})\n", ret, external_name, params));
+            }
+            if ex.local_name != ex.name {
+                let args = ex
+                    .params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, t)| format!("{} %a{}", llty_for_type(&types, *t).ir(), i))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let call_args = ex
+                    .params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, t)| format!("{} %a{}", llty_for_type(&types, *t).ir(), i))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                out.push_str(&format!("define {} {}({}) {{\n", ret, local_name, args));
+                out.push_str("entry:\n");
+                if ret == "void" {
+                    out.push_str(&format!("  call {} {}({})\n", ret, external_name, call_args));
+                    out.push_str("  ret void\n");
+                } else {
+                    out.push_str(&format!(
+                        "  %ret = call {} {}({})\n",
+                        ret, external_name, call_args
+                    ));
+                    out.push_str(&format!("  ret {} %ret\n", ret));
+                }
+                out.push_str("}\n");
+            }
             if !emitted_functions.iter().any(|n| n == &ex.local_name) {
                 emitted_functions.push(ex.local_name.clone());
             }
@@ -420,6 +454,20 @@ fn try_lower_entry_from_hir(
                 for def in defined {
                     if !emitted_functions.iter().any(|n| n == &def) {
                         emitted_functions.push(def);
+                    }
+                }
+                if !defines_current_name {
+                    if let Some(sig) = sigs.get(name.as_str()) {
+                        if let Some(sep) = find_mangled_signature_separator(name.as_str()) {
+                            let base_name = &name[..sep];
+                            let _ = emit_alias_to_symbol(
+                                name.as_str(),
+                                base_name,
+                                sig,
+                                out,
+                                emitted_functions,
+                            );
+                        }
                     }
                 }
                 if defines_current_name && !emitted_functions.iter().any(|n| n == name) {
@@ -464,14 +512,28 @@ fn emit_base_alias_for_mangled(
     out: &mut String,
     emitted_functions: &mut Vec<String>,
 ) -> bool {
-    let Some((base, _)) = mangled.split_once("__") else {
+    let Some(sep) = find_mangled_signature_separator(mangled) else {
         return false;
     };
+    let base = &mangled[..sep];
     if base.is_empty() || base == mangled {
         return false;
     }
+    emit_alias_to_symbol(mangled, base, sig, out, emitted_functions)
+}
+
+fn emit_alias_to_symbol(
+    mangled: &str,
+    base: &str,
+    sig: &FnSig,
+    out: &mut String,
+    emitted_functions: &mut Vec<String>,
+) -> bool {
     let base_available = emitted_functions.iter().any(|n| n == base) || llvm_output_has_function(out, base);
     if !base_available {
+        return false;
+    }
+    if emitted_functions.iter().any(|n| n == mangled) || llvm_output_has_function(out, mangled) {
         return false;
     }
     let params = sig
@@ -508,6 +570,19 @@ fn emit_base_alias_for_mangled(
     out.push_str("}\n\n");
     emitted_functions.push(mangled.to_string());
     true
+}
+
+fn find_mangled_signature_separator(name: &str) -> Option<usize> {
+    let bytes = name.as_bytes();
+    if bytes.len() < 3 {
+        return None;
+    }
+    for i in 1..(bytes.len() - 1) {
+        if bytes[i] == b'_' && bytes[i + 1] == b'_' {
+            return Some(i);
+        }
+    }
+    None
 }
 
 fn build_hir_for_llvm_lowering(
@@ -579,9 +654,96 @@ fn collect_reachable_functions(module: &HirModule, entry: &str) -> Vec<String> {
     visited.into_iter().collect::<Vec<_>>()
 }
 
+fn extend_reachable_with_runtime_helpers(
+    reachable: &mut Vec<String>,
+    module: &HirModule,
+    sigs: &BTreeMap<String, FnSig>,
+) {
+    let mut helper_roots = Vec::new();
+    let push_root = |roots: &mut Vec<String>, name: Option<&str>| {
+        if let Some(n) = name {
+            if !roots.iter().any(|r| r == n) {
+                roots.push(String::from(n));
+            }
+        }
+    };
+    push_root(
+        &mut helper_roots,
+        resolve_symbol_name(sigs, "alloc", &[LlTy::I32], LlTy::I32),
+    );
+    push_root(
+        &mut helper_roots,
+        resolve_symbol_name(sigs, "dealloc", &[LlTy::I32, LlTy::I32], LlTy::Void),
+    );
+    push_root(
+        &mut helper_roots,
+        resolve_symbol_name(sigs, "realloc", &[LlTy::I32, LlTy::I32, LlTy::I32], LlTy::I32),
+    );
+    push_root(
+        &mut helper_roots,
+        resolve_symbol_name(sigs, "store_i32", &[LlTy::I32, LlTy::I32], LlTy::Void),
+    );
+    push_root(
+        &mut helper_roots,
+        resolve_symbol_name(sigs, "store_u8", &[LlTy::I32, LlTy::I32], LlTy::Void),
+    );
+    push_root(
+        &mut helper_roots,
+        resolve_symbol_name(sigs, "load_i32", &[LlTy::I32], LlTy::I32),
+    );
+    push_root(
+        &mut helper_roots,
+        resolve_symbol_name(sigs, "load_u8", &[LlTy::I32], LlTy::I32),
+    );
+    push_root(
+        &mut helper_roots,
+        resolve_symbol_name(sigs, "align8", &[LlTy::I32], LlTy::I32),
+    );
+    push_root(
+        &mut helper_roots,
+        resolve_symbol_name(sigs, "mem_size", &[], LlTy::I32),
+    );
+    push_root(
+        &mut helper_roots,
+        resolve_symbol_name(sigs, "mem_grow", &[LlTy::I32], LlTy::I32),
+    );
+    if helper_roots.is_empty() {
+        return;
+    }
+
+    let mut function_map: BTreeMap<String, &HirFunction> = BTreeMap::new();
+    for f in &module.functions {
+        function_map.insert(f.name.clone(), f);
+    }
+
+    let mut seen: BTreeSet<String> = reachable.iter().cloned().collect();
+    let mut stack = Vec::new();
+    for root in helper_roots {
+        if seen.insert(root.clone()) {
+            reachable.push(root.clone());
+            stack.push(root);
+        }
+    }
+    while let Some(name) = stack.pop() {
+        let Some(func) = function_map.get(name.as_str()) else {
+            continue;
+        };
+        let mut refs = BTreeSet::new();
+        collect_callees_in_body(&func.body, &mut refs);
+        for callee in refs {
+            if seen.insert(callee.clone()) {
+                reachable.push(callee.clone());
+                stack.push(callee);
+            }
+        }
+    }
+}
+
 fn collect_callees_in_body(body: &HirBody, out: &mut BTreeSet<String>) {
-    if let HirBody::Block(block) = body {
-        collect_callees_in_block(block, out);
+    match body {
+        HirBody::Block(block) => collect_callees_in_block(block, out),
+        HirBody::LlvmIr(raw) => collect_callees_in_llvmir_block(raw, out),
+        HirBody::Wasm(_) => {}
     }
 }
 
@@ -657,6 +819,45 @@ fn collect_callees_in_expr(expr: &HirExpr, out: &mut BTreeSet<String>) {
         | HirExprKind::Var(_)
         | HirExprKind::FnValue(_)
         | HirExprKind::Drop { .. } => {}
+    }
+}
+
+fn collect_callees_in_llvmir_block(
+    block: &crate::ast::LlvmIrBlock,
+    out: &mut BTreeSet<String>,
+) {
+    for line in &block.lines {
+        collect_callee_from_llvmir_line(line, out);
+    }
+}
+
+fn collect_callee_from_llvmir_line(line: &str, out: &mut BTreeSet<String>) {
+    let trimmed = line.trim();
+    if !trimmed.contains("call") {
+        return;
+    }
+    let Some(call_pos) = trimmed.find("call") else {
+        return;
+    };
+    let rest = &trimmed[(call_pos + 4)..];
+    let Some(at_pos) = rest.find('@') else {
+        return;
+    };
+    let after_at = &rest[(at_pos + 1)..];
+    let name = if let Some(stripped) = after_at.strip_prefix('"') {
+        if let Some(end_q) = stripped.find('"') {
+            &stripped[..end_q]
+        } else {
+            return;
+        }
+    } else {
+        let end = after_at
+            .find(|c: char| c == '(' || c.is_ascii_whitespace())
+            .unwrap_or(after_at.len());
+        &after_at[..end]
+    };
+    if !name.is_empty() {
+        out.insert(String::from(name));
     }
 }
 
@@ -1346,10 +1547,8 @@ fn lower_hir_expr(
                 let arm_val = lower_hir_expr(types, ctx, &arm.body)?;
                 if let Some(slot) = result_slot.as_ref() {
                     let Some(v) = arm_val else {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: String::from("match arm result type mismatch"),
-                        });
+                        ctx.end_scope();
+                        continue;
                     };
                     if v.ty != result_ty {
                         return Err(LlvmCodegenError::UnsupportedHirLowering {
@@ -1879,10 +2078,25 @@ fn collect_defined_functions_from_llvmir_block(
 }
 
 fn parse_defined_function_name(line: &str) -> Option<&str> {
+    parse_signature_function_name(line, true)
+}
+
+fn parse_declared_or_defined_function_name(line: &str) -> Option<&str> {
+    parse_signature_function_name(line, false)
+}
+
+fn parse_signature_function_name(line: &str, define_only: bool) -> Option<&str> {
+    // define/declare のシグネチャ行から関数名を抽出する。
     // 例: define i32 @foo(i32 %x) {
-    // 例: define i32 @"foo"(i32 %x) {
+    // 例: declare i32 @"foo"(i32 %x)
     let trimmed = line.trim_start();
-    if !trimmed.starts_with("define ") {
+    let is_define = trimmed.starts_with("define ");
+    let is_declare = trimmed.starts_with("declare ");
+    if define_only {
+        if !is_define {
+            return None;
+        }
+    } else if !is_define && !is_declare {
         return None;
     }
     let at = trimmed.find('@')?;
@@ -1900,9 +2114,9 @@ fn parse_defined_function_name(line: &str) -> Option<&str> {
 }
 
 fn llvm_output_has_function(out: &str, name: &str) -> bool {
-    let needle_plain = format!("@{}(", name);
-    let needle_quoted = format!("@\"{}\"(", name);
-    out.contains(&needle_plain) || out.contains(&needle_quoted)
+    out.lines()
+        .filter_map(parse_declared_or_defined_function_name)
+        .any(|n| n == name)
 }
 
 fn collect_active_entry_names(
