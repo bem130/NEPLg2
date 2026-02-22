@@ -52,6 +52,11 @@
 #import "core/math" as *
 #import "core/result" as *
 
+#if[target=llvm]
+#llvmir:
+    @__nepl_mem = internal global [67108864 x i8] zeroinitializer, align 16
+    @__nepl_pages = internal global i32 1, align 4
+
 //: mem_size: 現在のメモリページ数を返す
 //:
 //: 目的:
@@ -62,12 +67,21 @@
 //:
 //: 注意(重要):
 //: - 1 ページ = 64KiB です。
+//: - llvm では内部線形メモリの擬似ページ数を返します。
 //:
 //: 計算量:
 //: - O(1)
 fn mem_size <()->i32> ():
+    #if[target=wasm]
     #wasm:
         memory.size
+    #if[target=llvm]
+    #llvmir:
+        define i32 @mem_size() {
+        entry:
+            %0 = load i32, ptr @__nepl_pages, align 4
+            ret i32 %0
+        }
 
 //: mem_grow: メモリを拡張する
 //:
@@ -79,13 +93,32 @@ fn mem_size <()->i32> ():
 //:
 //: 注意(重要):
 //: - 失敗時は -1 を返します。
+//: - llvm では擬似線形メモリの総量（64MiB）を超える要求を失敗扱いにします。
 //:
 //: 計算量:
 //: - O(1)
 fn mem_grow <(i32)*>i32> (pages):
+    #if[target=wasm]
     #wasm:
         local.get $pages
         memory.grow
+    #if[target=llvm]
+    #llvmir:
+        define i32 @mem_grow(i32 %pages) {
+        entry:
+            %neg = icmp slt i32 %pages, 0
+            br i1 %neg, label %fail, label %cont
+        cont:
+            %old = load i32, ptr @__nepl_pages, align 4
+            %new = add i32 %old, %pages
+            %too_large = icmp sgt i32 %new, 1024
+            br i1 %too_large, label %fail, label %ok
+        ok:
+            store i32 %new, ptr @__nepl_pages, align 4
+            ret i32 %old
+        fail:
+            ret i32 -1
+        }
 
 //: align8: 8 バイト境界に切り上げる
 //:
@@ -357,9 +390,19 @@ fn dealloc_safe <(i32,i32)*>Result<(), str>> (ptr, size):
 //: 計算量:
 //: - O(1)
 fn load_i32 <(i32)->i32> (p):
+    #if[target=wasm]
     #wasm:
         local.get $p
         i32.load
+    #if[target=llvm]
+    #llvmir:
+        define i32 @load_i32(i32 %p) {
+        entry:
+            %idx = zext i32 %p to i64
+            %ptr8 = getelementptr inbounds [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
+            %0 = load i32, ptr %ptr8, align 1
+            ret i32 %0
+        }
 
 //: store_i32: i32 を書き込む
 //:
@@ -375,10 +418,20 @@ fn load_i32 <(i32)->i32> (p):
 //: 計算量:
 //: - O(1)
 fn store_i32 <(i32,i32)*>()> (p, v):
+    #if[target=wasm]
     #wasm:
         local.get $p
         local.get $v
         i32.store
+    #if[target=llvm]
+    #llvmir:
+        define void @store_i32(i32 %p, i32 %v) {
+        entry:
+            %idx = zext i32 %p to i64
+            %ptr8 = getelementptr inbounds [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
+            store i32 %v, ptr %ptr8, align 1
+            ret void
+        }
 
 //: load_u8: 1 バイトを読み出す
 //:
@@ -394,9 +447,20 @@ fn store_i32 <(i32,i32)*>()> (p, v):
 //: 計算量:
 //: - O(1)
 fn load_u8 <(i32)->i32> (p):
+    #if[target=wasm]
     #wasm:
         local.get $p
         i32.load8_u
+    #if[target=llvm]
+    #llvmir:
+        define i32 @load_u8(i32 %p) {
+        entry:
+            %idx = zext i32 %p to i64
+            %ptr8 = getelementptr inbounds [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
+            %raw = load i8, ptr %ptr8, align 1
+            %0 = zext i8 %raw to i32
+            ret i32 %0
+        }
 
 //: store_u8: 1 バイトを書き込む
 //:
@@ -412,10 +476,21 @@ fn load_u8 <(i32)->i32> (p):
 //: 計算量:
 //: - O(1)
 fn store_u8 <(i32,i32)*>()> (p, v):
+    #if[target=wasm]
     #wasm:
         local.get $p
         local.get $v
         i32.store8
+    #if[target=llvm]
+    #llvmir:
+        define void @store_u8(i32 %p, i32 %v) {
+        entry:
+            %idx = zext i32 %p to i64
+            %ptr8 = getelementptr inbounds [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
+            %b = trunc i32 %v to i8
+            store i8 %b, ptr %ptr8, align 1
+            ret void
+        }
 
 //: memset_u8: バイト列を同じ値で埋める
 //:

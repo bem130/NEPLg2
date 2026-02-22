@@ -1,3 +1,26 @@
+# 2026-02-22 作業メモ (`core/mem` LLVM基盤着手 + `core/math` gate不整合修正)
+- 目的:
+  - `core/mem` を LLVM target でも呼べる最小基盤を追加する。
+  - `core/math` で残っていた raw body 競合（`#wasm` と `#llvmir` 同時有効）を解消する。
+- 実装:
+  - `stdlib/core/mem.nepl`
+    - LLVM 側の内部メモリ基盤を追加:
+      - `@__nepl_mem`（64MiB）
+      - `@__nepl_pages`（初期 1 page）
+    - `mem_size`, `mem_grow`, `load_i32`, `store_i32`, `load_u8`, `store_u8` を
+      `#if[target=wasm] #wasm` / `#if[target=llvm] #llvmir` の両分岐化。
+  - `stdlib/core/math.nepl`
+    - `#llvmir` を持つ関数で、`#wasm` 側に `#if[target=wasm]` が漏れていた箇所を一括補正。
+    - `function '<name>' has multiple active raw bodies after #if gate evaluation` を根本解消。
+- 失敗分析:
+  - LLVM runner で `tests/llvm_target.n.md::doctest#4` が失敗。
+  - 原因は `i32_sub` などにおいて `#wasm` が無条件有効だったため。
+  - `#if[target=wasm]` ガードを補い、raw body の同時有効化を解消。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `610/610 pass`
+  - `node nodesrc/tests.js -i tests/llvm_target.n.md -o tests/output/tests_llvm_target_current.json --runner llvm --no-tree -j 1`: `4/4 pass`
+
 # 2026-02-22 作業メモ (`core/math` 変換後半 + `u8_*` + 汎用ラッパ整備)
 - 目的:
   - `stdlib/core/math.nepl` の未整備領域（機械生成テンプレ文 + wasm専用定義）を、`wasm/llvm` 両対応と手書きドキュメントへ更新する。

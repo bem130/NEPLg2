@@ -47,6 +47,7 @@
 //:     assert_eq_i32 0 i32_add -1 1;
 //: ```
 fn i32_add <(i32,i32)->i32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -84,6 +85,7 @@ fn i32_add <(i32,i32)->i32> (a,b):
 //:     assert_eq_i32 -5 i32_sub 4 9;
 //: ```
 fn i32_sub <(i32,i32)->i32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -121,6 +123,7 @@ fn i32_sub <(i32,i32)->i32> (a,b):
 //:     assert_eq_i32 0 i32_mul 0 12345;
 //: ```
 fn i32_mul <(i32,i32)->i32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -158,6 +161,7 @@ fn i32_mul <(i32,i32)->i32> (a,b):
 //:     assert_eq_i32 -3 i32_div_s 10 -3;
 //: ```
 fn i32_div_s <(i32,i32)->i32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -195,6 +199,7 @@ fn i32_div_s <(i32,i32)->i32> (a,b):
 //:     assert_eq_i32 2147483647 i32_div_u -1 2;
 //: ```
 fn i32_div_u <(i32,i32)->i32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -232,6 +237,7 @@ fn i32_div_u <(i32,i32)->i32> (a,b):
 //:     assert_eq_i32 -1 i32_rem_s -10 3;
 //: ```
 fn i32_rem_s <(i32,i32)->i32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -269,6 +275,7 @@ fn i32_rem_s <(i32,i32)->i32> (a,b):
 //:     assert_eq_i32 5 i32_rem_u -1 10;
 //: ```
 fn i32_rem_u <(i32,i32)->i32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -761,6 +768,7 @@ fn i32_ge_u <(i32,i32)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_add <(u8,u8)->u8> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -790,6 +798,7 @@ fn u8_add <(u8,u8)->u8> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_sub <(u8,u8)->u8> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -819,6 +828,7 @@ fn u8_sub <(u8,u8)->u8> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_mul <(u8,u8)->u8> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -848,6 +858,7 @@ fn u8_mul <(u8,u8)->u8> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_div_u <(u8,u8)->u8> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -874,6 +885,7 @@ fn u8_div_u <(u8,u8)->u8> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_rem_u <(u8,u8)->u8> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -900,6 +912,7 @@ fn u8_rem_u <(u8,u8)->u8> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_eq <(u8,u8)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -927,6 +940,7 @@ fn u8_eq <(u8,u8)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_ne <(u8,u8)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -954,6 +968,7 @@ fn u8_ne <(u8,u8)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_lt_u <(u8,u8)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -981,6 +996,7 @@ fn u8_lt_u <(u8,u8)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_le_u <(u8,u8)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1008,6 +1024,7 @@ fn u8_le_u <(u8,u8)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_gt_u <(u8,u8)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1035,6 +1052,7 @@ fn u8_gt_u <(u8,u8)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u8_ge_u <(u8,u8)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1078,6 +1096,7 @@ fn u8_ge_u <(u8,u8)->bool> (a,b):
 //:     assert i64_eq i64_add a b b;
 //: ```
 fn i64_add <(i64,i64)->i64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1119,6 +1138,7 @@ fn i64_add <(i64,i64)->i64> (a,b):
 //:     assert i64_lt_s i64_sub z one z;
 //: ```
 fn i64_sub <(i64,i64)->i64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1158,6 +1178,7 @@ fn i64_sub <(i64,i64)->i64> (a,b):
 //:     assert i64_eq i64_mul i64_extend_i32_u 0 i64_extend_i32_u 999 i64_extend_i32_u 0;
 //: ```
 fn i64_mul <(i64,i64)->i64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1237,6 +1258,7 @@ fn i64_div_s <(i64,i64)->i64> (a,b):
 //:     assert i64_eq i64_div_u a b i64_extend_i32_u 0;
 //: ```
 fn i64_div_u <(i64,i64)->i64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1315,6 +1337,7 @@ fn i64_rem_s <(i64,i64)->i64> (a,b):
 //:     assert i64_eq i64_rem_u a b a;
 //: ```
 fn i64_rem_u <(i64,i64)->i64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1803,6 +1826,7 @@ fn i64_ge_u <(i64,i64)->bool> (a,b):
 //:     assert f32_eq y 2.5;
 //: ```
 fn f32_add <(f32,f32)->f32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1829,6 +1853,7 @@ fn f32_add <(f32,f32)->f32> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_sub <(f32,f32)->f32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1855,6 +1880,7 @@ fn f32_sub <(f32,f32)->f32> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_mul <(f32,f32)->f32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1881,6 +1907,7 @@ fn f32_mul <(f32,f32)->f32> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_div <(f32,f32)->f32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -1908,6 +1935,7 @@ fn f32_div <(f32,f32)->f32> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_sqrt <(f32)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.sqrt
@@ -1934,6 +1962,7 @@ fn f32_sqrt <(f32)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_abs <(f32)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.abs
@@ -1961,6 +1990,7 @@ fn f32_abs <(f32)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_neg <(f32)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.neg
@@ -1986,6 +2016,7 @@ fn f32_neg <(f32)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_ceil <(f32)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.ceil
@@ -2011,6 +2042,7 @@ fn f32_ceil <(f32)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_floor <(f32)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.floor
@@ -2036,6 +2068,7 @@ fn f32_floor <(f32)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_trunc <(f32)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.trunc
@@ -2061,6 +2094,7 @@ fn f32_trunc <(f32)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_nearest <(f32)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.nearest
@@ -2086,6 +2120,7 @@ fn f32_nearest <(f32)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_min <(f32,f32)->f32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2112,6 +2147,7 @@ fn f32_min <(f32,f32)->f32> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_max <(f32,f32)->f32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2138,6 +2174,7 @@ fn f32_max <(f32,f32)->f32> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_copysign <(f32,f32)->f32> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2164,6 +2201,7 @@ fn f32_copysign <(f32,f32)->f32> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_eq <(f32,f32)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2191,6 +2229,7 @@ fn f32_eq <(f32,f32)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_ne <(f32,f32)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2218,6 +2257,7 @@ fn f32_ne <(f32,f32)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_lt <(f32,f32)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2245,6 +2285,7 @@ fn f32_lt <(f32,f32)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_le <(f32,f32)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2272,6 +2313,7 @@ fn f32_le <(f32,f32)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_gt <(f32,f32)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2299,6 +2341,7 @@ fn f32_gt <(f32,f32)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_ge <(f32,f32)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2344,6 +2387,7 @@ fn f32_ge <(f32,f32)->bool> (a,b):
 //:     assert f64_eq y six;
 //: ```
 fn f64_add <(f64,f64)->f64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2370,6 +2414,7 @@ fn f64_add <(f64,f64)->f64> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_sub <(f64,f64)->f64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2396,6 +2441,7 @@ fn f64_sub <(f64,f64)->f64> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_mul <(f64,f64)->f64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2422,6 +2468,7 @@ fn f64_mul <(f64,f64)->f64> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_div <(f64,f64)->f64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2449,6 +2496,7 @@ fn f64_div <(f64,f64)->f64> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_sqrt <(f64)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.sqrt
@@ -2475,6 +2523,7 @@ fn f64_sqrt <(f64)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_abs <(f64)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.abs
@@ -2502,6 +2551,7 @@ fn f64_abs <(f64)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_neg <(f64)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.neg
@@ -2527,6 +2577,7 @@ fn f64_neg <(f64)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_ceil <(f64)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.ceil
@@ -2552,6 +2603,7 @@ fn f64_ceil <(f64)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_floor <(f64)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.floor
@@ -2577,6 +2629,7 @@ fn f64_floor <(f64)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_trunc <(f64)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.trunc
@@ -2602,6 +2655,7 @@ fn f64_trunc <(f64)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_nearest <(f64)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.nearest
@@ -2627,6 +2681,7 @@ fn f64_nearest <(f64)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_min <(f64,f64)->f64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2653,6 +2708,7 @@ fn f64_min <(f64,f64)->f64> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_max <(f64,f64)->f64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2679,6 +2735,7 @@ fn f64_max <(f64,f64)->f64> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_copysign <(f64,f64)->f64> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2705,6 +2762,7 @@ fn f64_copysign <(f64,f64)->f64> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_eq <(f64,f64)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2732,6 +2790,7 @@ fn f64_eq <(f64,f64)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_ne <(f64,f64)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2759,6 +2818,7 @@ fn f64_ne <(f64,f64)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_lt <(f64,f64)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2786,6 +2846,7 @@ fn f64_lt <(f64,f64)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_le <(f64,f64)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2813,6 +2874,7 @@ fn f64_le <(f64,f64)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_gt <(f64,f64)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2840,6 +2902,7 @@ fn f64_gt <(f64,f64)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_ge <(f64,f64)->bool> (a,b):
+    #if[target=wasm]
     #wasm:
         local.get $a
         local.get $b
@@ -2869,6 +2932,7 @@ fn f64_ge <(f64,f64)->bool> (a,b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_extend_i8_s <(i32)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.extend8_s
@@ -2896,6 +2960,7 @@ fn i32_extend_i8_s <(i32)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_extend_i16_s <(i32)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.extend16_s
@@ -2935,6 +3000,7 @@ fn i32_extend_i16_s <(i32)->i32> (a):
 //:     assert i64_eq v i64_extend_i32_u 123;
 //: ```
 fn i64_extend_i32_s <(i32)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.extend_i32_s
@@ -2973,6 +3039,7 @@ fn i64_extend_i32_s <(i32)->i64> (a):
 //:     assert i64_eq v i64_extend_i32_u 1;
 //: ```
 fn i64_extend_i32_u <(i32)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.extend_i32_u
@@ -2998,6 +3065,7 @@ fn i64_extend_i32_u <(i32)->i64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_wrap_i64 <(i64)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.wrap_i64
@@ -3023,6 +3091,7 @@ fn i32_wrap_i64 <(i64)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_convert_i32_s <(i32)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.convert_i32_s
@@ -3048,6 +3117,7 @@ fn f32_convert_i32_s <(i32)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_convert_i32_u <(i32)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.convert_i32_u
@@ -3073,6 +3143,7 @@ fn f32_convert_i32_u <(i32)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_convert_i64_s <(i64)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.convert_i64_s
@@ -3098,6 +3169,7 @@ fn f32_convert_i64_s <(i64)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_convert_i64_u <(i64)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.convert_i64_u
@@ -3123,6 +3195,7 @@ fn f32_convert_i64_u <(i64)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_trunc_f32_s <(f32)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_f32_s
@@ -3148,6 +3221,7 @@ fn i32_trunc_f32_s <(f32)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_trunc_f32_u <(f32)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_f32_u
@@ -3174,6 +3248,7 @@ fn i32_trunc_f32_u <(f32)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_trunc_sat_f32_s <(f32)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_sat_f32_s
@@ -3200,6 +3275,7 @@ fn i32_trunc_sat_f32_s <(f32)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_trunc_sat_f32_u <(f32)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_sat_f32_u
@@ -3225,6 +3301,7 @@ fn i32_trunc_sat_f32_u <(f32)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i64_trunc_f32_s <(f32)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_f32_s
@@ -3250,6 +3327,7 @@ fn i64_trunc_f32_s <(f32)->i64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i64_trunc_f32_u <(f32)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_f32_u
@@ -3276,6 +3354,7 @@ fn i64_trunc_f32_u <(f32)->i64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i64_trunc_sat_f32_s <(f32)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_sat_f32_s
@@ -3302,6 +3381,7 @@ fn i64_trunc_sat_f32_s <(f32)->i64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i64_trunc_sat_f32_u <(f32)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_sat_f32_u
@@ -3327,6 +3407,7 @@ fn i64_trunc_sat_f32_u <(f32)->i64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_convert_i32_s <(i32)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.convert_i32_s
@@ -3352,6 +3433,7 @@ fn f64_convert_i32_s <(i32)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_convert_i32_u <(i32)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.convert_i32_u
@@ -3377,6 +3459,7 @@ fn f64_convert_i32_u <(i32)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_convert_i64_s <(i64)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.convert_i64_s
@@ -3402,6 +3485,7 @@ fn f64_convert_i64_s <(i64)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_convert_i64_u <(i64)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.convert_i64_u
@@ -3427,6 +3511,7 @@ fn f64_convert_i64_u <(i64)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_trunc_f64_s <(f64)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_f64_s
@@ -3452,6 +3537,7 @@ fn i32_trunc_f64_s <(f64)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_trunc_f64_u <(f64)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_f64_u
@@ -3478,6 +3564,7 @@ fn i32_trunc_f64_u <(f64)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_trunc_sat_f64_s <(f64)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_sat_f64_s
@@ -3504,6 +3591,7 @@ fn i32_trunc_sat_f64_s <(f64)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_trunc_sat_f64_u <(f64)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_sat_f64_u
@@ -3529,6 +3617,7 @@ fn i32_trunc_sat_f64_u <(f64)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i64_trunc_f64_s <(f64)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_f64_s
@@ -3554,6 +3643,7 @@ fn i64_trunc_f64_s <(f64)->i64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i64_trunc_f64_u <(f64)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_f64_u
@@ -3580,6 +3670,7 @@ fn i64_trunc_f64_u <(f64)->i64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i64_trunc_sat_f64_s <(f64)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_sat_f64_s
@@ -3606,6 +3697,7 @@ fn i64_trunc_sat_f64_s <(f64)->i64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i64_trunc_sat_f64_u <(f64)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_sat_f64_u
@@ -3631,6 +3723,7 @@ fn i64_trunc_sat_f64_u <(f64)->i64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_promote_f32 <(f32)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.promote_f32
@@ -3656,6 +3749,7 @@ fn f64_promote_f32 <(f32)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_demote_f64 <(f64)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.demote_f64
@@ -3681,6 +3775,7 @@ fn f32_demote_f64 <(f64)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f32_reinterpret_i32 <(i32)->f32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f32.reinterpret_i32
@@ -3706,6 +3801,7 @@ fn f32_reinterpret_i32 <(i32)->f32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i32_reinterpret_f32 <(f32)->i32> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i32.reinterpret_f32
@@ -3731,6 +3827,7 @@ fn i32_reinterpret_f32 <(f32)->i32> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn f64_reinterpret_i64 <(i64)->f64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         f64.reinterpret_i64
@@ -3756,6 +3853,7 @@ fn f64_reinterpret_i64 <(i64)->f64> (a):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn i64_reinterpret_f64 <(f64)->i64> (a):
+    #if[target=wasm]
     #wasm:
         local.get $a
         i64.reinterpret_f64
