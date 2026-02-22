@@ -9,7 +9,7 @@ ret: 42
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn inc <(i32)->i32> (x):
@@ -29,7 +29,7 @@ ret: 42
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 let inc <(i32)->i32> (x):
@@ -49,7 +49,7 @@ ret: 42
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 let inc (x):
@@ -67,7 +67,7 @@ ret: 20
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -85,7 +85,7 @@ ret: 30
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn add_nums <(i32, i32)->i32> (a, b):
@@ -106,7 +106,7 @@ ret: 25
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn square <(i32)->i32> (x):
@@ -128,7 +128,7 @@ ret: 15
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn add_op <(i32, i32)->i32> (a, b):
@@ -160,7 +160,7 @@ ret: 11
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -178,7 +178,7 @@ ret: 123
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let f <()->i32> ():
@@ -195,7 +195,7 @@ ret: 120
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn fact <(i32)->i32> (n):
@@ -216,7 +216,7 @@ ret: 30
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn apply <(i32, (i32)->i32)->i32> (val, func):
@@ -236,7 +236,7 @@ ret: 15
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -257,7 +257,7 @@ ret: 15
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -278,7 +278,7 @@ ret: 15
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn add_op <(i32, i32)->i32> (a, b):
@@ -306,7 +306,7 @@ ret: 120
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn fact <(i32)->i32> (n):
@@ -327,7 +327,7 @@ ret: 15
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -344,7 +344,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -362,7 +362,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn apply <(i32,(i32)->i32)->i32> (val, func):
@@ -432,7 +432,7 @@ ret: 70
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn inc <(i32)->i32> (x):

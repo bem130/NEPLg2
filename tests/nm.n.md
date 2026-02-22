@@ -7,7 +7,7 @@ ret: 0
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "alloc/string" as *
 #import "core/math" as *
 #import "nm/parser" as *
@@ -28,7 +28,7 @@ ret: 0
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "alloc/string" as *
 #import "core/math" as *
 #import "nm/parser" as *

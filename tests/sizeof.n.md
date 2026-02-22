@@ -7,7 +7,7 @@
 neplg2:test
 ret: 0
 ```neplg2
-#target wasm
+#target core
 #entry main
 #indent 4
 #import "core/math" as *
@@ -42,7 +42,7 @@ fn main <()->i32> ():
 neplg2:test
 ret: 0
 ```neplg2
-#target wasm
+#target core
 #entry main
 #indent 4
 #import "core/math" as *
@@ -70,7 +70,7 @@ fn main <()->i32> ():
 neplg2:test
 ret: 0
 ```neplg2
-#target wasm
+#target core
 #entry main
 #indent 4
 #import "core/math" as *

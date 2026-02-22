@@ -10,7 +10,7 @@ ret: 8
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 #import "alloc/string" as *
 
@@ -26,7 +26,7 @@ ret: 14
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -42,7 +42,7 @@ ret: 7
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn add <(i32,i32)->i32> (a, b):
@@ -59,7 +59,7 @@ ret: 14
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn f <(i32)->i32> (x):
@@ -78,7 +78,7 @@ ret: 12
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn calc <(i32)->i32> (x):
@@ -96,7 +96,7 @@ ret: 11
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -118,7 +118,7 @@ ret: 8
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/result" as result
 #import "core/math" as *
 
@@ -134,7 +134,7 @@ ret: 10
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn plus <(i32,i32)->i32> (a, b):
@@ -152,7 +152,7 @@ ret: 123
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -173,7 +173,7 @@ ret: 10
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -193,7 +193,7 @@ ret: 11
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 #import "core/option" as *
 
@@ -214,7 +214,7 @@ ret: 8
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn plus_one_from <(i32)->i32> (add):
@@ -231,7 +231,7 @@ ret: 9
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -246,7 +246,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -261,7 +261,7 @@ ret: 7
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -277,7 +277,7 @@ ret: 31
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn f <(i32)->i32> (x):
@@ -299,7 +299,7 @@ ret: 15
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "alloc/string" as *
 #import "core/math" as *
 
@@ -315,7 +315,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -331,7 +331,7 @@ ret: 2
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn noshadow f <(i32)->i32> (x):
@@ -350,7 +350,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let mut noshadow x <i32> 1;
@@ -365,7 +365,7 @@ ret: 6
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/result" as result
 #import "core/math" as *
 

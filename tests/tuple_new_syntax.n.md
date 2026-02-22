@@ -9,7 +9,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -27,7 +27,7 @@ ret: 100
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -45,7 +45,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -66,7 +66,7 @@ ret: 8
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 #import "core/field" as *
 
@@ -85,7 +85,7 @@ ret: 20
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -107,7 +107,7 @@ ret: 5
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -127,7 +127,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn take <.T> <(.T)->i32> (t):
@@ -147,7 +147,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn make <()->.Pair> ():
@@ -168,7 +168,7 @@ ret: 6
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 #import "core/field" as *
 
@@ -190,7 +190,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -209,7 +209,7 @@ ret: 5
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "alloc/string" as *
 #import "core/field" as *
 
@@ -228,7 +228,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 struct S:
@@ -250,7 +250,7 @@ ret: 20
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 struct Wrapper:
@@ -272,7 +272,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn id <.T> <(.T)->.T> (x):
@@ -293,7 +293,7 @@ ret: 6
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -311,7 +311,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -331,7 +331,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -351,7 +351,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -370,7 +370,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -390,7 +390,7 @@ ret: 0
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let t ()

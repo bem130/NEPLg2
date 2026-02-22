@@ -6,7 +6,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let cond 1;
@@ -19,7 +19,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let then 1;
@@ -32,7 +32,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let else 1;
@@ -45,7 +45,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let do 1;
@@ -58,7 +58,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn let <()->i32> ():
     1
@@ -73,7 +73,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn id <(i32)->i32> (fn):
     fn

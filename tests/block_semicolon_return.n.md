@@ -14,7 +14,7 @@ ret: 3
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -34,7 +34,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let x <i32> block:
@@ -51,7 +51,7 @@ neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let x <i32> block 1;

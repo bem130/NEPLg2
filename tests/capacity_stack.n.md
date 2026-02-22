@@ -9,7 +9,7 @@ ret: 64
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn depth <(i32,i32)->i32> (n, acc):
@@ -29,7 +29,7 @@ ret: 512
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn depth <(i32,i32)->i32> (n, acc):
@@ -49,7 +49,7 @@ ret: 4096
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 #import "alloc/vec" as *
 
@@ -70,7 +70,7 @@ ret: 1535
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 #import "core/mem" as *
 
@@ -100,7 +100,7 @@ ret: 3000
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 #import "alloc/string" as *
 
@@ -122,7 +122,7 @@ ret: 15
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 #import "core/option" as *
 #import "alloc/vec" as *

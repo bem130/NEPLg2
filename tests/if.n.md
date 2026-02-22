@@ -9,7 +9,7 @@ ret: 0
 
 #entry main
 #indent 4
-#target wasm
+#target core
     #import "core/math" as *
 
 fn main <()->i32> ():
@@ -25,7 +25,7 @@ ret: 0
 
 #entry main
 #indent 4
-#target wasm
+#target core
     #import "core/math" as *
 
 fn main <()->i32> ():
@@ -41,7 +41,7 @@ ret: 0
 
 #entry main
 #indent 4
-#target wasm
+#target core
     #import "core/math" as *
 
 fn main <()->i32> ():
@@ -60,7 +60,7 @@ ret: 0
 
 #entry main
 #indent 4
-#target wasm
+#target core
     #import "core/math" as *
 
 fn main <()->i32> ():
@@ -79,7 +79,7 @@ ret: 0
 
 #entry main
 #indent 4
-#target wasm
+#target core
     #import "core/math" as *
 
 fn main <()->i32> ():
@@ -100,7 +100,7 @@ ret: 0
 
 #entry main
 #indent 4
-#target wasm
+#target core
     #import "core/math" as *
 
 fn main <()->i32> ():
@@ -116,7 +116,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
     #import "core/math" as *
 
 fn main <()->i32> ():
@@ -135,7 +135,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -154,7 +154,7 @@ ret: 7
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -173,7 +173,7 @@ ret: 11
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -194,7 +194,7 @@ ret: 11
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -220,7 +220,7 @@ ret: 21
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -240,7 +240,7 @@ ret: 31
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -260,7 +260,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -276,7 +276,7 @@ ret: 200
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -295,7 +295,7 @@ ret: 66
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -315,7 +315,7 @@ ret: 11
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -335,7 +335,7 @@ ret: 12
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -355,7 +355,7 @@ ret: 21
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -375,7 +375,7 @@ ret: 22
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -395,7 +395,7 @@ ret: 77
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -416,7 +416,7 @@ ret: 115
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -438,7 +438,7 @@ ret: 30
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -461,7 +461,7 @@ ret: 12
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -484,7 +484,7 @@ ret: 9
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -503,7 +503,7 @@ ret: 100
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -519,7 +519,7 @@ ret: 8
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -535,7 +535,7 @@ ret: 123
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -550,7 +550,7 @@ ret: 33
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -568,7 +568,7 @@ ret: 102
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -583,7 +583,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -608,7 +608,7 @@ ret: 7
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -629,7 +629,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -645,7 +645,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -664,7 +664,7 @@ ret: 190
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -690,7 +690,7 @@ ret: 280
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -716,7 +716,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -736,7 +736,7 @@ ret: 40
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -759,7 +759,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -783,7 +783,7 @@ ret: 70
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -802,7 +802,7 @@ ret: 80
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -821,7 +821,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -842,7 +842,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -860,7 +860,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let cond 1;
@@ -874,7 +874,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn then <()->i32> ():
     1
@@ -890,7 +890,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let let 1;
@@ -905,7 +905,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let else 1;
@@ -921,7 +921,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -939,7 +939,7 @@ ret: 40
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -956,7 +956,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -973,7 +973,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -990,7 +990,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -1008,7 +1008,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -1025,7 +1025,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -1042,7 +1042,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let v <i32> if:
@@ -1059,7 +1059,7 @@ ret: 42
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -1083,7 +1083,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -1109,7 +1109,7 @@ ret: 9
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():

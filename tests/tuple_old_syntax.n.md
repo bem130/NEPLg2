@@ -9,7 +9,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn take <((i32,bool))->i32> (t):
     7
@@ -25,7 +25,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let t (3, true)
@@ -39,7 +39,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let t <(i32,i32)> Tuple:
@@ -55,7 +55,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let t Tuple:
@@ -71,7 +71,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let t Tuple:

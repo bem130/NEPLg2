@@ -9,7 +9,7 @@ ret: 8
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn id <.T> <(.T)->.T> (x):
@@ -32,7 +32,7 @@ ret: 20
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 
 enum Option<.T>:
@@ -69,7 +69,7 @@ ret: 30
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 #import "core/math" as *
 
@@ -96,7 +96,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn id <T> <(T)->T> (x):
     x
@@ -112,7 +112,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 enum Option<T>:
     None
@@ -129,7 +129,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 struct Pair<T,U>:
     a <T>
@@ -147,7 +147,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 #import "core/math" as *
 
@@ -174,7 +174,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn first <.A,.B> <(.A,.B)->.A> (a,b):
@@ -197,7 +197,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 
 enum Option<.T>:
@@ -224,7 +224,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 
 enum Option<.T>:
@@ -251,7 +251,7 @@ ret: 9
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn id <.T> <(.T)->.T> (x):
     x
@@ -272,7 +272,7 @@ ret: 7
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn id <.T> <(.T)->.T> (x):
@@ -291,7 +291,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 
 enum Option<.T>:
@@ -317,7 +317,7 @@ ret: 5
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 
 struct Pair<.A,.B>:
@@ -339,7 +339,7 @@ ret: 30
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 #import "core/math" as *
 
@@ -368,7 +368,7 @@ ret: 4
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 #import "core/math" as *
 
@@ -403,7 +403,7 @@ ret: 9
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 
 enum Option<.T>:
@@ -433,7 +433,7 @@ ret: 7
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 
 enum Either<.A,.B>:
@@ -466,7 +466,7 @@ ret: 12
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 
 enum Option<.T>:
@@ -496,7 +496,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 enum Option<.T>:
     None
@@ -514,7 +514,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn same <.T> <(.T,.T)->i32> (a,b):
     0
@@ -530,7 +530,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 enum Either<.A,.B>:
     Left <.A>
@@ -548,7 +548,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 enum Option<.T>:
     None
@@ -569,7 +569,7 @@ neplg2:test[compile_fail]
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 enum Option<.T>:
     None

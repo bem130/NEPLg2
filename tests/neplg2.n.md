@@ -32,7 +32,7 @@ ret: 6
 #entry main
 #indent 4
 
-#target wasm
+#target core
 #if[target=wasm]
 fn add <(i32, i32) -> i32> (a, b):
     #wasm:
@@ -156,14 +156,14 @@ fn main <() -> i32> ():
 
 以前はコンパイル確認のみでした。
 このテストは `#if[target=wasm]` の分岐が有効な環境で only_wasm が定義され、main から呼べることを確認したいので、
-ターゲットを明示的に `#target wasm` とし、返り値 `123` を `ret:` で検証します。
+ターゲットを明示的に `#target core` とし、返り値 `123` を `ret:` で検証します。
 
 neplg2:test
 ret: 123
 ```neplg2
 #entry main
 
-#target wasm
+#target core
 #if[target=wasm]
 fn only_wasm <() -> i32> ():
     123
@@ -176,14 +176,14 @@ fn main <() -> i32> ():
 
 以前はコンパイル確認のみでした。
 `#if[target=wasi]` の定義が wasm ターゲットではスキップされ、未知シンボルを含む定義がコンパイルに影響しないことを狙っています。
-ターゲットを `#target wasm` と明示し、main が 0 を返すことを `ret: 0` で確認します。
+ターゲットを `#target core` と明示し、main が 0 を返すことを `ret: 0` で確認します。
 
 neplg2:test
 ret: 0
 ```neplg2
 #entry main
 
-#target wasm
+#target core
 #if[target=wasi]
 fn only_wasi <() -> i32> ():
     unknown_symbol
@@ -200,7 +200,7 @@ fn main <() -> i32> ():
 neplg2:test[compile_fail]
 ```neplg2
 #entry main
-#target wasm
+#target core
 
 #if[target=wasi]
 fn skipped <() -> i32> ():
@@ -222,7 +222,7 @@ neplg2:test
 ret: 5
 ```neplg2
 #entry main
-#target wasm
+#target core
 #indent 4
 #import "core/math" as *
 
@@ -241,7 +241,7 @@ neplg2:test
 ret: 7
 ```neplg2
 #entry main
-#target wasm
+#target core
 #indent 4
 
 fn main <()->i32> ():
@@ -260,7 +260,7 @@ neplg2:test
 ret: 9
 ```neplg2
 #entry main
-#target wasm
+#target core
 #indent 4
 
 fn main <()->i32> ():
@@ -321,7 +321,7 @@ ret: 10
 #entry main
 #indent 4
 
-#target wasm
+#target core
 #if[target=wasm]
 fn add <(i32,i32)->i32> (a,b):
     #wasm:
@@ -356,7 +356,7 @@ ret: 5
 #entry main
 #indent 4
 
-#target wasm
+#target core
 #if[target=wasm]
 fn add <(i32,i32)->i32> (a,b):
     #wasm:
@@ -379,7 +379,7 @@ ret: 5
 #entry main
 #indent 4
 
-#target wasm
+#target core
 #if[target=wasm]
 fn add <(i32,i32)->i32> (a,b):
     #wasm:
@@ -407,13 +407,13 @@ fn main <()->i32> ():
 
 以前は単なる `neplg2:test` で、失敗すべき条件（WASM ターゲットで WASI インポートを宣言する）を検証できていませんでした。
 テスト名どおり「WASM ターゲットでは WASI インポートが拒否される」ことを確認したいので、
-ターゲットを `#target wasm` と明示し、`compile_fail` として扱います。
+ターゲットを `#target core` と明示し、`compile_fail` として扱います。
 
 neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #extern "wasi_snapshot_preview1" "fd_write" fn fd_write <(i32,i32,i32,i32)->i32>
 fn main <()->()> ():
     ()
@@ -441,13 +441,13 @@ fn main <()->i32> ():
 
 以前は単なる `neplg2:test` で、実際には「コンパイルできてしまう」場合に検知できませんでした。
 このテスト名は「WASM ターゲットでは std/stdio が使えない（= コンパイル時に拒否される）」ことを意図しているため、
-ターゲットを `#target wasm` と明示し、`compile_fail` として検証します。
+ターゲットを `#target core` と明示し、`compile_fail` として検証します。
 
 neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "std/stdio" as *
 
 fn main <()->()> ():
@@ -550,7 +550,7 @@ fn main <()* >()> ():
 
 neplg2:test[compile_fail]
 ```neplg2
-#target wasm
+#target core
 #target std
 #entry main
 fn main <()->i32> ():

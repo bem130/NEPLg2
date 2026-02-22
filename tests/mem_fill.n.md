@@ -7,7 +7,7 @@ ret: 1
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 #import "core/math" as *
 
@@ -26,7 +26,7 @@ ret: 1
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 #import "core/math" as *
 
@@ -49,7 +49,7 @@ ret: 1
 ```neplg2
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 #import "core/math" as *
 

@@ -9,7 +9,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn id <(i32)->i32> (x): x
 
@@ -25,7 +25,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -40,7 +40,7 @@ ret: 6
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -55,7 +55,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -70,7 +70,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -86,7 +86,7 @@ ret: 6
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -103,7 +103,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -121,7 +121,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -136,7 +136,7 @@ ret: 6
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -151,7 +151,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -166,7 +166,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -187,7 +187,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn f <.T> <(.T)->i32> (t): 2
@@ -207,7 +207,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 struct S: v <i32>
 fn f <(S)->i32> (s): s.v
@@ -224,7 +224,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 struct S: v <i32>
 
@@ -241,7 +241,7 @@ ret: 20
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 
 enum E: V <i32>
@@ -260,7 +260,7 @@ ret: 6
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -275,7 +275,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -290,7 +290,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 #import "core/mem" as *
 
@@ -309,7 +309,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "alloc/string" as *
 
 fn main <()->i32> ():
@@ -324,7 +324,7 @@ ret: 0
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():

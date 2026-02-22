@@ -9,7 +9,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     block 10
@@ -23,7 +23,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -38,7 +38,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     block let x 10; x
@@ -52,7 +52,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -67,7 +67,7 @@ ret: 5
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     block block 5
@@ -81,7 +81,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     block:
@@ -96,7 +96,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -111,7 +111,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -127,7 +127,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -143,7 +143,7 @@ ret: 5
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -161,7 +161,7 @@ ret: 0
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     // block returns unit, so we return 0 explicitly
@@ -177,7 +177,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -195,7 +195,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let mut x 1
@@ -211,7 +211,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     <i32> block 10
@@ -231,7 +231,7 @@ ret: 2
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -249,7 +249,7 @@ ret: 3
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -264,7 +264,7 @@ ret: 10
 
 #entry main
 #indent 4
-#target wasm
+#target core
 #import "core/mem" as *
 
 enum E: A
@@ -282,7 +282,7 @@ ret: 1
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     block 1 // comment
@@ -296,7 +296,7 @@ ret: 0
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     block ()
@@ -311,7 +311,7 @@ ret: 99
 
 #entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     block block block 99
