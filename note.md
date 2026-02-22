@@ -1,3 +1,28 @@
+# 2026-02-22 作業メモ (LLVM lower: 関数値名フォールバック + `u8_to_i32` 対応)
+- 目的:
+  - LLVM lower の `unknown variable '<name>__...` を縮小する。
+  - numerics 系で残っていた `unsupported intrinsic 'u8_to_i32'` を解消する。
+- 実装:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `LowerCtx::lookup_local_fuzzy` を追加。
+      - 通常のローカル検索に失敗した場合、`name.split_once("__")` の base 名で再検索する。
+      - `Var` / `Set` のローカル参照に適用。
+    - intrinsic lower に `u8_to_i32` を追加。
+      - 現実装の `u8` 表現（i32）に合わせ、`and i32, 255` で正規化して返す。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 2`: `610/610 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH node nodesrc/tests.js -i tests -o tests/output/tests_llvm_current.json -j 2 --runner llvm --llvm-all --assert-io`: `446/601 pass`
+- 効果:
+  - LLVM fail は `170 -> 155`（15件改善）。
+  - `unknown variable` は `14 -> 3` まで減少。
+  - `unsupported intrinsic` は `0`（`u8_to_i32` 経路を解消）。
+- 残課題（高優先）:
+  - `pure context cannot call impure function`: 85件
+  - `undefined value`（主に `alloc__...` などリンク不整合）: 43件
+  - `CallIndirect` 未対応: 5件
+  - `alloc function is required`: 6件
+
 # 2026-02-22 作業メモ (LLVM lower: 線形メモリ参照の根本修正)
 - 目的:
   - LLVM 実行で発生していた `SIGSEGV` を、場当たり対処ではなく参照モデルの不整合を解消して根本修正する。

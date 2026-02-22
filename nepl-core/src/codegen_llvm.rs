@@ -298,6 +298,16 @@ impl<'a> LowerCtx<'a> {
         None
     }
 
+    fn lookup_local_fuzzy(&self, name: &str) -> Option<&LocalBinding> {
+        if let Some(v) = self.lookup_local(name) {
+            return Some(v);
+        }
+        if let Some((base, _)) = name.split_once("__") {
+            return self.lookup_local(base);
+        }
+        None
+    }
+
     fn linear_i8_ptr_from_i32(&mut self, offset_i32: &str) -> String {
         let idx_i64 = self.next_tmp();
         let ptr_i8 = self.next_tmp();
@@ -763,7 +773,7 @@ fn lower_hir_expr(
         HirExprKind::LiteralStr(id) => lower_hir_string_literal(types, ctx, *id as usize),
         HirExprKind::Unit => Ok(None),
         HirExprKind::Var(name) => {
-            let Some(binding) = ctx.lookup_local(name.as_str()) else {
+            let Some(binding) = ctx.lookup_local_fuzzy(name.as_str()) else {
                 return Err(LlvmCodegenError::UnsupportedHirLowering {
                     function: ctx.function_name.to_string(),
                     reason: format!("unknown variable '{}'", name),
@@ -801,7 +811,7 @@ fn lower_hir_expr(
             Ok(None)
         }
         HirExprKind::Set { name, value } => {
-            let Some(binding) = ctx.lookup_local(name.as_str()).cloned() else {
+            let Some(binding) = ctx.lookup_local_fuzzy(name.as_str()).cloned() else {
                 return Err(LlvmCodegenError::UnsupportedHirLowering {
                     function: ctx.function_name.to_string(),
                     reason: format!("set on unknown variable '{}'", name),
@@ -1589,6 +1599,32 @@ fn lower_hir_expr(
                     return Err(LlvmCodegenError::UnsupportedHirLowering {
                         function: ctx.function_name.to_string(),
                         reason: String::from("intrinsic i32_to_u8 expects i32"),
+                    });
+                }
+                let out = ctx.next_tmp();
+                ctx.push_line(&format!("  {} = and i32 {}, 255", out, v.repr));
+                return Ok(Some(LlValue {
+                    ty: LlTy::I32,
+                    repr: out,
+                }));
+            }
+            if name == "u8_to_i32" {
+                if args.len() != 1 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic u8_to_i32 expects one argument"),
+                    });
+                }
+                let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic u8_to_i32 value must produce a value"),
+                    });
+                };
+                if v.ty != LlTy::I32 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic u8_to_i32 expects i32"),
                     });
                 }
                 let out = ctx.next_tmp();
