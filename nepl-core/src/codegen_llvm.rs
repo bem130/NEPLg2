@@ -375,50 +375,89 @@ fn try_lower_entry_from_hir(
 
     let mut declared_extern_symbols: BTreeSet<String> = BTreeSet::new();
     for ex in &hir.externs {
-        if reachable.iter().any(|n| n == &ex.local_name) {
-            let local_name = ll_symbol(ex.local_name.as_str());
-            let external_name = ll_symbol(ex.name.as_str());
-            let params = ex
+        let local_name_raw = ex.local_name.as_str();
+        let base_alias = find_mangled_signature_separator(local_name_raw)
+            .map(|sep| &local_name_raw[..sep]);
+        let needs_base = base_alias
+            .map(|base| reachable.iter().any(|n| n == base))
+            .unwrap_or(false);
+        let local_name = ll_symbol(ex.local_name.as_str());
+        let external_name = ll_symbol(ex.name.as_str());
+        let params = ex
+            .params
+            .iter()
+            .map(|t| llty_for_type(&types, *t).ir())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let ret = llty_for_type(&types, ex.result).ir();
+        if declared_extern_symbols.insert(ex.name.clone()) {
+            out.push_str(&format!("declare {} {}({})\n", ret, external_name, params));
+        }
+        if ex.local_name != ex.name {
+            let args = ex
                 .params
                 .iter()
-                .map(|t| llty_for_type(&types, *t).ir())
+                .enumerate()
+                .map(|(i, t)| format!("{} %a{}", llty_for_type(&types, *t).ir(), i))
                 .collect::<Vec<_>>()
                 .join(", ");
-            let ret = llty_for_type(&types, ex.result).ir();
-            if declared_extern_symbols.insert(ex.name.clone()) {
-                out.push_str(&format!("declare {} {}({})\n", ret, external_name, params));
+            let call_args = ex
+                .params
+                .iter()
+                .enumerate()
+                .map(|(i, t)| format!("{} %a{}", llty_for_type(&types, *t).ir(), i))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&format!("define {} {}({}) {{\n", ret, local_name, args));
+            out.push_str("entry:\n");
+            if ret == "void" {
+                out.push_str(&format!("  call {} {}({})\n", ret, external_name, call_args));
+                out.push_str("  ret void\n");
+            } else {
+                out.push_str(&format!(
+                    "  %ret = call {} {}({})\n",
+                    ret, external_name, call_args
+                ));
+                out.push_str(&format!("  ret {} %ret\n", ret));
             }
-            if ex.local_name != ex.name {
-                let args = ex
-                    .params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, t)| format!("{} %a{}", llty_for_type(&types, *t).ir(), i))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let call_args = ex
-                    .params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, t)| format!("{} %a{}", llty_for_type(&types, *t).ir(), i))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                out.push_str(&format!("define {} {}({}) {{\n", ret, local_name, args));
-                out.push_str("entry:\n");
-                if ret == "void" {
-                    out.push_str(&format!("  call {} {}({})\n", ret, external_name, call_args));
-                    out.push_str("  ret void\n");
-                } else {
-                    out.push_str(&format!(
-                        "  %ret = call {} {}({})\n",
-                        ret, external_name, call_args
-                    ));
-                    out.push_str(&format!("  ret {} %ret\n", ret));
+            out.push_str("}\n");
+        }
+        if !emitted_functions.iter().any(|n| n == &ex.local_name) {
+            emitted_functions.push(ex.local_name.clone());
+        }
+        if needs_base {
+            if let Some(base) = base_alias {
+                if base != ex.local_name
+                    && !llvm_output_has_function(out, base)
+                    && !emitted_functions.iter().any(|n| n == base)
+                {
+                    let args = ex
+                        .params
+                        .iter()
+                        .enumerate()
+                        .map(|(i, t)| format!("{} %a{}", llty_for_type(&types, *t).ir(), i))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let call_args = ex
+                        .params
+                        .iter()
+                        .enumerate()
+                        .map(|(i, t)| format!("{} %a{}", llty_for_type(&types, *t).ir(), i))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let base_sym = ll_symbol(base);
+                    out.push_str(&format!("define {} {}({}) {{\n", ret, base_sym, args));
+                    out.push_str("entry:\n");
+                    if ret == "void" {
+                        out.push_str(&format!("  call {} {}({})\n", ret, local_name, call_args));
+                        out.push_str("  ret void\n");
+                    } else {
+                        out.push_str(&format!("  %ret = call {} {}({})\n", ret, local_name, call_args));
+                        out.push_str(&format!("  ret {} %ret\n", ret));
+                    }
+                    out.push_str("}\n");
+                    emitted_functions.push(String::from(base));
                 }
-                out.push_str("}\n");
-            }
-            if !emitted_functions.iter().any(|n| n == &ex.local_name) {
-                emitted_functions.push(ex.local_name.clone());
             }
         }
     }
