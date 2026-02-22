@@ -384,6 +384,7 @@ fn token_kind_name(kind: &TokenKind) -> &'static str {
         TokenKind::WasmText(_) => "WasmText",
         TokenKind::LlvmIrText(_) => "LlvmIrText",
         TokenKind::MlstrLine(_) => "MlstrLine",
+        TokenKind::DocComment(_) => "DocComment",
     }
 }
 
@@ -404,7 +405,8 @@ fn token_extra(kind: &TokenKind) -> Option<String> {
         | TokenKind::DirPrelude(v)
         | TokenKind::WasmText(v)
         | TokenKind::LlvmIrText(v)
-        | TokenKind::MlstrLine(v) => Some(v.clone()),
+        | TokenKind::MlstrLine(v)
+        | TokenKind::DocComment(v) => Some(v.clone()),
         TokenKind::BoolLiteral(v) => Some(v.to_string()),
         TokenKind::DirIndentWidth(v) => Some(v.to_string()),
         TokenKind::DirExtern {
