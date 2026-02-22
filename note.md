@@ -1,3 +1,27 @@
+# 2026-02-22 作業メモ (`core/math` 変換後半 + `u8_*` + 汎用ラッパ整備)
+- 目的:
+  - `stdlib/core/math.nepl` の未整備領域（機械生成テンプレ文 + wasm専用定義）を、`wasm/llvm` 両対応と手書きドキュメントへ更新する。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - 変換後半を wasm/llvm 両対応化:
+      - `i32_trunc_sat_f32_s/u`
+      - `i64_trunc_f32_s/u`, `i64_trunc_sat_f32_s/u`
+      - `f64_convert_i32_s/u`, `f64_convert_i64_s/u`
+      - `i32_trunc_f64_s/u`, `i32_trunc_sat_f64_s/u`
+      - `i64_trunc_f64_s/u`, `i64_trunc_sat_f64_s/u`
+      - `f64_promote_f32`, `f32_demote_f64`
+      - `f32_reinterpret_i32`, `i32_reinterpret_f32`, `f64_reinterpret_i64`, `i64_reinterpret_f64`
+    - `u8_*` 群を wasm専用から wasm/llvm 両対応へ拡張:
+      - `u8_add/sub/mul/div_u/rem_u/eq/ne/lt_u/le_u/gt_u/ge_u`
+    - 汎用ラッパ `add/sub/mul/div_s/mod_s/lt/eq/ne/le/gt/ge/and/or/not` のテンプレ文を用途ベースの手書きドキュメントへ更新。
+  - 実装詳細:
+    - 飽和変換は llvm intrinsic (`llvm.fptosi.sat.*` / `llvm.fptoui.sat.*`) を使用。
+    - 再解釈は `bitcast` を使用。
+    - `u8_add/sub/mul` は i32 演算後に `and 255` で 8-bit に丸める。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `610/610 pass`
+
 # 2026-02-22 作業メモ (`core/math` 変換系前半の wasm/llvm 両対応)
 - 目的:
   - `core/math` の変換系で、wasm 専用だった基礎 API（拡張・ラップ・整数/浮動小数変換）を llvm でも使える状態へ進める。
