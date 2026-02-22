@@ -72,6 +72,15 @@ jobs:
                   mkdir -p web/examples
                   cp examples/*.nepl web/examples/
 
+            - name: Cache trunk build output
+              id: cache-trunk
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      dist
+                      target/wasm32-unknown-unknown/release
+                  key: trunk-build-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Trunk.toml', 'index.html', 'nepl-web/**', 'nepl-core/**', 'web/**', 'nodesrc/**', 'stdlib/**') }}
+
             - name: Run cargo test (allowed to fail)
               id: cargo_test
               continue-on-error: true
@@ -87,6 +96,7 @@ jobs:
 
             - name: Build wasm app with trunk (do not stop deploy, but fail workflow later if needed)
               id: trunk_build
+              if: steps.cache-trunk.outputs.cache-hit != 'true'
               continue-on-error: true
               env:
                   NO_COLOR: "true"
@@ -150,7 +160,7 @@ jobs:
                   path: dist
 
             - name: Fail workflow if trunk build failed
-              if: ${{ steps.trunk_build.outcome == 'failure' }}
+              if: ${{ steps.cache-trunk.outputs.cache-hit != 'true' && steps.trunk_build.outcome == 'failure' }}
               run: |
                   echo "trunk build failed -> mark workflow as failed (deploy still runs)."
                   exit 1

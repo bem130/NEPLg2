@@ -41,6 +41,12 @@ jobs:
         with:
           version: ${{ env.TRUNK_VERSION }}
 
+      - name: Cache Cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: nepl-g2
+          cache-on-failure: true
+
       - name: Fix Trunk.toml for Linux (npm.cmd -> npm)
         run: |
           sed -i 's/npm.cmd/npm/g' Trunk.toml
@@ -50,7 +56,17 @@ jobs:
           mkdir -p web/examples
           cp examples/*.nepl web/examples/
 
+      - name: Cache trunk build output
+        id: cache-trunk
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist
+            target/wasm32-unknown-unknown/release
+          key: trunk-build-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Trunk.toml', 'index.html', 'nepl-web/**', 'nepl-core/**', 'web/**', 'nodesrc/**', 'stdlib/**') }}
+
       - name: Build wasm app with trunk (for compiler artifacts)
+        if: steps.cache-trunk.outputs.cache-hit != 'true'
         env:
           NO_COLOR: "true"
         run: |

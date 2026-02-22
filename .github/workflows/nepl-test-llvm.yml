@@ -93,7 +93,17 @@ jobs:
                   mkdir -p web/examples
                   cp examples/*.nepl web/examples/
 
+            - name: Cache trunk build output
+              id: cache-trunk
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      dist
+                      target/wasm32-unknown-unknown/release
+                  key: trunk-build-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Trunk.toml', 'index.html', 'nepl-web/**', 'nepl-core/**', 'web/**', 'nodesrc/**', 'stdlib/**') }}
+
             - name: Build wasm app with trunk
+              if: steps.cache-trunk.outputs.cache-hit != 'true'
               env:
                   NO_COLOR: "true"
               run: |
