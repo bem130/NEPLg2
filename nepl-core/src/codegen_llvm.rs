@@ -399,27 +399,9 @@ fn build_hir_for_llvm_lowering(
     target: CompileTarget,
     profile: BuildProfile,
 ) -> Result<(TypeCtx, HirModule), LlvmCodegenError> {
-    match try_build_hir_with_target(module, target, profile) {
-        Ok(hir) => return Ok(hir),
-        Err(primary_reason) => {
-            if matches!(target, CompileTarget::Llvm) {
-                match try_build_hir_with_target(module, CompileTarget::Wasi, profile) {
-                    Ok(hir) => return Ok(hir),
-                    Err(fallback_reason) => {
-                        return Err(LlvmCodegenError::TypecheckFailed {
-                            reason: format!(
-                                "llvm check: {} / std-compatible fallback: {}",
-                                primary_reason, fallback_reason
-                            ),
-                        });
-                    }
-                }
-            }
-            return Err(LlvmCodegenError::TypecheckFailed {
-                reason: primary_reason,
-            });
-        }
-    }
+    try_build_hir_with_target(module, target, profile).map_err(|reason| LlvmCodegenError::TypecheckFailed {
+        reason,
+    })
 }
 
 fn try_build_hir_with_target(
