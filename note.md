@@ -1,3 +1,24 @@
+# 2026-02-22 作業メモ (`core/math` i32 ビット演算/比較の wasm+llvm 統一 + stdlib/tests target 移行)
+- 目的:
+  - `stdlib/core/math.nepl` に残っていた `i32_*` の wasm 専用定義を、関数本体内 `#if[target=wasm]` / `#if[target=llvm]` 分岐へ統一する。
+  - `stdlib/tests/*.nepl` の backend 非依存テストを `#target std` へ移行し、wasm/llvm の両ランナーで回る状態にする。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - `i32_and/or/xor/shl/shr_s/shr_u/rotl/rotr/clz/ctz/popcnt`
+    - `i32_eq/ne/lt_s/lt_u/le_s/le_u/gt_s/gt_u/ge_s/ge_u`
+    を wasm/llvm 両対応化。
+    - LLVM 側で `llvm.fshl.i32`, `llvm.fshr.i32`, `llvm.ctlz.i32`, `llvm.cttz.i32`, `llvm.ctpop.i32` を利用。
+    - 末尾に残っていた `#if[target=llvm] fn i32_*` の重複定義を削除。
+    - `math.nepl` の doctest `#target wasi` を `#target std` へ置換。
+  - `stdlib/tests/*.nepl`
+    - backend 非依存なテスト（`fs.nepl` / `cliarg.nepl` を除く）を `#target std` へ置換。
+  - `tests/*.n.md`
+    - `#target wasi` は残っておらず、追加修正は不要であることを確認。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 2`: `610/610 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_llvm_current.json --runner llvm --llvm-all --no-tree -j 2`: `601/601 pass`
+
 # 2026-02-22 作業メモ (LLVM `core/mem` 回帰テスト追加)
 - 目的:
   - `core/mem` の LLVM 分岐が実際に呼び出せることを nodesrc の llvm runner で固定する。
