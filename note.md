@@ -1,3 +1,22 @@
+# 2026-02-22 作業メモ (`math.nepl` ドキュメントコメント手書き化の開始)
+- 目的:
+  - 機械的に生成された汎用文（「主な用途と呼び出し方を示します」等）を廃止し、関数の用途そのものを記述する手書きドキュメントへ置換する。
+  - LLVM 対応済み関数は、Wasm/LLVM の分岐実装と一致した説明に更新する。
+- 実装（今回完了分）:
+  - `stdlib/core/math.nepl`
+    - `i32_add/sub/mul/div_s/div_u/rem_s/rem_u`
+    - `i64_add/sub/mul/div_u/rem_u`
+    - `i64_extend_i32_s/u`
+    のドキュメントコメントを手書きで差し替え。
+  - doctest は「1テストケース内に複数 assert」を採用して簡潔化。
+  - 主要 i32/i64 算術系で `#if[target=wasm]` を関数外に置く方式をやめ、関数本体内の target 分岐へ揃えた。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `601/601 pass`
+- 継続課題:
+  - `math.nepl` 全関数に同方針の手書きコメントを適用（現時点で汎用テンプレ文が多数残存）。
+  - その後 `mem.nepl` など `stdlib/core` / `stdlib/alloc` の LLVM 対応を段階的に実装し、既存 wasm 用テストを llvm runner でも通せる状態へ進める。
+
 # 2026-02-22 作業メモ (`core/math` の `#wasm/#llvmir` 本体分岐へ統一)
 - 背景:
   - `add/sub/...` 系で wasm 側を関数呼び出しで委譲していたため、`#if[target=wasm]` の「直後1式」規則と `#wasm` 生コード方針を統一できていなかった。
