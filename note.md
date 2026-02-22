@@ -1,3 +1,21 @@
+# 2026-02-22 作業メモ (CI: LLVM ダウンロードのキャッシュ化 + trunk 前提の LLVM workflow 統合)
+- 目的:
+  - `nepl-test-llvm.yml` で毎回発生していた LLVM 21.1.0 の再ダウンロードを削減し、`node` / `trunk` と同様にセットアップを高速化する。
+  - `nodesrc` 実行前提として `nepl-web` の `trunk build` 手順を LLVM workflow 側にも統合する。
+- 原因:
+  - 既存の LLVM workflow は `/opt` へ都度 `curl + tar` しており、キャッシュ再利用経路が無かった。
+  - また、WASI workflow にある `trunk build` 前処理（web 依存導入、examples 配置、Trunk.toml Linux補正）が LLVM workflow には無く、`nodesrc` 実行前提が揃っていなかった。
+- 実装:
+  - `.github/workflows/nepl-test-llvm.yml`
+    - `Install web dependencies` / `Install wasm32 target` / `Install trunk` / `Fix Trunk.toml for Linux` / `Populate examples for trunk asset copy` / `Build wasm app with trunk` を追加。
+    - LLVM 配置先を `/opt` から `${{ github.workspace }}/.cache/llvm/21.1.0` に変更し、権限不要でキャッシュ可能な構成へ変更。
+    - `actions/cache@v4`（key: `llvm-${{ runner.os }}-${{ runner.arch }}-${{ env.LLVM_VERSION }}`）を追加。
+    - cache miss 時のみ `curl + tar` で展開し、cache hit 時はダウンロード・展開をスキップするように変更。
+    - LLVM 関連環境変数 (`GITHUB_PATH`, `NEPL_LLVM_*`) の設定を `Export LLVM environment` として常時実行する形に分離。
+- 検証:
+  - ユーザー指示により今回はローカルテスト未実行。
+  - CI 上では cache hit 時に LLVM 導入ステップがスキップされ、初回以降の実行時間短縮が見込める。
+
 # 2026-02-22 作業メモ (LLVM lower: 関数値名フォールバック + `u8_to_i32` 対応)
 - 目的:
   - LLVM lower の `unknown variable '<name>__...` を縮小する。
