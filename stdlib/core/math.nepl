@@ -1837,43 +1837,58 @@ fn f32_sqrt <(f32)->f32> (a):
         local.get $a
         f32.sqrt
 
-#if[target=wasm]
-//: f32_abs: 主な用途
+//: f32_abs: f32 の絶対値
 //:
 //: [目的/もくてき]:
-//: - f32_abs の主な用途と呼び出し方を示します。
+//: - f32 の符号を取り除いた絶対値を返します。
 //:
 //: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
+//: - wasm は `f32.abs` を使います。
+//: - llvm は `bitcast -> and mask -> bitcast` で符号ビットのみを落とします。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - NaN の payload は backend の仕様に従います。
 //:
 //: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
+//: - O(1)
 fn f32_abs <(f32)->f32> (a):
     #wasm:
         local.get $a
         f32.abs
+    #if[target=llvm]
+    #llvmir:
+        define float @f32_abs(float %a) {
+        entry:
+            %bits = bitcast float %a to i32
+            %masked = and i32 %bits, 2147483647
+            %0 = bitcast i32 %masked to float
+            ret float %0
+        }
 
-#if[target=wasm]
-//: f32_neg: 主な用途
+//: f32_neg: f32 の符号反転
 //:
 //: [目的/もくてき]:
-//: - f32_neg の主な用途と呼び出し方を示します。
+//: - f32 の符号を反転した値 `-a` を返します。
 //:
 //: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
+//: - wasm は `f32.neg`、llvm は `fneg float` を使います。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `-0.0` と `+0.0` は符号が反転します。
 //:
 //: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
+//: - O(1)
 fn f32_neg <(f32)->f32> (a):
     #wasm:
         local.get $a
         f32.neg
+    #if[target=llvm]
+    #llvmir:
+        define float @f32_neg(float %a) {
+        entry:
+            %0 = fneg float %a
+            ret float %0
+        }
 
 #if[target=wasm]
 //: f32_ceil: 主な用途
@@ -2314,43 +2329,58 @@ fn f64_sqrt <(f64)->f64> (a):
         local.get $a
         f64.sqrt
 
-#if[target=wasm]
-//: f64_abs: 主な用途
+//: f64_abs: f64 の絶対値
 //:
 //: [目的/もくてき]:
-//: - f64_abs の主な用途と呼び出し方を示します。
+//: - f64 の符号を取り除いた絶対値を返します。
 //:
 //: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
+//: - wasm は `f64.abs` を使います。
+//: - llvm は `bitcast -> and mask -> bitcast` で符号ビットのみを落とします。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - NaN の payload は backend の仕様に従います。
 //:
 //: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
+//: - O(1)
 fn f64_abs <(f64)->f64> (a):
     #wasm:
         local.get $a
         f64.abs
+    #if[target=llvm]
+    #llvmir:
+        define double @f64_abs(double %a) {
+        entry:
+            %bits = bitcast double %a to i64
+            %masked = and i64 %bits, 9223372036854775807
+            %0 = bitcast i64 %masked to double
+            ret double %0
+        }
 
-#if[target=wasm]
-//: f64_neg: 主な用途
+//: f64_neg: f64 の符号反転
 //:
 //: [目的/もくてき]:
-//: - f64_neg の主な用途と呼び出し方を示します。
+//: - f64 の符号を反転した値 `-a` を返します。
 //:
 //: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
+//: - wasm は `f64.neg`、llvm は `fneg double` を使います。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `-0.0` と `+0.0` は区別されるため、符号反転で相互変換されます。
 //:
 //: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
+//: - O(1)
 fn f64_neg <(f64)->f64> (a):
     #wasm:
         local.get $a
         f64.neg
+    #if[target=llvm]
+    #llvmir:
+        define double @f64_neg(double %a) {
+        entry:
+            %0 = fneg double %a
+            ret double %0
+        }
 
 #if[target=wasm]
 //: f64_ceil: 主な用途

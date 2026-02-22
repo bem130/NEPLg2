@@ -1,3 +1,25 @@
+# 2026-02-22 作業メモ (`core/math` f32/f64 単項演算の wasm/llvm 両対応)
+- 目的:
+  - `f32_abs/f32_neg/f64_abs/f64_neg` を wasm 専用状態から llvm 両対応へ拡張し、浮動小数の基礎 API を target 非依存で使える範囲を広げる。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - `f32_abs`
+      - wasm: `f32.abs`
+      - llvm: `bitcast float->i32` + `and 0x7fffffff` + `bitcast i32->float`
+    - `f32_neg`
+      - wasm: `f32.neg`
+      - llvm: `fneg float`
+    - `f64_abs`
+      - wasm: `f64.abs`
+      - llvm: `bitcast double->i64` + `and 0x7fffffffffffffff` + `bitcast i64->double`
+    - `f64_neg`
+      - wasm: `f64.neg`
+      - llvm: `fneg double`
+    - 4関数とも doc comment を用途中心の手書き内容へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/core/math.nepl -o tests/output/math_doctest_current.json -j 1 --no-stdlib`: `39/39 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `610/610 pass`
+
 # 2026-02-22 作業メモ (`core/math` f32/f64 基礎演算・比較の wasm/llvm 両対応)
 - 目的:
   - `core/math` のうち、f32/f64 の基礎演算・比較で残っていた wasm 専用定義を段階的に llvm 両対応へ拡張する。
