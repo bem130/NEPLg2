@@ -97,6 +97,9 @@ pub enum TokenKind {
 
     // mlstr line: ##: <text>
     MlstrLine(String),
+
+    // doc comments
+    DocComment(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -171,15 +174,30 @@ pub fn lex(file_id: FileId, src: &str) -> LexResult {
 
 impl LexState {
     fn process_line(&mut self, line: &str, line_start: usize) {
-        // Strip comments
+        // Handle DocComments before stripping them
+        let mut doc_comment: Option<String> = None;
         let content_owned = match line.find("//") {
-            Some(idx) => line[..idx].to_string(),
+            Some(idx) => {
+                let text_after = &line[idx..];
+                if text_after.starts_with("///") && !text_after.starts_with("////") {
+                    let doc_text = text_after[3..].trim().to_string();
+                    doc_comment = Some(doc_text);
+                }
+                line[..idx].to_string()
+            }
             None => line.to_string(),
         };
         let content = content_owned.as_str();
 
         // Skip empty lines (do not affect indent stack)
         if content.trim().is_empty() {
+            if let Some(doc) = doc_comment {
+                let start = line_start + line.find("///").unwrap();
+                let end = line_start + line.len();
+                // Treat doc comment on otherwise empty line as a token and indent it according to normal rules
+                // But to align it easily, we just output it without changing indent state
+                self.push_token(TokenKind::DocComment(doc), start, end);
+            }
             return;
         }
 
@@ -323,6 +341,12 @@ impl LexState {
         self.adjust_indent(effective_indent, line_start, in_llvmir);
 
         let line_offset = line_start + (content.len() - rest.len());
+
+        if let Some(doc) = doc_comment {
+            let start = line_start + line.find("///").unwrap();
+            let end = line_start + line.len();
+            self.push_token(TokenKind::DocComment(doc), start, end);
+        }
 
         if in_wasm {
             let text = rest.trim_end().to_string();

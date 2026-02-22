@@ -777,6 +777,7 @@ struct NameDefTrace {
     kind: &'static str,
     span: Span,
     scope_depth: usize,
+    doc: Option<String>,
 }
 
 #[derive(Clone)]
@@ -859,7 +860,7 @@ impl NameResolutionTrace {
         }
     }
 
-    fn define(&mut self, name: String, kind: &'static str, span: Span) -> usize {
+    fn define(&mut self, name: String, kind: &'static str, span: Span, doc: Option<String>) -> usize {
         let existing_candidates = self.lookup_candidates(&name);
         let id = self.defs.len();
         let depth = self.current_depth();
@@ -869,6 +870,7 @@ impl NameResolutionTrace {
             kind,
             span,
             scope_depth: depth,
+            doc,
         });
 
         if !existing_candidates.is_empty() {
@@ -995,12 +997,12 @@ fn hoist_block_defs(trace: &mut NameResolutionTrace, block: &Block) {
     for stmt in &block.items {
         match stmt {
             Stmt::FnDef(def) => {
-                trace.define(def.name.name.clone(), "fn", def.name.span);
+                trace.define(def.name.name.clone(), "fn", def.name.span, def.doc.clone());
             }
             Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => {
                 if let Some(PrefixItem::Symbol(Symbol::Let { name, mutable, .. })) = expr.items.first() {
                     if !*mutable {
-                        trace.define(name.name.clone(), "let_hoisted", name.span);
+                        trace.define(name.name.clone(), "let_hoisted", name.span, None);
                     }
                 }
             }
@@ -1012,7 +1014,7 @@ fn hoist_block_defs(trace: &mut NameResolutionTrace, block: &Block) {
 fn trace_match_arm(trace: &mut NameResolutionTrace, arm: &MatchArm) {
     trace.push_scope();
     if let Some(bind) = &arm.bind {
-        trace.define(bind.name.clone(), "match_bind", bind.span);
+        trace.define(bind.name.clone(), "match_bind", bind.span, None);
     }
     trace_block(trace, &arm.body);
     trace.pop_scope();
@@ -1023,7 +1025,7 @@ fn trace_prefix_expr(trace: &mut NameResolutionTrace, expr: &PrefixExpr) {
         match item {
             PrefixItem::Symbol(Symbol::Let { name, mutable, .. }) => {
                 if *mutable {
-                    trace.define(name.name.clone(), "let_mut", name.span);
+                    trace.define(name.name.clone(), "let_mut", name.span, None);
                 }
                 if idx != 0 {
                     trace.reference(name.name.clone(), name.span);
@@ -1076,7 +1078,7 @@ fn trace_stmt(trace: &mut NameResolutionTrace, stmt: &Stmt) {
             FnBody::Parsed(body) => {
                 trace.push_scope();
                 for param in &def.params {
-                    trace.define(param.name.clone(), "param", param.span);
+                    trace.define(param.name.clone(), "param", param.span, None);
                 }
                 trace_block(trace, body);
                 trace.pop_scope();
@@ -1086,7 +1088,7 @@ fn trace_stmt(trace: &mut NameResolutionTrace, stmt: &Stmt) {
         },
         Stmt::FnAlias(alias) => {
             trace.reference(alias.target.name.clone(), alias.target.span);
-            trace.define(alias.name.name.clone(), "fn_alias", alias.name.span);
+            trace.define(alias.name.name.clone(), "fn_alias", alias.name.span, alias.doc.clone());
         }
         Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => {
             trace_prefix_expr(trace, expr);
@@ -1113,6 +1115,9 @@ fn def_trace_to_js(source: &str, def: &NameDefTrace) -> JsValue {
         &JsValue::from_f64(def.scope_depth as f64),
     );
     let _ = Reflect::set(&obj, &JsValue::from_str("span"), &span_to_js(source, def.span));
+    if let Some(doc) = &def.doc {
+        let _ = Reflect::set(&obj, &JsValue::from_str("doc"), &JsValue::from_str(doc));
+    }
     obj.into()
 }
 

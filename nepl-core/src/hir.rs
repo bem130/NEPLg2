@@ -22,6 +22,7 @@ pub struct HirModule {
 
 #[derive(Debug, Clone)]
 pub struct HirFunction {
+    pub doc: Option<String>,
     pub name: String,
     pub func_ty: TypeId, // new
     pub params: Vec<HirParam>,
@@ -164,6 +165,7 @@ pub struct HirMatchArm {
 }
 #[derive(Debug, Clone)]
 pub struct HirTrait {
+    pub doc: Option<String>,
     pub name: String,
     pub type_params: Vec<TypeId>,
     pub methods: alloc::collections::BTreeMap<String, TypeId>,
@@ -172,6 +174,7 @@ pub struct HirTrait {
 
 #[derive(Debug, Clone)]
 pub struct HirImpl {
+    pub doc: Option<String>,
     pub trait_name: String,
     pub type_args: Vec<TypeId>,
     pub target_ty: TypeId,

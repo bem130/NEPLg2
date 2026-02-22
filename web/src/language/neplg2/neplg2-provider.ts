@@ -136,59 +136,33 @@ class NEPLg2LanguageProvider {
         this.resolve = null;
         this.semantics = null;
 
-        try {
-            this.lex = wasm.analyze_lex(this.text);
-        } catch (e) {
-            console.error('[NEPLg2LanguageProvider] analyze_lex failed:', e);
-            fallbackDiagnostics.push({
-                startIndex: 0,
-                endIndex: 0,
-                message: `analyze_lex failed: ${String(e?.message || e)}`,
-                severity: 'error',
-            });
-        }
-
-        if (typeof wasm.analyze_parse === 'function') {
-            try {
-                this.parse = wasm.analyze_parse(this.text);
-            } catch (e) {
-                const msg = String(e?.message || e);
-                console.error('[NEPLg2LanguageProvider] analyze_parse failed:', e);
-                fallbackDiagnostics.push({
-                    startIndex: 0,
-                    endIndex: 0,
-                    message: msg.includes('Maximum call stack size exceeded')
-                        ? 'parser recursion overflow: parse stage skipped for this source'
-                        : `analyze_parse failed: ${msg}`,
-                    severity: 'warning',
-                });
-            }
-        }
-
-        if (this.parse?.ok && typeof wasm.analyze_name_resolution === 'function') {
-            try {
-                this.resolve = wasm.analyze_name_resolution(this.text);
-            } catch (e) {
-                console.error('[NEPLg2LanguageProvider] analyze_name_resolution failed:', e);
-                fallbackDiagnostics.push({
-                    startIndex: 0,
-                    endIndex: 0,
-                    message: `analyze_name_resolution failed: ${String(e?.message || e)}`,
-                    severity: 'warning',
-                });
-            }
-        }
-
-        if (this.parse?.ok && typeof wasm.analyze_semantics === 'function') {
+        if (typeof wasm.analyze_semantics === 'function') {
             try {
                 this.semantics = wasm.analyze_semantics(this.text);
+                // analyze_semantics now includes tokens and name_resolution payloads
+                this.lex = {
+                    tokens: this.semantics.tokens || [],
+                    diagnostics: (this.semantics.diagnostics || []).filter((d: any) => d.stage === 'lex')
+                };
+                this.resolve = this.semantics.name_resolution || null;
+                // Currently, parse AST is not directly included, but diagnostics are there
+                // We run analyze_parse strictly to get the AST for folding ranges
+                let parsePayload = null;
+                if (typeof wasm.analyze_parse === 'function') {
+                    try { parsePayload = wasm.analyze_parse(this.text); } catch (e) {}
+                }
+                this.parse = {
+                    ok: this.semantics.ok,
+                    module: parsePayload?.module || null,
+                    diagnostics: [] // We use this.semantics.diagnostics for everything
+                };
             } catch (e) {
                 console.error('[NEPLg2LanguageProvider] analyze_semantics failed:', e);
                 fallbackDiagnostics.push({
                     startIndex: 0,
                     endIndex: 0,
                     message: `analyze_semantics failed: ${String(e?.message || e)}`,
-                    severity: 'warning',
+                    severity: 'error',
                 });
             }
         }

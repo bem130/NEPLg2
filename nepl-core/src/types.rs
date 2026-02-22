@@ -25,11 +25,13 @@ pub enum TypeKind {
     Never,
     Named(String),
     Enum {
+        doc: Option<String>,
         name: String,
         type_params: Vec<TypeId>, // TypeId(Var)
         variants: Vec<EnumVariantInfo>,
     },
     Struct {
+        doc: Option<String>,
         name: String,
         type_params: Vec<TypeId>, // TypeId(Var)
         fields: Vec<TypeId>,
@@ -363,11 +365,13 @@ impl TypeCtx {
             }
             (
                 TypeKind::Enum {
+                    doc: _,
                     name: na,
                     type_params: _,
                     variants: va,
                 },
                 TypeKind::Enum {
+                    doc: _,
                     name: nb,
                     type_params: _,
                     variants: vb,
@@ -401,12 +405,14 @@ impl TypeCtx {
             }
             (
                 TypeKind::Struct {
+                    doc: _,
                     name: na,
                     fields: fa,
                     type_params: _,
                     field_names: _,
                 },
                 TypeKind::Struct {
+                    doc: _,
                     name: nb,
                     fields: fb,
                     type_params: _,
@@ -672,6 +678,7 @@ impl TypeCtx {
             TypeKind::Named(_) => ty,
             TypeKind::Var(_) => ty,
             TypeKind::Enum {
+                doc,
                 name,
                 type_params,
                 variants,
@@ -697,6 +704,7 @@ impl TypeCtx {
                 }
                 if changed {
                     self.store(TypeKind::Enum {
+                        doc: doc.clone(),
                         name: name.clone(),
                         type_params: new_tps,
                         variants: new_vars,
@@ -706,6 +714,7 @@ impl TypeCtx {
                 }
             }
             TypeKind::Struct {
+                doc,
                 name,
                 type_params,
                 fields,
@@ -726,6 +735,7 @@ impl TypeCtx {
                 }
                 if changed {
                     self.store(TypeKind::Struct {
+                        doc: doc.clone(),
                         name: name.clone(),
                         type_params: new_tps,
                         fields: new_fs,

@@ -1,3 +1,34 @@
+# 2026-02-22 作業メモ (TypeCtx Docstring Propagation: Lexer -> HIR -> Web)
+- 目的:
+  - `///` ドキュメントコメントをパースし、型情報や HIR に保持させることで、Web Playground の Hover 等で表示可能にする。
+- 実装:
+  - `nepl-core/src/lexer.rs`
+    - `TokenKind::DocComment(String)` を追加。
+    - `process_line` で `///` を検出し、コメント内容を保持するトークンを生成。
+  - `nepl-core/src/ast.rs`
+    - `FnDef`, `FnAlias`, `StructDef`, `EnumDef`, `TraitDef`, `ImplDef` に `doc: Option<String>` フィールドを追加。
+  - `nepl-core/src/parser.rs`
+    - `parse_stmt` で文の直前の `DocComment` トークン群をバッファリングし、定義ノードの `.doc` へアタッチ。
+  - `nepl-core/src/types.rs`
+    - `TypeKind::Enum`, `TypeKind::Struct` に `doc` フィールドを追加。
+    - `substitute` 等の内部処理で `doc` を引き継ぐよう修正。
+  - `nepl-core/src/typecheck.rs`
+    - `EnumInfo`, `StructInfo`, `TraitInfo`, `ImplInfo` に `doc` を追加し、AST から引き継ぎ。
+    - `TypeKind` や `HirFunction` 等の初期化時に `doc` を渡すよう修正。
+  - `nepl-core/src/hir.rs`
+    - `HirFunction`, `HirTrait`, `HirImpl` に `doc: Option<String>` を追加。
+  - `nepl-web/src/lib.rs`
+    - `NameDefTrace` に `doc` フィールドを追加。
+    - `define` シグネチャを変更し、AST/HIR から取得した docString をトレース情報として保持。
+    - `def_trace_to_js` で JS 側に `doc` プロパティとしてシリアライズ。
+- 検証:
+  - `cargo check -p nepl-core`: 成功 (warning 除く)
+  - `cargo check -p nepl-cli`: 成功
+  - `nepl-web` 側のビルド依存（web-sys等）は WASM ターゲット前提のため `cargo check` はスキップし、コード整合性を目視確認。
+- 残課題:
+  - Frontend (`web/src/...`) で Hover 時にこの `doc` プロパティを表示する UI 実装。
+  - Doctest 実行結果のバッジ表示機能。
+
 # 2026-02-22 作業メモ (LLVM runner: backendタグ導入 + neplg2差分整理)
 - 目的:
   - `nodesrc/tests.js --runner llvm --llvm-all` で残っていた `neplg2.n.md` 系の不一致を上流から整理する。

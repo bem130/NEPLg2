@@ -141,6 +141,7 @@ impl Parser {
         };
         let lambda_span = params_span.join(body.span).unwrap_or(params_span);
         let fn_def = FnDef {
+            doc: None,
             vis: Visibility::Private,
             name: name_ident.clone(),
             no_shadow: false,
@@ -467,7 +468,22 @@ impl Parser {
         if !self.enter_parse_context("statement", ctx_span) {
             return None;
         }
-        let out = (|| match self.peek_kind()? {
+
+        let mut doc = None;
+        if let Some(TokenKind::DocComment(_)) = self.peek_kind() {
+            let mut buf = String::new();
+            while let Some(TokenKind::DocComment(t)) = self.peek_kind() {
+                if !buf.is_empty() {
+                    buf.push('\n');
+                }
+                buf.push_str(&t);
+                self.next();
+                self.consume_if(&TokenKind::Newline);
+            }
+            doc = Some(buf);
+        }
+
+        let mut out = (|| match self.peek_kind()? {
             TokenKind::DirEntry(_) => {
                 let (name, span) = match self.next() {
                     Some(tok) => {
@@ -622,6 +638,22 @@ impl Parser {
             }
             _ => self.parse_expr_stmt(),
         })();
+
+        let mut out = out;
+        if let Some(doc_str) = doc {
+            if let Some(stmt) = &mut out {
+                match stmt {
+                    Stmt::FnDef(d) => d.doc = Some(doc_str),
+                    Stmt::FnAlias(d) => d.doc = Some(doc_str),
+                    Stmt::StructDef(d) => d.doc = Some(doc_str),
+                    Stmt::EnumDef(d) => d.doc = Some(doc_str),
+                    Stmt::Trait(d) => d.doc = Some(doc_str),
+                    Stmt::Impl(d) => d.doc = Some(doc_str),
+                    _ => {}
+                }
+            }
+        }
+
         self.leave_parse_context();
         out
     }
@@ -748,6 +780,7 @@ impl Parser {
         };
 
         Some(Stmt::FnDef(FnDef {
+            doc: None,
             vis: Visibility::Private,
             name: Ident { name, span: nspan },
             no_shadow,
@@ -805,6 +838,7 @@ impl Parser {
             }
         }
         Some(Stmt::StructDef(StructDef {
+            doc: None,
             vis,
             name: Ident { name, span: nspan },
             type_params,
@@ -866,6 +900,7 @@ impl Parser {
             }
         }
         Some(Stmt::EnumDef(EnumDef {
+            doc: None,
             vis,
             name: Ident { name, span: nspan },
             type_params,
@@ -898,6 +933,7 @@ impl Parser {
             };
             self.expect(&TokenKind::Semicolon)?;
             return Some(Stmt::FnAlias(FnAlias {
+                doc: None,
                 vis,
                 name,
                 no_shadow,
@@ -965,6 +1001,7 @@ impl Parser {
         };
 
         Some(Stmt::FnDef(FnDef {
+            doc: None,
             vis,
             name,
             no_shadow,
@@ -1088,6 +1125,7 @@ impl Parser {
         self.expect(&TokenKind::Dedent)?;
         let end_span = self.peek_span().unwrap_or(nspan);
         Some(Stmt::Trait(TraitDef {
+            doc: None,
             vis,
             name: Ident { name, span: nspan },
             type_params,
@@ -1142,6 +1180,7 @@ impl Parser {
         self.expect(&TokenKind::Dedent)?;
         let end_span = self.peek_span().unwrap_or(kw_span);
         Some(Stmt::Impl(ImplDef {
+            doc: None,
             type_params,
             trait_name,
             target_ty,

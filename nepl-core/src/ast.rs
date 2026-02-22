@@ -110,6 +110,7 @@ pub struct Block {
 /// Function definition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
+    pub doc: Option<String>,
     pub vis: Visibility,
     pub name: Ident,
     pub no_shadow: bool,
@@ -122,6 +123,7 @@ pub struct FnDef {
 /// Function alias definition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnAlias {
+    pub doc: Option<String>,
     pub vis: Visibility,
     pub name: Ident,
     pub no_shadow: bool,
@@ -136,6 +138,7 @@ pub struct TypeParam {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TraitDef {
+    pub doc: Option<String>,
     pub vis: Visibility,
     pub name: Ident,
     pub type_params: Vec<TypeParam>,
@@ -145,6 +148,7 @@ pub struct TraitDef {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImplDef {
+    pub doc: Option<String>,
     pub type_params: Vec<TypeParam>,
     pub trait_name: Option<Ident>, // None for inherent impl
     pub target_ty: TypeExpr,
@@ -283,6 +287,7 @@ pub struct ImportItem {
 /// Struct definition (simple positional fields).
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructDef {
+    pub doc: Option<String>,
     pub vis: Visibility,
     pub name: Ident,
     pub type_params: Vec<TypeParam>,
@@ -298,6 +303,7 @@ pub struct EnumVariant {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDef {
+    pub doc: Option<String>,
     pub vis: Visibility,
     pub name: Ident,
     pub type_params: Vec<TypeParam>,

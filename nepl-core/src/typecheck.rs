@@ -65,6 +65,7 @@ struct CheckedFunction {
 
 #[derive(Debug, Clone)]
 struct EnumInfo {
+    doc: Option<String>,
     ty: TypeId,
     type_params: Vec<TypeId>,
     variants: Vec<EnumVariantInfo>,
@@ -72,6 +73,7 @@ struct EnumInfo {
 
 #[derive(Debug, Clone)]
 struct StructInfo {
+    doc: Option<String>,
     ty: TypeId,
     type_params: Vec<TypeId>,
     fields: Vec<TypeId>,
@@ -80,6 +82,7 @@ struct StructInfo {
 
 #[derive(Debug, Clone)]
 struct TraitInfo {
+    doc: Option<String>,
     name: String,
     type_params: Vec<TypeId>,
     methods: BTreeMap<String, TypeId>,
@@ -89,6 +92,7 @@ struct TraitInfo {
 
 #[derive(Debug, Clone)]
 struct ImplInfo {
+    doc: Option<String>,
     trait_name: Option<String>,
     target_ty: TypeId,
     methods: BTreeMap<String, (String, TypeId)>, // name -> (mangled_name, type)
@@ -319,6 +323,7 @@ pub fn typecheck(
                 let ty = ctx.register_named(
                     e.name.name.clone(),
                     TypeKind::Enum {
+                        doc: e.doc.clone(),
                         name: e.name.name.clone(),
                         type_params: tps.clone(),
                         variants: vars.clone(),
@@ -328,6 +333,7 @@ pub fn typecheck(
                 enums.insert(
                     e.name.name.clone(),
                     EnumInfo {
+                        doc: e.doc.clone(),
                         ty,
                         type_params: tps.clone(),
                         variants: vars.clone(),
@@ -421,6 +427,7 @@ pub fn typecheck(
                 let ty = ctx.register_named(
                     s.name.name.clone(),
                     TypeKind::Struct {
+                        doc: s.doc.clone(),
                         name: s.name.name.clone(),
                         type_params: tps.clone(),
                         fields: fs.clone(),
@@ -457,6 +464,7 @@ pub fn typecheck(
                 structs.insert(
                     s.name.name.clone(),
                     StructInfo {
+                        doc: s.doc.clone(),
                         ty,
                         type_params: tps,
                         fields: fs,
@@ -491,6 +499,7 @@ pub fn typecheck(
                 traits.insert(
                     t.name.name.clone(),
                     TraitInfo {
+                        doc: t.doc.clone(),
                         name: t.name.name.clone(),
                         type_params: tps,
                         methods,
@@ -597,6 +606,7 @@ pub fn typecheck(
                 methods.insert(m.name.name.clone(), (m.name.name.clone(), sig));
             }
             impls.push(ImplInfo {
+                doc: i.doc.clone(),
                 trait_name,
                 target_ty,
                 methods,
@@ -979,6 +989,7 @@ pub fn typecheck(
     let mut final_traits = Vec::new();
     for (name, info) in traits.iter() {
         final_traits.push(HirTrait {
+            doc: info.doc.clone(),
             name: name.clone(),
             type_params: info.type_params.clone(),
             methods: info.methods.clone(),
@@ -1135,6 +1146,7 @@ pub fn typecheck(
             }
 
             final_impls.push(HirImpl {
+                doc: i.doc.clone(),
                 trait_name,
                 type_args: tps,
                 target_ty,
@@ -1326,6 +1338,7 @@ fn check_function(
             }
         });
     let function = HirFunction {
+            doc: f.doc.clone(),
             name: out_name,
             func_ty, // assigned here
             params: {
