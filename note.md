@@ -1,3 +1,26 @@
+# 2026-02-22 作業メモ (`core/math` i64 範囲の手書きドキュメント整備)
+- 目的:
+  - `stdlib/core/math.nepl` の i64 系に残っていた機械生成テンプレ文（「主な用途」「薄いラッパ」）を廃止し、関数の用途そのものを説明する手書きコメントへ置換する。
+  - doctest を「1テストケースに複数 assert」方式で補強し、仕様説明と回帰検証を一致させる。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - 手書き化:
+      - `i64_div_s`, `i64_rem_s`
+      - `i64_and/or/xor/shl/shr_s/shr_u/rotl/rotr/clz/ctz/popcnt`
+      - `i64_eq/ne/lt_s/lt_u/le_s/le_u/gt_s/gt_u/ge_s/ge_u`
+    - doctest 追加・修正:
+      - `i64_div_s`, `i64_rem_s`, `i64_and`, `i64_eq`
+      - `i64_eq` doctest の unsigned 比較条件を `i64_gt_u` に修正（`i64_lt_u -1 1` は false のため）。
+  - `todo.md`
+    - `math.nepl` doctest の `#target core` 段階移行方針（`std/test` 依存除去を先行）を明記。
+- 失敗分析:
+  - `stdlib/core/math.nepl::doctest#20` で `divide by zero` trap が発生。
+  - 根因は `assert` 条件ミス（unsigned 比較の真偽誤認）で、ランタイム/コード生成不具合ではなかった。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i stdlib/core/math.nepl -o tests/output/math_doctest_current.json -j 1 --no-stdlib`: `37/37 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 1`: `608/608 pass`
+
 # 2026-02-22 作業メモ (`math.nepl` ドキュメントコメント手書き化の開始)
 - 目的:
   - 機械的に生成された汎用文（「主な用途と呼び出し方を示します」等）を廃止し、関数の用途そのものを記述する手書きドキュメントへ置換する。
