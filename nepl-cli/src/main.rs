@@ -198,7 +198,11 @@ fn execute(cli: Cli) -> Result<()> {
                 "--run is not supported for --target llvm (emit .ll and execute with clang/lli)"
             ));
         }
-        codegen_llvm::ensure_clang_21_linux_native()?;
+        if std::env::consts::OS == "linux" {
+            codegen_llvm::ensure_clang_21_linux_native()?;
+        } else {
+            eprintln!("Warning: Skipping LLVM toolchain check on non-Linux host. Generated .ll may require Linux to execute.");
+        }
         let llvm_ir = nepl_core::codegen_llvm::emit_ll_from_module_for_target(
             &module,
             run_target,

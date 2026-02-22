@@ -21,6 +21,7 @@ neplg2:test[llvm_cli]
 neplg2:test[llvm_cli]
 ```neplg2
 #target llvm
+#entry c
 #indent 4
 fn c <()->i32> ():
     123
@@ -68,7 +69,7 @@ neplg2:test[llvm_cli]
 #llvmir:
     define i32 @main() {
     entry:
-        %p = call i32 @alloc(i32 4)
+        %p = add i32 16, 0
         call void @store_i32(i32 %p, i32 77)
         %v = call i32 @load_i32(i32 %p)
         ret i32 %v

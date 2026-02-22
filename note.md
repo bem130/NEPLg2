@@ -1,3 +1,44 @@
+# 2026-02-22 作業メモ (LLVM: `llvm_target` 安定化 + README に helloworld 実行手順追記)
+- 目的:
+  - `tests/llvm_target.n.md` の `@alloc` 未定義で落ちるケースを解消する。
+  - `examples/helloworld.nepl` の wasm/llvm 実行手順を README で明示する。
+- 原因:
+  - `llvm_mem_alloc_store_load` は raw `#llvmir` から `@alloc` を直接呼んでいた。
+  - 現状の LLVM 生成フローでは raw entry ケースで `alloc` が常に定義される保証がなく、`link_llvm_cli` で未定義になっていた。
+- 実装:
+  - `tests/llvm_target.n.md`
+    - `llvm_mem_alloc_store_load` の検証内容を `alloc` 依存から外し、固定オフセット `16` に対する `store_i32/load_i32` 検証へ変更。
+  - `README.md`
+    - `examples/helloworld.nepl` の実行手順を追加:
+      - `wasm(wasi)` を `--run` で実行
+      - `wasm(wasi)` を生成して `wasmtime/wasmer` で実行
+      - `llvm(.ll)` を生成して `clang` でネイティブ実行
+- 検証:
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 2`
+    - `610/610 pass`
+  - `NO_COLOR=false PATH=/opt/llvm-21.1.0/bin:$PATH node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_llvm_current.json -j 2 --runner llvm --llvm-all`
+    - `590/601 pass`（fail 11）
+    - 前回 `589/601` から 1 件改善（`tests/llvm_target.n.md::doctest#5::llvm` 解消）
+
+# 2026-02-22 作業メモ (CI: trunk build 重複実行のキャッシュ化)
+- 目的:
+  - `.github/workflows` 内で複数回発生する `trunk build` の重複コストを下げる。
+- 原因:
+  - `wasi` / `llvm` / `nmd-doctest` / `gh-pages` の各 workflow で `trunk build` を毎回フル実行していた。
+  - Cargo キャッシュは一部で有効だったが、`dist` や wasm32 release 成果物をキー付きで再利用していなかった。
+- 実装:
+  - 4 workflow に `actions/cache@v4` を追加し、以下をキャッシュ対象に統一:
+    - `dist`
+    - `target/wasm32-unknown-unknown/release`
+  - cache key:
+    - `trunk-build-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Trunk.toml', 'index.html', 'nepl-web/**', 'nepl-core/**', 'web/**', 'nodesrc/**', 'stdlib/**') }}`
+  - `Build wasm app with trunk` は cache miss 時のみ実行する条件に変更。
+  - `gh-pages.yml` では trunk 実行が skip の場合に誤って失敗判定しないよう、fail 条件を `cache miss かつ trunk build failure` に修正。
+  - `nmd-doctest.yml` は未設定だった `Swatinem/rust-cache@v2` も追加して Cargo 側の再利用を統一。
+- 検証:
+  - ユーザー指示によりローカルテスト未実行。
+  - CI では同一キーの cache hit 時に trunk build ステップをスキップ可能。
+
 # 2026-02-22 作業メモ (CI: LLVM ダウンロードのキャッシュ化 + trunk 前提の LLVM workflow 統合)
 - 目的:
   - `nepl-test-llvm.yml` で毎回発生していた LLVM 21.1.0 の再ダウンロードを削減し、`node` / `trunk` と同様にセットアップを高速化する。

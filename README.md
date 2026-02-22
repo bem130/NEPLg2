@@ -76,6 +76,25 @@ cargo run -p nepl-cli -- -i examples/counter.nepl -o target/counter --profile de
 - `--emit all` は `wasm, wat, wat-min` に展開されます。
 - `--profile` は `#if[profile=...]` の分岐に使われます。
 
+## `examples/helloworld.nepl` の実行（wasm / llvm）
+
+```bash
+# wasm(wasi) を nepl-cli 内蔵ランナーで実行
+cargo run -p nepl-cli -- --input examples/helloworld.nepl --target wasi --run
+
+# wasm(wasi) を生成して wasmtime / wasmer で実行
+cargo run -p nepl-cli -- --input examples/helloworld.nepl --target wasi --output target/helloworld
+wasmtime run target/helloworld.wasm
+wasmer run target/helloworld.wasm
+
+# llvm(.ll) を生成して clang でネイティブ実行
+PATH=/opt/llvm-21.1.0/bin:$PATH \
+cargo run -p nepl-cli -- --input examples/helloworld.nepl --target llvm --output target/helloworld_llvm
+PATH=/opt/llvm-21.1.0/bin:$PATH \
+clang -O2 -lm target/helloworld_llvm.ll -o target/helloworld_llvm
+./target/helloworld_llvm
+```
+
 ## 外部 WASI ランタイムでの実行（wasmer / wasmtime）
 
 ```bash
