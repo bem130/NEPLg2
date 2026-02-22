@@ -1,20 +1,24 @@
 #indent 4
 
+#if[target=wasm]
 #extern "wasi_snapshot_preview1" "args_sizes_get" fn args_sizes_get <(i32,i32)->i32>
+#if[target=wasm]
 #extern "wasi_snapshot_preview1" "args_get" fn args_get <(i32,i32)->i32>
+#if[target=llvm]
+#extern "c" "syscall" fn __nepl_syscall <(i64,i64,i64,i64,i64,i64,i64)->i64>
 
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/option" as *
 
-//: cliarg: WASI のコマンドライン引数取得
+//: cliarg: コマンドライン引数取得（WASI / LLVM）
 //:
 //: 目的:
-//: - WASI の args_sizes_get/args_get を使い、argv を読み出します。
+//: - `cliarg_count` / `cliarg_get` で argv を読み出します。
 //:
 //: 実装(アルゴリズム):
-//: - args_sizes_get で argc と文字列バッファ長を取得します。
-//: - args_get で argv 配列と NUL 終端文字列群をメモリに書き込みます。
+//: - wasm は WASI `args_sizes_get/args_get` を使います。
+//: - llvm は Linux `/proc/self/cmdline` を syscall で読み、互換 `args_sizes_get/args_get` を実装します。
 //: - NUL 終端の文字列を [len][bytes] 形式の str にコピーします。
 //:
 //: 注意(重要):
@@ -24,6 +28,113 @@
 //:
 //: 計算量:
 //: - 引数取得は O(total_bytes)
+
+#if[target=llvm]
+fn __cli_copy_to_cstr <(str)->i32> (s):
+    let len <i32> load_i32 s;
+    let src <i32> add s 4;
+    let dst <i32> alloc add len 1;
+    let mut i <i32> 0;
+    while lt i len:
+        do:
+            store_u8 add dst i load_u8 add src i;
+            set i add i 1;
+    store_u8 add dst len 0;
+    dst
+
+#if[target=llvm]
+fn __cli_open_cmdline <()->i32> ():
+    let path <str> "/proc/self/cmdline";
+    let cpath <i32> __cli_copy_to_cstr path;
+    let fd64 <i64> __nepl_syscall i64_extend_i32_u 257 i64_extend_i32_s -100 i64_extend_i32_u cpath i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+    if:
+        cond:
+            i64_lt_s fd64 i64_extend_i32_u 0
+        then -1
+        else i32_wrap_i64 fd64
+
+#if[target=llvm]
+fn __cli_read_cmdline <(i32,i32)->i32> (buf, cap):
+    let fd <i32> __cli_open_cmdline;
+    if:
+        cond:
+            lt fd 0
+        then:
+            -1
+        else:
+            let n64 <i64> __nepl_syscall i64_extend_i32_u 0 i64_extend_i32_u fd i64_extend_i32_u buf i64_extend_i32_u cap i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+            __nepl_syscall i64_extend_i32_u 3 i64_extend_i32_u fd i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+            if:
+                cond:
+                    i64_lt_s n64 i64_extend_i32_u 0
+                then -1
+                else i32_wrap_i64 n64
+
+#if[target=llvm]
+fn args_sizes_get <(i32,i32)->i32> (argc_ptr, buf_ptr):
+    let cap <i32> 65536;
+    let tmp <i32> alloc cap;
+    let n <i32> __cli_read_cmdline tmp cap;
+    if:
+        cond:
+            lt n 0
+        then:
+            1
+        else:
+            let mut argc <i32> 0;
+            let mut i <i32> 0;
+            while lt i n:
+                do:
+                    if:
+                        eq load_u8 add tmp i 0
+                        then set argc add argc 1;
+                        else ();
+                    set i add i 1;
+            store_i32 argc_ptr argc;
+            store_i32 buf_ptr n;
+            0
+
+#if[target=llvm]
+fn args_get <(i32,i32)->i32> (argv_ptr, argv_buf):
+    let cap <i32> 65536;
+    let tmp <i32> alloc cap;
+    let n <i32> __cli_read_cmdline tmp cap;
+    if:
+        cond:
+            lt n 0
+        then:
+            1
+        else:
+            let mut i <i32> 0;
+            while lt i n:
+                do:
+                    store_u8 add argv_buf i load_u8 add tmp i;
+                    set i add i 1;
+
+            let mut argi <i32> 0;
+            if:
+                cond:
+                    lt 0 n
+                then:
+                    store_i32 argv_ptr argv_buf;
+                else ();
+
+            let mut j <i32> 0;
+            while lt j n:
+                do:
+                    if:
+                        eq load_u8 add argv_buf j 0
+                        then:
+                            set argi add argi 1;
+                            if:
+                                cond:
+                                    lt add j 1 n
+                                then:
+                                    store_i32 add argv_ptr mul argi 4 add argv_buf add j 1;
+                                else ();
+                        else ();
+                    set j add j 1;
+            0
 
 //: cstr_len: NUL 終端文字列の長さを求める
 //:
@@ -51,7 +162,7 @@
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/env/cliarg" as *
 //: fn main <()*>()> ():
 //:     cstr_len 0;
@@ -97,7 +208,7 @@ fn cstr_len <(i32)*>i32> (p):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/env/cliarg" as *
 //: fn main <()*>()> ():
 //:     cstr_to_str 0;
@@ -140,7 +251,7 @@ fn cstr_to_str <(i32)*>str> (p):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/env/cliarg" as *
 //: fn main <()*>()> ():
 //:     cliarg_count ();
@@ -185,7 +296,7 @@ fn cliarg_count <()*>i32> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/env/cliarg" as *
 //: fn main <()*>()> ():
 //:     cliarg_get 0;
@@ -252,7 +363,7 @@ fn cliarg_get <(i32)*>Option<str>> (idx):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/env/cliarg" as *
 //: fn main <()*>()> ():
 //:     cliarg_program ();

@@ -3291,3 +3291,32 @@
   1. `NO_COLOR=false trunk build` -> pass
   2. `node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 2` -> pass (`610/610`)
   3. `node nodesrc/tests.js -i tests -o tests/output/tests_llvm_all_probe.json --runner llvm --llvm-all --no-tree -j 2` -> pass (`601/601`)
+
+# 2026-02-22 作業メモ (stdlib stdio/fs/cliarg の Linux syscall 化と回帰)
+- 目的:
+  - `extern wasi_*` 依存を target 分岐で整理し、`llvm` では Linux `syscall` 経由で `stdio/fs/cliarg` を動かす。
+  - `tests.js` の wasm/llvm 回帰を壊さずに、std 系モジュールのコンパイル不安定を解消する。
+- 実装:
+  - `stdlib/std/stdio.nepl`
+    - `#if[target=wasm]` の extern 宣言を維持しつつ、`#if[target=llvm]` で `syscall` ラッパを追加。
+    - `fd_read` / `fd_write` の LLVM 互換実装を Linux syscall (`read`/`write`) で統一。
+    - `if:` レイアウトを `cond/then/else` 形式へ修正し、parser の no-progress を解消。
+  - `stdlib/std/fs.nepl`
+    - LLVM 側 `path_open` / `fd_read` / `fd_close` を Linux syscall (`openat`/`read`/`close`) へ統一。
+    - syscall 呼び出しを 1 行式に揃えて、改行引数解釈の揺れを除去。
+  - `stdlib/std/env/cliarg.nepl`
+    - LLVM 側 `args_sizes_get` / `args_get` を `/proc/self/cmdline` 読み取りで互換実装。
+    - `if:` レイアウトの `cond:` 欠落箇所を修正。
+  - `README.md`
+    - 実行方法を 4 系統（`--run`, `wasmer`, `wasmtime`, `llvm`）で明示。
+- 検証（直列）:
+  1. `NO_COLOR=false trunk build` -> pass
+  2. `node nodesrc/tests.js -i stdlib/std/stdio.nepl -i stdlib/std/fs.nepl -i stdlib/std/env/cliarg.nepl -o tests/output/std_platform_wasm.json -j 2` -> pass (`241/241`)
+  3. `node nodesrc/tests.js -i stdlib/std/stdio.nepl -i stdlib/std/fs.nepl -i stdlib/std/env/cliarg.nepl --runner llvm --llvm-all --no-tree -o tests/output/std_platform_llvm.json -j 2` -> pass (`227/227`)
+  4. `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 2` -> pass (`610/610`)
+  5. `node nodesrc/tests.js -i tests --runner llvm --llvm-all --no-tree -o tests/output/tests_current_llvm.json -j 2` -> pass (`601/601`)
+- examples 実行確認:
+  - `wasi --run`: `helloworld.nepl`, `counter.nepl`, `kp_fizzbuzz.nepl` は実行確認済み。
+  - `llvm`: `.ll` 生成は成功。ただしリンク時に `undefined reference to main` で実行不可。
+    - 現状の LLVM backend はユーザー関数/entry の最終出力が未完で、`main`/`_start` を持つ実行 IR 生成が未対応。
+    - これは `todo.md` の LLVM backend 本実装タスクで継続。

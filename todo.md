@@ -43,10 +43,12 @@
 
 9. LLVM IR target 追加（nepl-cli 限定）
 - `#llvmir` 手書き経路 + i32 定数 subset から、通常の NEPL 関数本体（Parsed/HIR）を LLVM IR へ下げる本実装へ拡張する。
+- LLVM backend でユーザー関数と `#entry` を確実に出力し、生成 `.ll` が `main` か `_start` を持つ実行可能 IR になるようにする。
 - `tests/sort.n.md` など通常テストを `--runner all --llvm-all` で通せるように、`stdlib/core` / `stdlib/alloc` の LLVM 対応を進める。
 - `stdlib/core/math.nepl` の doctest は最終的に `#target core` へ移行する（先に `std/test` 依存を外した core 向け検証手段を整備する）。
 - `#if[target=core]` / `#if[target=std]` 前提で stdlib と tests の target 記述を段階移行し、dual-run（wasm+llvm）回帰を整備する。
 - `clang 21.1.0 + linux native` の初期要件を保ちつつ、将来の複数 LLVM バージョン/複数 native target へ拡張可能な設定モデルを設計する。
+- `llvm` 向け syscall 分岐を OS 別（linux/win/mac）に分離できるよう、target 条件式の OS 軸（例: `#if[target=llvm&linux]`）を設計・実装する。
 
 ---
 ### 以下編集禁止

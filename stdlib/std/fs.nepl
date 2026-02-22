@@ -1,8 +1,14 @@
 #indent 4
 
+#if[target=wasm]
 #extern "wasi_snapshot_preview1" "path_open" fn wasi_path_open <(i32,i32,i32,i32,i32,i64,i64,i32,i32)->i32>
+#if[target=wasm]
 #extern "wasi_snapshot_preview1" "fd_read" fn wasi_fd_read <(i32,i32,i32,i32)->i32>
+#if[target=wasm]
 #extern "wasi_snapshot_preview1" "fd_close" fn wasi_fd_close <(i32)->i32>
+
+#if[target=llvm]
+#extern "c" "syscall" fn __nepl_syscall <(i64,i64,i64,i64,i64,i64,i64)->i64>
 
 #import "core/cast" as *
 #import "core/mem" as *
@@ -11,13 +17,14 @@
 #import "alloc/vec" as *
 #import "alloc/string" as *
 
-//: fs: WASI ファイル読み込み
+//: fs: ファイル読み込み（WASI / LLVM）
 //:
 //: 目的:
-//: - WASI の path_open/fd_read/fd_close を使った簡易ファイル読み込みを提供します。
+//: - `fs_read_to_bytes` / `fs_read_to_string` など、target 非依存のファイル読み込み API を提供します。
 //:
 //: 実装(アルゴリズム):
-//: - path_open で fd を開き、fd_read をループしてバッファに蓄積します。
+//: - wasm では WASI `path_open/fd_read/fd_close` を呼びます。
+//: - llvm では libc `open/read/close` を使って同名 API を互換実装します。
 //: - 読み込み結果を Vec<u8> または str に変換します。
 //:
 //: 注意(重要):
@@ -26,6 +33,84 @@
 //:
 //: 計算量:
 //: - 読み込みバイト数に比例 (O(n))
+
+#if[target=llvm]
+fn __fs_copy_to_cstr <(i32,i32)->i32> (src_ptr, src_len):
+    let dst <i32> alloc add src_len 1;
+    let mut i <i32> 0;
+    while lt i src_len:
+        do:
+            store_u8 add dst i load_u8 add src_ptr i;
+            set i add i 1;
+    store_u8 add dst src_len 0;
+    dst
+
+#if[target=llvm]
+fn __linux_syscall_read <(i32,i32,i32)->i64> (fd,ptr,len):
+    __nepl_syscall i64_extend_i32_u 0 i64_extend_i32_u fd i64_extend_i32_u ptr i64_extend_i32_u len i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0
+
+#if[target=llvm]
+fn wasi_path_open <(i32,i32,i32,i32,i32,i64,i64,i32,i32)->i32> (_dirfd,_dirflags,path_ptr,path_len,_oflags,_rights_base,_rights_inheriting,_fdflags,fd_out):
+    let cpath <i32> __fs_copy_to_cstr path_ptr path_len;
+    // Linux x86_64: openat(AT_FDCWD=-100, path, O_RDONLY=0, mode=0)
+    let fd64 <i64> __nepl_syscall i64_extend_i32_u 257 i64_extend_i32_s -100 i64_extend_i32_u cpath i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+    if:
+        cond:
+            i64_lt_s fd64 i64_extend_i32_u 0
+        then:
+            1
+        else:
+            store_i32 fd_out i32_wrap_i64 fd64;
+            0
+
+#if[target=llvm]
+fn wasi_fd_read <(i32,i32,i32,i32)->i32> (fd,iovs,iovs_len,nread_ptr):
+    let mut total <i32> 0;
+    let mut iov_idx <i32> 0;
+    let mut err <i32> 0;
+    let mut done <i32> 0;
+    while eq done 0:
+        do:
+            if:
+                cond:
+                    lt iov_idx iovs_len
+                then:
+                    let iov_ptr <i32> add iovs mul iov_idx 8;
+                    let base <i32> load_i32 iov_ptr;
+                    let len <i32> load_i32 add iov_ptr 4;
+                    // Linux x86_64: read(fd, buf, count)
+                    let n64 <i64> __linux_syscall_read fd base len;
+                    if:
+                        cond:
+                            i64_lt_s n64 i64_extend_i32_u 0
+                        then:
+                            set err 1;
+                            set done 1;
+                        else:
+                            let n <i32> i32_wrap_i64 n64;
+                            set total add total n;
+                            if:
+                                cond:
+                                    lt n len
+                                then:
+                                    set done 1;
+                                else:
+                                    ();
+                    set iov_idx add iov_idx 1;
+                else:
+                    set done 1;
+    store_i32 nread_ptr total;
+    err
+
+#if[target=llvm]
+fn wasi_fd_close <(i32)->i32> (fd):
+    // Linux x86_64: close(fd)
+    let rc64 <i64> __nepl_syscall i64_extend_i32_u 3 i64_extend_i32_u fd i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+    if:
+        cond:
+            i64_lt_s rc64 i64_extend_i32_u 0
+        then 1
+        else 0
 
 //: i64_from_i32: i32 を i64 に拡張する
 //:
@@ -53,7 +138,7 @@
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/fs" as *
 //: fn main <()*>()> ():
 //:     i64_from_i32 0;
@@ -88,7 +173,7 @@ fn i64_from_i32 <(i32)->i64> (v):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/fs" as *
 //: fn main <()*>()> ():
 //:     fs_open_read "sample";
@@ -131,7 +216,7 @@ fn fs_open_read <(str)*>Result<i32,i32>> (path):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/fs" as *
 //: fn main <()*>()> ():
 //:     fs_read_fd_bytes 0;
@@ -200,7 +285,7 @@ fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/fs" as *
 //: fn main <()*>()> ():
 //:     fs_bytes_to_string vec_push<u8> vec_new<u8> 65;
@@ -244,7 +329,7 @@ fn fs_bytes_to_string <(Vec<u8>)*>str> (buf):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/fs" as *
 //: fn main <()*>()> ():
 //:     fs_read_to_bytes "sample";
@@ -285,7 +370,7 @@ fn fs_read_to_bytes <(str)*>Result<Vec<u8>,i32>> (path):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/fs" as *
 //: fn main <()*>()> ():
 //:     fs_read_to_string "sample";

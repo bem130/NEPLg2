@@ -1,18 +1,24 @@
 #indent 4
 
+#if[target=wasm]
 #extern "wasi_snapshot_preview1" "fd_read" fn fd_read <(i32,i32,i32,i32)->i32>
+#if[target=wasm]
 #extern "wasi_snapshot_preview1" "fd_write" fn fd_write <(i32,i32,i32,i32)->i32>
+
+#if[target=llvm]
+#extern "c" "syscall" fn __nepl_syscall <(i64,i64,i64,i64,i64,i64,i64)->i64>
 
 #import "core/mem" as *
 #import "core/math" as *
 
-//: stdio: WASI 標準入出力
+//: stdio: 標準入出力（WASI / LLVM）
 //:
 //: 目的:
-//: - WASI の fd_read/fd_write を使った簡易 I/O を提供します。
+//: - `print` / `read_line` などの基本 I/O を target 非依存で提供します。
 //:
 //: 実装(アルゴリズム):
-//: - iovec を作って fd_read/fd_write を呼びます。
+//: - wasm では WASI `fd_read` / `fd_write` を呼びます。
+//: - llvm では Linux の `syscall(read/write)` で互換 `fd_read` / `fd_write` を実装します。
 //: - 文字列は [len][bytes] の形式です。
 //:
 //: 注意(重要):
@@ -21,6 +27,90 @@
 //:
 //: 計算量:
 //: - 文字列長に比例
+
+#if[target=llvm]
+fn __linux_syscall_rw <(i32,i32,i32,i32)->i64> (nr,fd,ptr,len):
+    __nepl_syscall i64_extend_i32_u nr i64_extend_i32_u fd i64_extend_i32_u ptr i64_extend_i32_u len i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0
+
+#if[target=llvm]
+fn fd_write <(i32,i32,i32,i32)->i32> (_fd,iovs,iovs_len,nwritten_ptr):
+    let mut total <i32> 0;
+    let mut iov_idx <i32> 0;
+    let mut err <i32> 0;
+    let mut done <i32> 0;
+    let fd <i32> _fd;
+    while eq done 0:
+        do:
+            if:
+                cond:
+                    lt iov_idx iovs_len
+                then:
+                    let iov_ptr <i32> add iovs mul iov_idx 8;
+                    let base <i32> load_i32 iov_ptr;
+                    let len <i32> load_i32 add iov_ptr 4;
+                    // Linux x86_64: write(fd, buf, count)
+                    let n64 <i64> __linux_syscall_rw 1 fd base len;
+                    if:
+                        cond:
+                            i64_lt_s n64 i64_extend_i32_u 0
+                        then:
+                            set err 1;
+                            set done 1;
+                        else:
+                            let n <i32> i32_wrap_i64 n64;
+                            set total add total n;
+                            if:
+                                cond:
+                                    lt n len
+                                then:
+                                    set done 1;
+                                else:
+                                    ();
+                    set iov_idx add iov_idx 1;
+                else:
+                    set done 1;
+    store_i32 nwritten_ptr total;
+    err
+
+#if[target=llvm]
+fn fd_read <(i32,i32,i32,i32)->i32> (_fd,iovs,iovs_len,nread_ptr):
+    let mut total <i32> 0;
+    let mut iov_idx <i32> 0;
+    let mut err <i32> 0;
+    let mut done <i32> 0;
+    let fd <i32> _fd;
+    while eq done 0:
+        do:
+            if:
+                cond:
+                    lt iov_idx iovs_len
+                then:
+                    let iov_ptr <i32> add iovs mul iov_idx 8;
+                    let base <i32> load_i32 iov_ptr;
+                    let len <i32> load_i32 add iov_ptr 4;
+                    // Linux x86_64: read(fd, buf, count)
+                    let n64 <i64> __linux_syscall_rw 0 fd base len;
+                    if:
+                        cond:
+                            i64_lt_s n64 i64_extend_i32_u 0
+                        then:
+                            set err 1;
+                            set done 1;
+                        else:
+                            let n <i32> i32_wrap_i64 n64;
+                            set total add total n;
+                            if:
+                                cond:
+                                    lt n len
+                                then:
+                                    set done 1;
+                                else:
+                                    ();
+                    set iov_idx add iov_idx 1;
+                else:
+                    set done 1;
+    store_i32 nread_ptr total;
+    err
 
 //: print: 文字列を標準出力へ出す
 //:
@@ -48,7 +138,7 @@
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     print "sample";
@@ -89,7 +179,7 @@ fn print <(str)*>()> (s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     read_all ();
@@ -142,7 +232,7 @@ fn read_all <()*>str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     read_line ();
@@ -212,7 +302,7 @@ fn read_line <()*>str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     println "sample";
@@ -248,7 +338,7 @@ fn println <(str)*>()> (s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     print_i32 0;
@@ -324,7 +414,7 @@ fn print_i32 <(i32)*>()> (v):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     println_i32 0;
@@ -359,7 +449,7 @@ fn println_i32 <(i32)*>()> (v):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_reset ();
@@ -393,7 +483,7 @@ fn ansi_reset <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_bold ();
@@ -427,7 +517,7 @@ fn ansi_bold <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_underline ();
@@ -461,7 +551,7 @@ fn ansi_underline <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_red ();
@@ -495,7 +585,7 @@ fn ansi_red <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_green ();
@@ -529,7 +619,7 @@ fn ansi_green <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_yellow ();
@@ -563,7 +653,7 @@ fn ansi_yellow <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_blue ();
@@ -597,7 +687,7 @@ fn ansi_blue <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_magenta ();
@@ -631,7 +721,7 @@ fn ansi_magenta <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_cyan ();
@@ -665,7 +755,7 @@ fn ansi_cyan <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_white ();
@@ -699,7 +789,7 @@ fn ansi_white <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     ansi_gray ();
@@ -733,7 +823,7 @@ fn ansi_gray <()->str> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     print_color "sample" "sample";
@@ -770,7 +860,7 @@ fn print_color <(str,str)*>()> (color, s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     println_color "sample" "sample";
@@ -806,7 +896,7 @@ fn println_color <(str,str)*>()> (color, s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     debug "sample";
@@ -843,7 +933,7 @@ fn debug <(str)*>()> (s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     debug_color "sample" "sample";
@@ -880,7 +970,7 @@ fn debug_color <(str,str)*>()> (color, s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     debug "sample";
@@ -915,7 +1005,7 @@ fn __debug_release_noop <(str)*>()> (_s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     debug_color "sample" "sample";
@@ -951,7 +1041,7 @@ fn __debug_color_release_noop <(str,str)*>()> (_color, _s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     debugln "sample";
@@ -988,7 +1078,7 @@ fn debugln <(str)*>()> (s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     debugln_color "sample" "sample";
@@ -1026,7 +1116,7 @@ fn debugln_color <(str,str)*>()> (color, s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     debugln "sample";
@@ -1061,7 +1151,7 @@ fn __debugln_release_noop <(str)*>()> (_s):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/stdio" as *
 //: fn main <()*>()> ():
 //:     debugln_color "sample" "sample";

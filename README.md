@@ -42,8 +42,15 @@ fn main <()*> ()> ():
 
 ## CLI でのコンパイル/実行
 
+NEPLg2 の実行確認は、次の 4 系統で行えます。
+
+1. `--run`（`nepl-cli` 内蔵 Wasm 実行）
+2. `wasmer`（外部 WASI ランタイム）
+3. `wasmtime`（外部 WASI ランタイム）
+4. `llvm`（`.ll` 生成 + clang でネイティブ実行）
+
 ```bash
-# wasm を直接実行（出力ファイルなし）
+# 1) --run: wasm を直接実行（出力ファイルなし）
 cargo run -p nepl-cli -- --input examples/counter.nepl --run
 
 # 出力を書きつつ実行
@@ -69,16 +76,16 @@ cargo run -p nepl-cli -- -i examples/counter.nepl -o target/counter --profile de
 - `--emit all` は `wasm, wat, wat-min` に展開されます。
 - `--profile` は `#if[profile=...]` の分岐に使われます。
 
-## 外部 WASI ランタイムでの実行
+## 外部 WASI ランタイムでの実行（wasmer / wasmtime）
 
 ```bash
 # WASI 向け wasm を生成
 cargo run -p nepl-cli -- -i examples/counter.nepl -o counter --target wasi
 
-# wasmtime
+# 2) wasmtime
 wasmtime run counter.wasm
 
-# wasmer
+# 3) wasmer
 wasmer run counter.wasm
 
 # stdin/stdout ありの例
@@ -88,6 +95,25 @@ echo "3 5 +" | wasmer run rpn.wasm
 ```
 
 `#entry` で指定した関数がエントリーポイントになります（WASI では `_start` として公開）。
+
+## LLVM 実行（clang 21.1.0）
+
+```bash
+# 4) llvm: .ll を生成
+NEPL_LLVM_CLANG_BIN=/opt/llvm-21.1.0/bin/clang \
+cargo run -p nepl-cli -- -i examples/helloworld.nepl --target llvm -o target/hello_llvm
+
+# clang でネイティブバイナリ化
+/opt/llvm-21.1.0/bin/clang target/hello_llvm.ll -O2 -lm -o target/hello_llvm
+
+# 実行
+./target/hello_llvm
+```
+
+補足:
+
+- `--target llvm` は `--run` を直接サポートしません（`.ll` を生成して clang/lli で実行）。
+- `NEPL_LLVM_CLANG_BIN` を設定すると、`nepl-cli` 側の clang バージョン検証に使われます。
 
 ## 標準ライブラリ（抜粋）
 
