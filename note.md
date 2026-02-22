@@ -3367,3 +3367,34 @@
 - 現在判明している根本課題:
   - LLVM 側は `main` 解決に進むようになったが、`core/math` の wasm 専用関数（例: `add__i32_i32__i32__pure`）に到達すると `compile_llvm_cli` で失敗する。
   - これは「完全検証モードの不具合」ではなく、`stdlib` 側の llvm 実装未整備が原因であり、上流課題として継続修正する。
+
+# 2026-02-22 作業メモ (LLVM lower 強化と llvm runner 改修)
+- 目的:
+  - `llvm` ランナーの失敗を上流（`nepl-core/src/codegen_llvm.rs`）から削減する。
+  - `wasm` 既存テストを壊さず、`llvm` 側の失敗を compile/link 中心から run/実装不足へ寄せる。
+- 実装:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `lower_hir_string_literal` の `alloc/store_i32/store_u8` をシグネチャ解決 (`resolve_symbol_name`) に変更。
+    - `EnumConstruct` でも `alloc` をシグネチャ解決へ変更。
+    - `StructConstruct` / `TupleConstruct` の lower を追加（ヒープ確保 + フィールド逐次 store）。
+    - intrinsic lower を追加:
+      - `add`
+      - `f32_to_i32`
+      - `i32_to_u8`
+    - `if` の再定義抑制まわりを継続補正:
+      - `RawBodySelection::Llvm` で初回走査時に定義関数名を `emitted_functions` へ登録。
+      - `parse_defined_function_name` で `define @"name"(...)` の引用符を正規化。
+      - `HirBody::LlvmIr` の「定義済み扱い」条件を厳密化し、raw が `@add` のみ定義する場合に `add__...` を誤って定義済みにしないよう修正。
+    - raw 定義の base 名しか無いケース向けに mangled alias wrapper 生成を追加（`add__... -> add` 等）。
+  - `nodesrc/tests.js`
+    - LLVM リンク時に `-lm` を追加（`ceilf/floorf/truncf/nearbyintf` 等の未解決を解消）。
+  - `stdlib/alloc/string.nepl`
+    - `str_eq_loop` / `str_eq_at` の引数 `len` を `n` に変更し、関数シンボル `len` との解決衝突を回避。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 2`: `610/610 pass`
+  - `node nodesrc/tests.js -i tests -o tests/output/tests_llvm_current.json -j 2 --runner llvm --llvm-all --assert-io`: `397/601 pass`
+- 状況整理:
+  - 直近で `llvm` は `link_llvm_cli` の大量失敗（未定義シンボル/`libm` 未リンク）を削減。
+  - 現在の主失敗は `run_llvm_cli(SIGSEGV)` と、一部の `compile_llvm_cli`（型効果/名前解決由来）に集約。
+  - 次段は `core/mem` と `alloc/*` のランタイム整合（線形メモリ運用）を優先して進める。

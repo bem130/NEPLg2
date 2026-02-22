@@ -379,9 +379,9 @@ fn str_eq <(str,str)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
+fn str_eq_loop <(str,str,i32,i32)->bool> (a,b,n,i):
     if:
-        eq i len
+        eq i n
         then:
             true
         else:
@@ -389,7 +389,7 @@ fn str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
             let bb <i32> load_u8 add b add 4 i;
             if:
                 eq ba bb
-                then str_eq_loop a b len add i 1
+                then str_eq_loop a b n add i 1
                 else false
 
 // str_is_space: ASCII 空白文字か判定する
@@ -496,16 +496,16 @@ fn str_starts_with <(str,str)->bool> (s, prefix):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn str_eq_at <(str,str,i32,i32,i32)->bool> (s, pat, start, len, i):
+fn str_eq_at <(str,str,i32,i32,i32)->bool> (s, pat, start, n, i):
     if:
-        eq i len
+        eq i n
         then true
         else:
             let bs <i32> load_u8 add s add 4 add start i;
             let bp <i32> load_u8 add pat add 4 i;
             if:
                 eq bs bp
-                then str_eq_at s pat start len add i 1
+                then str_eq_at s pat start n add i 1
                 else false
 
 // str_ends_with: 末尾一致を判定する

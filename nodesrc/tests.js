@@ -543,7 +543,7 @@ async function runSingleLlvmCli(c, workerId, cliPath, options = {}) {
         } else {
             const link = await runCommand(
                 clangBin || 'clang',
-                ['-O0', llPath, '-o', exePath],
+                ['-O0', llPath, '-o', exePath, '-lm'],
                 {
                     env: {
                         ...process.env,

@@ -121,6 +121,7 @@ pub fn emit_ll_from_module_for_target(
                 FnBody::Parsed(block) => {
                     match select_raw_body_from_parsed_block(block, target, profile) {
                         RawBodySelection::Llvm(raw) => {
+                            collect_defined_functions_from_llvmir_block(raw, &mut emitted_functions);
                             append_llvmir_block(&mut out, raw);
                         }
                         RawBodySelection::Wasm => {
@@ -358,8 +359,8 @@ fn try_lower_entry_from_hir(
         out.push('\n');
     }
 
-    for name in reachable {
-        if emitted_functions.iter().any(|n| n == &name) {
+    for name in &reachable {
+        if emitted_functions.iter().any(|n| n == name) {
             continue;
         }
         let Some(func) = function_map.get(name.as_str()) else {
@@ -367,8 +368,30 @@ fn try_lower_entry_from_hir(
         };
         match &func.body {
             HirBody::LlvmIr(raw) => {
+                out.push_str(&format!("; nepl: function {} (raw llvmir)\n", name));
+                let mut defined = Vec::new();
+                collect_defined_functions_from_llvmir_block(raw, &mut defined);
+                let defines_current_name = defined.iter().any(|d| d == name);
+                let already_defined = !defined.is_empty()
+                    && defined.iter().all(|n| {
+                        emitted_functions.iter().any(|e| e == n)
+                            || llvm_output_has_function(out, n.as_str())
+                    });
+                if already_defined {
+                    if defines_current_name && !emitted_functions.iter().any(|n| n == name) {
+                        emitted_functions.push(name.clone());
+                    }
+                    continue;
+                }
                 append_llvmir_block(out, raw);
-                emitted_functions.push(name);
+                for def in defined {
+                    if !emitted_functions.iter().any(|n| n == &def) {
+                        emitted_functions.push(def);
+                    }
+                }
+                if defines_current_name && !emitted_functions.iter().any(|n| n == name) {
+                    emitted_functions.push(name.clone());
+                }
             }
             HirBody::Wasm(_) => {
                 return Err(LlvmCodegenError::UnsupportedWasmBody {
@@ -376,12 +399,20 @@ fn try_lower_entry_from_hir(
                 });
             }
             HirBody::Block(block) => {
+                out.push_str(&format!("; nepl: function {} (lowered block)\n", name));
                 let lowered = lower_hir_function(&types, &hir, &sigs, func, block)?;
                 out.push_str(&lowered);
                 out.push('\n');
-                emitted_functions.push(name);
+                emitted_functions.push(name.clone());
             }
         }
+    }
+
+    for (name, sig) in sigs.iter() {
+        if emitted_functions.iter().any(|n| n == name) {
+            continue;
+        }
+        let _ = emit_base_alias_for_mangled(name.as_str(), sig, out, emitted_functions);
     }
 
     if resolved_entry == "main" && emitted_functions.iter().any(|n| n == "__nepl_entry_main") {
@@ -392,6 +423,58 @@ fn try_lower_entry_from_hir(
     // suppress unused warning when future passes extend signature synthesis
     sigs.clear();
     Ok(resolved_entry)
+}
+
+fn emit_base_alias_for_mangled(
+    mangled: &str,
+    sig: &FnSig,
+    out: &mut String,
+    emitted_functions: &mut Vec<String>,
+) -> bool {
+    let Some((base, _)) = mangled.split_once("__") else {
+        return false;
+    };
+    if base.is_empty() || base == mangled {
+        return false;
+    }
+    let base_available = emitted_functions.iter().any(|n| n == base) || llvm_output_has_function(out, base);
+    if !base_available {
+        return false;
+    }
+    let params = sig
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, ty)| format!("{} %p{}", ty.ir(), i))
+        .collect::<Vec<_>>();
+    let call_args = sig
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, ty)| format!("{} %p{}", ty.ir(), i))
+        .collect::<Vec<_>>()
+        .join(", ");
+    out.push_str(&format!(
+        "define {} {}({}) {{\nentry:\n",
+        sig.ret.ir(),
+        ll_symbol(mangled),
+        params.join(", ")
+    ));
+    if sig.ret == LlTy::Void {
+        out.push_str(&format!("  call void {}({})\n", ll_symbol(base), call_args));
+        out.push_str("  ret void\n");
+    } else {
+        out.push_str(&format!(
+            "  %0 = call {} {}({})\n",
+            sig.ret.ir(),
+            ll_symbol(base),
+            call_args
+        ));
+        out.push_str(&format!("  ret {} %0\n", sig.ret.ir()));
+    }
+    out.push_str("}\n\n");
+    emitted_functions.push(mangled.to_string());
+    true
 }
 
 fn build_hir_for_llvm_lowering(
@@ -798,14 +881,6 @@ fn lower_hir_expr(
                 "  {} = icmp ne i32 {}, 0",
                 cond_i1, cond_v.repr
             ));
-            let then_label = ctx.next_label("if_then");
-            let else_label = ctx.next_label("if_else");
-            let end_label = ctx.next_label("if_end");
-            ctx.push_line(&format!(
-                "  br i1 {}, label %{}, label %{}",
-                cond_i1, then_label, else_label
-            ));
-
             let result_ty = llty_for_type(types, expr.ty);
             let result_slot = if result_ty != LlTy::Void {
                 let slot = ctx.next_tmp();
@@ -814,6 +889,13 @@ fn lower_hir_expr(
             } else {
                 None
             };
+            let then_label = ctx.next_label("if_then");
+            let else_label = ctx.next_label("if_else");
+            let end_label = ctx.next_label("if_end");
+            ctx.push_line(&format!(
+                "  br i1 {}, label %{}, label %{}",
+                cond_i1, then_label, else_label
+            ));
 
             ctx.push_line(&format!("{}:", then_label));
             if let Some(tv) = lower_hir_expr(types, ctx, then_branch)? {
@@ -902,11 +984,411 @@ fn lower_hir_expr(
             ctx.push_line(&format!("{}:", end_label));
             Ok(None)
         }
+        HirExprKind::EnumConstruct {
+            name: _,
+            variant,
+            payload,
+            type_args: _,
+        } => {
+            let payload_ll = payload.as_ref().map(|p| llty_for_type(types, p.ty));
+            let (payload_offset, total_size) = match payload_ll {
+                Some(LlTy::I64) | Some(LlTy::F64) => (8i64, 16i32),
+                Some(_) => (4i64, 8i32),
+                None => (0i64, 4i32),
+            };
+
+            let alloc_name = resolve_symbol_name(ctx.sigs, "alloc", &[LlTy::I32], LlTy::I32)
+                .ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
+                    function: ctx.function_name.to_string(),
+                    reason: String::from("alloc function is required for enum construction"),
+                })?;
+
+            let ptr = ctx.next_tmp();
+            ctx.push_line(&format!(
+                "  {} = call i32 {}(i32 {})",
+                ptr,
+                ll_symbol(alloc_name),
+                total_size
+            ));
+
+            let tag = enum_variant_tag(types, expr.ty, variant.as_str());
+            let ptr_i64 = ctx.next_tmp();
+            let tag_ptr = ctx.next_tmp();
+            ctx.push_line(&format!("  {} = zext i32 {} to i64", ptr_i64, ptr));
+            ctx.push_line(&format!("  {} = inttoptr i64 {} to i32*", tag_ptr, ptr_i64));
+            ctx.push_line(&format!("  store i32 {}, i32* {}, align 1", tag, tag_ptr));
+
+            if let Some(p) = payload {
+                let pv = lower_hir_expr(types, ctx, p)?;
+                if let Some(vty) = payload_ll {
+                    let Some(pv) = pv else {
+                        return Err(LlvmCodegenError::UnsupportedHirLowering {
+                            function: ctx.function_name.to_string(),
+                            reason: String::from("enum payload must produce a value"),
+                        });
+                    };
+                    if pv.ty != vty {
+                        return Err(LlvmCodegenError::UnsupportedHirLowering {
+                            function: ctx.function_name.to_string(),
+                            reason: format!(
+                                "enum payload type mismatch: expected {:?}, got {:?}",
+                                vty, pv.ty
+                            ),
+                        });
+                    }
+                    let base_i64 = ctx.next_tmp();
+                    let base_ptr8 = ctx.next_tmp();
+                    let payload_ptr8 = ctx.next_tmp();
+                    let typed_ptr = ctx.next_tmp();
+                    ctx.push_line(&format!("  {} = zext i32 {} to i64", base_i64, ptr));
+                    ctx.push_line(&format!("  {} = inttoptr i64 {} to i8*", base_ptr8, base_i64));
+                    ctx.push_line(&format!(
+                        "  {} = getelementptr i8, i8* {}, i64 {}",
+                        payload_ptr8, base_ptr8, payload_offset
+                    ));
+                    ctx.push_line(&format!(
+                        "  {} = bitcast i8* {} to {}*",
+                        typed_ptr,
+                        payload_ptr8,
+                        vty.ir()
+                    ));
+                    ctx.push_line(&format!(
+                        "  store {} {}, {}* {}, align 1",
+                        vty.ir(),
+                        pv.repr,
+                        vty.ir(),
+                        typed_ptr
+                    ));
+                }
+            }
+
+            Ok(Some(LlValue {
+                ty: LlTy::I32,
+                repr: ptr,
+            }))
+        }
+        HirExprKind::StructConstruct {
+            name: _,
+            fields,
+            type_args: _,
+        } => {
+            let field_tys = fields
+                .iter()
+                .map(|f| llty_for_type(types, f.ty))
+                .collect::<Vec<_>>();
+            let mut offsets = Vec::with_capacity(field_tys.len());
+            let mut total_size: i32 = 0;
+            for ty in &field_tys {
+                offsets.push(total_size as i64);
+                total_size += ll_storage_size(*ty) as i32;
+            }
+            let alloc_name = resolve_symbol_name(ctx.sigs, "alloc", &[LlTy::I32], LlTy::I32)
+                .ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
+                    function: ctx.function_name.to_string(),
+                    reason: String::from("alloc function is required for struct construction"),
+                })?;
+            let ptr = ctx.next_tmp();
+            ctx.push_line(&format!(
+                "  {} = call i32 {}(i32 {})",
+                ptr,
+                ll_symbol(alloc_name),
+                total_size
+            ));
+            for (idx, f) in fields.iter().enumerate() {
+                let fty = field_tys[idx];
+                let fv = lower_hir_expr(types, ctx, f)?;
+                if fty == LlTy::Void {
+                    continue;
+                }
+                let Some(fv) = fv else {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("struct field must produce a value"),
+                    });
+                };
+                if fv.ty != fty {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: format!(
+                            "struct field type mismatch: expected {:?}, got {:?}",
+                            fty, fv.ty
+                        ),
+                    });
+                }
+                let base_i64 = ctx.next_tmp();
+                let base_ptr8 = ctx.next_tmp();
+                let field_ptr8 = ctx.next_tmp();
+                let typed_ptr = ctx.next_tmp();
+                ctx.push_line(&format!("  {} = zext i32 {} to i64", base_i64, ptr));
+                ctx.push_line(&format!("  {} = inttoptr i64 {} to i8*", base_ptr8, base_i64));
+                ctx.push_line(&format!(
+                    "  {} = getelementptr i8, i8* {}, i64 {}",
+                    field_ptr8, base_ptr8, offsets[idx]
+                ));
+                ctx.push_line(&format!(
+                    "  {} = bitcast i8* {} to {}*",
+                    typed_ptr,
+                    field_ptr8,
+                    fty.ir()
+                ));
+                ctx.push_line(&format!(
+                    "  store {} {}, {}* {}, align 1",
+                    fty.ir(),
+                    fv.repr,
+                    fty.ir(),
+                    typed_ptr
+                ));
+            }
+            Ok(Some(LlValue {
+                ty: LlTy::I32,
+                repr: ptr,
+            }))
+        }
+        HirExprKind::TupleConstruct { items } => {
+            let item_tys = items
+                .iter()
+                .map(|v| llty_for_type(types, v.ty))
+                .collect::<Vec<_>>();
+            let mut offsets = Vec::with_capacity(item_tys.len());
+            let mut total_size: i32 = 0;
+            for ty in &item_tys {
+                offsets.push(total_size as i64);
+                total_size += ll_storage_size(*ty) as i32;
+            }
+            let alloc_name = resolve_symbol_name(ctx.sigs, "alloc", &[LlTy::I32], LlTy::I32)
+                .ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
+                    function: ctx.function_name.to_string(),
+                    reason: String::from("alloc function is required for tuple construction"),
+                })?;
+            let ptr = ctx.next_tmp();
+            ctx.push_line(&format!(
+                "  {} = call i32 {}(i32 {})",
+                ptr,
+                ll_symbol(alloc_name),
+                total_size
+            ));
+            for (idx, item) in items.iter().enumerate() {
+                let ity = item_tys[idx];
+                let iv = lower_hir_expr(types, ctx, item)?;
+                if ity == LlTy::Void {
+                    continue;
+                }
+                let Some(iv) = iv else {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("tuple item must produce a value"),
+                    });
+                };
+                if iv.ty != ity {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: format!(
+                            "tuple item type mismatch: expected {:?}, got {:?}",
+                            ity, iv.ty
+                        ),
+                    });
+                }
+                let base_i64 = ctx.next_tmp();
+                let base_ptr8 = ctx.next_tmp();
+                let item_ptr8 = ctx.next_tmp();
+                let typed_ptr = ctx.next_tmp();
+                ctx.push_line(&format!("  {} = zext i32 {} to i64", base_i64, ptr));
+                ctx.push_line(&format!("  {} = inttoptr i64 {} to i8*", base_ptr8, base_i64));
+                ctx.push_line(&format!(
+                    "  {} = getelementptr i8, i8* {}, i64 {}",
+                    item_ptr8, base_ptr8, offsets[idx]
+                ));
+                ctx.push_line(&format!(
+                    "  {} = bitcast i8* {} to {}*",
+                    typed_ptr,
+                    item_ptr8,
+                    ity.ir()
+                ));
+                ctx.push_line(&format!(
+                    "  store {} {}, {}* {}, align 1",
+                    ity.ir(),
+                    iv.repr,
+                    ity.ir(),
+                    typed_ptr
+                ));
+            }
+            Ok(Some(LlValue {
+                ty: LlTy::I32,
+                repr: ptr,
+            }))
+        }
+        HirExprKind::Match { scrutinee, arms } => {
+            let Some(scr_v) = lower_hir_expr(types, ctx, scrutinee)? else {
+                return Err(LlvmCodegenError::UnsupportedHirLowering {
+                    function: ctx.function_name.to_string(),
+                    reason: String::from("match scrutinee must produce a value"),
+                });
+            };
+            if scr_v.ty != LlTy::I32 {
+                return Err(LlvmCodegenError::UnsupportedHirLowering {
+                    function: ctx.function_name.to_string(),
+                    reason: String::from("match scrutinee must be enum pointer (i32)"),
+                });
+            }
+            if arms.is_empty() {
+                return Err(LlvmCodegenError::UnsupportedHirLowering {
+                    function: ctx.function_name.to_string(),
+                    reason: String::from("match must have at least one arm"),
+                });
+            }
+
+            let scr_i64 = ctx.next_tmp();
+            let scr_ptr = ctx.next_tmp();
+            let tag = ctx.next_tmp();
+            ctx.push_line(&format!("  {} = zext i32 {} to i64", scr_i64, scr_v.repr));
+            ctx.push_line(&format!("  {} = inttoptr i64 {} to i32*", scr_ptr, scr_i64));
+            ctx.push_line(&format!("  {} = load i32, i32* {}, align 1", tag, scr_ptr));
+
+            let result_ty = llty_for_type(types, expr.ty);
+            let result_slot = if result_ty != LlTy::Void {
+                let slot = ctx.next_tmp();
+                ctx.push_line(&format!("  {} = alloca {}", slot, result_ty.ir()));
+                Some(slot)
+            } else {
+                None
+            };
+            let end_label = ctx.next_label("match_end");
+            let default_label = ctx.next_label("match_default");
+            let mut arm_labels = Vec::with_capacity(arms.len());
+            for _ in arms {
+                arm_labels.push(ctx.next_label("match_arm"));
+            }
+
+            ctx.push_line(&format!("  switch i32 {}, label %{} [", tag, default_label));
+            for (idx, arm) in arms.iter().enumerate() {
+                let arm_tag = enum_variant_tag(types, scrutinee.ty, arm.variant.as_str());
+                ctx.push_line(&format!("    i32 {}, label %{}", arm_tag, arm_labels[idx]));
+            }
+            ctx.push_line("  ]");
+
+            for (idx, arm) in arms.iter().enumerate() {
+                ctx.push_line(&format!("{}:", arm_labels[idx]));
+                ctx.begin_scope();
+                if let Some(bind) = &arm.bind_local {
+                    if let Some(payload_ty) =
+                        enum_variant_payload(types, scrutinee.ty, arm.variant.as_str())
+                    {
+                        let payload_ll = llty_for_type(types, payload_ty);
+                        let payload_offset = match payload_ll {
+                            LlTy::I64 | LlTy::F64 => 8,
+                            _ => 4,
+                        };
+                        let base_i64 = ctx.next_tmp();
+                        let base_ptr8 = ctx.next_tmp();
+                        let payload_ptr8 = ctx.next_tmp();
+                        ctx.push_line(&format!(
+                            "  {} = zext i32 {} to i64",
+                            base_i64, scr_v.repr
+                        ));
+                        ctx.push_line(&format!(
+                            "  {} = inttoptr i64 {} to i8*",
+                            base_ptr8, base_i64
+                        ));
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            payload_ptr8, base_ptr8, payload_offset
+                        ));
+
+                        let local_ptr = ctx.next_tmp();
+                        let local_val = if matches!(types.get(types.resolve_id(payload_ty)), TypeKind::U8)
+                        {
+                            let p = ctx.next_tmp();
+                            let raw = ctx.next_tmp();
+                            let z = ctx.next_tmp();
+                            ctx.push_line(&format!("  {} = bitcast i8* {} to i8*", p, payload_ptr8));
+                            ctx.push_line(&format!("  {} = load i8, i8* {}, align 1", raw, p));
+                            ctx.push_line(&format!("  {} = zext i8 {} to i32", z, raw));
+                            z
+                        } else {
+                            let typed_ptr = ctx.next_tmp();
+                            let loaded = ctx.next_tmp();
+                            ctx.push_line(&format!(
+                                "  {} = bitcast i8* {} to {}*",
+                                typed_ptr,
+                                payload_ptr8,
+                                payload_ll.ir()
+                            ));
+                            ctx.push_line(&format!(
+                                "  {} = load {}, {}* {}, align 1",
+                                loaded,
+                                payload_ll.ir(),
+                                payload_ll.ir(),
+                                typed_ptr
+                            ));
+                            loaded
+                        };
+                        ctx.push_line(&format!("  {} = alloca {}", local_ptr, payload_ll.ir()));
+                        ctx.push_line(&format!(
+                            "  store {} {}, {}* {}, align 1",
+                            payload_ll.ir(),
+                            local_val,
+                            payload_ll.ir(),
+                            local_ptr
+                        ));
+                        ctx.bind_local(bind.as_str(), local_ptr, payload_ll);
+                    }
+                }
+
+                let arm_val = lower_hir_expr(types, ctx, &arm.body)?;
+                if let Some(slot) = result_slot.as_ref() {
+                    let Some(v) = arm_val else {
+                        return Err(LlvmCodegenError::UnsupportedHirLowering {
+                            function: ctx.function_name.to_string(),
+                            reason: String::from("match arm result type mismatch"),
+                        });
+                    };
+                    if v.ty != result_ty {
+                        return Err(LlvmCodegenError::UnsupportedHirLowering {
+                            function: ctx.function_name.to_string(),
+                            reason: format!(
+                                "match arm result type mismatch: expected {:?}, got {:?}",
+                                result_ty, v.ty
+                            ),
+                        });
+                    }
+                    ctx.push_line(&format!(
+                        "  store {} {}, {}* {}, align 1",
+                        v.ty.ir(),
+                        v.repr,
+                        v.ty.ir(),
+                        slot
+                    ));
+                }
+                ctx.end_scope();
+                ctx.push_line(&format!("  br label %{}", end_label));
+            }
+
+            ctx.push_line(&format!("{}:", default_label));
+            ctx.push_line("  unreachable");
+
+            ctx.push_line(&format!("{}:", end_label));
+            if let Some(slot) = result_slot {
+                let tmp = ctx.next_tmp();
+                ctx.push_line(&format!(
+                    "  {} = load {}, {}* {}, align 1",
+                    tmp,
+                    result_ty.ir(),
+                    result_ty.ir(),
+                    slot
+                ));
+                Ok(Some(LlValue {
+                    ty: result_ty,
+                    repr: tmp,
+                }))
+            } else {
+                Ok(None)
+            }
+        }
         HirExprKind::Block(block) => lower_hir_block(types, ctx, block),
         HirExprKind::Intrinsic {
             name,
             type_args,
-            args: _,
+            args,
         } => {
             if name == "size_of" || name == "align_of" {
                 if let Some(ty) = type_args.first() {
@@ -922,9 +1404,222 @@ fn lower_hir_expr(
                     }));
                 }
             }
+            if name == "load" {
+                if type_args.len() != 1 || args.len() != 1 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic load requires one type arg and one value arg"),
+                    });
+                }
+                let Some(ptr_v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic load pointer must produce a value"),
+                    });
+                };
+                if ptr_v.ty != LlTy::I32 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic load pointer must be i32"),
+                    });
+                }
+                let ty_id = types.resolve_id(type_args[0]);
+                let ty_kind = types.get(ty_id);
+                if matches!(ty_kind, TypeKind::U8) {
+                    let p_i64 = ctx.next_tmp();
+                    let p_ptr = ctx.next_tmp();
+                    let raw = ctx.next_tmp();
+                    let out = ctx.next_tmp();
+                    ctx.push_line(&format!("  {} = zext i32 {} to i64", p_i64, ptr_v.repr));
+                    ctx.push_line(&format!("  {} = inttoptr i64 {} to i8*", p_ptr, p_i64));
+                    ctx.push_line(&format!("  {} = load i8, i8* {}, align 1", raw, p_ptr));
+                    ctx.push_line(&format!("  {} = zext i8 {} to i32", out, raw));
+                    return Ok(Some(LlValue {
+                        ty: LlTy::I32,
+                        repr: out,
+                    }));
+                }
+                let out_ty = llty_for_type(types, ty_id);
+                let p_i64 = ctx.next_tmp();
+                let p_ptr = ctx.next_tmp();
+                let out = ctx.next_tmp();
+                ctx.push_line(&format!("  {} = zext i32 {} to i64", p_i64, ptr_v.repr));
+                ctx.push_line(&format!(
+                    "  {} = inttoptr i64 {} to {}*",
+                    p_ptr,
+                    p_i64,
+                    out_ty.ir()
+                ));
+                ctx.push_line(&format!(
+                    "  {} = load {}, {}* {}, align 1",
+                    out,
+                    out_ty.ir(),
+                    out_ty.ir(),
+                    p_ptr
+                ));
+                return Ok(Some(LlValue {
+                    ty: out_ty,
+                    repr: out,
+                }));
+            }
+            if name == "store" {
+                if type_args.len() != 1 || args.len() != 2 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic store requires one type arg and two value args"),
+                    });
+                }
+                let Some(ptr_v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic store pointer must produce a value"),
+                    });
+                };
+                let Some(val_v) = lower_hir_expr(types, ctx, &args[1])? else {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic store value must produce a value"),
+                    });
+                };
+                if ptr_v.ty != LlTy::I32 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic store pointer must be i32"),
+                    });
+                }
+                let ty_id = types.resolve_id(type_args[0]);
+                let ty_kind = types.get(ty_id);
+                if matches!(ty_kind, TypeKind::U8) {
+                    if val_v.ty != LlTy::I32 {
+                        return Err(LlvmCodegenError::UnsupportedHirLowering {
+                            function: ctx.function_name.to_string(),
+                            reason: String::from("intrinsic store<u8> expects i32 value"),
+                        });
+                    }
+                    let p_i64 = ctx.next_tmp();
+                    let p_ptr = ctx.next_tmp();
+                    let b = ctx.next_tmp();
+                    ctx.push_line(&format!("  {} = zext i32 {} to i64", p_i64, ptr_v.repr));
+                    ctx.push_line(&format!("  {} = inttoptr i64 {} to i8*", p_ptr, p_i64));
+                    ctx.push_line(&format!("  {} = trunc i32 {} to i8", b, val_v.repr));
+                    ctx.push_line(&format!("  store i8 {}, i8* {}, align 1", b, p_ptr));
+                    return Ok(None);
+                }
+                let store_ty = llty_for_type(types, ty_id);
+                if val_v.ty != store_ty {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: format!(
+                            "intrinsic store type mismatch: expected {:?}, got {:?}",
+                            store_ty, val_v.ty
+                        ),
+                    });
+                }
+                let p_i64 = ctx.next_tmp();
+                let p_ptr = ctx.next_tmp();
+                ctx.push_line(&format!("  {} = zext i32 {} to i64", p_i64, ptr_v.repr));
+                ctx.push_line(&format!(
+                    "  {} = inttoptr i64 {} to {}*",
+                    p_ptr,
+                    p_i64,
+                    store_ty.ir()
+                ));
+                ctx.push_line(&format!(
+                    "  store {} {}, {}* {}, align 1",
+                    store_ty.ir(),
+                    val_v.repr,
+                    store_ty.ir(),
+                    p_ptr
+                ));
+                return Ok(None);
+            }
             if name == "unreachable" {
                 ctx.push_line("  unreachable");
                 return Ok(None);
+            }
+            if name == "add" {
+                if args.len() != 2 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic add expects two arguments"),
+                    });
+                }
+                let Some(a) = lower_hir_expr(types, ctx, &args[0])? else {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic add lhs must produce a value"),
+                    });
+                };
+                let Some(b) = lower_hir_expr(types, ctx, &args[1])? else {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic add rhs must produce a value"),
+                    });
+                };
+                if a.ty != LlTy::I32 || b.ty != LlTy::I32 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic add currently supports i32 only"),
+                    });
+                }
+                let out = ctx.next_tmp();
+                ctx.push_line(&format!("  {} = add i32 {}, {}", out, a.repr, b.repr));
+                return Ok(Some(LlValue {
+                    ty: LlTy::I32,
+                    repr: out,
+                }));
+            }
+            if name == "f32_to_i32" {
+                if args.len() != 1 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic f32_to_i32 expects one argument"),
+                    });
+                }
+                let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic f32_to_i32 value must produce a value"),
+                    });
+                };
+                if v.ty != LlTy::F32 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic f32_to_i32 expects f32"),
+                    });
+                }
+                let out = ctx.next_tmp();
+                ctx.push_line(&format!("  {} = fptosi float {} to i32", out, v.repr));
+                return Ok(Some(LlValue {
+                    ty: LlTy::I32,
+                    repr: out,
+                }));
+            }
+            if name == "i32_to_u8" {
+                if args.len() != 1 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic i32_to_u8 expects one argument"),
+                    });
+                }
+                let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic i32_to_u8 value must produce a value"),
+                    });
+                };
+                if v.ty != LlTy::I32 {
+                    return Err(LlvmCodegenError::UnsupportedHirLowering {
+                        function: ctx.function_name.to_string(),
+                        reason: String::from("intrinsic i32_to_u8 expects i32"),
+                    });
+                }
+                let out = ctx.next_tmp();
+                ctx.push_line(&format!("  {} = and i32 {}, 255", out, v.repr));
+                return Ok(Some(LlValue {
+                    ty: LlTy::I32,
+                    repr: out,
+                }));
             }
             Err(LlvmCodegenError::UnsupportedHirLowering {
                 function: ctx.function_name.to_string(),
@@ -951,27 +1646,44 @@ fn lower_hir_string_literal(
         });
     };
     let bytes = s.as_bytes();
-    let alloc_sig = ctx.sigs.get("alloc").ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
+    let alloc_name = resolve_symbol_name(
+        ctx.sigs,
+        "alloc",
+        &[LlTy::I32],
+        LlTy::I32,
+    ).ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
         function: ctx.function_name.to_string(),
         reason: String::from("alloc function is required to materialize string literals"),
     })?;
-    if alloc_sig.params.len() != 1 || alloc_sig.ret != LlTy::I32 {
-        return Err(LlvmCodegenError::UnsupportedHirLowering {
-            function: ctx.function_name.to_string(),
-            reason: String::from("alloc signature is incompatible"),
-        });
-    }
+    let store_i32_name = resolve_symbol_name(
+        ctx.sigs,
+        "store_i32",
+        &[LlTy::I32, LlTy::I32],
+        LlTy::Void,
+    ).ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
+        function: ctx.function_name.to_string(),
+        reason: String::from("store_i32 function is required to materialize string literals"),
+    })?;
+    let store_u8_name = resolve_symbol_name(
+        ctx.sigs,
+        "store_u8",
+        &[LlTy::I32, LlTy::I32],
+        LlTy::Void,
+    ).ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
+        function: ctx.function_name.to_string(),
+        reason: String::from("store_u8 function is required to materialize string literals"),
+    })?;
     let ptr_tmp = ctx.next_tmp();
     let total_len = (bytes.len() + 4) as i32;
     ctx.push_line(&format!(
         "  {} = call i32 {}(i32 {})",
         ptr_tmp,
-        ll_symbol("alloc"),
+        ll_symbol(alloc_name),
         total_len
     ));
     ctx.push_line(&format!(
         "  call void {}(i32 {}, i32 {})",
-        ll_symbol("store_i32"),
+        ll_symbol(store_i32_name),
         ptr_tmp,
         bytes.len()
     ));
@@ -980,7 +1692,7 @@ fn lower_hir_string_literal(
         ctx.push_line(&format!("  {} = add i32 {}, {}", off, ptr_tmp, idx + 4));
         ctx.push_line(&format!(
             "  call void {}(i32 {}, i32 {})",
-            ll_symbol("store_u8"),
+            ll_symbol(store_u8_name),
             off,
             *b as i32
         ));
@@ -1010,6 +1722,14 @@ fn llty_for_type(types: &TypeCtx, ty: TypeId) -> LlTy {
     }
 }
 
+fn ll_storage_size(ty: LlTy) -> i64 {
+    match ty {
+        LlTy::I64 | LlTy::F64 => 8,
+        LlTy::Void => 0,
+        LlTy::I32 | LlTy::F32 => 4,
+    }
+}
+
 fn ll_symbol(name: &str) -> String {
     let escaped = name
         .replace('\\', "\\5C")
@@ -1017,20 +1737,117 @@ fn ll_symbol(name: &str) -> String {
     format!("@\"{}\"", escaped)
 }
 
-fn summarize_diagnostics_for_message(diags: &[crate::diagnostic::Diagnostic]) -> String {
-    let mut uniq = BTreeSet::new();
-    for d in diags {
-        if matches!(d.severity, crate::diagnostic::Severity::Error) {
-            uniq.insert(d.message.clone());
+fn resolve_symbol_name<'a>(
+    sigs: &'a BTreeMap<String, FnSig>,
+    preferred: &'a str,
+    params: &[LlTy],
+    ret: LlTy,
+) -> Option<&'a str> {
+    let signature_matches = |sig: &FnSig| sig.ret == ret && sig.params.as_slice() == params;
+
+    if let Some(sig) = sigs.get(preferred) {
+        if signature_matches(sig) {
+            return Some(preferred);
         }
     }
-    if uniq.is_empty() {
+
+    let mut candidates = sigs
+        .iter()
+        .filter_map(|(name, sig)| {
+            if !signature_matches(sig) {
+                return None;
+            }
+            if name == preferred || name.starts_with(&format!("{}__", preferred)) {
+                Some(name.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if candidates.is_empty() {
+        return None;
+    }
+    candidates.sort_unstable();
+    candidates.first().copied()
+}
+
+fn enum_variant_tag(ctx: &TypeCtx, enum_ty: TypeId, variant: &str) -> i32 {
+    let name = if let Some(pos) = variant.rfind("::") {
+        &variant[pos + 2..]
+    } else {
+        variant
+    };
+    let enum_ty = ctx.resolve_id(enum_ty);
+    match ctx.get(enum_ty) {
+        TypeKind::Enum { variants, .. } => variants
+            .iter()
+            .position(|v| v.name == name)
+            .unwrap_or(0) as i32,
+        TypeKind::Apply { base, .. } => enum_variant_tag(ctx, base, name),
+        _ => 0,
+    }
+}
+
+fn enum_variant_payload(ctx: &TypeCtx, enum_ty: TypeId, variant: &str) -> Option<TypeId> {
+    let name = if let Some(pos) = variant.rfind("::") {
+        &variant[pos + 2..]
+    } else {
+        variant
+    };
+    let enum_ty = ctx.resolve_id(enum_ty);
+    match ctx.get(enum_ty) {
+        TypeKind::Enum { variants, .. } => variants
+            .iter()
+            .find(|v| v.name == name)
+            .and_then(|v| v.payload),
+        TypeKind::Apply { base, args } => match ctx.get(base) {
+            TypeKind::Enum {
+                variants,
+                type_params,
+                ..
+            } => {
+                let payload = variants
+                    .iter()
+                    .find(|v| v.name == name)
+                    .and_then(|v| v.payload);
+                payload.map(|pty| {
+                    if let Some(pos) = type_params.iter().position(|tp| *tp == pty) {
+                        if let Some(arg) = args.get(pos) {
+                            return *arg;
+                        }
+                    }
+                    pty
+                })
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn summarize_diagnostics_for_message(diags: &[crate::diagnostic::Diagnostic]) -> String {
+    let errs = diags
+        .iter()
+        .filter(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
+        .collect::<Vec<_>>();
+    if errs.is_empty() {
         return String::from("no diagnostic details");
     }
-    let total = uniq.len();
-    let mut parts = uniq.into_iter().take(3).collect::<Vec<_>>();
-    if total > 3 {
-        parts.push(format!("... and {} more", total - 3));
+    let mut uniq = BTreeSet::new();
+    for d in errs.iter().take(8) {
+        uniq.insert(format!(
+            "{} (file={}, start={}, end={})",
+            d.message,
+            d.primary.span.file_id.0,
+            d.primary.span.start,
+            d.primary.span.end
+        ));
+    }
+    let total = errs.len();
+    let mut parts = uniq.into_iter().collect::<Vec<_>>();
+    if total > parts.len() {
+        parts.push(format!("... and {} more diagnostics", total - parts.len()));
     }
     parts.join(" / ")
 }
@@ -1050,6 +1867,7 @@ fn collect_defined_functions_from_llvmir_block(
 
 fn parse_defined_function_name(line: &str) -> Option<&str> {
     // 例: define i32 @foo(i32 %x) {
+    // 例: define i32 @"foo"(i32 %x) {
     let trimmed = line.trim_start();
     if !trimmed.starts_with("define ") {
         return None;
@@ -1057,12 +1875,21 @@ fn parse_defined_function_name(line: &str) -> Option<&str> {
     let at = trimmed.find('@')?;
     let rest = &trimmed[(at + 1)..];
     let end = rest.find('(')?;
-    let name = &rest[..end];
+    let mut name = &rest[..end];
+    if name.starts_with('"') && name.ends_with('"') && name.len() >= 2 {
+        name = &name[1..name.len() - 1];
+    }
     if name.is_empty() {
         None
     } else {
         Some(name)
     }
+}
+
+fn llvm_output_has_function(out: &str, name: &str) -> bool {
+    let needle_plain = format!("@{}(", name);
+    let needle_quoted = format!("@\"{}\"(", name);
+    out.contains(&needle_plain) || out.contains(&needle_quoted)
 }
 
 fn collect_active_entry_names(
