@@ -3320,3 +3320,20 @@
   - `llvm`: `.ll` 生成は成功。ただしリンク時に `undefined reference to main` で実行不可。
     - 現状の LLVM backend はユーザー関数/entry の最終出力が未完で、`main`/`_start` を持つ実行 IR 生成が未対応。
     - これは `todo.md` の LLVM backend 本実装タスクで継続。
+
+# 2026-02-22 作業メモ (LLVM entry ブリッジ追加と examples 実行確認)
+- 実装:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `#entry` で指定された関数が raw/parsed subset で emit 済みの場合、`main` が未定義なら
+      `define i32 @main() { call @entry; ret }` のブリッジを自動生成する処理を追加。
+    - raw `#llvmir` ブロックから `define @name` を抽出して、emit 済み関数集合を追跡する補助関数を追加。
+- 回帰確認（直列）:
+  1. `NO_COLOR=false trunk build` -> pass
+  2. `node nodesrc/tests.js -i tests --runner llvm --llvm-all --no-tree -o tests/output/tests_current_llvm.json -j 2` -> pass (`601/601`)
+- examples 実行確認:
+  - `wasi --run`: `helloworld`, `counter`, `kp_fizzbuzz` はすべて成功。
+  - `llvm`: `.ll` 生成は成功するが、clang リンク時に `undefined reference to main` で失敗。
+    - 3例とも `main`/`_start` が最終 `.ll` に存在しないことを確認。
+    - 根因は、entry 本体（Parsed 関数）の LLVM lower が未実装で emit されていないため。
+- 次アクション:
+  - Parsed/HIR の LLVM lower（少なくとも entry 関数本体）を実装し、`main` を確実に生成する。

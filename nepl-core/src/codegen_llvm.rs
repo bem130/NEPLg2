@@ -72,6 +72,7 @@ pub fn emit_ll_from_module_for_target(
 ) -> Result<String, LlvmCodegenError> {
     let mut out = String::new();
     let entry_names = collect_active_entry_names(module, target, profile);
+    let mut emitted_functions: Vec<String> = Vec::new();
     let mut pending_if: Option<bool> = None;
 
     for stmt in &module.root.items {
@@ -89,10 +90,12 @@ pub fn emit_ll_from_module_for_target(
 
         match stmt {
             Stmt::LlvmIr(block) => {
+                collect_defined_functions_from_llvmir_block(block, &mut emitted_functions);
                 append_llvmir_block(&mut out, block);
             }
             Stmt::FnDef(def) => match &def.body {
                 FnBody::LlvmIr(block) => {
+                    collect_defined_functions_from_llvmir_block(block, &mut emitted_functions);
                     append_llvmir_block(&mut out, block);
                 }
                 FnBody::Parsed(block) => {
@@ -119,6 +122,7 @@ pub fn emit_ll_from_module_for_target(
                                 target,
                                 profile,
                             ) {
+                                emitted_functions.push(def.name.name.clone());
                                 out.push_str(&lowered);
                                 out.push('\n');
                             }
@@ -140,7 +144,49 @@ pub fn emit_ll_from_module_for_target(
         }
     }
 
+    if let Some(entry) = entry_names.last() {
+        if emitted_functions.iter().any(|n| n == entry)
+            && entry != "main"
+            && !emitted_functions.iter().any(|n| n == "main")
+        {
+            out.push_str(&format!(
+                "define i32 @main() {{\nentry:\n  %0 = call i32 @{}()\n  ret i32 %0\n}}\n\n",
+                entry
+            ));
+        }
+    }
+
     Ok(out)
+}
+
+fn collect_defined_functions_from_llvmir_block(
+    block: &crate::ast::LlvmIrBlock,
+    out: &mut Vec<String>,
+) {
+    for line in &block.lines {
+        if let Some(name) = parse_defined_function_name(line) {
+            if !out.iter().any(|n| n == name) {
+                out.push(String::from(name));
+            }
+        }
+    }
+}
+
+fn parse_defined_function_name(line: &str) -> Option<&str> {
+    // 例: define i32 @foo(i32 %x) {
+    let trimmed = line.trim_start();
+    if !trimmed.starts_with("define ") {
+        return None;
+    }
+    let at = trimmed.find('@')?;
+    let rest = &trimmed[(at + 1)..];
+    let end = rest.find('(')?;
+    let name = &rest[..end];
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
 }
 
 fn collect_active_entry_names(
@@ -427,4 +473,24 @@ fn main <()->i32> ():
             }
         );
     }
+
+    #[test]
+    fn emit_ll_generates_main_bridge_from_entry() {
+        let src = r#"
+#target llvm
+#entry boot
+fn boot <()->i32> ():
+    #llvmir:
+        define i32 @boot() {
+        entry:
+            ret i32 9
+        }
+"#;
+        let module = parse_module(src);
+        let ll = emit_ll_from_module(&module).expect("entry bridge should be emitted");
+        assert!(ll.contains("define i32 @boot()"));
+        assert!(ll.contains("define i32 @main()"));
+        assert!(ll.contains("call i32 @boot()"));
+    }
+
 }
