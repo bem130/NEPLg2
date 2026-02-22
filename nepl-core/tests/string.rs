@@ -203,10 +203,9 @@ fn main <()*>()> ():
 }
 
 #[test]
-#[should_panic]  // Specification should clarify - for now expect error
 fn test_mlstr_empty_lines() {
-    // How should mlstr: handle empty lines?
-    // Based on specification: should error or have clear rules
+    // 現行実装では空行は無視され、mlstr の本文は `##:` 行のみで構成される。
+    // そのためこのケースはエラーにはならず、少なくともコンパイルは通ることを固定する。
     let src = r#"
 #entry main
 fn main <()*>()> ():

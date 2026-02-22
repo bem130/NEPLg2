@@ -84,10 +84,10 @@ fn main <()*>i32> ():
     let trimmed <str> str_trim s;
     
     // 要件: starts_with / ends_with
+    let ok_starts_with_fn <bool> str_starts_with trimmed "fn";
     if:
-        not str_starts_with trimmed "fn"
-        then 1
-        else:
+        ok_starts_with_fn
+        then:
             // 要件: split (区切り文字での分割)
             let parts <Vec<str>> str_split trimmed "(";
             let name_part <str> unwrap<str> vec_get<str> parts 0; // "fn main"
@@ -99,6 +99,7 @@ fn main <()*>i32> ():
                 str_eq func_name "main"
                 then 0
                 else 2
+        else 1
     
 ```
 

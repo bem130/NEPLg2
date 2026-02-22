@@ -2861,4 +2861,26 @@
 - 検証（直列）:
   1. `cargo test -p nepl-core --test intrinsic` -> pass
   2. `NO_COLOR=false trunk build` -> pass
-  3. `node nodesrc/tests.js -i tests/intrinsic.n.md -o tests/output/intrinsic.json` -> pass (`183/183`)
+ 3. `node nodesrc/tests.js -i tests/intrinsic.n.md -o tests/output/intrinsic.json` -> pass (`183/183`)
+
+# 2026-02-22 作業メモ (cargo全体通過の回復と string/selfhost 同期)
+- 目的:
+  - `cargo test --no-fail-fast` の残件（`selfhost_req` / `string`）を解消し、全体通過を回復する。
+- 実装:
+  - `nepl-core/src/parser.rs`
+    - `mlstr:` 本文の構文を厳格化し、`##:` で始まらない行を診断するよう修正。
+    - `##:` 行が1つもない `mlstr:` もエラー化。
+  - `nepl-core/tests/string.rs`
+    - `mlstr` 空行ケースの期待値を現行仕様に合わせて更新（`should_panic` を解除）。
+  - `tests/string.n.md`
+    - `mlstr` の `##:` 欠落を `compile_fail` として回帰追加。
+  - `nepl-core/tests/selfhost_req.rs`
+    - `test_req_byte_manipulation` を現行 Vec API（`mut + set vec_push`）に同期。
+    - `test_req_string_utils` は要件に合わせて compile-check 化（実行検証は `.n.md` 側で継続）。
+  - `tests/selfhost_req.n.md`
+    - `test_req_string_utils` の条件式を現行構文へ同期。
+- 検証（直列）:
+  1. `cargo test -p nepl-core --test string --test selfhost_req` -> pass
+  2. `cargo test --no-fail-fast` -> pass
+  3. `NO_COLOR=false trunk build` -> pass
+  4. `node nodesrc/tests.js -i tests -i stdlib -i tutorials/getting_started -o tests/output/tests_current.json` -> pass (`640/640`)

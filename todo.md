@@ -41,6 +41,12 @@
 - `stdlib/kp` のドキュメントコメント/ドキュメントテスト形式を基準に、他 stdlib へ統一展開する。
 - 複雑データ処理の箇所を中心に改行 `|>` パイプを活用し、可読性とメモリ安全性を両立する。
 
+9. LLVM IR target 追加（nepl-cli 限定）
+- `nepl-cli` からのみ LLVM IR を出力できる target を追加する（`nepl-web` は対象外）。
+- LLVM 21.1.0 (linux native) 前提で toolchain 検出とビルド手順を固定する。
+- `inkwell`/`llvm-sys` のバージョン固定と `LLVM_SYS_211_PREFIX` 運用を整理し、`doc/` にセットアップを記載する。
+- 既存の wasm/wasi 経路に影響を与えないよう codegen 層を分離する。
+
 ---
 ### 以下編集禁止
 

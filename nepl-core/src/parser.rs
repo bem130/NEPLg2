@@ -3441,53 +3441,66 @@ impl Parser {
         })
     }
 
-    fn parse_mlstr_layout(&mut self, _span: Span) -> Option<String> {
+    fn parse_mlstr_layout(&mut self, span: Span) -> Option<String> {
         let mut text = String::new();
         let mut first = true;
-        
-        // Skip optional newline before block
+        let mut saw_mlstr_line = false;
+
+        // `mlstr:` の直後に空行が続く書き方は許容するが、本文行は `##:` 必須。
         while self.consume_if(&TokenKind::Newline) {}
-        
+
         self.expect(&TokenKind::Indent)?;
-        
+
         while !self.is_end(&TokenEnd::Dedent) {
-            let next_tok = self.next();
-            match next_tok {
-                Some(Token {
-                    kind: TokenKind::MlstrLine(line),
-                    ..
-                }) => {
-                    if !first {
-                        text.push('\n');
+            match self.peek_kind() {
+                Some(TokenKind::MlstrLine(_)) => {
+                    if let Some(Token {
+                        kind: TokenKind::MlstrLine(line),
+                        ..
+                    }) = self.next()
+                    {
+                        if !first {
+                            text.push('\n');
+                        }
+                        text.push_str(&line);
+                        first = false;
+                        saw_mlstr_line = true;
                     }
-                    text.push_str(&line);
-                    first = false;
                     self.consume_if(&TokenKind::Newline);
                 }
-                Some(Token {
-                    kind: TokenKind::Newline,
-                    ..
-                }) => {
-                    // empty line or extra newline, ignore
+                Some(TokenKind::Newline) => {
+                    let err_span = self.next().map(|t| t.span).unwrap_or(span);
+                    self.diagnostics.push(Diagnostic::error(
+                        "mlstr lines must start with '##:'",
+                        err_span,
+                    ));
                 }
-                Some(Token {
-                    kind: TokenKind::Dedent,
-                    ..
-                }) | Some(Token {
-                    kind: TokenKind::Eof,
-                    ..
-                }) => {
-                    // should be handled by is_end, but just in case
-                    break;
-                }
+                Some(TokenKind::Dedent) | Some(TokenKind::Eof) => break,
                 Some(_) => {
-                    // unexpected token in mlstr layout, but let's just skip it
-                    // and continue until we find a Dedent or EOF
+                    let err_span = self.peek_span().unwrap_or(span);
+                    self.diagnostics.push(Diagnostic::error(
+                        "mlstr lines must start with '##:'",
+                        err_span,
+                    ));
+                    while let Some(kind) = self.peek_kind() {
+                        if matches!(kind, TokenKind::Newline | TokenKind::Dedent | TokenKind::Eof)
+                        {
+                            break;
+                        }
+                        self.next();
+                    }
+                    self.consume_if(&TokenKind::Newline);
                 }
                 None => break,
             }
         }
         self.consume_if(&TokenKind::Dedent);
+        if !saw_mlstr_line {
+            self.diagnostics.push(Diagnostic::error(
+                "mlstr requires at least one '##:' line",
+                span,
+            ));
+        }
         Some(text)
     }
 

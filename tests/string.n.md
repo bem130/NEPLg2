@@ -207,6 +207,22 @@ fn main <()* >()> ():
     print "END"
 ```
 
+## test_mlstr_missing_prefix_is_error
+
+`mlstr:` 本文は `##: ` で始まる行のみ許可します。
+接頭辞のない行を混在させた場合は、パース時にエラーになることを固定します。
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+fn main <()->i32> ():
+    let text <str> mlstr:
+        ##: line1
+        line2 without prefix
+    0
+```
+
 ## test_string_to_str_implicit_conversion
 
 neplg2:test
