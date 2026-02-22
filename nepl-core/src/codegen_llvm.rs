@@ -297,6 +297,29 @@ impl<'a> LowerCtx<'a> {
         }
         None
     }
+
+    fn linear_i8_ptr_from_i32(&mut self, offset_i32: &str) -> String {
+        let idx_i64 = self.next_tmp();
+        let ptr_i8 = self.next_tmp();
+        self.push_line(&format!("  {} = zext i32 {} to i64", idx_i64, offset_i32));
+        self.push_line(&format!(
+            "  {} = getelementptr [67108864 x i8], [67108864 x i8]* @__nepl_mem, i64 0, i64 {}",
+            ptr_i8, idx_i64
+        ));
+        ptr_i8
+    }
+
+    fn linear_typed_ptr_from_i32(&mut self, offset_i32: &str, ty: LlTy) -> String {
+        let base_i8 = self.linear_i8_ptr_from_i32(offset_i32);
+        let typed_ptr = self.next_tmp();
+        self.push_line(&format!(
+            "  {} = bitcast i8* {} to {}*",
+            typed_ptr,
+            base_i8,
+            ty.ir()
+        ));
+        typed_ptr
+    }
 }
 
 fn try_lower_entry_from_hir(
@@ -1012,10 +1035,7 @@ fn lower_hir_expr(
             ));
 
             let tag = enum_variant_tag(types, expr.ty, variant.as_str());
-            let ptr_i64 = ctx.next_tmp();
-            let tag_ptr = ctx.next_tmp();
-            ctx.push_line(&format!("  {} = zext i32 {} to i64", ptr_i64, ptr));
-            ctx.push_line(&format!("  {} = inttoptr i64 {} to i32*", tag_ptr, ptr_i64));
+            let tag_ptr = ctx.linear_typed_ptr_from_i32(ptr.as_str(), LlTy::I32);
             ctx.push_line(&format!("  store i32 {}, i32* {}, align 1", tag, tag_ptr));
 
             if let Some(p) = payload {
@@ -1036,12 +1056,9 @@ fn lower_hir_expr(
                             ),
                         });
                     }
-                    let base_i64 = ctx.next_tmp();
-                    let base_ptr8 = ctx.next_tmp();
+                    let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
                     let payload_ptr8 = ctx.next_tmp();
                     let typed_ptr = ctx.next_tmp();
-                    ctx.push_line(&format!("  {} = zext i32 {} to i64", base_i64, ptr));
-                    ctx.push_line(&format!("  {} = inttoptr i64 {} to i8*", base_ptr8, base_i64));
                     ctx.push_line(&format!(
                         "  {} = getelementptr i8, i8* {}, i64 {}",
                         payload_ptr8, base_ptr8, payload_offset
@@ -1115,12 +1132,9 @@ fn lower_hir_expr(
                         ),
                     });
                 }
-                let base_i64 = ctx.next_tmp();
-                let base_ptr8 = ctx.next_tmp();
+                let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
                 let field_ptr8 = ctx.next_tmp();
                 let typed_ptr = ctx.next_tmp();
-                ctx.push_line(&format!("  {} = zext i32 {} to i64", base_i64, ptr));
-                ctx.push_line(&format!("  {} = inttoptr i64 {} to i8*", base_ptr8, base_i64));
                 ctx.push_line(&format!(
                     "  {} = getelementptr i8, i8* {}, i64 {}",
                     field_ptr8, base_ptr8, offsets[idx]
@@ -1188,12 +1202,9 @@ fn lower_hir_expr(
                         ),
                     });
                 }
-                let base_i64 = ctx.next_tmp();
-                let base_ptr8 = ctx.next_tmp();
+                let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
                 let item_ptr8 = ctx.next_tmp();
                 let typed_ptr = ctx.next_tmp();
-                ctx.push_line(&format!("  {} = zext i32 {} to i64", base_i64, ptr));
-                ctx.push_line(&format!("  {} = inttoptr i64 {} to i8*", base_ptr8, base_i64));
                 ctx.push_line(&format!(
                     "  {} = getelementptr i8, i8* {}, i64 {}",
                     item_ptr8, base_ptr8, offsets[idx]
@@ -1237,11 +1248,8 @@ fn lower_hir_expr(
                 });
             }
 
-            let scr_i64 = ctx.next_tmp();
-            let scr_ptr = ctx.next_tmp();
+            let scr_ptr = ctx.linear_typed_ptr_from_i32(scr_v.repr.as_str(), LlTy::I32);
             let tag = ctx.next_tmp();
-            ctx.push_line(&format!("  {} = zext i32 {} to i64", scr_i64, scr_v.repr));
-            ctx.push_line(&format!("  {} = inttoptr i64 {} to i32*", scr_ptr, scr_i64));
             ctx.push_line(&format!("  {} = load i32, i32* {}, align 1", tag, scr_ptr));
 
             let result_ty = llty_for_type(types, expr.ty);
@@ -1278,17 +1286,8 @@ fn lower_hir_expr(
                             LlTy::I64 | LlTy::F64 => 8,
                             _ => 4,
                         };
-                        let base_i64 = ctx.next_tmp();
-                        let base_ptr8 = ctx.next_tmp();
+                        let base_ptr8 = ctx.linear_i8_ptr_from_i32(scr_v.repr.as_str());
                         let payload_ptr8 = ctx.next_tmp();
-                        ctx.push_line(&format!(
-                            "  {} = zext i32 {} to i64",
-                            base_i64, scr_v.repr
-                        ));
-                        ctx.push_line(&format!(
-                            "  {} = inttoptr i64 {} to i8*",
-                            base_ptr8, base_i64
-                        ));
                         ctx.push_line(&format!(
                             "  {} = getelementptr i8, i8* {}, i64 {}",
                             payload_ptr8, base_ptr8, payload_offset
@@ -1426,12 +1425,9 @@ fn lower_hir_expr(
                 let ty_id = types.resolve_id(type_args[0]);
                 let ty_kind = types.get(ty_id);
                 if matches!(ty_kind, TypeKind::U8) {
-                    let p_i64 = ctx.next_tmp();
-                    let p_ptr = ctx.next_tmp();
+                    let p_ptr = ctx.linear_i8_ptr_from_i32(ptr_v.repr.as_str());
                     let raw = ctx.next_tmp();
                     let out = ctx.next_tmp();
-                    ctx.push_line(&format!("  {} = zext i32 {} to i64", p_i64, ptr_v.repr));
-                    ctx.push_line(&format!("  {} = inttoptr i64 {} to i8*", p_ptr, p_i64));
                     ctx.push_line(&format!("  {} = load i8, i8* {}, align 1", raw, p_ptr));
                     ctx.push_line(&format!("  {} = zext i8 {} to i32", out, raw));
                     return Ok(Some(LlValue {
@@ -1440,16 +1436,8 @@ fn lower_hir_expr(
                     }));
                 }
                 let out_ty = llty_for_type(types, ty_id);
-                let p_i64 = ctx.next_tmp();
-                let p_ptr = ctx.next_tmp();
+                let p_ptr = ctx.linear_typed_ptr_from_i32(ptr_v.repr.as_str(), out_ty);
                 let out = ctx.next_tmp();
-                ctx.push_line(&format!("  {} = zext i32 {} to i64", p_i64, ptr_v.repr));
-                ctx.push_line(&format!(
-                    "  {} = inttoptr i64 {} to {}*",
-                    p_ptr,
-                    p_i64,
-                    out_ty.ir()
-                ));
                 ctx.push_line(&format!(
                     "  {} = load {}, {}* {}, align 1",
                     out,
@@ -1496,11 +1484,8 @@ fn lower_hir_expr(
                             reason: String::from("intrinsic store<u8> expects i32 value"),
                         });
                     }
-                    let p_i64 = ctx.next_tmp();
-                    let p_ptr = ctx.next_tmp();
+                    let p_ptr = ctx.linear_i8_ptr_from_i32(ptr_v.repr.as_str());
                     let b = ctx.next_tmp();
-                    ctx.push_line(&format!("  {} = zext i32 {} to i64", p_i64, ptr_v.repr));
-                    ctx.push_line(&format!("  {} = inttoptr i64 {} to i8*", p_ptr, p_i64));
                     ctx.push_line(&format!("  {} = trunc i32 {} to i8", b, val_v.repr));
                     ctx.push_line(&format!("  store i8 {}, i8* {}, align 1", b, p_ptr));
                     return Ok(None);
@@ -1515,15 +1500,7 @@ fn lower_hir_expr(
                         ),
                     });
                 }
-                let p_i64 = ctx.next_tmp();
-                let p_ptr = ctx.next_tmp();
-                ctx.push_line(&format!("  {} = zext i32 {} to i64", p_i64, ptr_v.repr));
-                ctx.push_line(&format!(
-                    "  {} = inttoptr i64 {} to {}*",
-                    p_ptr,
-                    p_i64,
-                    store_ty.ir()
-                ));
+                let p_ptr = ctx.linear_typed_ptr_from_i32(ptr_v.repr.as_str(), store_ty);
                 ctx.push_line(&format!(
                     "  store {} {}, {}* {}, align 1",
                     store_ty.ir(),

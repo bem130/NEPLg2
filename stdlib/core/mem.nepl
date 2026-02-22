@@ -398,10 +398,15 @@ fn load_i32 <(i32)->i32> (p):
     #llvmir:
         define i32 @load_i32(i32 %p) {
         entry:
+            %ok = icmp ule i32 %p, 67108860
+            br i1 %ok, label %in, label %oob
+        in:
             %idx = zext i32 %p to i64
-            %ptr8 = getelementptr inbounds [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
+            %ptr8 = getelementptr [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
             %0 = load i32, ptr %ptr8, align 1
             ret i32 %0
+        oob:
+            ret i32 0
         }
 
 //: store_i32: i32 を書き込む
@@ -427,9 +432,14 @@ fn store_i32 <(i32,i32)*>()> (p, v):
     #llvmir:
         define void @store_i32(i32 %p, i32 %v) {
         entry:
+            %ok = icmp ule i32 %p, 67108860
+            br i1 %ok, label %in, label %oob
+        in:
             %idx = zext i32 %p to i64
-            %ptr8 = getelementptr inbounds [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
+            %ptr8 = getelementptr [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
             store i32 %v, ptr %ptr8, align 1
+            ret void
+        oob:
             ret void
         }
 
@@ -455,11 +465,16 @@ fn load_u8 <(i32)->i32> (p):
     #llvmir:
         define i32 @load_u8(i32 %p) {
         entry:
+            %ok = icmp ule i32 %p, 67108863
+            br i1 %ok, label %in, label %oob
+        in:
             %idx = zext i32 %p to i64
-            %ptr8 = getelementptr inbounds [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
+            %ptr8 = getelementptr [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
             %raw = load i8, ptr %ptr8, align 1
             %0 = zext i8 %raw to i32
             ret i32 %0
+        oob:
+            ret i32 0
         }
 
 //: store_u8: 1 バイトを書き込む
@@ -485,10 +500,15 @@ fn store_u8 <(i32,i32)*>()> (p, v):
     #llvmir:
         define void @store_u8(i32 %p, i32 %v) {
         entry:
+            %ok = icmp ule i32 %p, 67108863
+            br i1 %ok, label %in, label %oob
+        in:
             %idx = zext i32 %p to i64
-            %ptr8 = getelementptr inbounds [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
+            %ptr8 = getelementptr [67108864 x i8], ptr @__nepl_mem, i64 0, i64 %idx
             %b = trunc i32 %v to i8
             store i8 %b, ptr %ptr8, align 1
+            ret void
+        oob:
             ret void
         }
 

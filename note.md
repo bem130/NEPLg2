@@ -1,3 +1,36 @@
+# 2026-02-22 作業メモ (LLVM lower: 線形メモリ参照の根本修正)
+- 目的:
+  - LLVM 実行で発生していた `SIGSEGV` を、場当たり対処ではなく参照モデルの不整合を解消して根本修正する。
+- 原因:
+  - `nepl-core/src/codegen_llvm.rs` の `EnumConstruct` / `StructConstruct` / `TupleConstruct` / `Match` / intrinsic `load/store` が、
+    NEPL の i32 線形メモリオフセットを `inttoptr` でネイティブアドレスとして扱っていた。
+  - `core/mem.nepl` の LLVM 実装は `@__nepl_mem` を基準にオフセット解決するため、両者のモデルが不一致だった。
+- 実装:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `LowerCtx` に以下の helper を追加:
+      - `linear_i8_ptr_from_i32`
+      - `linear_typed_ptr_from_i32`
+    - 上記 helper を使って、以下の `inttoptr` を全廃:
+      - enum/tag/payload 読み書き
+      - struct/tuple フィールド読み書き
+      - match の tag/payload 読み取り
+      - intrinsic `load` / `store`（`u8` 含む）
+  - `stdlib/core/mem.nepl`
+    - LLVM の `load_i32/store_i32/load_u8/store_u8` に境界チェックを追加（OOB read=0 / write=no-op）。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node nodesrc/tests.js -i tests -o tests/output/tests_current.json -j 2`: `610/610 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH node nodesrc/tests.js -i tests -o tests/output/tests_llvm_current.json -j 2 --runner llvm --llvm-all --assert-io`: `431/601 pass`
+  - 失敗内訳（LLVM）:
+    - `compile_llvm_cli`: 123
+    - `link_llvm_cli`: 47
+    - `run_llvm_cli`: 0（`SIGSEGV` 0件）
+- 次の打ち手:
+  - `unknown variable`（overload名解決の不整合）を `stack/list/nm` 系から解消する。
+  - `unsupported intrinsic`（`u8_to_i32` など）を lower に追加する。
+  - `CallIndirect` を lower して高階関数系の未対応を縮小する。
+  - `compile_fail` 期待不一致（3件）はテスト仕様と LLVM runner の期待値整合を確認する。
+
 # 2026-02-22 作業メモ (`core/math` i32 ビット演算/比較の wasm+llvm 統一 + stdlib/tests target 移行)
 - 目的:
   - `stdlib/core/math.nepl` に残っていた `i32_*` の wasm 専用定義を、関数本体内 `#if[target=wasm]` / `#if[target=llvm]` 分岐へ統一する。
