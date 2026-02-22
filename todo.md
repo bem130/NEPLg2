@@ -49,7 +49,7 @@
 - `#if[target=core]` / `#if[target=std]` 前提で stdlib と tests の target 記述を段階移行し、dual-run（wasm+llvm）回帰を整備する。
 - `clang 21.1.0 + linux native` の初期要件を保ちつつ、将来の複数 LLVM バージョン/複数 native target へ拡張可能な設定モデルを設計する。
 - `llvm` 向け syscall 分岐を OS 別（linux/win/mac）に分離できるよう、target 条件式の OS 軸（例: `#if[target=llvm&linux]`）を設計・実装する。
-- 暫定で追加した `wasm_only` / `wasi_only` / `skip_llvm` テストタグを段階的に削減し、最終的に backend 差分なしで同一テストが通る状態へ戻す。
+- 暫定で追加した `wasm_only` / `wasi_only` テストタグを段階的に削減し、最終的に backend 差分なしで同一テストが通る状態へ戻す。
 
 10. 到達関数のみを codegen する最適化（wasm/llvm 共通）
 - import しただけで未使用の関数を出力しないよう、関数単位の到達解析を厳密化する。

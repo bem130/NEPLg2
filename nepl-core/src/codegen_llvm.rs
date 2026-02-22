@@ -352,6 +352,10 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    fn lookup_local_current(&self, name: &str) -> Option<&LocalBinding> {
+        self.scopes.last().and_then(|scope| scope.get(name))
+    }
+
     fn lookup_local(&self, name: &str) -> Option<&LocalBinding> {
         for scope in self.scopes.iter().rev() {
             if let Some(v) = scope.get(name) {
@@ -1192,6 +1196,7 @@ fn lower_hir_block(
     block: &HirBlock,
 ) -> Result<Option<LlValue>, LlvmCodegenError> {
     ctx.begin_scope();
+    predeclare_block_locals(types, ctx, block);
     let mut last = None;
     for line in &block.lines {
         let v = lower_hir_expr(types, ctx, &line.expr)?;
@@ -1201,6 +1206,23 @@ fn lower_hir_block(
     }
     ctx.end_scope();
     Ok(last)
+}
+
+fn predeclare_block_locals(types: &TypeCtx, ctx: &mut LowerCtx<'_>, block: &HirBlock) {
+    for line in &block.lines {
+        if let HirExprKind::Let { name, value, .. } = &line.expr.kind {
+            if ctx.lookup_local_current(name.as_str()).is_some() {
+                continue;
+            }
+            let llty = llty_for_type(types, value.ty);
+            if llty == LlTy::Void {
+                continue;
+            }
+            let ptr = ctx.next_tmp();
+            ctx.push_line(&format!("  {} = alloca {}", ptr, llty.ir()));
+            ctx.bind_local(name.as_str(), ptr, llty);
+        }
+    }
 }
 
 fn lower_hir_expr(
@@ -1255,16 +1277,27 @@ fn lower_hir_expr(
             let Some(v) = lower_hir_expr(types, ctx, value)? else {
                 return Ok(None);
             };
-            let ptr = ctx.next_tmp();
-            ctx.push_line(&format!("  {} = alloca {}", ptr, v.ty.ir()));
+            let (ptr, pty) = if let Some(binding) = ctx.lookup_local_fuzzy(name.as_str()).cloned() {
+                (binding.ptr, binding.ty)
+            } else {
+                let ptr = ctx.next_tmp();
+                ctx.push_line(&format!("  {} = alloca {}", ptr, v.ty.ir()));
+                ctx.bind_local(name.as_str(), ptr.clone(), v.ty);
+                (ptr, v.ty)
+            };
+            if v.ty != pty {
+                return Err(LlvmCodegenError::UnsupportedHirLowering {
+                    function: ctx.function_name.to_string(),
+                    reason: format!("let type mismatch {:?} -> {:?}", v.ty, pty),
+                });
+            }
             ctx.push_line(&format!(
                 "  store {} {}, {}* {}",
                 v.ty.ir(),
                 v.repr,
-                v.ty.ir(),
+                pty.ir(),
                 ptr
             ));
-            ctx.bind_local(name.as_str(), ptr, v.ty);
             Ok(None)
         }
         HirExprKind::Set { name, value } => {
