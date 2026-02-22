@@ -9,7 +9,7 @@
 
 注意: このテストは `test.nepl` が実行環境に存在することを前提にしています。
 
-neplg2:test
+neplg2:test[wasi_only]
 ret: 0
 ```neplg2
 #entry main

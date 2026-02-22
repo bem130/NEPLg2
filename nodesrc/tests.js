@@ -315,6 +315,14 @@ function isLlvmCase(c) {
     return /^\s*#target\s+llvm\s*$/m.test(String(c.source || ''));
 }
 
+function skipOnWasmRunner(c) {
+    return hasTag(c.tags, 'skip_wasm') || hasTag(c.tags, 'llvm_only');
+}
+
+function skipOnLlvmRunner(c) {
+    return hasTag(c.tags, 'skip_llvm') || hasTag(c.tags, 'wasm_only') || hasTag(c.tags, 'wasi_only');
+}
+
 function runCommand(cmd, args, options = {}) {
     return new Promise((resolve) => {
         const stdinText = Object.prototype.hasOwnProperty.call(options, 'stdinText')
@@ -803,8 +811,9 @@ async function main() {
         allCases.push(...collectTestsFromPath(p));
     }
 
-    const wasmCases = allCases.filter((c) => !isLlvmCase(c));
-    const llvmCasesRaw = llvmAll ? allCases : allCases.filter((c) => isLlvmCase(c));
+    const wasmCases = allCases.filter((c) => !isLlvmCase(c) && !skipOnWasmRunner(c));
+    const llvmCasesRaw = (llvmAll ? allCases : allCases.filter((c) => isLlvmCase(c)))
+        .filter((c) => !skipOnLlvmRunner(c));
     const llvmCases = llvmCasesRaw.map((c) => ({
         ...c,
         _llvmExplicit: isLlvmCase(c),

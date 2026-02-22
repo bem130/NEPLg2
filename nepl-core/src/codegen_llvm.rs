@@ -90,6 +90,7 @@ pub fn emit_ll_from_module_for_target(
     target: CompileTarget,
     profile: BuildProfile,
 ) -> Result<String, LlvmCodegenError> {
+    validate_target_directive_for_llvm(module)?;
     let mut out = String::new();
     let entry_names = collect_active_entry_names(module, target, profile);
     let mut emitted_functions: Vec<String> = Vec::new();
@@ -194,6 +195,47 @@ pub fn emit_ll_from_module_for_target(
     }
 
     Ok(out)
+}
+
+fn validate_target_directive_for_llvm(module: &Module) -> Result<(), LlvmCodegenError> {
+    let mut found = false;
+    for d in &module.directives {
+        if let Directive::Target { target, .. } = d {
+            if !is_known_target_name(target.as_str()) {
+                return Err(LlvmCodegenError::TypecheckFailed {
+                    reason: format!("unknown target in #target: {}", target),
+                });
+            }
+            if found {
+                return Err(LlvmCodegenError::TypecheckFailed {
+                    reason: String::from("multiple #target directives are not allowed"),
+                });
+            }
+            found = true;
+        }
+    }
+    if !found {
+        for stmt in &module.root.items {
+            if let Stmt::Directive(Directive::Target { target, .. }) = stmt {
+                if !is_known_target_name(target.as_str()) {
+                    return Err(LlvmCodegenError::TypecheckFailed {
+                        reason: format!("unknown target in #target: {}", target),
+                    });
+                }
+                if found {
+                    return Err(LlvmCodegenError::TypecheckFailed {
+                        reason: String::from("multiple #target directives are not allowed"),
+                    });
+                }
+                found = true;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn is_known_target_name(name: &str) -> bool {
+    matches!(name, "wasm" | "core" | "wasi" | "std" | "llvm")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

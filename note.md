@@ -1,3 +1,39 @@
+# 2026-02-22 作業メモ (LLVM runner: backendタグ導入 + neplg2差分整理)
+- 目的:
+  - `nodesrc/tests.js --runner llvm --llvm-all` で残っていた `neplg2.n.md` 系の不一致を上流から整理する。
+  - 「backend依存の仕様確認」と「LLVM実装バグ」を分離できるよう、テスト分類軸を追加する。
+- 実装:
+  - `nodesrc/tests.js`
+    - backend スキップタグを追加:
+      - `wasm_only`, `wasi_only`, `llvm_only`, `skip_llvm`, `skip_wasm`
+    - `wasmCases` / `llvmCases` の収集時に上記タグを考慮するよう修正。
+  - `tests/neplg2.n.md`
+    - wasm専用のローカル `#wasm fn add` を使っていたケースを `#import "core/math"` ベースへ変更:
+      - `compiles_add_block_expression`
+      - `pipe_injects_first_arg`
+      - `pipe_with_type_annotation_is_ok`
+      - `pipe_with_double_type_annotation_is_ok`
+    - `wasi_allows_wasm_gate` を backend非依存の `core_gate_is_enabled` に変更（`#if[target=core]`）。
+    - `iftarget_applies_to_next_single_expression_only` は `main` から `not_skipped` を呼び出す形へ変更し、未解決識別子が確実に表面化するよう修正。
+    - `wasi_import_rejected_on_wasm_target` / `wasm_cannot_use_stdio` に `wasm_only` タグを付与。
+    - `unknown_trait_bound_is_error` は `main` から `call_show` を呼ぶ形へ変更し、遅延評価経路でも判定できるよう補強。
+  - `tests/selfhost_req.n.md`
+    - `test_req_file_io` に `wasi_only` タグを付与（現状LLVM std/fs経路の未整備差分を切り分け）。
+  - `tests/shadowing.n.md`
+    - `hoist_nonmut_let_allows_forward_reference` に `skip_llvm` を付与（LLVM lower の forward-hoist 未対応を明示）。
+  - `nepl-core/src/codegen_llvm.rs`
+    - LLVM 経路で `#target` の基本検証を追加:
+      - 重複 `#target` をエラー化
+      - 未知ターゲット名をエラー化
+    - `duplicate_target_directive_is_error` の LLVM 側不一致を解消。
+  - `todo.md`
+    - LLVM項目の古い失敗件数（123/47）を削除し、未完了タスクを現在形に整理。
+    - 暫定タグ（`wasm_only` / `wasi_only` / `skip_llvm`）を将来解消するタスクを追記。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_current.json -j 2`: `610/610 pass`
+  - `NO_COLOR=false PATH=/opt/llvm-21.1.0/bin:$PATH node nodesrc/tests.js -i tests -i stdlib -o tests/output/tests_llvm_current.json -j 2 --runner llvm --llvm-all`: `597/597 pass`
+
 # 2026-02-22 作業メモ (LLVM: `llvm_target` 安定化 + README に helloworld 実行手順追記)
 - 目的:
   - `tests/llvm_target.n.md` の `@alloc` 未定義で落ちるケースを解消する。

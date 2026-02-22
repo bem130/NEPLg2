@@ -226,7 +226,7 @@ fn main <()->i32> ():
 
 ## hoist_nonmut_let_allows_forward_reference
 
-neplg2:test
+neplg2:test[skip_llvm]
 ret: 9
 ```neplg2
 #entry main

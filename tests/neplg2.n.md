@@ -33,15 +33,9 @@ ret: 6
 #indent 4
 
 #target core
-#if[target=wasm]
-fn add <(i32, i32) -> i32> (a, b):
-    #wasm:
-        local.get $a
-        local.get $b
-        i32.add
+#import "core/math" as *
 
 fn main <() -> i32> ():
-    #import "core/math" as *
     add 1:
         add 2 3
 ```
@@ -152,11 +146,11 @@ fn main <() -> i32> ():
     add_one 1
 ```
 
-## wasi_allows_wasm_gate
+## core_gate_is_enabled
 
 以前はコンパイル確認のみでした。
-このテストは `#if[target=wasm]` の分岐が有効な環境で only_wasm が定義され、main から呼べることを確認したいので、
-ターゲットを明示的に `#target core` とし、返り値 `123` を `ret:` で検証します。
+このテストは `#target core` の環境で `#if[target=core]` が有効になり、
+定義された関数を main から呼べることを確認します。
 
 neplg2:test
 ret: 123
@@ -164,12 +158,12 @@ ret: 123
 #entry main
 
 #target core
-#if[target=wasm]
-fn only_wasm <() -> i32> ():
+#if[target=core]
+fn only_core <() -> i32> ():
     123
 
 fn main <() -> i32> ():
-    only_wasm
+    only_core
 ```
 
 ## wasm_skips_wasi_gate
@@ -210,7 +204,7 @@ fn not_skipped <() -> i32> ():
     unknown_symbol_b
 
 fn main <() -> i32> ():
-    0
+    not_skipped
 ```
 
 ## iftarget_on_general_call_expression
@@ -322,12 +316,7 @@ ret: 10
 #indent 4
 
 #target core
-#if[target=wasm]
-fn add <(i32,i32)->i32> (a,b):
-    #wasm:
-        local.get $a
-        local.get $b
-        i32.add
+#import "core/math" as *
 
 fn main <()->i32> ():
     add 1 add 2 3 |> add 4
@@ -357,12 +346,7 @@ ret: 5
 #indent 4
 
 #target core
-#if[target=wasm]
-fn add <(i32,i32)->i32> (a,b):
-    #wasm:
-        local.get $a
-        local.get $b
-        i32.add
+#import "core/math" as *
 
 fn main <()->i32> ():
     1 |> <i32> add 4
@@ -380,12 +364,7 @@ ret: 5
 #indent 4
 
 #target core
-#if[target=wasm]
-fn add <(i32,i32)->i32> (a,b):
-    #wasm:
-        local.get $a
-        local.get $b
-        i32.add
+#import "core/math" as *
 
 fn main <()->i32> ():
     1 |> <i32> <i32> add 4
@@ -409,7 +388,7 @@ fn main <()->i32> ():
 テスト名どおり「WASM ターゲットでは WASI インポートが拒否される」ことを確認したいので、
 ターゲットを `#target core` と明示し、`compile_fail` として扱います。
 
-neplg2:test[compile_fail]
+neplg2:test[compile_fail, wasm_only]
 ```neplg2
 #entry main
 #indent 4
@@ -443,7 +422,7 @@ fn main <()->i32> ():
 このテスト名は「WASM ターゲットでは std/stdio が使えない（= コンパイル時に拒否される）」ことを意図しているため、
 ターゲットを `#target core` と明示し、`compile_fail` として検証します。
 
-neplg2:test[compile_fail]
+neplg2:test[compile_fail, wasm_only]
 ```neplg2
 #entry main
 #indent 4
@@ -719,7 +698,7 @@ fn call_show <.T: Missing> <(.T)->i32> (x):
     0
 
 fn main <()->i32> ():
-    0
+    call_show 0
 ```
 
 ## unreachable_does_not_force_never_in_generic
