@@ -19,7 +19,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //:| #import "core/result" as *
 //: fn main <()*>()> ():
@@ -33,7 +33,7 @@
 //: neplg2:test[should_panic]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //:| #import "core/result" as *
 //: // Err を unwrap_ok すると unreachable で落ちることを期待
@@ -44,7 +44,7 @@
 //: neplg2:test[compile_fail]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "core/result" as *
 //: // 型が合わない Err を入れているのでコンパイルエラーを期待
 //: fn main <()*>()> ():
@@ -55,7 +55,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //:| #import "core/result" as *
 //:| #import "core/math" as *

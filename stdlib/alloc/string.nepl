@@ -10,7 +10,7 @@
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //: ()
 //: ```
 

@@ -20,7 +20,7 @@
 //: stdout: "1 0 3\n"
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "kp/kpdsu" as *
 //:| #import "std/stdio" as *
 //: fn main <()*> ()> ():

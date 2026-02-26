@@ -22,7 +22,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //:| #import "alloc/string" as *
 //:| #import "core/option" as *
@@ -55,7 +55,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //:| #import "alloc/string" as *
 //:| #import "core/option" as *
@@ -104,7 +104,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //: fn main <()->i32> ():
 //:     if list_is_empty<i32> list_nil<i32> 0 1
@@ -131,7 +131,7 @@ fn list_nil <.T> <()->i32> ():
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //: fn main <()->i32> ():
 //:     let l list_cons<i32> 5 list_nil<i32>;
@@ -163,7 +163,7 @@ fn list_cons <.T> <(.T,i32)*>i32> (head, tail):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():
@@ -202,7 +202,7 @@ fn list_head <.T> <(i32)->Option<.T>> (lst):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():
@@ -243,7 +243,7 @@ fn list_tail <.T> <(i32)->Option<i32>> (lst):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //: fn main <()->i32> ():
 //:     if list_is_empty<i32> list_nil<i32> 0 1
@@ -270,7 +270,7 @@ fn list_is_empty <.T> <(i32)->bool> (lst):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //: fn main <()->i32> ():
 //:     let l0 list_nil<i32>;
@@ -308,7 +308,7 @@ fn list_len <.T> <(i32)*>i32> (lst):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():
@@ -370,7 +370,7 @@ fn list_get <.T> <(i32,i32)*>Option<.T>> (lst, idx):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //: fn main <()->i32> ():
 //:     let l0 list_nil<i32>;
@@ -406,7 +406,7 @@ fn list_free <.T> <(i32)*>()> (lst):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/list" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():

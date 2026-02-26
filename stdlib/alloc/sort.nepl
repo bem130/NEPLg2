@@ -10,7 +10,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //:| #import "alloc/sort" as *
 //:| #import "alloc/vec" as *
@@ -35,7 +35,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //:| #import "alloc/sort" as *
 //:| #import "alloc/vec" as *

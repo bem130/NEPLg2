@@ -19,7 +19,7 @@
 //: stdout: "6 9\n"
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "kp/kpfenwick" as *
 //:| #import "std/stdio" as *
 //: fn main <()*> ()> ():

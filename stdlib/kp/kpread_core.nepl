@@ -16,7 +16,7 @@
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //: ()
 //: ```
 fn scanner_new_impl_i <(i32)*>i32> (_dummy):

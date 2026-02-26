@@ -10,7 +10,7 @@
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //: ()
 //: ```
 
@@ -245,7 +245,7 @@ fn render_nodes <(Vec<Node>)*>str> (nodes):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasm
+//:| #target core
 //:| #import "alloc/string" as *
 //:| #import "nm/parser" as *
 //:| #import "nm/html_gen" as *

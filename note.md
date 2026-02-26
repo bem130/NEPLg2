@@ -3603,3 +3603,19 @@
     - `__nepl_syscall` 未定義 2件
     - `unknown variable 'inc__i32__i32__pure'` 2件
     - `kpdsu` の実行出力差分 1件
+
+# 2026-02-26 作業メモ (stdlib doctest target の core/std 化)
+- 目的:
+  - LLVM dual-run で使用する doctest の target 表記を統一するため、`stdlib/*.nepl` 内の doctest 埋め込みソースのみを `#target core/std` へ移行する。
+  - 実装コード側の `#target`（モジュール本体）は変更せず、テストケース定義だけを更新する。
+- 実装:
+  - `stdlib/**/*.nepl` の `//:| #target wasi` を `//:| #target std` に変更。
+  - `stdlib/**/*.nepl` の `//:| #target wasm` を `//:| #target core` に変更。
+  - 実コード行（`#target wasi` など）は未変更。
+- 検証:
+  - `NO_COLOR=false trunk build` は成功。
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` 実行結果:
+    - `total=1781, passed=1205, failed=576, errored=0`
+    - 失敗の代表は `tests/kp.n.md` / `tests/string.n.md` の wasm/llvm 実行差分（stdout mismatch）で、今回の target 表記変更による新規失敗は確認できない（件数が既知値と一致）。
+- 補足:
+  - `tests/*.n.md` は既に `core/std` 化済みであることを再確認した。

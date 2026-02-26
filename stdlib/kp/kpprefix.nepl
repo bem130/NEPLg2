@@ -19,7 +19,7 @@
 //: stdout: "6 14\n"
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "kp/kpprefix" as *
 //:| #import "core/mem" as *
 //:| #import "std/stdio" as *

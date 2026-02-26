@@ -48,7 +48,7 @@
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     test_str_eq "sample" "sample";
@@ -89,7 +89,7 @@ fn test_str_eq <(str,str)->bool> (a,b):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     test_str_eq_loop "sample" "sample" 0 0;
@@ -133,7 +133,7 @@ fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     bool_to_str true;
@@ -173,7 +173,7 @@ fn bool_to_str <(bool)->str> (b):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     i32_to_str 0;
@@ -222,7 +222,7 @@ fn i32_to_str <(i32)*>str> (v):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     test_print_fail "sample";
@@ -259,7 +259,7 @@ fn test_print_fail <(str)*>()> (msg):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     test_checked "sample";
@@ -298,7 +298,7 @@ fn test_checked <(str)*>()> (msg):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     test_checked "sample";
@@ -335,7 +335,7 @@ fn test_checked <(str)*>()> (msg):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     test_print_fail "sample";
@@ -370,7 +370,7 @@ fn test_print_fail <(str)*>()> (msg):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     test_fail "sample";
@@ -405,7 +405,7 @@ fn test_fail <(str)*>()> (msg):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     trap ();
@@ -439,7 +439,7 @@ fn trap <()*>()> ():
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     assert true;
@@ -477,7 +477,7 @@ fn assert <(bool)*>()> (ok):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 0 0;
@@ -520,7 +520,7 @@ fn assert_eq_i32 <(i32,i32)*>()> (expected, actual):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     assert_ne true true;
@@ -577,7 +577,7 @@ fn assert_ne <(bool,bool)*>()> (a, b):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     assert_str_eq "sample" "sample";
@@ -619,7 +619,7 @@ fn assert_str_eq <(str,str)*>()> (expected, actual):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     assert_ok_i32 () ();
@@ -659,7 +659,7 @@ fn assert_ok_i32 <(Result<i32,i32>)*>()> (r):
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     assert_err_i32 () ();

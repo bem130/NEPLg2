@@ -10,7 +10,7 @@
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //: ()
 //: ```
 
@@ -738,7 +738,7 @@ fn parse_inlines <(str)*>Vec<Inline>> (s):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasm
+//:| #target core
 //:| #import "alloc/string" as *
 //:| #import "nm/parser" as *
 //: fn main <()->i32> ():
@@ -1051,7 +1051,7 @@ fn nodes_to_json <(Vec<Node>)*>str> (nodes):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasm
+//:| #target core
 //:| #import "alloc/string" as *
 //:| #import "nm/parser" as *
 //: fn main <()->i32> ():

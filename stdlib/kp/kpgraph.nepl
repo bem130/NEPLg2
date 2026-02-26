@@ -17,7 +17,7 @@
 //: stdout: "0 1 2 3\n"
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "kp/kpread" as *
 //:| #import "kp/kpwrite" as *
 //:| #import "kp/kpgraph" as *

@@ -22,7 +22,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/stack" as *
 //:| #import "alloc/string" as *
 //:| #import "core/option" as *
@@ -51,7 +51,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/stack" as *
 //:| #import "alloc/string" as *
 //:| #import "core/option" as *
@@ -101,7 +101,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/stack" as *
 //: fn main <()->i32> ():
 //:     let st stack_new<i32>;
@@ -135,7 +135,7 @@ fn stack_new <.T> <()*>i32> ():
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/stack" as *
 //: fn main <()->i32> ():
 //:     let st stack_new<i32>;
@@ -180,7 +180,7 @@ fn stack_push <.T> <(i32,.T)*>()> (stk, item):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/stack" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():
@@ -225,7 +225,7 @@ fn stack_pop <.T> <(i32)*>Option<.T>> (stk):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/stack" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():
@@ -267,7 +267,7 @@ fn stack_peek <.T> <(i32)->Option<.T>> (stk):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/stack" as *
 //: fn main <()->i32> ():
 //:     let st stack_new<i32>;
@@ -297,7 +297,7 @@ fn stack_len <.T> <(i32)->i32> (stk):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/stack" as *
 //: fn main <()->i32> ():
 //:     let st stack_new<i32>;
@@ -325,7 +325,7 @@ fn stack_is_empty <.T> <(i32)->bool> (stk):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/stack" as *
 //: fn main <()->i32> ():
 //:     let st stack_new<i32>;
@@ -355,7 +355,7 @@ fn stack_clear <.T> <(i32)*>()> (stk):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "alloc/collections/stack" as *
 //: fn main <()->i32> ():
 //:     let st stack_new<i32>;

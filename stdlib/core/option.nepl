@@ -21,7 +21,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //:| #import "core/option" as *
 //: fn main <()*>()> ():
@@ -34,7 +34,7 @@
 //: neplg2:test[should_panic]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //:| #import "core/option" as *
 //: // None を unwrap すると unreachable で落ちることを期待
@@ -45,7 +45,7 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "std/test" as *
 //:| #import "core/option" as *
 //:| #import "core/math" as *

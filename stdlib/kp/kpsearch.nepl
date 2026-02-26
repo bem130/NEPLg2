@@ -21,7 +21,7 @@
 //: stdout: "1 3 1\n"
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "kp/kpsearch" as *
 //:| #import "core/mem" as *
 //:| #import "std/stdio" as *
@@ -92,7 +92,7 @@ fn contains_i32 <(i32,i32,i32)*>bool> (data, len, x):
 //: stdout: "3\n"
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "kp/kpsearch" as *
 //:| #import "core/mem" as *
 //:| #import "std/stdio" as *
@@ -133,7 +133,7 @@ fn count_equal_range_i32 <(i32,i32,i32)*>i32> (data, len, x):
 //: stdout: "4\n1 2 3 7\n"
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "kp/kpsearch" as *
 //:| #import "core/mem" as *
 //:| #import "core/math" as *

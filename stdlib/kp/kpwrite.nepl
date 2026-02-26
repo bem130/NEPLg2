@@ -10,7 +10,7 @@
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //: ()
 //: ```
 
@@ -430,7 +430,7 @@ fn writer_write_f32 <(i32,f32)*>()> (w, v):
 //: stdout: "1 2\n"
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "kp/kpwrite" as *
 //: fn main <()*> ()> ():
 //:     let w <i32> writer_new;
@@ -459,7 +459,7 @@ fn writer_write_space <(i32)*>()> (w):
 //: stdout: "123\n"
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "kp/kpwrite" as *
 //: fn main <()*> ()> ():
 //:     let w <i32> writer_new;
@@ -486,7 +486,7 @@ fn writer_write_i32_ln <(i32,i32)*>()> (w, v):
 //: stdout: "42\n"
 //: ```neplg2
 //:| #entry main
-//:| #target wasi
+//:| #target std
 //:| #import "kp/kpwrite" as *
 //: fn main <()*> ()> ():
 //:     let w <i32> writer_new;
