@@ -1,3 +1,11 @@
+# 2026-02-27 作業メモ (`shadowing` 仕様ドキュメント追加)
+- 目的:
+  - `noshadow` 導入後の実仕様（warning と error の境界）を実装と同じ粒度で共有する。
+- 変更:
+  - `doc/shadowing.md` を追加。
+  - 同名・同一シグネチャ再定義、オーバーロード、`noshadow` 保護規則を整理。
+  - 対応テストケースを併記し、仕様確認導線を明確化。
+
 # 2026-02-27 作業メモ (`std/test` の target 重複定義を解消)
 - 背景:
   - `stdlib/std/test.nepl` で `test_checked` / `test_print_fail` が
