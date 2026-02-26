@@ -10,6 +10,18 @@
   - `node nodesrc/tests.js -i tests/sort.n.md -o /tmp/tests-sort-extended.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `484/484 pass`
   - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-sort-tests-extend.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1605/1605 pass`
 
+# 2026-02-27 作業メモ (`sort` 境界テスト拡張: len=0/1)
+- 目的:
+  - `sort_i32(ptr, n)` の no-op 境界（`n=0`, `n=1`）を明示的に固定し、将来の実装変更での回帰を防ぐ。
+- 変更:
+  - `tests/sort.n.md` に次のケースを追加:
+    - `sort_i32_ptr_len0_noop`
+    - `sort_i32_ptr_len1_noop`
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/sort.n.md -o /tmp/tests-sort-extended-v2.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `490/490 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-sort-tests-extend-v2.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1611/1611 pass`
+
 # 2026-02-27 作業メモ (`noshadow` stdlib 段階適用: phase 1)
 - 目的:
   - `todo.md` 2番の「`noshadow` の stdlib 適用拡大」を、既存コードと衝突しない範囲から段階導入する。

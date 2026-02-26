@@ -219,3 +219,43 @@ fn main <()->i32> ():
     dealloc p 20;
     if ok 3234 0
 ```
+
+## sort_i32_ptr_len0_noop
+
+neplg2:test
+ret: 4234
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/sort" as *
+#import "core/mem" as *
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let p <i32> alloc 4;
+    sort_i32 p 0;
+    dealloc p 4;
+    4234
+```
+
+## sort_i32_ptr_len1_noop
+
+neplg2:test
+ret: 5234
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/sort" as *
+#import "core/mem" as *
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let p <i32> alloc 4;
+    store_i32 p 7;
+    sort_i32 p 1;
+    let ok <bool> eq load_i32 p 7;
+    dealloc p 4;
+    if ok 5234 0
+```
