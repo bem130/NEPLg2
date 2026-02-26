@@ -232,44 +232,6 @@ fn test_print_fail <(str)*>()> (msg):
     let m0 <str> concat "FAIL: " msg;
     println_color ansi_red m0
 
-//: test_checked: 成功ログを無視する（WASM）
-//:
-//: 目的:
-//: - WASM ターゲットでのダミー実装です。
-//:
-//: 実装(アルゴリズム):
-//: - 何もしません。
-//:
-//: 注意(重要):
-//: - 表示は行いません。
-//:
-//: 計算量:
-//: - O(1)
-#if[target=wasm]
-//: test_checked: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_checked` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_checked "sample";
-//: ```
-#if[target=wasm]
-fn test_checked <(str)*>()> (msg):
-    let m0 <str> concat "Checked -wasm- " msg;
-    println_color ansi_green m0
-    ()
-
 //: test_checked: 成功ログを表示する（WASI）
 //:
 //: 目的:
@@ -307,42 +269,6 @@ fn test_checked <(str)*>()> (msg):
 fn test_checked <(str)*>()> (msg):
     print_color ansi_green "Checked ";
     println msg;
-
-//: test_print_fail: 失敗メッセージを無視する（WASM）
-//:
-//: 目的:
-//: - WASM ターゲットでのダミー実装です。
-//:
-//: 実装(アルゴリズム):
-//: - 何もしません。
-//:
-//: 注意(重要):
-//: - 表示は行いません。
-//:
-//: 計算量:
-//: - O(1)
-#if[target=wasm]
-//: test_print_fail: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_print_fail` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_print_fail "sample";
-//: ```
-#if[target=wasm]
-fn test_print_fail <(str)*>()> (msg):
-    ()
 
 //: test_fail: 失敗メッセージを出して異常終了する
 //:

@@ -1,3 +1,18 @@
+# 2026-02-27 作業メモ (`std/test` の target 重複定義を解消)
+- 背景:
+  - `stdlib/std/test.nepl` で `test_checked` / `test_print_fail` が
+    - `#if[target=std]`
+    - `#if[target=wasm]`
+    の両方で定義され、wasm+std 条件で重複定義になり得る構造だった。
+- 実装:
+  - `stdlib/std/test.nepl`
+    - `target=wasm` 側の `test_checked` 実装を削除。
+    - `target=wasm` 側の `test_print_fail` 実装を削除。
+    - `target=std` 実装に一本化。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-stdlib-test-dedup.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1594/1594 pass`
+
 # 2026-02-27 作業メモ (`noshadow` とオーバーロード判定の根本修正)
 - 目的:
   - オーバーロードは許可しつつ、`noshadow` が付いた関数と同一シグネチャの再定義のみを禁止する。
