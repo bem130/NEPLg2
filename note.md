@@ -45,6 +45,23 @@
 - 根拠:
   - ローカルで同等条件（tree含む strict-dual）の実行結果を確認済み:
     - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full-with-tree.json --runner all --llvm-all --assert-io --strict-dual -j 2` -> `1603/1603 pass`
+
+## 2026-02-27 作業メモ (`#if[target=linux]` 判定の根本修正)
+- 背景:
+  - `#if[target=linux]` がホストOS (`cfg!(target_os=...)`) で判定されており、wasm ランナーでも Linux ホスト上では true になる不整合があった。
+- 変更:
+  - `nepl-core/src/compiler.rs`
+    - target gate の OS 軸判定をホスト依存から compile target 依存へ修正。
+    - 現段階仕様:
+      - `linux`: `CompileTarget::Llvm` のときのみ true
+      - `win/windows`, `mac/darwin/macos`: false（将来の target 拡張で実装予定）
+  - `tests/neplg2.n.md`
+    - `iftarget_os_axis_linux_is_false_on_wasm` (`wasm_only`) 追加。
+    - `iftarget_os_axis_linux_is_true_on_llvm` (`llvm_only`) 追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-osaxis.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `569/569 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-osaxis-fix.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1590/1590 pass`
     - `1588/1588 pass`
 
 # 2026-02-26 作業メモ (`todo 10` 完了: 未到達除去の回帰テスト追加)

@@ -301,6 +301,43 @@ fn main <()->i32> ():
     3
 ```
 
+## iftarget_os_axis_linux_is_false_on_wasm
+
+`#if[target=linux]` はホストOSではなく compile target に対して判定されるべきです。
+wasm ランナーでは false になり、未定義シンボルを含む分岐がスキップされることを確認します。
+
+neplg2:test[wasm_only]
+ret: 0
+```neplg2
+#entry main
+#target core
+
+#if[target=linux]
+fn hidden_linux_only <()->i32> ():
+    unknown_symbol
+
+fn main <()->i32> ():
+    0
+```
+
+## iftarget_os_axis_linux_is_true_on_llvm
+
+llvm ランナーでは `#if[target=linux]` が true になり、分岐内定義を参照できることを確認します。
+
+neplg2:test[llvm_only]
+ret: 7
+```neplg2
+#entry main
+#target core
+
+#if[target=linux]
+fn only_linux <()->i32> ():
+    7
+
+fn main <()->i32> ():
+    only_linux
+```
+
 ## import_and_prelude_directives_are_accepted
 
 以前はコンパイル確認のみでした。

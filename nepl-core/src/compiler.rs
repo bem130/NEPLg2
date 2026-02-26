@@ -156,10 +156,12 @@ fn target_gate_atom_allows(gate: &str, active: CompileTarget) -> bool {
             CompileTarget::Wasm | CompileTarget::Wasi | CompileTarget::Llvm
         ),
         "std" => matches!(active, CompileTarget::Wasi | CompileTarget::Llvm),
-        // LLVM native host axis (for future target split, e.g. llvm&linux)
-        "linux" => cfg!(target_os = "linux"),
-        "win" | "windows" => cfg!(target_os = "windows"),
-        "mac" | "darwin" | "macos" => cfg!(target_os = "macos"),
+        // OS axis は「コンパイル対象 target」に対して判定する。
+        // 現段階では llvm は linux native を前提としているため、
+        // linux=true, win/mac=false として扱う。
+        "linux" => matches!(active, CompileTarget::Llvm),
+        "win" | "windows" => false,
+        "mac" | "darwin" | "macos" => false,
         _ => false,
     }
 }
