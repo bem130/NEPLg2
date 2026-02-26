@@ -388,7 +388,7 @@ fn main <()->i32> ():
 テスト名どおり「WASM ターゲットでは WASI インポートが拒否される」ことを確認したいので、
 ターゲットを `#target core` と明示し、`compile_fail` として扱います。
 
-neplg2:test[compile_fail, wasm_only]
+neplg2:test[compile_fail]
 ```neplg2
 #entry main
 #indent 4

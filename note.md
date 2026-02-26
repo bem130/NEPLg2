@@ -1,3 +1,21 @@
+# 2026-02-26 作業メモ (`wasm_only` タグの段階削減: 1件)
+- 目的:
+  - `todo.md` 9番の「暫定 backend タグ削減」を段階実施し、不要になった `wasm_only` を外す。
+- 実装:
+  - `tests/neplg2.n.md`
+    - `wasi_import_rejected_on_wasm_target` のタグを
+      - 変更前: `neplg2:test[compile_fail, wasm_only]`
+      - 変更後: `neplg2:test[compile_fail]`
+- 根拠:
+  - 同ケースを `nepl-cli --target llvm` でも検証し、`WASI import is only allowed for #target wasi` で compile fail になることを確認。
+  - backend 固有ではなく target 検証として共通化可能と判断。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-dual.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+    - `561/561 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 600s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-tag-reduction.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+    - `1580/1580 pass`
+
 # 2026-02-26 作業メモ (LLVM: 関数単位の未到達除去を導入)
 - 目的:
   - `todo.md` 10番（wasm/llvm 共通の未到達除去）に合わせ、LLVM IR 生成でも関数単位で未到達コードを出力しない方向へ進める。
