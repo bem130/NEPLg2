@@ -1,3 +1,26 @@
+# 2026-02-27 作業メモ (`noshadow` stdlib 段階適用: phase 1)
+- 目的:
+  - `todo.md` 2番の「`noshadow` の stdlib 適用拡大」を、既存コードと衝突しない範囲から段階導入する。
+- 実施内容:
+  - `stdlib/std/test.nepl` の主要 API を `fn noshadow` 化:
+    - `test_fail`
+    - `assert`
+    - `assert_eq_i32`
+    - `assert_ne`
+    - `assert_str_eq`
+    - `assert_ok_i32`
+    - `assert_err_i32`
+  - `tests/shadowing.n.md` に stdlib 連携ケースを追加:
+    - `std_test_noshadow_same_signature_redefinition_is_error`（compile_fail）
+    - `std_test_noshadow_allows_overload_with_different_signature`（成功）
+- 失敗分析（途中経過）:
+  - 先に `core/result` の `ok` を `noshadow` 化したところ、既存 doctest の `let ok ...` と広範囲に衝突し大量失敗（`cannot shadow non-shadowable symbol 'ok'`）になった。
+  - これは運用上の影響が大きいため、`core/result` への適用は撤回し、衝突しにくい `std/test` API に対象を限定した。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/shadowing.n.md -o /tmp/tests-shadowing-stdlib-noshadow-v3.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `530/530 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-stdlib-noshadow-phase1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1599/1599 pass`
+
 # 2026-02-27 作業メモ (`shadowing` 仕様ドキュメント追加)
 - 目的:
   - `noshadow` 導入後の実仕様（warning と error の境界）を実装と同じ粒度で共有する。

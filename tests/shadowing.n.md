@@ -383,6 +383,39 @@ fn main <()->i32> ():
     f 2
 ```
 
+## std_test_noshadow_same_signature_redefinition_is_error
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+#target std
+#import "std/test" as *
+
+fn assert_eq_i32 <(i32,i32)*>()> (_a, _b):
+    ()
+
+fn main <()*>()> ():
+    ()
+```
+
+## std_test_noshadow_allows_overload_with_different_signature
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target std
+#import "std/test" as *
+
+fn assert_eq_i32 <(str,str)*>()> (_a, _b):
+    ()
+
+fn main <()->i32> ():
+    0
+```
+
 ## let_mut_noshadow_is_invalid
 
 neplg2:test[compile_fail]

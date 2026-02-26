@@ -301,7 +301,7 @@ fn test_checked <(str)*>()> (msg):
 //: fn main <()*>()> ():
 //:     test_fail "sample";
 //: ```
-fn test_fail <(str)*>()> (msg):
+fn noshadow test_fail <(str)*>()> (msg):
     test_print_fail msg;
     trap;
 
@@ -370,7 +370,7 @@ fn trap <()*>()> ():
 //: fn main <()*>()> ():
 //:     assert true;
 //: ```
-fn assert <(bool)*>()> (ok):
+fn noshadow assert <(bool)*>()> (ok):
     if:
         ok
         then ()
@@ -408,7 +408,7 @@ fn assert <(bool)*>()> (ok):
 //: fn main <()*>()> ():
 //:     assert_eq_i32 0 0;
 //: ```
-fn assert_eq_i32 <(i32,i32)*>()> (expected, actual):
+fn noshadow assert_eq_i32 <(i32,i32)*>()> (expected, actual):
     if:
         eq expected actual
         then ()
@@ -451,7 +451,7 @@ fn assert_eq_i32 <(i32,i32)*>()> (expected, actual):
 //: fn main <()*>()> ():
 //:     assert_ne true true;
 //: ```
-fn assert_ne <(bool,bool)*>()> (a, b):
+fn noshadow assert_ne <(bool,bool)*>()> (a, b):
     if:
         a
         then:
@@ -508,7 +508,7 @@ fn assert_ne <(bool,bool)*>()> (a, b):
 //: fn main <()*>()> ():
 //:     assert_str_eq "sample" "sample";
 //: ```
-fn assert_str_eq <(str,str)*>()> (expected, actual):
+fn noshadow assert_str_eq <(str,str)*>()> (expected, actual):
     if:
         test_str_eq expected actual
         then ()
@@ -550,7 +550,7 @@ fn assert_str_eq <(str,str)*>()> (expected, actual):
 //: fn main <()*>()> ():
 //:     assert_ok_i32 () ();
 //: ```
-fn assert_ok_i32 <(Result<i32,i32>)*>()> (r):
+fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
     match r:
         Result::Ok v:
             ()
@@ -590,7 +590,7 @@ fn assert_ok_i32 <(Result<i32,i32>)*>()> (r):
 //: fn main <()*>()> ():
 //:     assert_err_i32 () ();
 //: ```
-fn assert_err_i32 <(Result<i32,i32>)*>()> (r):
+fn noshadow assert_err_i32 <(Result<i32,i32>)*>()> (r):
     match r:
         Result::Ok v:
             let sv <str> i32_to_str v;
