@@ -5,7 +5,7 @@ module.exports = {
     async run(api) {
         const source = `#entry main
 #indent 4
-#target wasm
+#target core
 fn main <()->i32> ():
     if cond true then 1 else 2
 `;

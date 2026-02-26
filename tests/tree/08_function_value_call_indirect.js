@@ -5,7 +5,7 @@ module.exports = {
     async run(api) {
         const source = `#entry main
 #indent 4
-#target wasm
+#target core
 
 fn inc <(i32)->i32> (x):
     x

@@ -48,7 +48,7 @@ fn main <()*>i32> ():
 
         const sameSigShadowSource = `#entry main
 #indent 4
-#target wasm
+#target core
 
 fn same <(i32)->i32> (x):
     x

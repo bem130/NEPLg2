@@ -14,7 +14,7 @@ module.exports = {
     async run(api) {
         const source = `#entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let cond 1;

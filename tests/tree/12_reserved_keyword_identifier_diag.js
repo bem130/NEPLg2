@@ -16,7 +16,7 @@ module.exports = {
     async run(api) {
         const letCond = `#entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let cond 1;
@@ -29,7 +29,7 @@ fn main <()->i32> ():
 
         const fnLet = `#entry main
 #indent 4
-#target wasm
+#target core
 
 fn let <()->i32> ():
     1
@@ -44,7 +44,7 @@ fn main <()->i32> ():
 
         const paramFn = `#entry main
 #indent 4
-#target wasm
+#target core
 
 fn id <(i32)->i32> (fn):
     fn

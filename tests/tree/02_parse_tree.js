@@ -5,7 +5,7 @@ module.exports = {
     async run(api) {
         const source = `#entry main
 #indent 4
-#target wasm
+#target core
 fn main <()->i32> ():
     let mut i 0;
     while cond lt i 2 do set i add i 1;

@@ -10,7 +10,7 @@ module.exports = {
     async run(api) {
         const legacyTupleLiteral = `#entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let t (1, true)
@@ -27,7 +27,7 @@ fn main <()->i32> ():
 
         const legacyTupleType = `#entry main
 #indent 4
-#target wasm
+#target core
 
 fn main <()->i32> ():
     let t <(i32,i32)> Tuple:

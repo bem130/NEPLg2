@@ -12,7 +12,7 @@ module.exports = {
     async run(api) {
         const warnSource = `#entry main
 #indent 4
-#target wasm
+#target core
 #import "core/math" as *
 
 fn main <()->i32> ():
@@ -29,7 +29,7 @@ fn main <()->i32> ():
 
         const noWarnSource = `#entry main
 #indent 4
-#target wasm
+#target core
 #import "core/cast" as *
 
 fn cast_i32 <(i32)->i32> (x):
