@@ -3785,3 +3785,14 @@
   - 結果: `total=1579, passed=1579, failed=0, errored=0`
 - 補足:
   - 実装途中で `Var/FnValue` 参照未追跡により `len__str__i32__pure` 未定義が発生したが、参照追跡追加で解消した。
+## 2026-02-27 作業メモ (LLVM codegen の target gate 判定を compiler と統一)
+- 目的:
+  - `#if[target=...]` の式評価を、LLVM codegen 側でも `compiler` と同一実装で判定する。
+  - target 判定の二重実装による将来の乖離を防ぐ。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `gate_allows` の `Directive::IfTarget` 分岐を `target.allows(...)` から
+      `crate::compiler::target_gate_allows_expr(...)` 呼び出しへ変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-continue.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1588/1588 pass`

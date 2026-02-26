@@ -2640,7 +2640,9 @@ fn collect_active_entry_names(
 
 fn gate_allows(d: &Directive, target: CompileTarget, profile: BuildProfile) -> Option<bool> {
     match d {
-        Directive::IfTarget { target: gate, .. } => Some(target.allows(gate.as_str())),
+        Directive::IfTarget { target: gate, .. } => {
+            Some(crate::compiler::target_gate_allows_expr(gate.as_str(), target))
+        }
         Directive::IfProfile { profile: p, .. } => Some(profile_allows(p.as_str(), profile)),
         _ => None,
     }
