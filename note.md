@@ -3643,3 +3643,18 @@
   - `NO_COLOR=false trunk build` 成功。
   - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-final-before-commit.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
     - `total=1579, passed=1579, failed=0, errored=0`。
+
+# 2026-02-26 作業メモ (dual-run 全通とテスト基盤再確認)
+- 目的:
+  - テストケースとテストツールの妥当性を先に担保し、コンパイラ実装修正へ進める前提を固める。
+- 実施:
+  - `nodesrc/tests.js` の wasm/llvm 対応付けと strict-dual 比較対象の扱いを修正。
+  - `tests/kp.n.md` の誤期待値を仕様に合わせて修正。
+  - `tests/string.n.md` の単行文字列エスケープ検証と `stdout:` メタ表記を整合化。
+  - `nepl-core/src/lexer.rs` の `mlstr` 行頭スペース取り込み不整合を修正。
+- 検証:
+  - `NO_COLOR=false trunk build`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-final-now.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+  - 結果: `total=1579, passed=1579, failed=0, errored=0`
+- 判断:
+  - 現時点で残る失敗はなく、テスト基盤/テストケース/コンパイラ実装のこの範囲の不整合は解消済み。

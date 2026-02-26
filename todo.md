@@ -44,9 +44,7 @@
 9. LLVM IR target 追加（nepl-cli 限定）
 - `CallIndirect` / overload 名解決 / 主要 intrinsic を lower し、LLVM runner の `compile_llvm_cli` 不一致を段階的に解消する。
 - `alloc__...` などのリンク不整合を再設計し、`link_llvm_cli` 失敗を解消する。
-- `tests/sort.n.md` を含む通常テストを `--runner all --llvm-all --assert-io` で通せるように、`stdlib/core` / `stdlib/alloc` の LLVM 実装を継続する。
 - `stdlib/core/math.nepl` の doctest は最終的に `#target core` へ移行する（先に `std/test` 依存を外した core 向け検証手段を整備する）。
-- `#if[target=core]` / `#if[target=std]` 前提で stdlib と tests の target 記述を段階移行し、dual-run（wasm+llvm）回帰を整備する。
 - `clang 21.1.0 + linux native` の初期要件を保ちつつ、将来の複数 LLVM バージョン/複数 native target へ拡張可能な設定モデルを設計する。
 - `llvm` 向け syscall 分岐を OS 別（linux/win/mac）に分離できるよう、target 条件式の OS 軸（例: `#if[target=llvm&linux]`）を設計・実装する。
 - 暫定で追加した `wasm_only` / `wasi_only` テストタグを段階的に削減し、最終的に backend 差分なしで同一テストが通る状態へ戻す。
