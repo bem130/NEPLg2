@@ -89,6 +89,10 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> pass
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-cli-toolchain-model.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1590/1590 pass`
+  - 上記結果を根拠に、`todo.md` の LLVM項目から
+    - `compile_llvm_cli` 不一致解消
+    - `link_llvm_cli` 不一致解消
+    の完了済み項目を削除した。
     - `1588/1588 pass`
 
 # 2026-02-26 作業メモ (`todo 10` 完了: 未到達除去の回帰テスト追加)

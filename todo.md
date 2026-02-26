@@ -42,8 +42,6 @@
 - 複雑データ処理の箇所を中心に改行 `|>` パイプを活用し、可読性とメモリ安全性を両立する。
 
 9. LLVM IR target 追加（nepl-cli 限定）
-- `CallIndirect` / overload 名解決 / 主要 intrinsic を lower し、LLVM runner の `compile_llvm_cli` 不一致を段階的に解消する。
-- `alloc__...` などのリンク不整合を再設計し、`link_llvm_cli` 失敗を解消する。
 - `stdlib/core/math.nepl` の doctest は最終的に `#target core` へ移行する（先に `std/test` 依存を外した core 向け検証手段を整備する）。
 
 ---
