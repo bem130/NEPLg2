@@ -86,6 +86,45 @@ fn main <()->i32> ():
     if and bn and b0 and b1 and b2 b3 1334 0
 ```
 
+## sort_quick_ret_len0_noop
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v0 vec_new<i32>;
+    let v1 sort_quick_ret<i32> v0;
+    let s vec_data_len<i32> v1;
+    get s 1
+```
+
+## sort_quick_ret_len1_noop
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v0 vec_new<i32>;
+    let v1 vec_push<i32> v0 42;
+    let v2 sort_quick_ret<i32> v1;
+    let s vec_data_len<i32> v2;
+    get s 1
+```
+
 ## sort_heap_i32_basic
 
 neplg2:test
@@ -147,6 +186,45 @@ fn main <()->i32> ():
     if and bn and b0 and b1 and b2 b3 1434 0
 ```
 
+## sort_heap_ret_len0_noop
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v0 vec_new<i32>;
+    let v1 sort_heap_ret<i32> v0;
+    let s vec_data_len<i32> v1;
+    get s 1
+```
+
+## sort_heap_ret_len1_noop
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v0 vec_new<i32>;
+    let v1 vec_push<i32> v0 42;
+    let v2 sort_heap_ret<i32> v1;
+    let s vec_data_len<i32> v2;
+    get s 1
+```
+
 ## sort_merge_ret_i32_sorted_values
 
 neplg2:test
@@ -181,6 +259,45 @@ fn main <()->i32> ():
     let b2 <bool> eq load_i32 add p 8 3;
     let b3 <bool> eq load_i32 add p 12 4;
     if and bn and b0 and b1 and b2 b3 1534 0
+```
+
+## sort_merge_ret_len0_noop
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v0 vec_new<i32>;
+    let v1 sort_merge_ret<i32> v0;
+    let s vec_data_len<i32> v1;
+    get s 1
+```
+
+## sort_merge_ret_len1_noop
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v0 vec_new<i32>;
+    let v1 vec_push<i32> v0 42;
+    let v2 sort_merge_ret<i32> v1;
+    let s vec_data_len<i32> v2;
+    get s 1
 ```
 
 ## sort_default_dispatch_i32

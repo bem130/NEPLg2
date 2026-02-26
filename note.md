@@ -4044,3 +4044,19 @@
   - `NO_COLOR=false trunk build` -> pass
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/shadowing.n.md -o /tmp/tests-shadowing-stdio-noshadow-v2.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `538/538 pass`
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-stdio-noshadow-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1628/1628 pass`
+
+# 2026-02-27 作業メモ (`sort_*_ret` 境界回帰の強化)
+- 目的:
+  - `sort_*_ret` API の move 規則整合を維持するため、戻り値Vec APIに対する `len=0/1` 境界ケースを固定する。
+- 変更:
+  - `tests/sort.n.md` に以下を追加:
+    - `sort_quick_ret_len0_noop`
+    - `sort_quick_ret_len1_noop`
+    - `sort_heap_ret_len0_noop`
+    - `sort_heap_ret_len1_noop`
+    - `sort_merge_ret_len0_noop`
+    - `sort_merge_ret_len1_noop`
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/sort.n.md -o /tmp/tests-sort-ret-boundary-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `520/520 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-sort-ret-boundary-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1646/1646 pass`
