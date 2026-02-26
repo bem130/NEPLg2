@@ -1,3 +1,18 @@
+# 2026-02-26 作業メモ (`wasi_only` タグ削減: selfhost_req を dual 共通化)
+- 目的:
+  - backend 暫定タグ削減を継続し、`tests/selfhost_req.n.md` の `wasi_only` を除去する。
+- 実装:
+  - `tests/selfhost_req.n.md`
+    - `test_req_file_io` のタグを `neplg2:test[wasi_only]` から `neplg2:test` へ変更。
+    - 読み込みパスを `test.nepl` から `stdlib/tests/fs.nepl` に変更し、CI/ローカル差分のない固定ファイルへ統一。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/selfhost_req.n.md -o /tmp/tests-selfhostreq-dual.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+    - `478/478 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 600s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-selfhost-tag-reduction.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+    - `1582/1582 pass`
+  - 暫定 backend タグの残件は `tests/neplg2.n.md` の `wasm_only` 1件のみ（WASM特有制約テスト）。
+
 # 2026-02-26 作業メモ (`wasm_only` タグの段階削減: 1件)
 - 目的:
   - `todo.md` 9番の「暫定 backend タグ削減」を段階実施し、不要になった `wasm_only` を外す。

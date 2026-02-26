@@ -9,7 +9,7 @@
 
 注意: このテストは `test.nepl` が実行環境に存在することを前提にしています。
 
-neplg2:test[wasi_only]
+neplg2:test
 ret: 0
 ```neplg2
 #entry main
@@ -22,7 +22,7 @@ ret: 0
 
 fn main <()*>i32> ():
     // 要件: ソースコードファイルを読み込めること
-    let path "test.nepl";
+    let path "stdlib/tests/fs.nepl";
     let res <Result<str, i32>> fs_read_to_string path;
     
     match res:
