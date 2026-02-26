@@ -34,6 +34,17 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> pass
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-kp-target-std.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1588/1588 pass`
+
+## 2026-02-27 作業メモ (CI LLVM workflow の品質ゲート強化)
+- 目的:
+  - GitHub Actions の LLVM workflow で、dual 実行結果を本番ゲートとして扱う。
+- 変更:
+  - `.github/workflows/nepl-test-llvm.yml`
+    - `Full dual backend verification (non-blocking)` を `continue-on-error: true` なしのブロッキング実行へ変更。
+    - 同 step の `--no-tree` を削除し、tree API テストを含む full dual 実行へ変更。
+- 根拠:
+  - ローカルで同等条件（tree含む strict-dual）の実行結果を確認済み:
+    - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full-with-tree.json --runner all --llvm-all --assert-io --strict-dual -j 2` -> `1603/1603 pass`
     - `1588/1588 pass`
 
 # 2026-02-26 作業メモ (`todo 10` 完了: 未到達除去の回帰テスト追加)

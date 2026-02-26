@@ -115,12 +115,11 @@ jobs:
               run: |
                   node nodesrc/tests.js -i tests/llvm_target.n.md -o tests-llvm.json --runner llvm --llvm-compile-only --no-tree --no-stdlib -j 2
 
-            - name: Full dual backend verification (non-blocking)
-              continue-on-error: true
+            - name: Full dual backend verification
               env:
                   NO_COLOR: "true"
               run: |
-                  node nodesrc/tests.js -i tests -i stdlib -o tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2
+                  node nodesrc/tests.js -i tests -i stdlib -o tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual -j 2
 
             - name: Upload llvm doctest JSON (always)
               if: always()
