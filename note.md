@@ -4022,3 +4022,25 @@
   - `NO_COLOR=false trunk build` -> pass
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/sort.n.md -o /tmp/tests-sort-vec-data-len-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `502/502 pass`
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-vec-data-len-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1623/1623 pass`
+
+# 2026-02-27 作業メモ (`noshadow` 適用範囲の stdlib 拡大: stdio)
+- 目的:
+  - `todo.md` のシャドーイング運用を完了させるため、`std/test` に続いて `std/stdio` の基幹APIにも `noshadow` を適用する。
+- 実装:
+  - `stdlib/std/stdio.nepl`
+    - `print`
+    - `read_line`
+    - `println`
+    - `print_i32`
+    - `println_i32`
+    を `fn noshadow` 化。
+  - `tests/shadowing.n.md`
+    - `std_stdio_noshadow_same_signature_redefinition_is_error`（compile_fail）を追加。
+    - `std_stdio_noshadow_allows_overload_with_different_signature`（成功）を追加。
+- 失敗分析:
+  - 初回は `print <(i32)*>()>` を overloading するテストにし、`stdio` 内部の `print` 呼び出しが曖昧化して大量 `ambiguous overload` を誘発。
+  - これはテスト設計ミスと判断し、内部呼び出しに影響しない `read_line` の別シグネチャ overloading へ変更して解消。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/shadowing.n.md -o /tmp/tests-shadowing-stdio-noshadow-v2.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `538/538 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-stdio-noshadow-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1628/1628 pass`

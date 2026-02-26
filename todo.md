@@ -9,36 +9,33 @@
 1. 高階関数・call_indirect
 - capture あり関数値は closure conversion の設計を確定して段階導入する。
 
-2. シャドーイング運用の完成
-- `noshadow` の適用範囲を stdlib で段階拡大し、運用ルールを文書化する。
-
-3. sort/generics と Vec 読み取り設計
+2. sort/generics と Vec 読み取り設計
 - `sort_*` API と move 規則の整合を見直し、必要なら API/実装/テストを再設計する。
 
-4. LSP/API 拡張（phase 2）
+3. LSP/API 拡張（phase 2）
 - `analyze_name_resolution` で、import/alias/use 跨ぎ時の定義元ファイル情報（jump 先）を返す。
 - token 単位の型情報 API に定義ジャンプ情報（import 先含む）を統合する。
 - Hover/Inlay Hint 向けに式範囲・引数範囲・推論型・関連 doc comment を返す API を追加する。
 
-5. 診断体系の再整理
+4. 診断体系の再整理
 - エラーをテーブルで一元管理する（短い数値ID + 詳細メッセージ）。
 - 診断生成側は `ErrorId` を返し、表示層で `id -> 本文` を解決する構造に整理する。
 - LSP/API から `id` と展開済み本文の両方を取得できるようにする。
 
-6. Web Playground / tests.html 強化
+5. Web Playground / tests.html 強化
 - VSCode 拡張予定の情報（名前解決/型情報/式範囲/定義ジャンプ候補）を Playground で表示する。
 - `web/tests.html` の詳細展開時にソースと解析結果（AST/resolve/semantics）を併記する。
 
-7. `examples/js_interpreter` 実装（言語仕様固定後）
+6. `examples/js_interpreter` 実装（言語仕様固定後）
 - `examples/js_interpreter` に JavaScript インタプリタを実装する。
 - 言語仕様は変更せず、stdlib の再設計・改良のみで不足を埋める。
 - Node.js 実行結果との同値性回帰テストを追加する。
 
-8. stdlib の段階的リファクタリング（言語仕様安定後）
+7. stdlib の段階的リファクタリング（言語仕様安定後）
 - `stdlib/kp` のドキュメントコメント/ドキュメントテスト形式を基準に、他 stdlib へ統一展開する。
 - 複雑データ処理の箇所を中心に改行 `|>` パイプを活用し、可読性とメモリ安全性を両立する。
 
-9. LLVM IR target 追加（nepl-cli 限定）
+8. LLVM IR target 追加（nepl-cli 限定）
 
 ---
 ### 以下編集禁止

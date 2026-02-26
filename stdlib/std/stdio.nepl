@@ -154,7 +154,7 @@ fn fd_read <(i32,i32,i32,i32)*>i32> (_fd,iovs,iovs_len,nread_ptr):
 //: fn main <()*>()> ():
 //:     print "sample";
 //: ```
-fn print <(str)*>()> (s):
+fn noshadow print <(str)*>()> (s):
     let iov <i32> alloc 8;
     store_i32 iov add s 4;
     store_i32 add iov 4 load_i32 s;
@@ -248,7 +248,7 @@ fn read_all <()*>str> ():
 //: fn main <()*>()> ():
 //:     read_line ();
 //: ```
-fn read_line <()*>str> ():
+fn noshadow read_line <()*>str> ():
     let cap <i32> 1024;
     let out <i32> alloc add 4 cap;
     let iov <i32> alloc 8;
@@ -318,7 +318,7 @@ fn read_line <()*>str> ():
 //: fn main <()*>()> ():
 //:     println "sample";
 //: ```
-fn println <(str)*>()> (s):
+fn noshadow println <(str)*>()> (s):
     print s;
     print "\n";
     ()
@@ -354,7 +354,7 @@ fn println <(str)*>()> (s):
 //: fn main <()*>()> ():
 //:     print_i32 0;
 //: ```
-fn print_i32 <(i32)*>()> (v):
+fn noshadow print_i32 <(i32)*>()> (v):
     let s <i32> :
         if:
             eq v 0
@@ -430,7 +430,7 @@ fn print_i32 <(i32)*>()> (v):
 //: fn main <()*>()> ():
 //:     println_i32 0;
 //: ```
-fn println_i32 <(i32)*>()> (v):
+fn noshadow println_i32 <(i32)*>()> (v):
     print_i32 v;
     print "\n";
 

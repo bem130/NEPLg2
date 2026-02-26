@@ -416,6 +416,39 @@ fn main <()->i32> ():
     0
 ```
 
+## std_stdio_noshadow_same_signature_redefinition_is_error
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+#target std
+#import "std/stdio" as *
+
+fn print <(str)*>()> (_s):
+    ()
+
+fn main <()*>()> ():
+    ()
+```
+
+## std_stdio_noshadow_allows_overload_with_different_signature
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target std
+#import "std/stdio" as *
+
+fn read_line <(i32)->str> (_v):
+    "ok"
+
+fn main <()->i32> ():
+    0
+```
+
 ## let_mut_noshadow_is_invalid
 
 neplg2:test[compile_fail]
