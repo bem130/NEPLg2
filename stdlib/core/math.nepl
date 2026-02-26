@@ -10,7 +10,7 @@
 //: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
-//:| #target std
+//:| #target core
 //: ()
 //: ```
 
@@ -38,8 +38,8 @@
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 42 i32_add 40 2;
@@ -76,8 +76,8 @@ fn i32_add <(i32,i32)->i32> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 5 i32_sub 9 4;
@@ -114,8 +114,8 @@ fn i32_sub <(i32,i32)->i32> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 42 i32_mul 6 7;
@@ -152,8 +152,8 @@ fn i32_mul <(i32,i32)->i32> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 -3 i32_div_s -9 3;
@@ -190,8 +190,8 @@ fn i32_div_s <(i32,i32)->i32> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 3 i32_div_u 11 3;
@@ -228,8 +228,8 @@ fn i32_div_u <(i32,i32)->i32> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 1 i32_rem_s 10 3;
@@ -266,8 +266,8 @@ fn i32_rem_s <(i32,i32)->i32> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 2 i32_rem_u 11 3;
@@ -304,8 +304,8 @@ fn i32_rem_u <(i32,i32)->i32> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 2 i32_and 6 3;
@@ -539,8 +539,8 @@ fn i32_rotr <(i32,i32)->i32> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 31 i32_clz 1;
@@ -632,8 +632,8 @@ fn i32_popcnt <(i32)->i32> (a):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert i32_eq 7 7;
@@ -1245,8 +1245,8 @@ fn u8_ge_u <(u8,u8)->bool> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 40;
@@ -1287,8 +1287,8 @@ fn i64_add <(i64,i64)->i64> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 44;
@@ -1329,8 +1329,8 @@ fn i64_sub <(i64,i64)->i64> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 6;
@@ -1370,8 +1370,8 @@ fn i64_mul <(i64,i64)->i64> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let n9 <i64> i64_extend_i32_s -9;
@@ -1414,8 +1414,8 @@ fn i64_div_s <(i64,i64)->i64> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 100;
@@ -1457,8 +1457,8 @@ fn i64_div_u <(i64,i64)->i64> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let n10 <i64> i64_extend_i32_s -10;
@@ -1500,8 +1500,8 @@ fn i64_rem_s <(i64,i64)->i64> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 100;
@@ -1542,8 +1542,8 @@ fn i64_rem_u <(i64,i64)->i64> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 14;
@@ -1855,8 +1855,8 @@ fn i64_popcnt <(i64)->i64> (a):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_s -1;
@@ -2153,8 +2153,8 @@ fn i64_ge_u <(i64,i64)->bool> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let x <f32> f32_add 1.5 2.25;
@@ -2710,8 +2710,8 @@ fn f32_ge <(f32,f32)->bool> (a,b):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let one <f64> f64_convert_i32_s 1;
@@ -3327,8 +3327,8 @@ fn i32_extend_i16_s <(i32)->i32> (a):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let v <i64> i64_extend_i32_s -1;
@@ -3366,8 +3366,8 @@ fn i64_extend_i32_s <(i32)->i64> (a):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let v <i64> i64_extend_i32_u -1;
@@ -4602,8 +4602,8 @@ fn not <(bool)->bool> (a):
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
-//:| #target std
-//:| #import "std/test" as *
+//:| #target core
+//:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 3 u32_add 1 2;

@@ -42,7 +42,6 @@
 - 複雑データ処理の箇所を中心に改行 `|>` パイプを活用し、可読性とメモリ安全性を両立する。
 
 9. LLVM IR target 追加（nepl-cli 限定）
-- `stdlib/core/math.nepl` の doctest は最終的に `#target core` へ移行する（先に `std/test` 依存を外した core 向け検証手段を整備する）。
 
 ---
 ### 以下編集禁止

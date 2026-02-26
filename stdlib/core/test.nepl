@@ -1,0 +1,61 @@
+//: core/test: core target で使える最小テスト補助
+//:
+//: [目的/もくてき]:
+//: - `core` target の doctest で、最小限のアサート機能を提供します。
+//: - `std/test` に依存せず、`core` 層だけで検証できる基盤を提供します。
+//:
+//: [注意/ちゅうい]:
+//: - 失敗時は `unreachable` を呼び出して直ちに異常終了します。
+//: - 失敗メッセージの出力機能は持ちません（core 層の最小実装）。
+//:
+//: neplg2:test
+//: ret: 0
+//: ```neplg2
+//:| #entry main
+//:| #target core
+//:| #import "core/test" as *
+//: fn main <()->i32> ():
+//:     assert_eq_i32 10 10
+//:     0
+//: ```
+
+#indent 4
+#target core
+
+#import "core/math" as *
+
+//: test_fail: 失敗として異常終了する
+//:
+//: [目的/もくてき]:
+//: - core 層で「テスト失敗」を表現するため、必ず異常終了します。
+//:
+//: [実装/じっそう]:
+//: - `#intrinsic \"unreachable\"` を呼び出して停止します。
+fn test_fail <(str)->()> (_msg):
+    #intrinsic "unreachable" <> ()
+
+//: assert: 条件が真であることを検証する
+//:
+//: [目的/もくてき]:
+//: - `ok` が true の場合は何もしません。
+//: - false の場合は異常終了します。
+fn assert <(bool)->()> (ok):
+    if:
+        cond ok
+        then ()
+        else:
+            #intrinsic "unreachable" <> ()
+
+//: assert_eq_i32: i32 の等値を検証する
+//:
+//: [目的/もくてき]:
+//: - `expected` と `actual` が等しいことを確認します。
+//:
+//: [実装/じっそう]:
+//: - `core/math` の `eq` を使って比較し、偽なら異常終了します。
+fn assert_eq_i32 <(i32,i32)->()> (expected, actual):
+    if:
+        cond eq expected actual
+        then ()
+        else:
+            #intrinsic "unreachable" <> ()

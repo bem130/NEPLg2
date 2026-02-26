@@ -93,6 +93,29 @@
     - `compile_llvm_cli` 不一致解消
     - `link_llvm_cli` 不一致解消
     の完了済み項目を削除した。
+
+## 2026-02-27 作業メモ (`core/math` doctest の `#target core` 化)
+- 目的:
+  - `todo.md` の残件だった `stdlib/core/math.nepl` doctest の `#target core` 化を実施する。
+  - `std/test` 依存を外し、core 層のみで実行できる最小テスト補助へ移行する。
+- 変更:
+  - `stdlib/core/test.nepl` を新規追加。
+    - `test_fail`
+    - `assert`
+    - `assert_eq_i32`
+    を `core` target で提供。
+  - `stdlib/core/math.nepl`
+    - doctest 埋め込みコードの
+      - `#target std` -> `#target core`
+      - `#import "std/test" as *` -> `#import "core/test" as *`
+    に置換。
+- 修正中に発見した根本原因:
+  - `core/test.nepl` の `else #intrinsic ...` が構文不正で `unknown token` を誘発していた。
+  - `else:` ブロック内へ `#intrinsic` を置く形に修正。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i stdlib/core/math.nepl -o /tmp/tests-math-core-fix2.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `538/538 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-core-math-doctest-core.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1593/1593 pass`
     - `1588/1588 pass`
 
 # 2026-02-26 作業メモ (`todo 10` 完了: 未到達除去の回帰テスト追加)
