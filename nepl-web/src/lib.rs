@@ -1008,6 +1008,15 @@ fn hoist_block_defs(trace: &mut NameResolutionTrace, block: &Block) {
                     }
                 }
             }
+            Stmt::StructDef(def) => {
+                trace.define(def.name.name.clone(), "struct", def.name.span, def.doc.clone());
+            }
+            Stmt::EnumDef(def) => {
+                trace.define(def.name.name.clone(), "enum", def.name.span, def.doc.clone());
+            }
+            Stmt::Trait(def) => {
+                trace.define(def.name.name.clone(), "trait", def.name.span, def.doc.clone());
+            }
             _ => {}
         }
     }
@@ -1578,8 +1587,8 @@ fn resolve_target_for_analysis(module: &nepl_core::ast::Module) -> (CompileTarge
     for d in &module.directives {
         if let Directive::Target { target, span } = d {
             let parsed = match target.as_str() {
-                "wasm" => Some(CompileTarget::Wasm),
-                "wasi" => Some(CompileTarget::Wasi),
+                "wasm" | "core" => Some(CompileTarget::Wasm),
+                "wasi" | "std" => Some(CompileTarget::Wasi),
                 "llvm" => Some(CompileTarget::Llvm),
                 _ => None,
             };
@@ -1602,8 +1611,8 @@ fn resolve_target_for_analysis(module: &nepl_core::ast::Module) -> (CompileTarge
         for it in &module.root.items {
             if let Stmt::Directive(Directive::Target { target, span }) = it {
                 let parsed = match target.as_str() {
-                    "wasm" => Some(CompileTarget::Wasm),
-                    "wasi" => Some(CompileTarget::Wasi),
+                    "wasm" | "core" => Some(CompileTarget::Wasm),
+                    "wasi" | "std" => Some(CompileTarget::Wasi),
                     "llvm" => Some(CompileTarget::Llvm),
                     _ => None,
                 };
