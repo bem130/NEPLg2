@@ -1,3 +1,29 @@
+# 2026-02-26 作業メモ (`stdlib/tests` の `#target std` 化 + LLVM std/fs/cliarg 根本修正)
+- 目的:
+  - `stdlib/tests/fs.nepl` と `stdlib/tests/cliarg.nepl` を `#target wasi` から `#target std` に移行し、wasm/llvm 両ランナーで同一テストとして扱える状態にする。
+- 原因:
+  - LLVM 側で `std/fs` と `std/env/cliarg` の syscall ラッパが pure/impure で不整合になっていた。
+  - `std/test -> std/stdio` 経由で `__nepl_syscall` が重複導入され、`std/fs` / `std/env/cliarg` 内の呼び出しで `ambiguous overload` が発生していた。
+- 実装:
+  - `stdlib/tests/fs.nepl`
+    - `#target wasi` -> `#target std`
+  - `stdlib/tests/cliarg.nepl`
+    - `#target wasi` -> `#target std`
+  - `stdlib/std/fs.nepl`
+    - WASI extern (`wasi_path_open`/`wasi_fd_read`/`wasi_fd_close`) を `*>` に修正。
+    - LLVM syscall extern を `__nepl_syscall` から `__fs_syscall` に分離。
+    - `__fs_copy_to_cstr` / `__linux_syscall_read` / LLVM側 `wasi_*` を impure シグネチャに統一。
+  - `stdlib/std/env/cliarg.nepl`
+    - WASI extern (`args_sizes_get`/`args_get`) を `*>` に修正。
+    - LLVM syscall extern を `__nepl_syscall` から `__cli_syscall` に分離。
+    - `__cli_copy_to_cstr` / `__cli_open_cmdline` / `__cli_read_cmdline` / LLVM側 `args_*` を impure シグネチャに統一。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 180s node nodesrc/tests.js -i stdlib/tests/fs.nepl -i stdlib/tests/cliarg.nepl -o /tmp/std-tests-target-migration.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 1`
+    - `465/465 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 600s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-fs-cliarg.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+    - `1579/1579 pass`
+
 # 2026-02-22 作業メモ (TypeCtx Docstring Propagation: Lexer -> HIR -> Web)
 - 目的:
   - `///` ドキュメントコメントをパースし、型情報や HIR に保持させることで、Web Playground の Hover 等で表示可能にする。

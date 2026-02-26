@@ -1,11 +1,11 @@
 #indent 4
 
 #if[target=wasm]
-#extern "wasi_snapshot_preview1" "args_sizes_get" fn args_sizes_get <(i32,i32)->i32>
+#extern "wasi_snapshot_preview1" "args_sizes_get" fn args_sizes_get <(i32,i32)*>i32>
 #if[target=wasm]
-#extern "wasi_snapshot_preview1" "args_get" fn args_get <(i32,i32)->i32>
+#extern "wasi_snapshot_preview1" "args_get" fn args_get <(i32,i32)*>i32>
 #if[target=llvm]
-#extern "c" "syscall" fn __nepl_syscall <(i64,i64,i64,i64,i64,i64,i64)->i64>
+#extern "c" "syscall" fn __cli_syscall <(i64,i64,i64,i64,i64,i64,i64)*>i64>
 
 #import "core/mem" as *
 #import "core/math" as *
@@ -30,7 +30,7 @@
 //: - 引数取得は O(total_bytes)
 
 #if[target=llvm]
-fn __cli_copy_to_cstr <(str)->i32> (s):
+fn __cli_copy_to_cstr <(str)*>i32> (s):
     let len <i32> load_i32 s;
     let src <i32> add s 4;
     let dst <i32> alloc add len 1;
@@ -43,10 +43,10 @@ fn __cli_copy_to_cstr <(str)->i32> (s):
     dst
 
 #if[target=llvm]
-fn __cli_open_cmdline <()->i32> ():
+fn __cli_open_cmdline <()*>i32> ():
     let path <str> "/proc/self/cmdline";
     let cpath <i32> __cli_copy_to_cstr path;
-    let fd64 <i64> __nepl_syscall i64_extend_i32_u 257 i64_extend_i32_s -100 i64_extend_i32_u cpath i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+    let fd64 <i64> __cli_syscall i64_extend_i32_u 257 i64_extend_i32_s -100 i64_extend_i32_u cpath i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
     if:
         cond:
             i64_lt_s fd64 i64_extend_i32_u 0
@@ -54,7 +54,7 @@ fn __cli_open_cmdline <()->i32> ():
         else i32_wrap_i64 fd64
 
 #if[target=llvm]
-fn __cli_read_cmdline <(i32,i32)->i32> (buf, cap):
+fn __cli_read_cmdline <(i32,i32)*>i32> (buf, cap):
     let fd <i32> __cli_open_cmdline;
     if:
         cond:
@@ -62,8 +62,8 @@ fn __cli_read_cmdline <(i32,i32)->i32> (buf, cap):
         then:
             -1
         else:
-            let n64 <i64> __nepl_syscall i64_extend_i32_u 0 i64_extend_i32_u fd i64_extend_i32_u buf i64_extend_i32_u cap i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
-            __nepl_syscall i64_extend_i32_u 3 i64_extend_i32_u fd i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+            let n64 <i64> __cli_syscall i64_extend_i32_u 0 i64_extend_i32_u fd i64_extend_i32_u buf i64_extend_i32_u cap i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+            __cli_syscall i64_extend_i32_u 3 i64_extend_i32_u fd i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
             if:
                 cond:
                     i64_lt_s n64 i64_extend_i32_u 0
@@ -71,7 +71,7 @@ fn __cli_read_cmdline <(i32,i32)->i32> (buf, cap):
                 else i32_wrap_i64 n64
 
 #if[target=llvm]
-fn args_sizes_get <(i32,i32)->i32> (argc_ptr, buf_ptr):
+fn args_sizes_get <(i32,i32)*>i32> (argc_ptr, buf_ptr):
     let cap <i32> 65536;
     let tmp <i32> alloc cap;
     let n <i32> __cli_read_cmdline tmp cap;
@@ -95,7 +95,7 @@ fn args_sizes_get <(i32,i32)->i32> (argc_ptr, buf_ptr):
             0
 
 #if[target=llvm]
-fn args_get <(i32,i32)->i32> (argv_ptr, argv_buf):
+fn args_get <(i32,i32)*>i32> (argv_ptr, argv_buf):
     let cap <i32> 65536;
     let tmp <i32> alloc cap;
     let n <i32> __cli_read_cmdline tmp cap;
