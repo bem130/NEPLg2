@@ -159,3 +159,63 @@ fn main <()->i32> ():
     dealloc p 16;
     if ok 1234 0
 ```
+
+## sort_i32_ptr_with_duplicates
+
+neplg2:test
+ret: 2234
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/sort" as *
+#import "core/mem" as *
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let p <i32> alloc 20;
+    store_i32 add p 0 3;
+    store_i32 add p 4 1;
+    store_i32 add p 8 3;
+    store_i32 add p 12 2;
+    store_i32 add p 16 1;
+    sort_i32 p 5;
+    let b0 <bool> eq load_i32 add p 0 1;
+    let b1 <bool> eq load_i32 add p 4 1;
+    let b2 <bool> eq load_i32 add p 8 2;
+    let b3 <bool> eq load_i32 add p 12 3;
+    let b4 <bool> eq load_i32 add p 16 3;
+    let ok <bool> and b0 and b1 and b2 and b3 b4;
+    dealloc p 20;
+    if ok 2234 0
+```
+
+## sort_i32_ptr_with_negative_values
+
+neplg2:test
+ret: 3234
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/sort" as *
+#import "core/mem" as *
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let p <i32> alloc 20;
+    store_i32 add p 0 -2;
+    store_i32 add p 4 5;
+    store_i32 add p 8 0;
+    store_i32 add p 12 -1;
+    store_i32 add p 16 3;
+    sort_i32 p 5;
+    let b0 <bool> eq load_i32 add p 0 -2;
+    let b1 <bool> eq load_i32 add p 4 -1;
+    let b2 <bool> eq load_i32 add p 8 0;
+    let b3 <bool> eq load_i32 add p 12 3;
+    let b4 <bool> eq load_i32 add p 16 5;
+    let ok <bool> and b0 and b1 and b2 and b3 b4;
+    dealloc p 20;
+    if ok 3234 0
+```
