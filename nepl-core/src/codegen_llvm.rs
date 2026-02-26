@@ -93,6 +93,7 @@ pub fn emit_ll_from_module_for_target(
     validate_target_directive_for_llvm(module)?;
     let mut out = String::new();
     let entry_names = collect_active_entry_names(module, target, profile);
+    let reachable_hint = compute_reachable_hint(module, target, profile, &entry_names);
     let mut emitted_functions: Vec<String> = Vec::new();
     let mut pending_if: Option<bool> = None;
 
@@ -116,10 +117,16 @@ pub fn emit_ll_from_module_for_target(
             }
             Stmt::FnDef(def) => match &def.body {
                 FnBody::LlvmIr(block) => {
+                    if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
+                        continue;
+                    }
                     collect_defined_functions_from_llvmir_block(block, &mut emitted_functions);
                     append_llvmir_block(&mut out, block);
                 }
                 FnBody::Parsed(block) => {
+                    if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
+                        continue;
+                    }
                     match select_raw_body_from_parsed_block(block, target, profile) {
                         RawBodySelection::Llvm(raw) => {
                             collect_defined_functions_from_llvmir_block(raw, &mut emitted_functions);
@@ -155,7 +162,7 @@ pub fn emit_ll_from_module_for_target(
                     // `#wasm` は明示的な wasm backend 専用実装。
                     // 非 entry 関数は移行期間のためスキップするが、
                     // entry が #wasm のみの場合は LLVM 実行可能なモジュールを作れないためエラーとする。
-                    if entry_names.iter().any(|n| n == &def.name.name) {
+                    if is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
                         return Err(LlvmCodegenError::UnsupportedWasmBody {
                             function: def.name.name.clone(),
                         });
@@ -195,6 +202,36 @@ pub fn emit_ll_from_module_for_target(
     }
 
     Ok(out)
+}
+
+fn compute_reachable_hint(
+    module: &Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+    entry_names: &[String],
+) -> Option<BTreeSet<String>> {
+    if entry_names.is_empty() {
+        return None;
+    }
+    let (_, hir) = try_build_hir_with_target(module, target, profile).ok()?;
+    let mut out = BTreeSet::new();
+    for entry in entry_names {
+        let reachable = collect_reachable_functions(&hir, entry.as_str());
+        for name in reachable {
+            out.insert(name.clone());
+            if let Some(sep) = find_mangled_signature_separator(name.as_str()) {
+                out.insert(String::from(&name[..sep]));
+            }
+        }
+    }
+    Some(out)
+}
+
+fn is_ast_fn_reachable(name: &str, reachable_hint: Option<&BTreeSet<String>>) -> bool {
+    match reachable_hint {
+        None => true,
+        Some(set) => set.contains(name),
+    }
 }
 
 fn validate_target_directive_for_llvm(module: &Module) -> Result<(), LlvmCodegenError> {

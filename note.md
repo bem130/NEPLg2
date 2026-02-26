@@ -1,3 +1,20 @@
+# 2026-02-26 作業メモ (LLVM: 関数単位の未到達除去を導入)
+- 目的:
+  - `todo.md` 10番（wasm/llvm 共通の未到達除去）に合わせ、LLVM IR 生成でも関数単位で未到達コードを出力しない方向へ進める。
+- 実装:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `emit_ll_from_module_for_target` に到達関数ヒントを導入。
+    - `compute_reachable_hint` を追加し、entry から HIR の到達関数集合を算出（型付け可能な場合）。
+    - `is_ast_fn_reachable` を追加し、`Stmt::FnDef` の出力可否判定に使用。
+    - 到達集合に含まれない `FnBody::LlvmIr` / `FnBody::Parsed` をスキップ。
+    - `FnBody::Wasm` は「到達している場合のみ」Unsupported エラーにするよう整理。
+  - 補助:
+    - 到達集合には mangled 名と base 名（`foo__...` -> `foo`）の両方を保持し、AST 関数名との対応を安定化。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 600s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-llvm-reachability.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+    - `1579/1579 pass`
+
 # 2026-02-26 作業メモ (`stdlib/tests` の `#target std` 化 + LLVM std/fs/cliarg 根本修正)
 - 目的:
   - `stdlib/tests/fs.nepl` と `stdlib/tests/cliarg.nepl` を `#target wasi` から `#target std` に移行し、wasm/llvm 両ランナーで同一テストとして扱える状態にする。
