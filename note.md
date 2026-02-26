@@ -4094,3 +4094,22 @@
   - `NO_COLOR=false trunk build` -> pass
   - `node tests/tree/run.js` -> `15/15 pass`
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-token-resolution-defobj-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
+# 2026-02-27 作業メモ (LSP/API phase2: VFS跨ぎ定義ジャンプ情報の固定)
+- 目的:
+  - `todo.md` 2番（LSP/API 拡張 phase 2）のうち、token 解決結果に import 先定義のファイル情報を返す部分を安定化する。
+- 実装:
+  - `nepl-web/src/lib.rs`
+    - `span_to_js_with_map` を導入し、`SourceMap` がある場合は span の line/col を元ファイル基準で計算し、`file_path` を埋めるように変更。
+    - 名前解決 payload 変換関数（`def_trace_to_js` / `ref_trace_to_js` / `shadow_trace_to_js` / `name_resolution_payload_to_js`）に `SourceMap` を渡せる形へ拡張。
+    - `analyze_semantics_with_vfs(entry_path, source, vfs)` を追加し、VFS 読み込み時の `token_resolution` に
+      - `resolved_definition`（span + file_path）
+      - `candidate_definitions`（配列、各要素に span + file_path）
+      を返すように実装。
+  - `tests/tree/16_semantics_vfs_cross_file.js` を追加。
+    - `core/math` の `add` 呼び出しで、解決先が `/stdlib/core/math.nepl` を指すことを検証。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node tests/tree/run.js` -> `16/16 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
+- todo反映:
+  - `todo.md` 2番から「token 単位の型情報 API に定義ジャンプ情報（import 先含む）を統合する」を削除（完了）。
