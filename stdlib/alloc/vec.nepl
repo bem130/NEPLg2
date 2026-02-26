@@ -242,6 +242,42 @@ fn vec_cap <.T> <(Vec<.T>)->i32> (v):
 fn vec_data_ptr <.T> <(Vec<.T>)->i32> (v):
     get v "data"
 
+//: vec_data_len: 要素バッファ先頭ポインタと長さを同時に返す
+//:
+//: 目的:
+//: - 読み取り専用の処理で、data/len を 1 回の呼び出しで取得します。
+//:
+//: 実装(アルゴリズム):
+//: - data と len を取り出し、`Tuple:` で `(data_ptr, len)` を返します。
+//:
+//: 注意(重要):
+//: - 返り値はタプルです。先頭が data_ptr、次が len です。
+//: - data_ptr は生ポインタなので、範囲管理は呼び出し側で行ってください。
+//:
+//: 計算量:
+//: - O(1)
+//:
+//: 使い方:
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/vec" as *
+//:| #import "core/field" as *
+//: fn main <()->i32> ():
+//:     let v0 vec_new<i32>;
+//:     let v1 vec_push<i32> v0 7;
+//:     let s vec_data_len<i32> v1;
+//:     if and gt get s 0 0 eq get s 1 1 0 1
+//: ```
+fn vec_data_len <.T> <(Vec<.T>)->.Pair> (v):
+    let v_len <i32> get v "len"
+    let v_data <i32> get v "data"
+    Tuple:
+        v_data
+        v_len
+
 //: vec_is_empty: 空か判定する
 //:
 //: 目的:

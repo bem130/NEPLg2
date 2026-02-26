@@ -4003,3 +4003,22 @@
   - `NO_COLOR=false trunk build` -> pass
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/sort.n.md -o /tmp/tests-sort-returning-api-v6.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `499/499 pass`
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-sort-ret-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1620/1620 pass`
+
+# 2026-02-27 作業メモ (`Vec` read-only 経路の段階導入)
+- 目的:
+  - `todo.md` 3番の `Vec` 読み取り設計を前進させ、`sort` 検証コードで move 規則に引っかからない read-only パターンを標準化する。
+- 実装:
+  - `stdlib/alloc/vec.nepl`
+    - `vec_data_len <.T> <(Vec<.T>)->.Pair>` を追加。
+    - 返り値は `Tuple:` で `(data_ptr, len)`。
+    - 日本語ドキュメントコメントと doctest を追加。
+  - `tests/sort.n.md`
+    - `sort_quick_ret_i32_sorted_values`
+    - `sort_heap_ret_i32_sorted_values`
+    - `sort_merge_ret_i32_sorted_values`
+    を `vec_data_ptr` 直接参照から `vec_data_len + core/field.get` ベースに更新。
+    - `len == 4` の検証も追加し、データ整合と長さ整合を同時に確認。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/sort.n.md -o /tmp/tests-sort-vec-data-len-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `502/502 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-vec-data-len-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1623/1623 pass`
