@@ -1,3 +1,24 @@
+# 2026-02-26 作業メモ (`#if[target=...]` の式評価対応)
+- 目的:
+  - `todo.md` 9番（target 条件式の再設計）に向けて、`#if[target=...]` を単一識別子判定から式判定へ拡張する。
+- 実装:
+  - `nepl-core/src/compiler.rs`
+    - `target_gate_allows_expr(expr, target)` を追加。
+    - `|`（OR）/ `&`（AND）/ `()` を評価する簡易パーサを追加。
+    - `CompileTarget::allows` を新 evaluator 経由に変更。
+    - atom として `wasm/wasi/llvm/core/std` に加え、OS 軸 `linux/win/windows/mac/darwin/macos` を追加。
+  - `nepl-core/src/typecheck.rs`
+    - `target_allows` を `crate::compiler::target_gate_allows_expr` 呼び出しに変更し、typecheck 側 gate 判定を統一。
+  - `tests/neplg2.n.md`
+    - `iftarget_target_expr_or_and_paren` を追加（`core&(wasm|llvm)` が true）。
+    - `iftarget_target_expr_false_branch_skips` を追加（`core&(wasi&llvm)` が false）。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-targetexpr-dual.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+    - `567/567 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 600s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-targetexpr.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+    - `1588/1588 pass`
+
 # 2026-02-26 作業メモ (`todo 10` 完了: 未到達除去の回帰テスト追加)
 - 目的:
   - `todo.md` 10番「未到達除去後の回帰テスト追加」を実施する。

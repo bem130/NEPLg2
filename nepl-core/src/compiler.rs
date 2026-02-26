@@ -33,20 +33,134 @@ pub enum CompileTarget {
 
 impl CompileTarget {
     pub fn allows(&self, gate: &str) -> bool {
-        match gate {
-            "wasm" => matches!(self, CompileTarget::Wasm | CompileTarget::Wasi),
-            "wasi" => matches!(self, CompileTarget::Wasi),
-            "llvm" => matches!(self, CompileTarget::Llvm),
-            // Alias target gates:
-            // - core: minimal runtime layer (wasm/wasi/llvm すべてで共有可能)
-            // - std:  higher runtime layer（現段階では wasi / llvm を許可）
-            "core" => matches!(
-                self,
-                CompileTarget::Wasm | CompileTarget::Wasi | CompileTarget::Llvm
-            ),
-            "std" => matches!(self, CompileTarget::Wasi | CompileTarget::Llvm),
-            _ => false,
+        target_gate_allows_expr(gate, *self)
+    }
+}
+
+pub fn target_gate_allows_expr(expr: &str, active: CompileTarget) -> bool {
+    let mut p = TargetGateParser::new(expr, active);
+    let v = p.parse_or();
+    if !p.ok {
+        return false;
+    }
+    p.skip_ws();
+    if p.pos < p.src.len() {
+        return false;
+    }
+    v
+}
+
+struct TargetGateParser<'a> {
+    src: &'a [u8],
+    pos: usize,
+    ok: bool,
+    active: CompileTarget,
+}
+
+impl<'a> TargetGateParser<'a> {
+    fn new(src: &'a str, active: CompileTarget) -> Self {
+        Self {
+            src: src.as_bytes(),
+            pos: 0,
+            ok: true,
+            active,
         }
+    }
+
+    fn skip_ws(&mut self) {
+        while self.pos < self.src.len() && self.src[self.pos].is_ascii_whitespace() {
+            self.pos += 1;
+        }
+    }
+
+    fn parse_or(&mut self) -> bool {
+        let mut v = self.parse_and();
+        loop {
+            self.skip_ws();
+            if self.pos < self.src.len() && self.src[self.pos] == b'|' {
+                self.pos += 1;
+                let rhs = self.parse_and();
+                v = v || rhs;
+            } else {
+                break;
+            }
+        }
+        v
+    }
+
+    fn parse_and(&mut self) -> bool {
+        let mut v = self.parse_primary();
+        loop {
+            self.skip_ws();
+            if self.pos < self.src.len() && self.src[self.pos] == b'&' {
+                self.pos += 1;
+                let rhs = self.parse_primary();
+                v = v && rhs;
+            } else {
+                break;
+            }
+        }
+        v
+    }
+
+    fn parse_primary(&mut self) -> bool {
+        self.skip_ws();
+        if self.pos >= self.src.len() {
+            self.ok = false;
+            return false;
+        }
+        match self.src[self.pos] {
+            b'(' => {
+                self.pos += 1;
+                let v = self.parse_or();
+                self.skip_ws();
+                if self.pos >= self.src.len() || self.src[self.pos] != b')' {
+                    self.ok = false;
+                    return false;
+                }
+                self.pos += 1;
+                v
+            }
+            b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
+                let start = self.pos;
+                self.pos += 1;
+                while self.pos < self.src.len() {
+                    let c = self.src[self.pos];
+                    if c.is_ascii_alphanumeric() || c == b'_' {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+                let name = core::str::from_utf8(&self.src[start..self.pos]).unwrap_or("");
+                target_gate_atom_allows(name, self.active)
+            }
+            _ => {
+                self.ok = false;
+                false
+            }
+        }
+    }
+}
+
+fn target_gate_atom_allows(gate: &str, active: CompileTarget) -> bool {
+    match gate {
+        "wasm" => matches!(active, CompileTarget::Wasm | CompileTarget::Wasi),
+        "wasi" => matches!(active, CompileTarget::Wasi),
+        "llvm" => matches!(active, CompileTarget::Llvm),
+        // Alias target gates:
+        // - core: minimal runtime layer (wasm/wasi/llvm すべてで共有可能)
+        // - std:  higher runtime layer（現段階では wasi / llvm を許可）
+        "core" => matches!(
+            active,
+            CompileTarget::Wasm | CompileTarget::Wasi | CompileTarget::Llvm
+        ),
+        "std" => matches!(active, CompileTarget::Wasi | CompileTarget::Llvm),
+        // LLVM native host axis (for future target split, e.g. llvm&linux)
+        "linux" => cfg!(target_os = "linux"),
+        "win" | "windows" => cfg!(target_os = "windows"),
+        "mac" | "darwin" | "macos" => cfg!(target_os = "macos"),
+        _ => false,
     }
 }
 

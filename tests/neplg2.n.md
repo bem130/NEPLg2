@@ -263,6 +263,44 @@ fn main <()->i32> ():
     if true then 9 else 0
 ```
 
+## iftarget_target_expr_or_and_paren
+
+`#if[target=...]` で `|` / `&` / `()` の式が使えることを確認します。
+`core&(wasm|llvm)` は wasm/llvm のどちらでも true になるため、`gated` が有効になって 77 を返す必要があります。
+
+neplg2:test
+ret: 77
+```neplg2
+#entry main
+#target core
+
+#if[target=core&(wasm|llvm)]
+fn gated <()->i32> ():
+    77
+
+fn main <()->i32> ():
+    gated
+```
+
+## iftarget_target_expr_false_branch_skips
+
+false になる target 式では、直後 1 式だけがスキップされることを確認します。
+`core&(wasi&llvm)` は常に false のため、未定義識別子を含む関数は無視され、main は 3 を返す必要があります。
+
+neplg2:test
+ret: 3
+```neplg2
+#entry main
+#target core
+
+#if[target=core&(wasi&llvm)]
+fn skipped_bad <()->i32> ():
+    unknown_symbol
+
+fn main <()->i32> ():
+    3
+```
+
 ## import_and_prelude_directives_are_accepted
 
 以前はコンパイル確認のみでした。

@@ -5334,17 +5334,7 @@ fn parse_i32_literal(text: &str) -> Option<i32> {
 }
 
 fn target_allows(target: &str, active: CompileTarget) -> bool {
-    match target {
-        "wasm" => matches!(active, CompileTarget::Wasm | CompileTarget::Wasi),
-        "wasi" => matches!(active, CompileTarget::Wasi),
-        "llvm" => matches!(active, CompileTarget::Llvm),
-        "core" => matches!(
-            active,
-            CompileTarget::Wasm | CompileTarget::Wasi | CompileTarget::Llvm
-        ),
-        "std" => matches!(active, CompileTarget::Wasi | CompileTarget::Llvm),
-        _ => false,
-    }
+    crate::compiler::target_gate_allows_expr(target, active)
 }
 
 fn profile_allows(profile: &str, active: BuildProfile) -> bool {
