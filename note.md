@@ -4060,3 +4060,19 @@
   - `NO_COLOR=false trunk build` -> pass
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/sort.n.md -o /tmp/tests-sort-ret-boundary-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `520/520 pass`
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-sort-ret-boundary-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1646/1646 pass`
+
+# 2026-02-27 作業メモ (`sort_*_ret` API 整合の完了)
+- 目的:
+  - `todo.md` の sort/move 規則整合項目を完了できる状態にする。
+- 実装:
+  - `tests/sort.n.md` に `sort_*_ret` の返却後再利用ケースを追加:
+    - `sort_quick_ret_vec_is_reusable_after_sort`
+    - `sort_heap_ret_vec_is_reusable_after_sort`
+    - `sort_merge_ret_vec_is_reusable_after_sort`
+  - いずれも「sort 後に `vec_push` できること」と `vec_data_len` で `len` が増えることを検証。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/sort.n.md -o /tmp/tests-sort-ret-reuse-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `529/529 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-sort-ret-reuse-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
+- todo 整理:
+  - `todo.md` の `sort/generics と Vec 読み取り設計` を完了として削除し、残項目の番号を詰めた。

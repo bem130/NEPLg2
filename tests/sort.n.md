@@ -125,6 +125,28 @@ fn main <()->i32> ():
     get s 1
 ```
 
+## sort_quick_ret_vec_is_reusable_after_sort
+
+neplg2:test
+ret: 5
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v0 vec_new<i32>;
+    let v1 vec_push<i32> v0 4;
+    let v2 vec_push<i32> v1 1;
+    let v3 sort_quick_ret<i32> v2;
+    let v4 vec_push<i32> v3 5;
+    let s vec_data_len<i32> v4;
+    get s 1
+```
+
 ## sort_heap_i32_basic
 
 neplg2:test
@@ -225,6 +247,28 @@ fn main <()->i32> ():
     get s 1
 ```
 
+## sort_heap_ret_vec_is_reusable_after_sort
+
+neplg2:test
+ret: 5
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v0 vec_new<i32>;
+    let v1 vec_push<i32> v0 4;
+    let v2 vec_push<i32> v1 1;
+    let v3 sort_heap_ret<i32> v2;
+    let v4 vec_push<i32> v3 5;
+    let s vec_data_len<i32> v4;
+    get s 1
+```
+
 ## sort_merge_ret_i32_sorted_values
 
 neplg2:test
@@ -297,6 +341,28 @@ fn main <()->i32> ():
     let v1 vec_push<i32> v0 42;
     let v2 sort_merge_ret<i32> v1;
     let s vec_data_len<i32> v2;
+    get s 1
+```
+
+## sort_merge_ret_vec_is_reusable_after_sort
+
+neplg2:test
+ret: 5
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v0 vec_new<i32>;
+    let v1 vec_push<i32> v0 4;
+    let v2 vec_push<i32> v1 1;
+    let v3 sort_merge_ret<i32> v2;
+    let v4 vec_push<i32> v3 5;
+    let s vec_data_len<i32> v4;
     get s 1
 ```
 
