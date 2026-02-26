@@ -4076,3 +4076,21 @@
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-sort-ret-reuse-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
 - todo 整理:
   - `todo.md` の `sort/generics と Vec 読み取り設計` を完了として削除し、残項目の番号を詰めた。
+
+# 2026-02-27 作業メモ (LSP/API phase2: token_resolution に定義オブジェクトを統合)
+- 目的:
+  - `todo.md` 2番（LSP/API 拡張）の一部として、token 単位情報から直接「定義ジャンプ可能な情報」を取得できるようにする。
+- 実装:
+  - `nepl-web/src/lib.rs` の `analyze_semantics` で、`token_resolution` 各要素に以下を追加:
+    - `resolved_definition`（id/name/kind/scope_depth/span）
+    - `candidate_definitions`（候補定義配列、各要素に span 含む）
+  - 従来の `resolved_def_id` / `candidate_def_ids` は後方互換として維持。
+- テスト:
+  - `tests/tree/04_semantics_tree.js` を更新し、
+    - `resolved_definition.span` の存在
+    - `candidate_definitions` が配列であること
+    を検証。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node tests/tree/run.js` -> `15/15 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-token-resolution-defobj-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`

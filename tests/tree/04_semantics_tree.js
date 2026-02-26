@@ -32,6 +32,14 @@ fn main <()->i32> ():
 
         const resolvedToken = tokenRes.find((t) => t?.resolved_def_id !== null && t?.resolved_def_id !== undefined);
         assert.ok(resolvedToken, 'at least one token should resolve to a definition');
+        assert.ok(
+            resolvedToken?.resolved_definition && resolvedToken.resolved_definition.span,
+            'resolved_definition with span should be embedded'
+        );
+        assert.ok(
+            Array.isArray(resolvedToken?.candidate_definitions),
+            'candidate_definitions should be embedded as array'
+        );
 
         const nr = result?.name_resolution;
         assert.ok(nr && Array.isArray(nr.definitions), 'name_resolution payload should be included');
@@ -58,6 +66,6 @@ fn main <()->i32> ():
         );
         assert.ok(shadowWarn, 'important shadowing warning should be emitted by typecheck');
 
-        return { checked: 10, expr_count: exprs.length, token_sem_count: tokenSem.length };
+        return { checked: 12, expr_count: exprs.length, token_sem_count: tokenSem.length };
     },
 };

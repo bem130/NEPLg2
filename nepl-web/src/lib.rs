@@ -1910,6 +1910,90 @@ pub fn analyze_semantics(source: &str) -> JsValue {
                         cand.push(&JsValue::from_f64(*id as f64));
                     }
                     let _ = Reflect::set(&item, &JsValue::from_str("candidate_def_ids"), &cand);
+                    if let Some(id) = rf.resolved_def_id {
+                        if let Some(def) = resolve_trace.defs.get(id) {
+                            let resolved = js_sys::Object::new();
+                            let _ = Reflect::set(
+                                &resolved,
+                                &JsValue::from_str("id"),
+                                &JsValue::from_f64(def.id as f64),
+                            );
+                            let _ = Reflect::set(
+                                &resolved,
+                                &JsValue::from_str("name"),
+                                &JsValue::from_str(&def.name),
+                            );
+                            let _ = Reflect::set(
+                                &resolved,
+                                &JsValue::from_str("kind"),
+                                &JsValue::from_str(def.kind),
+                            );
+                            let _ = Reflect::set(
+                                &resolved,
+                                &JsValue::from_str("scope_depth"),
+                                &JsValue::from_f64(def.scope_depth as f64),
+                            );
+                            let _ = Reflect::set(
+                                &resolved,
+                                &JsValue::from_str("span"),
+                                &span_to_js(source, def.span),
+                            );
+                            let _ = Reflect::set(
+                                &item,
+                                &JsValue::from_str("resolved_definition"),
+                                &resolved,
+                            );
+                        } else {
+                            let _ = Reflect::set(
+                                &item,
+                                &JsValue::from_str("resolved_definition"),
+                                &JsValue::NULL,
+                            );
+                        }
+                    } else {
+                        let _ = Reflect::set(
+                            &item,
+                            &JsValue::from_str("resolved_definition"),
+                            &JsValue::NULL,
+                        );
+                    }
+                    let cand_defs = js_sys::Array::new();
+                    for id in &rf.candidate_def_ids {
+                        if let Some(def) = resolve_trace.defs.get(*id) {
+                            let cand_def = js_sys::Object::new();
+                            let _ = Reflect::set(
+                                &cand_def,
+                                &JsValue::from_str("id"),
+                                &JsValue::from_f64(def.id as f64),
+                            );
+                            let _ = Reflect::set(
+                                &cand_def,
+                                &JsValue::from_str("name"),
+                                &JsValue::from_str(&def.name),
+                            );
+                            let _ = Reflect::set(
+                                &cand_def,
+                                &JsValue::from_str("kind"),
+                                &JsValue::from_str(def.kind),
+                            );
+                            let _ = Reflect::set(
+                                &cand_def,
+                                &JsValue::from_str("scope_depth"),
+                                &JsValue::from_f64(def.scope_depth as f64),
+                            );
+                            let _ = Reflect::set(
+                                &cand_def,
+                                &JsValue::from_str("span"),
+                                &span_to_js(source, def.span),
+                            );
+                            cand_defs.push(&cand_def);
+                        }
+                    }
+                    let _ = Reflect::set(
+                        &item,
+                        &JsValue::from_str("candidate_definitions"),
+                        &cand_defs,
+                    );
                 } else {
                     let _ = Reflect::set(&item, &JsValue::from_str("name"), &JsValue::NULL);
                     let _ = Reflect::set(&item, &JsValue::from_str("ref_span"), &JsValue::NULL);
@@ -1917,6 +2001,16 @@ pub fn analyze_semantics(source: &str) -> JsValue {
                     let _ = Reflect::set(
                         &item,
                         &JsValue::from_str("candidate_def_ids"),
+                        &js_sys::Array::new(),
+                    );
+                    let _ = Reflect::set(
+                        &item,
+                        &JsValue::from_str("resolved_definition"),
+                        &JsValue::NULL,
+                    );
+                    let _ = Reflect::set(
+                        &item,
+                        &JsValue::from_str("candidate_definitions"),
                         &js_sys::Array::new(),
                     );
                 }
