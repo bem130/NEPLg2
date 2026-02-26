@@ -981,6 +981,95 @@ fn sort_slice_quick <.T: Ord> <(i32,i32)*>()> (data_ptr, len):
 fn sort_i32 <(i32,i32)*>()> (data_ptr, n):
     sort_slice_quick<i32> data_ptr n
 
+//: sort_quick_ret: quick sort 後の Vec を返す
+//:
+//: [目的/もくてき]:
+//: - 破壊的ソートを行った同じ `Vec` を返し、後続処理で検証や連結処理をしやすくします。
+//:
+//: [実装/じっそう]:
+//: - `sort_quick` を呼んだあと `v` をそのまま返します。
+//:
+//: [注意/ちゅうい]:
+//: - ソート自体は in-place です。
+//:
+//: [計算量/けいさんりょう]:
+//: - `sort_quick` と同じです。
+fn sort_quick_ret <.T: Ord> <(Vec<.T>)*>Vec<.T>> (v):
+    let n <i32> get v "len"
+    let cap <i32> get v "cap"
+    let data_ptr <i32> get v "data"
+    if:
+        le n 1
+        then ()
+        else:
+            sort_quick_range_data<.T> data_ptr 0 sub n 1;
+            ()
+    Vec<.T> n cap data_ptr
+
+//: sort_heap_ret: heap sort 後の Vec を返す
+//:
+//: [目的/もくてき]:
+//: - 破壊的ソートを行った同じ `Vec` を返し、後続処理で検証や連結処理をしやすくします。
+//:
+//: [実装/じっそう]:
+//: - `sort_heap` を呼んだあと `v` をそのまま返します。
+//:
+//: [注意/ちゅうい]:
+//: - ソート自体は in-place です。
+//:
+//: [計算量/けいさんりょう]:
+//: - `sort_heap` と同じです。
+fn sort_heap_ret <.T: Ord> <(Vec<.T>)*>Vec<.T>> (v):
+    let n <i32> get v "len"
+    let cap <i32> get v "cap"
+    let data_ptr <i32> get v "data"
+    if:
+        le n 1
+        then ()
+        else:
+            let mut start <i32> div_s sub n 2 2;
+            while ge start 0:
+                do:
+                    sort_heap_sift_down_data<.T> data_ptr start n;
+                    set start sub start 1;
+
+            let mut end <i32> sub n 1;
+            while gt end 0:
+                do:
+                    sort_swap_data<.T> data_ptr 0 end;
+                    sort_heap_sift_down_data<.T> data_ptr 0 end;
+                    set end sub end 1;
+            ()
+    Vec<.T> n cap data_ptr
+
+//: sort_merge_ret: merge sort 後の Vec を返す
+//:
+//: [目的/もくてき]:
+//: - 破壊的ソートを行った同じ `Vec` を返し、後続処理で検証や連結処理をしやすくします。
+//:
+//: [実装/じっそう]:
+//: - `sort_merge` を呼んだあと `v` をそのまま返します。
+//:
+//: [注意/ちゅうい]:
+//: - ソート自体は in-place です。
+//:
+//: [計算量/けいさんりょう]:
+//: - `sort_merge` と同じです。
+fn sort_merge_ret <.T: Ord> <(Vec<.T>)*>Vec<.T>> (v):
+    let n <i32> get v "len"
+    let cap <i32> get v "cap"
+    let data_ptr <i32> get v "data"
+    if:
+        le n 1
+        then ()
+        else:
+            let bytes <i32> mul n size_of<.T>
+            let buf <i32> alloc bytes
+            sort_merge_range_data<.T> data_ptr buf 0 n;
+            dealloc buf bytes;
+            ()
+    Vec<.T> n cap data_ptr
+
 
 // sort: デフォルトは quick sort
 //: sort: 主な用途

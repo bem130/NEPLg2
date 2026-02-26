@@ -3986,3 +3986,20 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> pass
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-continue.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1588/1588 pass`
+
+# 2026-02-27 作業メモ (`sort_*_ret` の move-check 根本修正)
+- 目的:
+  - `todo.md` 3番の `sort` まわりで、Vec を返すラッパAPIを move 規則に整合させる。
+- 原因:
+  - `sort_quick_ret` / `sort_heap_ret` / `sort_merge_ret` で `v` から `get` を行った後に `v` をそのまま返しており、move-check で `use of moved value: v` になっていた。
+  - 失敗は `tests/sort.n.md` の新規ケースで再現し、診断位置も同一。
+- 修正:
+  - `stdlib/alloc/sort.nepl`
+    - `sort_*_ret` で `len/cap/data` を取得後、返り値を `v` ではなく `Vec<.T> n cap data_ptr` の再構築へ変更。
+  - `tests/sort.n.md`
+    - 新規 `sort_*_ret` 検証ケースの読み取りを `vec_get` 連続呼び出しから、`vec_data_ptr + load_i32` に変更。
+    - これにより、`vec_get` が `Vec` を消費する現在仕様でも単一値 `v` を使い回さずに検証可能。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/sort.n.md -o /tmp/tests-sort-returning-api-v6.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `499/499 pass`
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-sort-ret-v1.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1620/1620 pass`

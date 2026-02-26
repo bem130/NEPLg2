@@ -13,7 +13,6 @@
 - `noshadow` の適用範囲を stdlib で段階拡大し、運用ルールを文書化する。
 
 3. sort/generics と Vec 読み取り設計
-- `tests/sort.n.md` を起点に `stdlib/alloc/sort.nepl` の move-check 問題を根本解消する。
 - `sort_*` API と move 規則の整合を見直し、必要なら API/実装/テストを再設計する。
 - `Vec` の read-only 経路（slice 風 API）を再設計する。
 

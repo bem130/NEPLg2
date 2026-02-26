@@ -50,6 +50,38 @@ fn main <()->i32> ():
     1234
 ```
 
+## sort_quick_ret_i32_sorted_values
+
+neplg2:test
+ret: 1334
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/option" as *
+
+fn make_vec4 <()*>Vec<i32>> ():
+    let mut v vec_new<i32>;
+    set v vec_push<i32> v 4;
+    set v vec_push<i32> v 1;
+    set v vec_push<i32> v 3;
+    set v vec_push<i32> v 2;
+    v
+
+fn main <()->i32> ():
+    let v sort_quick_ret<i32> make_vec4;
+    let p <i32> vec_data_ptr<i32> v;
+    let b0 <bool> eq load_i32 add p 0 1;
+    let b1 <bool> eq load_i32 add p 4 2;
+    let b2 <bool> eq load_i32 add p 8 3;
+    let b3 <bool> eq load_i32 add p 12 4;
+    if and b0 and b1 and b2 b3 1334 0
+```
+
 ## sort_heap_i32_basic
 
 neplg2:test
@@ -73,6 +105,70 @@ fn make_vec4 <()*>Vec<i32>> ():
 fn main <()->i32> ():
     sort_heap<i32> make_vec4;
     1234
+```
+
+## sort_heap_ret_i32_sorted_values
+
+neplg2:test
+ret: 1434
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/option" as *
+
+fn make_vec4 <()*>Vec<i32>> ():
+    let mut v vec_new<i32>;
+    set v vec_push<i32> v 4;
+    set v vec_push<i32> v 1;
+    set v vec_push<i32> v 3;
+    set v vec_push<i32> v 2;
+    v
+
+fn main <()->i32> ():
+    let v sort_heap_ret<i32> make_vec4;
+    let p <i32> vec_data_ptr<i32> v;
+    let b0 <bool> eq load_i32 add p 0 1;
+    let b1 <bool> eq load_i32 add p 4 2;
+    let b2 <bool> eq load_i32 add p 8 3;
+    let b3 <bool> eq load_i32 add p 12 4;
+    if and b0 and b1 and b2 b3 1434 0
+```
+
+## sort_merge_ret_i32_sorted_values
+
+neplg2:test
+ret: 1534
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+#import "alloc/sort" as *
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/option" as *
+
+fn make_vec4 <()*>Vec<i32>> ():
+    let mut v vec_new<i32>;
+    set v vec_push<i32> v 4;
+    set v vec_push<i32> v 1;
+    set v vec_push<i32> v 3;
+    set v vec_push<i32> v 2;
+    v
+
+fn main <()->i32> ():
+    let v sort_merge_ret<i32> make_vec4;
+    let p <i32> vec_data_ptr<i32> v;
+    let b0 <bool> eq load_i32 add p 0 1;
+    let b1 <bool> eq load_i32 add p 4 2;
+    let b2 <bool> eq load_i32 add p 8 3;
+    let b3 <bool> eq load_i32 add p 12 4;
+    if and b0 and b1 and b2 b3 1534 0
 ```
 
 ## sort_default_dispatch_i32
