@@ -3,80 +3,128 @@ use std::process::Command;
 use anyhow::{anyhow, Context, Result};
 
 #[derive(Debug, Clone)]
-struct LlvmToolchainRequirement {
-    clang_version: String,
-    require_linux_native: bool,
-    triple_must_contain: String,
+struct LlvmToolchainConfig {
+    clang_bin: String,
+    required_version_exact: Option<String>,
+    required_version_prefix: Option<String>,
+    required_host_os: Option<String>,
+    triple_must_contain: Option<String>,
 }
 
-impl LlvmToolchainRequirement {
+impl LlvmToolchainConfig {
     fn current_default() -> Self {
+        let clang_bin =
+            std::env::var("NEPL_LLVM_CLANG_BIN").unwrap_or_else(|_| "clang".to_string());
+        let required_version_exact = std::env::var("NEPL_LLVM_CLANG_VERSION").ok().or_else(|| {
+            // 既定は従来どおり 21.1.0 を要求する。
+            Some("21.1.0".to_string())
+        });
+        let required_version_prefix = std::env::var("NEPL_LLVM_CLANG_VERSION_PREFIX").ok();
+        let required_host_os = std::env::var("NEPL_LLVM_REQUIRED_HOST_OS")
+            .ok()
+            .or_else(|| {
+                let require_linux = std::env::var("NEPL_LLVM_REQUIRE_LINUX")
+                    .ok()
+                    .map(|v| v != "0")
+                    .unwrap_or(true);
+                if require_linux {
+                    Some("linux".to_string())
+                } else {
+                    None
+                }
+            });
+        let triple_must_contain = std::env::var("NEPL_LLVM_TRIPLE_CONTAINS")
+            .ok()
+            .or_else(|| required_host_os.clone());
         Self {
-            clang_version: std::env::var("NEPL_LLVM_CLANG_VERSION")
-                .unwrap_or_else(|_| "21.1.0".to_string()),
-            require_linux_native: std::env::var("NEPL_LLVM_REQUIRE_LINUX")
-                .ok()
-                .map(|v| v != "0")
-                .unwrap_or(true),
-            triple_must_contain: std::env::var("NEPL_LLVM_TRIPLE_CONTAINS")
-                .unwrap_or_else(|_| "linux".to_string()),
+            clang_bin,
+            required_version_exact,
+            required_version_prefix,
+            required_host_os,
+            triple_must_contain,
         }
     }
 }
 
-fn clang_bin() -> String {
-    std::env::var("NEPL_LLVM_CLANG_BIN").unwrap_or_else(|_| "clang".to_string())
-}
-
-/// clang 21.1.0 の Linux native toolchain が利用可能かを検証する。
-pub fn ensure_clang_21_linux_native() -> Result<()> {
-    let req = LlvmToolchainRequirement::current_default();
-    let clang = clang_bin();
-
-    if req.require_linux_native && std::env::consts::OS != "linux" {
-        return Err(anyhow!(
-            "llvm target requires linux native host; current host is {}",
-            std::env::consts::OS
-        ));
+fn ensure_llvm_toolchain(cfg: &LlvmToolchainConfig) -> Result<()> {
+    if let Some(required_os) = &cfg.required_host_os {
+        if std::env::consts::OS != required_os {
+            return Err(anyhow!(
+                "llvm target requires host os '{}'; current host is '{}'",
+                required_os,
+                std::env::consts::OS
+            ));
+        }
     }
 
-    let version_out = Command::new(&clang)
+    let version_out = Command::new(&cfg.clang_bin)
         .arg("--version")
         .output()
-        .with_context(|| format!("failed to execute {} --version", clang))?;
+        .with_context(|| format!("failed to execute {} --version", cfg.clang_bin))?;
     if !version_out.status.success() {
         return Err(anyhow!(
-            "clang --version failed with status {}",
+            "{} --version failed with status {}",
+            cfg.clang_bin,
             version_out.status
         ));
     }
     let version_text = String::from_utf8_lossy(&version_out.stdout);
     let first_line = version_text.lines().next().unwrap_or_default().trim();
-    if !first_line.contains(&format!("clang version {}", req.clang_version)) {
-        return Err(anyhow!(
-            "llvm target requires clang version {}, but got: {}",
-            req.clang_version,
-            first_line,
-        ));
+    if let Some(exact) = &cfg.required_version_exact {
+        if !first_line.contains(&format!("clang version {}", exact)) {
+            return Err(anyhow!(
+                "llvm target requires clang version {}, but got: {}",
+                exact,
+                first_line,
+            ));
+        }
+    }
+    if let Some(prefix) = &cfg.required_version_prefix {
+        let needle = format!("clang version {}", prefix);
+        if !first_line.contains(&needle) {
+            return Err(anyhow!(
+                "llvm target requires clang version prefix '{}', but got: {}",
+                prefix,
+                first_line
+            ));
+        }
     }
 
-    let triple_out = Command::new(&clang)
+    let triple_out = Command::new(&cfg.clang_bin)
         .arg("-dumpmachine")
         .output()
-        .with_context(|| format!("failed to execute {} -dumpmachine", clang))?;
+        .with_context(|| format!("failed to execute {} -dumpmachine", cfg.clang_bin))?;
     if !triple_out.status.success() {
         return Err(anyhow!(
-            "clang -dumpmachine failed with status {}",
+            "{} -dumpmachine failed with status {}",
+            cfg.clang_bin,
             triple_out.status
         ));
     }
     let triple = String::from_utf8_lossy(&triple_out.stdout).trim().to_string();
-    if !triple.contains(&req.triple_must_contain) {
-        return Err(anyhow!(
-            "llvm target requires clang triple containing '{}', but got: {}",
-            req.triple_must_contain,
-            triple,
-        ));
+    if let Some(needle) = &cfg.triple_must_contain {
+        if !triple.contains(needle) {
+            return Err(anyhow!(
+                "llvm target requires clang triple containing '{}', but got: {}",
+                needle,
+                triple,
+            ));
+        }
     }
     Ok(())
+}
+
+/// LLVM toolchain が利用可能かを検証する。
+///
+/// 既定値は `clang 21.1.0 + linux native`。
+/// 以下の環境変数で条件を調整できる:
+/// - `NEPL_LLVM_CLANG_BIN`
+/// - `NEPL_LLVM_CLANG_VERSION` (exact match)
+/// - `NEPL_LLVM_CLANG_VERSION_PREFIX` (prefix match)
+/// - `NEPL_LLVM_REQUIRED_HOST_OS`
+/// - `NEPL_LLVM_REQUIRE_LINUX`
+/// - `NEPL_LLVM_TRIPLE_CONTAINS`
+pub fn ensure_llvm_toolchain_from_env() -> Result<()> {
+    let cfg = LlvmToolchainConfig::current_default();
+    ensure_llvm_toolchain(&cfg)
 }

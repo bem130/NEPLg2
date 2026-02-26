@@ -45,7 +45,6 @@
 - `CallIndirect` / overload 名解決 / 主要 intrinsic を lower し、LLVM runner の `compile_llvm_cli` 不一致を段階的に解消する。
 - `alloc__...` などのリンク不整合を再設計し、`link_llvm_cli` 失敗を解消する。
 - `stdlib/core/math.nepl` の doctest は最終的に `#target core` へ移行する（先に `std/test` 依存を外した core 向け検証手段を整備する）。
-- `clang 21.1.0 + linux native` の初期要件を保ちつつ、将来の複数 LLVM バージョン/複数 native target へ拡張可能な設定モデルを設計する。
 
 ---
 ### 以下編集禁止

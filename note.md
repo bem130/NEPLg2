@@ -62,6 +62,33 @@
   - `NO_COLOR=false trunk build` -> pass
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-osaxis.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `569/569 pass`
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-osaxis-fix.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1590/1590 pass`
+
+## 2026-02-27 作業メモ (LLVM toolchain 検証モデルの拡張可能化)
+- 目的:
+  - 既定要件（clang 21.1.0 + linux native）を維持したまま、将来の複数 LLVM バージョン/複数 native target へ拡張しやすい検証モデルに整理する。
+- 変更:
+  - `nepl-cli/src/codegen_llvm.rs`
+    - 固定関数 `ensure_clang_21_linux_native` を置き換え、`LlvmToolchainConfig` ベースの一般化検証へ移行。
+    - 検証関数:
+      - `ensure_llvm_toolchain_from_env()`
+      - 内部で `clang --version` / `clang -dumpmachine` を確認。
+    - 既定値:
+      - clang exact version: `21.1.0`
+      - required host os: `linux`
+      - triple contains: `linux`
+    - 拡張用環境変数:
+      - `NEPL_LLVM_CLANG_BIN`
+      - `NEPL_LLVM_CLANG_VERSION`
+      - `NEPL_LLVM_CLANG_VERSION_PREFIX`
+      - `NEPL_LLVM_REQUIRED_HOST_OS`
+      - `NEPL_LLVM_REQUIRE_LINUX`
+      - `NEPL_LLVM_TRIPLE_CONTAINS`
+  - `nepl-cli/src/main.rs`
+    - LLVM target 時のチェックを `ensure_llvm_toolchain_from_env()` 呼び出しへ統一。
+    - 非Linuxでの「警告のみスキップ」は廃止し、要件不一致を明示エラーにした。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-cli-toolchain-model.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1590/1590 pass`
     - `1588/1588 pass`
 
 # 2026-02-26 作業メモ (`todo 10` 完了: 未到達除去の回帰テスト追加)
