@@ -49,9 +49,6 @@
 - `llvm` 向け syscall 分岐を OS 別（linux/win/mac）に分離できるよう、target 条件式の OS 軸（例: `#if[target=llvm&linux]`）を設計・実装する。
 - 暫定で追加した `wasm_only` / `wasi_only` テストタグを段階的に削減し、最終的に backend 差分なしで同一テストが通る状態へ戻す。
 
-10. 到達関数のみを codegen する最適化（wasm/llvm 共通）
-- 未到達除去後も `stdlib/core` / `stdlib/alloc` の実行互換（wasm/llvm）を崩さない回帰テストを追加する。
-
 ---
 ### 以下編集禁止
 

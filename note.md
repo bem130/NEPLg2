@@ -1,3 +1,17 @@
+# 2026-02-26 作業メモ (`todo 10` 完了: 未到達除去の回帰テスト追加)
+- 目的:
+  - `todo.md` 10番「未到達除去後の回帰テスト追加」を実施する。
+- 実装:
+  - `tests/tree/15_wasm_unreachable_function_pruning.js` を追加。
+    - `#entry main` から到達する `live` 関数は WAT 出力に存在することを確認。
+    - 未到達の `dead` 関数は WAT 出力に存在しないことを確認。
+- 検証:
+  - `NO_COLOR=false trunk build`: 成功
+  - `node tests/tree/run.js`
+    - `15/15 pass`（新規テスト含む）
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 600s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-with-tree-after-pruning-test.json --runner all --llvm-all --assert-io --strict-dual -j 2`
+    - `1597/1597 pass`
+
 # 2026-02-26 作業メモ (`wasi_only` タグ削減: selfhost_req を dual 共通化)
 - 目的:
   - backend 暫定タグ削減を継続し、`tests/selfhost_req.n.md` の `wasi_only` を除去する。
