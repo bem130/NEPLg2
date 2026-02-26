@@ -1,3 +1,24 @@
+# 2026-02-27 作業メモ (`noshadow` とオーバーロード判定の根本修正)
+- 目的:
+  - オーバーロードは許可しつつ、`noshadow` が付いた関数と同一シグネチャの再定義のみを禁止する。
+  - 同名だが別シグネチャの関数定義は継続して許可する。
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - `find_nonshadow_same_signature_func` を追加。
+    - グローバル関数定義・関数 alias・ローカル関数定義の各経路で、
+      - `noshadow` な既存 callable があり、
+      - かつ同一シグネチャの場合のみ
+      - エラーとして拒否するように統一。
+    - `noshadow` 宣言側の衝突判定にも「同一シグネチャ callable の既存定義」を含めた。
+  - `tests/shadowing.n.md`
+    - 同一シグネチャの通常 `fn` 再定義は許可されるケースを維持。
+    - `fn_noshadow_same_signature_redefinition_is_error` を追加。
+    - `fn_noshadow_allows_overload_with_different_signature` を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/shadowing.n.md -o /tmp/tests-shadowing-noshadow.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `529/529 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-noshadow-semantics.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1598/1598 pass`
+
 # 2026-02-26 作業メモ (`#if[target=...]` の式評価対応)
 - 目的:
   - `todo.md` 9番（target 条件式の再設計）に向けて、`#if[target=...]` を単一識別子判定から式判定へ拡張する。

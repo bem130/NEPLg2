@@ -718,7 +718,29 @@ pub fn typecheck(
                 }
                 if let Some(blocked) = shadow_blocked_by_nonshadow(&env, &f.name.name) {
                     if is_callable_binding(blocked) {
-                        // 関数同名はオーバーロードとして扱う（noshadow でも許可）。
+                        if let Some(conflict) =
+                            find_nonshadow_same_signature_func(&env, &f.name.name, ty, &ctx)
+                        {
+                            diagnostics.push(Diagnostic::error(
+                                format!(
+                                    "cannot shadow non-shadowable function '{}' with same signature",
+                                    f.name.name
+                                ),
+                                f.name.span,
+                            ));
+                            diagnostics.push(
+                                Diagnostic::error(
+                                    "non-shadowable function declaration is here",
+                                    conflict.span,
+                                )
+                                .with_secondary_label(
+                                    f.name.span,
+                                    Some("shadow attempt".into()),
+                                ),
+                            );
+                            continue;
+                        }
+                        // 関数同名はオーバーロードとして扱う（異なるシグネチャは許可）。
                     } else {
                     diagnostics.push(Diagnostic::error(
                         format!(
@@ -735,10 +757,11 @@ pub fn typecheck(
                     }
                 }
                 if f.no_shadow
-                    && env
+                    && (env
                         .lookup_all_any_defined(&f.name.name)
                         .iter()
                         .any(|b| !is_callable_binding(b))
+                        || find_same_signature_func(&env, &f.name.name, ty, &ctx).is_some())
                 {
                     diagnostics.push(Diagnostic::error(
                         format!(
@@ -844,7 +867,29 @@ pub fn typecheck(
             }
             if let Some(blocked) = shadow_blocked_by_nonshadow(&env, &alias.name.name) {
                 if is_callable_binding(blocked) {
-                    // 関数同名はオーバーロードとして扱う（noshadow でも許可）。
+                    if let Some(conflict) =
+                        find_nonshadow_same_signature_func(&env, &alias.name.name, ty, &ctx)
+                    {
+                        diagnostics.push(Diagnostic::error(
+                            format!(
+                                "cannot shadow non-shadowable function alias '{}' with same signature",
+                                alias.name.name
+                            ),
+                            alias.name.span,
+                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                "non-shadowable function declaration is here",
+                                conflict.span,
+                            )
+                            .with_secondary_label(
+                                alias.name.span,
+                                Some("shadow attempt".into()),
+                            ),
+                        );
+                        break;
+                    }
+                    // 関数同名はオーバーロードとして扱う（異なるシグネチャは許可）。
                 } else {
                 diagnostics.push(Diagnostic::error(
                     format!(
@@ -861,10 +906,11 @@ pub fn typecheck(
                 }
             }
             if alias.no_shadow
-                && env
+                && (env
                     .lookup_all_any_defined(&alias.name.name)
                     .iter()
                     .any(|b| !is_callable_binding(b))
+                    || find_same_signature_func(&env, &alias.name.name, ty, &ctx).is_some())
             {
                 diagnostics.push(Diagnostic::error(
                     format!(
@@ -1873,7 +1919,32 @@ impl<'a> BlockChecker<'a> {
                 {
                     if let Some(blocked) = shadow_blocked_by_nonshadow(self.env, &f.name.name) {
                         if is_callable_binding(blocked) {
-                            // 関数同名はオーバーロードとして扱う（noshadow でも許可）。
+                            if let Some(conflict) = find_nonshadow_same_signature_func(
+                                self.env,
+                                &f.name.name,
+                                ty,
+                                self.ctx,
+                            ) {
+                                self.diagnostics.push(Diagnostic::error(
+                                    format!(
+                                        "cannot shadow non-shadowable function '{}' with same signature",
+                                        f.name.name
+                                    ),
+                                    f.name.span,
+                                ));
+                                self.diagnostics.push(
+                                    Diagnostic::error(
+                                        "non-shadowable function declaration is here",
+                                        conflict.span,
+                                    )
+                                    .with_secondary_label(
+                                        f.name.span,
+                                        Some("shadow attempt".into()),
+                                    ),
+                                );
+                                continue;
+                            }
+                            // 関数同名はオーバーロードとして扱う（異なるシグネチャは許可）。
                         } else {
                         self.diagnostics.push(Diagnostic::error(
                             format!("cannot shadow non-shadowable symbol '{}'", f.name.name),
@@ -1887,11 +1958,13 @@ impl<'a> BlockChecker<'a> {
                         }
                     }
                     if f.no_shadow
-                        && self
+                        && (self
                             .env
                             .lookup_all_any_defined(&f.name.name)
                             .iter()
                             .any(|b| !is_callable_binding(b))
+                            || find_same_signature_func(self.env, &f.name.name, ty, self.ctx)
+                                .is_some())
                     {
                         self.diagnostics.push(Diagnostic::error(
                             format!(
@@ -5062,6 +5135,21 @@ fn find_same_signature_func<'a>(
     let target_sig = function_signature_string(ctx, ty);
     env.lookup_all_callables(name).into_iter().find(|b| {
         matches!(b.kind, BindingKind::Func { .. })
+            && function_signature_string(ctx, b.ty) == target_sig
+    })
+}
+
+fn find_nonshadow_same_signature_func<'a>(
+    env: &'a Env,
+    name: &str,
+    ty: TypeId,
+    ctx: &TypeCtx,
+) -> Option<&'a Binding> {
+    let target_sig = function_signature_string(ctx, ty);
+    env.lookup_all_callables(name).into_iter().find(|b| {
+        b.no_shadow
+            && b.defined
+            && matches!(b.kind, BindingKind::Func { .. })
             && function_signature_string(ctx, b.ty) == target_sig
     })
 }

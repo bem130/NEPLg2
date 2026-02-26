@@ -334,6 +334,25 @@ ret: 2
 #target core
 #import "core/math" as *
 
+fn f <(i32)->i32> (x):
+    add x 1
+
+fn f <(i32)->i32> (x):
+    add x 2
+
+fn main <()->i32> ():
+    f 0
+```
+
+## fn_noshadow_same_signature_redefinition_is_error
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
 fn noshadow f <(i32)->i32> (x):
     add x 1
 
@@ -342,6 +361,26 @@ fn f <(i32)->i32> (x):
 
 fn main <()->i32> ():
     f 0
+```
+
+## fn_noshadow_allows_overload_with_different_signature
+
+neplg2:test
+ret: 3
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn noshadow f <(i32)->i32> (x):
+    add x 1
+
+fn f <(f32)->i32> (_x):
+    100
+
+fn main <()->i32> ():
+    f 2
 ```
 
 ## let_mut_noshadow_is_invalid

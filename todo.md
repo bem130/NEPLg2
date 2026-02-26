@@ -10,7 +10,6 @@
 - capture あり関数値は closure conversion の設計を確定して段階導入する。
 
 2. シャドーイング運用の完成
-- オーバーロードとシャドーの判定を最終仕様で固定する（同一シグネチャのみ shadow warning）。
 - `noshadow` の適用範囲を stdlib で段階拡大し、運用ルールを文書化する。
 
 3. sort/generics と Vec 読み取り設計
