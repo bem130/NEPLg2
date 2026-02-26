@@ -17,6 +17,23 @@
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-targetexpr-dual.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
     - `567/567 pass`
   - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 600s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-targetexpr.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+
+## 2026-02-27 作業メモ (`stdlib/kp` の module target を `std` へ統一)
+- 目的:
+  - `stdlib/kp` が `#target wasi` 固定になっている箇所を解消し、wasm/llvm の dual 実行で共通モジュールとして扱える状態にする。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+  - `stdlib/kp/kpread_core.nepl`
+  - `stdlib/kp/kpwrite.nepl`
+  - `stdlib/kp/kpsearch.nepl`
+  - `stdlib/kp/kpprefix.nepl`
+  - `stdlib/kp/kpgraph.nepl`
+  - `stdlib/kp/kpfenwick.nepl`
+  - `stdlib/kp/kpdsu.nepl`
+  - すべて `#target wasi` -> `#target std` に統一。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `PATH=/opt/llvm-21.1.0/bin:$PATH NO_COLOR=false timeout 900s node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-kp-target-std.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1588/1588 pass`
     - `1588/1588 pass`
 
 # 2026-02-26 作業メモ (`todo 10` 完了: 未到達除去の回帰テスト追加)
