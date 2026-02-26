@@ -369,7 +369,10 @@ impl LexState {
                 content.len(),
             );
         } else if is_mlstr_line {
-            let text = rest_trim.strip_prefix("##:").unwrap().to_string();
+            let mut text = rest_trim.strip_prefix("##:").unwrap().to_string();
+            if let Some(stripped) = text.strip_prefix(' ') {
+                text = stripped.to_string();
+            }
             let end = line_start + content.len();
             self.push_token(TokenKind::MlstrLine(text), line_offset, end);
         } else {

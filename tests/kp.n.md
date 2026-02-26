@@ -189,7 +189,7 @@ fn main <()*>()> ():
 ## kpsearch_unique_and_count
 
 neplg2:test[normalize_newlines]
-stdout: "3 3\n1 2 5\n"
+stdout: "2 3\n1 2 5\n"
 ```neplg2
 #entry main
 #indent 4

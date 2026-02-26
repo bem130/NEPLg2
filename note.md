@@ -3619,3 +3619,27 @@
     - 失敗の代表は `tests/kp.n.md` / `tests/string.n.md` の wasm/llvm 実行差分（stdout mismatch）で、今回の target 表記変更による新規失敗は確認できない（件数が既知値と一致）。
 - 補足:
   - `tests/*.n.md` は既に `core/std` 化済みであることを再確認した。
+
+# 2026-02-26 作業メモ (テスト基盤・文字列テストの整合修正)
+- 目的:
+  - `tests + stdlib` の dual 実行で大量失敗していた原因を、テストツール問題・テストケース問題・コンパイラ問題に分解して是正する。
+- 根本原因と修正:
+  - `nodesrc/tests.js`
+    - `::llvm` サフィックス除去長が誤っており、`compare_wasm_llvm` が誤って `missing llvm counterpart result` を生成していた。
+      - 修正: `stripLlvmSuffix` を `-6` に訂正。
+    - `strictDual` 比較で `wasi_only/skip_llvm/wasm_only` ケースまで比較対象に入っていた。
+      - 修正: `compareWasmLlvmResults` で `skipOnLlvmRunner` を適用し比較対象外化。
+  - `tests/kp.n.md`
+    - `kpsearch_unique_and_count` の期待値がデータ内容と関数仕様（`count_equal_range_i32`）に対して不整合だった。
+      - 修正: `"3 3\n1 2 5\n"` -> `"2 3\n1 2 5\n"`。
+  - `tests/string.n.md`
+    - `stdout:` メタ値に `\\n` を使っており、JSON文字列としては「改行」ではなく「バックスラッシュ+n」期待になっていた。
+    - 単行文字列エスケープ検証のソース側も `"...\\n..."` になっており、テスト意図（エスケープ解釈）と不一致だった。
+      - 修正: `stdout:` とソース文字列を、意図どおり `\n`/`\t` が制御文字として評価される形へ更新。
+  - `nepl-core/src/lexer.rs`
+    - `mlstr` の `##:` 行で先頭1スペースを本文へ取り込んでいたため、仕様（`##: ` の後ろが本文）と不一致。
+      - 修正: `##:` 直後の先頭1スペースを除去するように調整。
+- 検証:
+  - `NO_COLOR=false trunk build` 成功。
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-final-before-commit.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+    - `total=1579, passed=1579, failed=0, errored=0`。

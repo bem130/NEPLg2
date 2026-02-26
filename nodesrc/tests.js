@@ -684,7 +684,7 @@ function summarize(results) {
 
 function stripLlvmSuffix(id) {
     const s = String(id || '');
-    return s.endsWith('::llvm') ? s.slice(0, -7) : s;
+    return s.endsWith('::llvm') ? s.slice(0, -6) : s;
 }
 
 function compareWasmLlvmResults(wasmResults, llvmResults, options = {}) {
@@ -695,6 +695,7 @@ function compareWasmLlvmResults(wasmResults, llvmResults, options = {}) {
     const compared = [];
     for (const w of wasmResults) {
         const k = String(w.id || '');
+        if (skipOnLlvmRunner(w)) continue;
         const l = llvmMap.get(k);
         if (!l) {
             if (options.strictDual) {

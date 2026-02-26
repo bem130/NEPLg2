@@ -8,7 +8,7 @@
 単行文字列リテラルはエスケープを解釈し、`\\n` は改行として出力されることを期待します。
 
 neplg2:test[normalize_newlines]
-stdout: "hello\\nworld!"
+stdout: "hello\nworld!"
 ```neplg2
 #target std
 #entry main
@@ -16,8 +16,8 @@ stdout: "hello\\nworld!"
 #import "std/stdio" as *
 
 fn main <()* >()> ():
-    // 単行文字列の \\n が実行時に改行として扱われることを確認する
-    print "hello\\nworld!"
+    // 単行文字列の \n が実行時に改行として扱われることを確認する
+    print "hello\nworld!"
 ```
 
 ## test_string_literal_mlstr_type
@@ -26,7 +26,7 @@ fn main <()* >()> ():
 `mlstr:` が「行間に \\n を挿入し、末尾には挿入しない」仕様どおりに実行時に組み立てられることを、標準出力で確認します。
 
 neplg2:test[normalize_newlines]
-stdout: "hello\\nworld!"
+stdout: "hello\nworld!"
 ```neplg2
 #target std
 #entry main
@@ -47,7 +47,7 @@ fn main <()* >()> ():
 `mlstr:` が末尾に余計な改行を付けないことを、後続の `"END"` と連結して出力することで確認します（もし末尾に \\n が入ると `"world!\\nEND"` になって不一致になります）。
 
 neplg2:test[normalize_newlines]
-stdout: "hello\\nworld!END"
+stdout: "hello\nworld!END"
 ```neplg2
 #target std
 #entry main
@@ -69,7 +69,7 @@ fn main <()* >()> ():
 そのため、`\\n` と `\\t` を含む内容をそのまま出力し、末尾に `"END"` を付けて検証します。
 
 neplg2:test[normalize_newlines]
-stdout: "\\\\n should be literal backslash-n\\nno \\\\t escape processingEND"
+stdout: "\\n should be literal backslash-n\nno \\t escape processingEND"
 ```neplg2
 #target std
 #entry main
@@ -90,7 +90,7 @@ fn main <()* >()> ():
 単行文字列では `\\n` と `\\t` がそれぞれ改行・タブとして解釈されることを、実行時の出力で確認します。
 
 neplg2:test[normalize_newlines]
-stdout: "hello\\nworld!\\ttab"
+stdout: "hello\nworld!\ttab"
 ```neplg2
 #target std
 #entry main
@@ -98,8 +98,8 @@ stdout: "hello\\nworld!\\ttab"
 #import "std/stdio" as *
 
 fn main <()* >()> ():
-    // \\n と \\t が実行時に制御文字として扱われることを確認する
-    print "hello\\nworld!\\ttab"
+    // \n と \t が実行時に制御文字として扱われることを確認する
+    print "hello\nworld!\ttab"
 ```
 
 ## test_str_no_ownership
@@ -168,7 +168,7 @@ fn main <()* >()> ():
 `mlstr:` が UTF-8 の行も正しく保持し、行間に \\n を挿入することを `"END"` 連結で確認します。
 
 neplg2:test[normalize_newlines]
-stdout: "こんにちは\\n世界END"
+stdout: "こんにちは\n世界END"
 ```neplg2
 #target std
 #entry main
@@ -190,7 +190,7 @@ fn main <()* >()> ():
 ここでは視認性のために `[` と `]` で囲って出力し、`line1` の後ろに 3 つのスペースが残ることを `stdout:` で確認します。
 
 neplg2:test[normalize_newlines]
-stdout: "[line1   \\nline2]END"
+stdout: "[line1   \nline2]END"
 ```neplg2
 #target std
 #entry main
