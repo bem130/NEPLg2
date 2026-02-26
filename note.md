@@ -3658,3 +3658,19 @@
   - 結果: `total=1579, passed=1579, failed=0, errored=0`
 - 判断:
   - 現時点で残る失敗はなく、テスト基盤/テストケース/コンパイラ実装のこの範囲の不整合は解消済み。
+
+# 2026-02-26 作業メモ (wasm codegen 到達解析の追加)
+- 目的:
+  - import しただけで未使用関数まで wasm 出力される状態を改善し、entry から到達する関数のみを出力する。
+- 実装:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `collect_reachable_wasm_functions` を追加し、entry 起点の関数到達集合を構築。
+    - `collect_called_functions_from_expr` を追加し、`Call(User)` と関数値参照（`Var`/`FnValue`）を追跡対象にした。
+    - `call_indirect` が含まれる場合は、静的確定不能のため保守的に全関数保持へフォールバック。
+    - user 関数の lower 対象を到達集合でフィルタリング。
+- 検証:
+  - `NO_COLOR=false trunk build`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-reachability-3.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+  - 結果: `total=1579, passed=1579, failed=0, errored=0`
+- 補足:
+  - 実装途中で `Var/FnValue` 参照未追跡により `len__str__i32__pure` 未定義が発生したが、参照追跡追加で解消した。

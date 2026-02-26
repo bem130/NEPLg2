@@ -4,7 +4,7 @@
 extern crate alloc;
 extern crate std;
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec;
@@ -208,8 +208,13 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
         }
     }
 
+    let reachable_functions = collect_reachable_wasm_functions(module);
+
     // User functions
     for f in &module.functions {
+        if !reachable_functions.contains(&f.name) {
+            continue;
+        }
         if let Some(sig) = wasm_sig(ctx, f.result, &f.params) {
             functions.push(FuncLower::user(f, sig));
         } else {
@@ -447,6 +452,141 @@ fn has_unbound_type_var(ctx: &TypeCtx, ty: TypeId) -> bool {
         TypeKind::Box(inner) | TypeKind::Reference(inner, _) => has_unbound_type_var(ctx, inner),
         _ => false,
     }
+}
+
+fn collect_called_functions_from_expr(
+    expr: &HirExpr,
+    out: &mut BTreeSet<String>,
+    has_indirect: &mut bool,
+) {
+    match &expr.kind {
+        HirExprKind::Call { callee, args } => {
+            if let FuncRef::User(name, _) = callee {
+                out.insert(name.clone());
+            }
+            for a in args {
+                collect_called_functions_from_expr(a, out, has_indirect);
+            }
+        }
+        HirExprKind::CallIndirect { callee, args, .. } => {
+            *has_indirect = true;
+            collect_called_functions_from_expr(callee, out, has_indirect);
+            for a in args {
+                collect_called_functions_from_expr(a, out, has_indirect);
+            }
+        }
+        HirExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_called_functions_from_expr(cond, out, has_indirect);
+            collect_called_functions_from_expr(then_branch, out, has_indirect);
+            collect_called_functions_from_expr(else_branch, out, has_indirect);
+        }
+        HirExprKind::While { cond, body } => {
+            collect_called_functions_from_expr(cond, out, has_indirect);
+            collect_called_functions_from_expr(body, out, has_indirect);
+        }
+        HirExprKind::Match { scrutinee, arms } => {
+            collect_called_functions_from_expr(scrutinee, out, has_indirect);
+            for arm in arms {
+                collect_called_functions_from_expr(&arm.body, out, has_indirect);
+            }
+        }
+        HirExprKind::EnumConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                collect_called_functions_from_expr(p, out, has_indirect);
+            }
+        }
+        HirExprKind::StructConstruct { fields, .. } => {
+            for f in fields {
+                collect_called_functions_from_expr(f, out, has_indirect);
+            }
+        }
+        HirExprKind::TupleConstruct { items } => {
+            for i in items {
+                collect_called_functions_from_expr(i, out, has_indirect);
+            }
+        }
+        HirExprKind::Block(b) => {
+            for line in &b.lines {
+                collect_called_functions_from_expr(&line.expr, out, has_indirect);
+            }
+        }
+        HirExprKind::Let { value, .. } | HirExprKind::Set { value, .. } => {
+            collect_called_functions_from_expr(value, out, has_indirect);
+        }
+        HirExprKind::Intrinsic { args, .. } => {
+            for a in args {
+                collect_called_functions_from_expr(a, out, has_indirect);
+            }
+        }
+        HirExprKind::AddrOf(inner) | HirExprKind::Deref(inner) => {
+            collect_called_functions_from_expr(inner, out, has_indirect);
+        }
+        HirExprKind::Var(name) | HirExprKind::FnValue(name) => {
+            out.insert(name.clone());
+        }
+        HirExprKind::Unit
+        | HirExprKind::LiteralI32(_)
+        | HirExprKind::LiteralF32(_)
+        | HirExprKind::LiteralBool(_)
+        | HirExprKind::LiteralStr(_)
+        | HirExprKind::Drop { .. } => {}
+    }
+}
+
+fn collect_reachable_wasm_functions(module: &HirModule) -> BTreeSet<String> {
+    let all_names: BTreeSet<String> = module.functions.iter().map(|f| f.name.clone()).collect();
+    if all_names.is_empty() {
+        return all_names;
+    }
+
+    let mut roots = BTreeSet::new();
+    if let Some(entry) = &module.entry {
+        if all_names.contains(entry) {
+            roots.insert(entry.clone());
+        }
+    }
+    if roots.is_empty() {
+        return all_names;
+    }
+
+    let mut map: BTreeMap<String, &HirFunction> = BTreeMap::new();
+    for f in &module.functions {
+        map.insert(f.name.clone(), f);
+    }
+
+    let mut reachable = BTreeSet::new();
+    let mut stack: Vec<String> = roots.iter().cloned().collect();
+    let mut has_indirect = false;
+
+    while let Some(name) = stack.pop() {
+        if !reachable.insert(name.clone()) {
+            continue;
+        }
+        let Some(func) = map.get(&name) else {
+            continue;
+        };
+        if let HirBody::Block(b) = &func.body {
+            let mut called = BTreeSet::new();
+            for line in &b.lines {
+                collect_called_functions_from_expr(&line.expr, &mut called, &mut has_indirect);
+            }
+            for callee in called {
+                if all_names.contains(&callee) && !reachable.contains(&callee) {
+                    stack.push(callee);
+                }
+            }
+        }
+    }
+
+    if has_indirect {
+        // call_indirect の実引数先は静的に確定できないため、保守的に全関数を保持する。
+        return all_names;
+    }
+    reachable
 }
 
 // ---------------------------------------------------------------------

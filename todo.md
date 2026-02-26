@@ -50,8 +50,6 @@
 - 暫定で追加した `wasm_only` / `wasi_only` テストタグを段階的に削減し、最終的に backend 差分なしで同一テストが通る状態へ戻す。
 
 10. 到達関数のみを codegen する最適化（wasm/llvm 共通）
-- import しただけで未使用の関数を出力しないよう、関数単位の到達解析を厳密化する。
-- `HirBody::LlvmIr` 内の `call @...` 参照も解析対象に含め、必要関数だけを残す。
 - 未到達除去後も `stdlib/core` / `stdlib/alloc` の実行互換（wasm/llvm）を崩さない回帰テストを追加する。
 
 ---
