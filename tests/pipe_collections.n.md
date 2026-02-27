@@ -139,19 +139,34 @@ ret: 1
 #target std
 
 #import "alloc/collections/hashmap" as *
+#import "alloc/diag/error" as *
 #import "core/math" as *
 #import "core/option" as *
+#import "core/result" as *
+
+fn must_hm <(Result<HashMap<i32>, Diag>)*>HashMap<i32>> (r):
+    match r:
+        Result::Ok hm:
+            hm
+        Result::Err _d:
+            #intrinsic "unreachable" <> ()
 
 fn main <()*>i32> ():
     let hm0 <HashMap<i32>>:
         hashmap_new<i32>
+        |> must_hm
         |> hashmap_insert<i32> 7 70
-        |> hashmap_insert<i32> 9 90;
+        |> must_hm
+        |> hashmap_insert<i32> 9 90
+        |> must_hm;
     let ok0 <bool> eq hashmap_len<i32> hm0 2;
     let hm1 <HashMap<i32>>:
         hashmap_new<i32>
+        |> must_hm
         |> hashmap_insert<i32> 7 70
-        |> hashmap_insert<i32> 9 90;
+        |> must_hm
+        |> hashmap_insert<i32> 9 90
+        |> must_hm;
     let ok1 <bool> match hashmap_get<i32> hm1 9:
         Option::Some v:
             eq v 90
@@ -159,8 +174,11 @@ fn main <()*>i32> ():
             false
     let hm2 <HashMap<i32>>:
         hashmap_new<i32>
+        |> must_hm
         |> hashmap_insert<i32> 7 70
-        |> hashmap_insert<i32> 9 90;
+        |> must_hm
+        |> hashmap_insert<i32> 9 90
+        |> must_hm;
     let ok2 <bool> hashmap_contains<i32> hm2 7;
     if and ok0 and ok1 ok2 1 0
 ```
@@ -175,18 +193,33 @@ ret: 1
 #target std
 
 #import "alloc/collections/hashset" as *
+#import "alloc/diag/error" as *
 #import "core/math" as *
+#import "core/result" as *
+
+fn must_hs <(Result<HashSet, Diag>)*>HashSet> (r):
+    match r:
+        Result::Ok hs:
+            hs
+        Result::Err _d:
+            #intrinsic "unreachable" <> ()
 
 fn main <()*>i32> ():
     let hs0 <HashSet>:
         hashset_new
+        |> must_hs
         |> hashset_insert 4
-        |> hashset_insert 8;
+        |> must_hs
+        |> hashset_insert 8
+        |> must_hs;
     let ok2 <bool> eq hashset_len hs0 2;
     let hs1 <HashSet>:
         hashset_new
+        |> must_hs
         |> hashset_insert 4
-        |> hashset_insert 8;
+        |> must_hs
+        |> hashset_insert 8
+        |> must_hs;
     let ok3 <bool> hashset_contains hs1 8;
     if and ok2 ok3 1 0
 ```

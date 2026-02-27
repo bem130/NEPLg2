@@ -18,7 +18,9 @@
 
 #import "core/mem" as *
 #import "core/math" as *
+#import "core/result" as *
 #import "core/field" as *
+#import "alloc/diag/error" as *
 
 struct HashSet:
     hdr <i32>
@@ -145,20 +147,32 @@ fn hashset_contains_loop <(i32,i32,i32,i32,i32,i32)->bool> (entries, entry_size,
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_new <()*>HashSet> ():
+fn hashset_new <()*>Result<HashSet, Diag>> ():
     let cap <i32> 16
     let entry_size <i32> 8
     let entries <i32> alloc mul cap entry_size
-    let mut i <i32> 0
-    while lt i cap:
-        do:
-            store_i32 add entries mul i entry_size 0
-            set i add i 1
-    let header <i32> alloc 12
-    store_i32 header 0
-    store_i32 add header 4 cap
-    store_i32 add header 8 entries
-    HashSet header
+    if:
+        eq entries 0
+        then:
+            diag_err<HashSet> diag_out_of_memory "hashset_new(entries)"
+        else:
+            let mut i <i32> 0
+            while lt i cap:
+                do:
+                    store_i32 add entries mul i entry_size 0
+                    set i add i 1
+            let header <i32> alloc 12
+            if:
+                eq header 0
+                then:
+                    dealloc entries mul cap entry_size
+                    diag_err<HashSet> diag_out_of_memory "hashset_new(header)"
+                else:
+                    store_i32 header 0
+                    store_i32 add header 4 cap
+                    store_i32 add header 8 entries
+                    let hs2 <HashSet> HashSet header
+                    ok<HashSet, Diag> hs2
 
 // hashset_insert: 要素を追加する
 //
@@ -186,15 +200,15 @@ fn hashset_new <()*>HashSet> ():
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_insert <(HashSet,i32)*>HashSet> (hs, key):
+fn hashset_insert <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
     let hdr <i32> get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
     let idx <i32> mod_s abs hash_i32 key cap
     let mut cur <i32> idx
-    let mut result <bool> false
     let mut done <i32> 0
+    let mut full <i32> 0
     while eq done 0:
         do:
             let entry <i32> add entries mul cur entry_size
@@ -215,9 +229,16 @@ fn hashset_insert <(HashSet,i32)*>HashSet> (hs, key):
                             set cur mod_s add cur 1 cap
                             if:
                                 eq cur idx
-                                then set done 1
+                                then:
+                                    set full 1
+                                    set done 1
                                 else ()
-    hs
+    if:
+        eq full 1
+        then:
+            diag_err<HashSet> diag_capacity_exceeded "hashset_insert"
+        else:
+            ok<HashSet, Diag> hs
 
 // hashset_contains: 要素の存在確認
 //
@@ -279,15 +300,15 @@ fn hashset_contains <(HashSet,i32)->bool> (hs, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_remove <(HashSet,i32)*>HashSet> (hs, key):
+fn hashset_remove <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
     let hdr <i32> get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
     let idx <i32> mod_s abs hash_i32 key cap
     let mut cur <i32> idx
-    let mut result <bool> false
     let mut done <i32> 0
+    let mut removed <i32> 0
     while eq done 0:
         do:
             let entry <i32> add entries mul cur entry_size
@@ -302,6 +323,7 @@ fn hashset_remove <(HashSet,i32)*>HashSet> (hs, key):
                         then:
                             store_i32 entry 0
                             store_i32 hdr sub load_i32 hdr 1
+                            set removed 1
                             set done 1
                         else:
                             set cur mod_s add cur 1 cap
@@ -309,7 +331,12 @@ fn hashset_remove <(HashSet,i32)*>HashSet> (hs, key):
                                 eq cur idx
                                 then set done 1
                                 else ()
-    hs
+    if:
+        eq removed 1
+        then:
+            ok<HashSet, Diag> hs
+        else:
+            diag_err<HashSet> diag_key_not_found "hashset_remove"
 
 // hashset_len: 要素数を返す
 //

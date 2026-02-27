@@ -19,7 +19,9 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/option" as *
+#import "core/result" as *
 #import "core/field" as *
+#import "alloc/diag/error" as *
 
 struct HashMap<.V>:
     hdr <i32>
@@ -97,20 +99,32 @@ fn hash_i32 <(i32)->i32> (key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashmap_new <.V> <()*>HashMap<.V>> ():
+fn hashmap_new <.V> <()*>Result<HashMap<.V>, Diag>> ():
     let cap <i32> 16
     let entry_size <i32> add 8 size_of<.V>
     let entries <i32> alloc mul cap entry_size
-    let mut i <i32> 0
-    while lt i cap:
-        do:
-            store_i32 add entries mul i entry_size 0
-            set i add i 1
-    let header <i32> alloc 12
-    store_i32 header 0  // count
-    store_i32 add header 4 cap
-    store_i32 add header 8 entries
-    HashMap<.V> header
+    if:
+        eq entries 0
+        then:
+            diag_err<HashMap<.V>> diag_out_of_memory "hashmap_new(entries)"
+        else:
+            let mut i <i32> 0
+            while lt i cap:
+                do:
+                    store_i32 add entries mul i entry_size 0
+                    set i add i 1
+            let header <i32> alloc 12
+            if:
+                eq header 0
+                then:
+                    dealloc entries mul cap entry_size
+                    diag_err<HashMap<.V>> diag_out_of_memory "hashmap_new(header)"
+                else:
+                    store_i32 header 0  // count
+                    store_i32 add header 4 cap
+                    store_i32 add header 8 entries
+                    let hm <HashMap<.V>> HashMap header
+                    ok<HashMap<.V>, Diag> hm
 
 // hashmap_insert: キーに値を設定する
 //
@@ -138,7 +152,7 @@ fn hashmap_new <.V> <()*>HashMap<.V>> ():
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashmap_insert <.V> <(HashMap<.V>,i32,.V)*>HashMap<.V>> (hm, key, val):
+fn hashmap_insert <.V> <(HashMap<.V>,i32,.V)*>Result<HashMap<.V>, Diag>> (hm, key, val):
     let hdr <i32> get hm "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
@@ -146,6 +160,7 @@ fn hashmap_insert <.V> <(HashMap<.V>,i32,.V)*>HashMap<.V>> (hm, key, val):
     let idx <i32> mod_s abs hash_i32 key cap
     let mut cur <i32> idx
     let mut found <i32> 0
+    let mut full <i32> 0
     while eq found 0:
         do:
             let entry <i32> add entries mul cur entry_size
@@ -169,9 +184,16 @@ fn hashmap_insert <.V> <(HashMap<.V>,i32,.V)*>HashMap<.V>> (hm, key, val):
                             set cur mod_s add cur 1 cap
                             if:
                                 eq cur idx
-                                set found 1
-                                ()
-    hm
+                                then:
+                                    set found 1
+                                    set full 1
+                                else ()
+    if:
+        eq full 1
+        then:
+            diag_err<HashMap<.V>> diag_capacity_exceeded "hashmap_insert"
+        else:
+            ok<HashMap<.V>, Diag> hm
 
 // hashmap_get_loop: 線形探索の内部ループ
 //
@@ -312,7 +334,7 @@ fn hashmap_contains <.V> <(HashMap<.V>,i32)->bool> (hm, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashmap_remove <.V> <(HashMap<.V>,i32)*>HashMap<.V>> (hm, key):
+fn hashmap_remove <.V> <(HashMap<.V>,i32)*>Result<HashMap<.V>, Diag>> (hm, key):
     let hdr <i32> get hm "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
@@ -320,6 +342,7 @@ fn hashmap_remove <.V> <(HashMap<.V>,i32)*>HashMap<.V>> (hm, key):
     let idx <i32> mod_s abs hash_i32 key cap
     let mut cur <i32> idx
     let mut done <i32> 0
+    let mut removed <i32> 0
     while eq done 0:
         do:
             let entry <i32> add entries mul cur entry_size
@@ -334,6 +357,7 @@ fn hashmap_remove <.V> <(HashMap<.V>,i32)*>HashMap<.V>> (hm, key):
                         then:
                             store_i32 entry 0  // mark empty
                             store_i32 hdr sub load_i32 hdr 1
+                            set removed 1
                             set done 1
                         else:
                             set cur mod_s add cur 1 cap
@@ -341,7 +365,12 @@ fn hashmap_remove <.V> <(HashMap<.V>,i32)*>HashMap<.V>> (hm, key):
                                 eq cur idx
                                 set done 1
                                 ()
-    hm
+    if:
+        eq removed 1
+        then:
+            ok<HashMap<.V>, Diag> hm
+        else:
+            diag_err<HashMap<.V>> diag_key_not_found "hashmap_remove"
 
 // hashmap_len: 要素数を返す
 //

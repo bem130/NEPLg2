@@ -4608,3 +4608,33 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/alloc/collections/hashmap_str.nepl -i stdlib/alloc/collections/hashset_str.nepl -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/hashstr-final-scope.json -j 2`
   - 結果: `10/10 pass`
+
+# 2026-02-27 作業メモ (safe stdlib をデフォルト化: Result/Diag)
+- 目的:
+  - collections API を「別名オプション」ではなく、`Result/Diag` を返す安全APIとして標準化する。
+- 根本原因:
+  - `alloc/diag/error.nepl` で `concat` 依存の import が欠落し、識別子解決が崩れていた。
+  - collections 実装の `if` 分岐に旧記法 `do:` が残存し、型/制御フロー解析が崩れていた。
+- 実装:
+  - `stdlib/alloc/diag/error.nepl`
+    - `#import "alloc/string" as *` を追加。
+    - `DiagCode` / `Diag` / `diag_err` 系を維持し、安全APIの基盤を有効化。
+  - `stdlib/alloc/collections/hashmap.nepl`
+  - `stdlib/alloc/collections/hashset.nepl`
+  - `stdlib/alloc/collections/hashmap_str.nepl`
+  - `stdlib/alloc/collections/hashset_str.nepl`
+    - `new/insert/remove` を `Result<..., Diag>` 返却のデフォルトAPIとして確定。
+    - `if` 分岐内の無効な `do:` を除去し、正常な式フローへ修正。
+  - テスト更新:
+    - `stdlib/tests/hashmap.n.md`
+    - `stdlib/tests/hashset.n.md`
+    - `stdlib/tests/hashmap_str.n.md`
+    - `stdlib/tests/hashset_str.n.md`
+    - `tests/pipe_collections.n.md`
+    - `tests/selfhost_req.n.md`
+    - `unwrap_ok_i` 依存を除去し、各テスト内で `must_*`（`Result` を受けるローカル関数）へ統一。
+    - move規則に合わせて値再利用パターンを分離。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i stdlib/core/result.nepl -i stdlib/alloc/diag/error.nepl -i stdlib/alloc/collections/hashmap.nepl -i stdlib/alloc/collections/hashset.nepl -i stdlib/alloc/collections/hashmap_str.nepl -i stdlib/alloc/collections/hashset_str.nepl -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md -i tests/pipe_collections.n.md -i tests/selfhost_req.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/diag-collections-scope.json -j 2`
+  - 結果: `67/67 pass`

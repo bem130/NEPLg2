@@ -19,8 +19,10 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/field" as *
+#import "core/result" as *
 #import "alloc/string" as *
 #import "alloc/hash/fnv1a32" as *
+#import "alloc/diag/error" as *
 
 struct HashSetStr:
     hdr <i32>
@@ -186,20 +188,32 @@ fn hashset_str_contains_loop <(i32,i32,i32,i32,i32,str)->bool> (entries, entry_s
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_str_new <()*>HashSetStr> ():
+fn hashset_str_new <()*>Result<HashSetStr, Diag>> ():
     let cap <i32> 16
     let entry_size <i32> 8
     let entries <i32> alloc mul cap entry_size
-    let mut i <i32> 0
-    while lt i cap:
-        do:
-            store_i32 add entries mul i entry_size 0
-            set i add i 1
-    let header <i32> alloc 12
-    store_i32 header 0
-    store_i32 add header 4 cap
-    store_i32 add header 8 entries
-    HashSetStr header
+    if:
+        eq entries 0
+        then:
+            diag_err<HashSetStr> diag_out_of_memory "hashset_str_new(entries)"
+        else:
+            let mut i <i32> 0
+            while lt i cap:
+                do:
+                    store_i32 add entries mul i entry_size 0
+                    set i add i 1
+            let header <i32> alloc 12
+            if:
+                eq header 0
+                then:
+                    dealloc entries mul cap entry_size
+                    diag_err<HashSetStr> diag_out_of_memory "hashset_str_new(header)"
+                else:
+                    store_i32 header 0
+                    store_i32 add header 4 cap
+                    store_i32 add header 8 entries
+                    let hs2 <HashSetStr> HashSetStr header
+                    ok<HashSetStr, Diag> hs2
 
 // hashset_str_insert: 要素を追加する
 //
@@ -227,7 +241,7 @@ fn hashset_str_new <()*>HashSetStr> ():
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_str_insert <(HashSetStr,str)*>HashSetStr> (hs, key):
+fn hashset_str_insert <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
     let hdr <i32> get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
@@ -235,6 +249,7 @@ fn hashset_str_insert <(HashSetStr,str)*>HashSetStr> (hs, key):
     let idx <i32> mod_s abs hash_str key cap
     let mut cur <i32> idx
     let mut done <i32> 0
+    let mut full <i32> 0
     while eq done 0:
         do:
             let entry <i32> add entries mul cur entry_size
@@ -255,9 +270,16 @@ fn hashset_str_insert <(HashSetStr,str)*>HashSetStr> (hs, key):
                             set cur mod_s add cur 1 cap
                             if:
                                 eq cur idx
-                                then set done 1
+                                then:
+                                    set full 1
+                                    set done 1
                                 else ()
-    hs
+    if:
+        eq full 1
+        then:
+            diag_err<HashSetStr> diag_capacity_exceeded "hashset_str_insert"
+        else:
+            ok<HashSetStr, Diag> hs
 
 // hashset_str_contains: 要素の存在確認
 //
@@ -319,7 +341,7 @@ fn hashset_str_contains <(HashSetStr,str)->bool> (hs, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_str_remove <(HashSetStr,str)*>HashSetStr> (hs, key):
+fn hashset_str_remove <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
     let hdr <i32> get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
@@ -327,6 +349,7 @@ fn hashset_str_remove <(HashSetStr,str)*>HashSetStr> (hs, key):
     let idx <i32> mod_s abs hash_str key cap
     let mut cur <i32> idx
     let mut done <i32> 0
+    let mut removed <i32> 0
     while eq done 0:
         do:
             let entry <i32> add entries mul cur entry_size
@@ -341,6 +364,7 @@ fn hashset_str_remove <(HashSetStr,str)*>HashSetStr> (hs, key):
                         then:
                             store_i32 entry 0
                             store_i32 hdr sub load_i32 hdr 1
+                            set removed 1
                             set done 1
                         else:
                             set cur mod_s add cur 1 cap
@@ -348,7 +372,12 @@ fn hashset_str_remove <(HashSetStr,str)*>HashSetStr> (hs, key):
                                 eq cur idx
                                 then set done 1
                                 else ()
-    hs
+    if:
+        eq removed 1
+        then:
+            ok<HashSetStr, Diag> hs
+        else:
+            diag_err<HashSetStr> diag_key_not_found "hashset_str_remove"
 
 // hashset_str_len: 要素数を返す
 //
