@@ -27,12 +27,16 @@ function parseArgs(argv) {
     let distHint = '';
     let jobs = 0;
     let includeStdlib = true;
+    let includeStdlibTouched = false;
     let includeTree = true;
+    let includeTreeTouched = false;
     let runner = 'wasm';
     let llvmAll = false;
     let assertIo = false;
     let strictDual = false;
     let llvmCompileOnly = false;
+    let changedOnly = false;
+    let changedBase = 'HEAD';
 
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
@@ -54,10 +58,30 @@ function parseArgs(argv) {
         }
         if (a === '--no-stdlib') {
             includeStdlib = false;
+            includeStdlibTouched = true;
+            continue;
+        }
+        if (a === '--with-stdlib') {
+            includeStdlib = true;
+            includeStdlibTouched = true;
             continue;
         }
         if (a === '--no-tree') {
             includeTree = false;
+            includeTreeTouched = true;
+            continue;
+        }
+        if (a === '--with-tree') {
+            includeTree = true;
+            includeTreeTouched = true;
+            continue;
+        }
+        if (a === '--changed') {
+            changedOnly = true;
+            continue;
+        }
+        if (a === '--changed-base' && i + 1 < argv.length) {
+            changedBase = argv[++i];
             continue;
         }
         if ((a === '--runner' || a === '--mode') && i + 1 < argv.length) {
@@ -94,6 +118,8 @@ function parseArgs(argv) {
                 assertIo,
                 strictDual,
                 llvmCompileOnly,
+                changedOnly,
+                changedBase,
             };
         }
     }
@@ -114,12 +140,16 @@ function parseArgs(argv) {
         distHint,
         jobs,
         includeStdlib,
+        includeStdlibTouched,
         includeTree,
+        includeTreeTouched,
         runner,
         llvmAll,
         assertIo,
         strictDual,
         llvmCompileOnly,
+        changedOnly,
+        changedBase,
     };
 }
 
@@ -173,11 +203,46 @@ function collectTestsFromPath(inputPath) {
                 expected_stdout: dt.stdout ?? null,
                 expected_stderr: dt.stderr ?? null,
                 expected_diag_ids: Array.isArray(dt.diag_ids) ? dt.diag_ids : [],
+                argv: Array.isArray(dt.argv) ? dt.argv : null,
             });
         }
     }
 
     return cases;
+}
+
+function runGitNameOnly(args) {
+    const p = spawnSync('git', args, {
+        encoding: 'utf8',
+        maxBuffer: 8 * 1024 * 1024,
+    });
+    if (p.status !== 0) return [];
+    return String(p.stdout || '')
+        .split(/\r?\n/)
+        .map((v) => v.trim())
+        .filter((v) => v.length > 0);
+}
+
+function collectChangedTestInputs(baseRef) {
+    const files = new Set();
+    const add = (arr) => {
+        for (const f of arr) files.add(path.resolve(f));
+    };
+    add(runGitNameOnly(['diff', '--name-only', '--diff-filter=ACMR', `${baseRef}...HEAD`]));
+    add(runGitNameOnly(['diff', '--name-only', '--diff-filter=ACMR']));
+    add(runGitNameOnly(['diff', '--cached', '--name-only', '--diff-filter=ACMR']));
+    add(runGitNameOnly(['ls-files', '--others', '--exclude-standard']));
+
+    return Array.from(files)
+        .filter((abs) => isFile(abs))
+        .filter((abs) => abs.endsWith('.n.md') || abs.endsWith('.nepl'))
+        .filter((abs) => {
+            const rel = path.relative(process.cwd(), abs).replace(/\\/g, '/');
+            return rel.startsWith('tests/')
+                || rel.startsWith('stdlib/')
+                || rel.startsWith('tutorials/')
+                || rel.startsWith('examples/');
+        });
 }
 
 async function runAll(cases, jobs, distHint) {
@@ -220,6 +285,7 @@ async function runAll(cases, jobs, distHint) {
                 source: c.source,
                 tags: c.tags,
                 stdin: c.stdin || '',
+                argv: Array.isArray(c.argv) ? c.argv : [],
                 distHint,
             };
             const r = await runSingle(req, loaded);
@@ -819,15 +885,78 @@ function collectResolvedDistDirs(results) {
 }
 
 async function main() {
-    const { help, inputs, outPath, distHint, jobs, includeStdlib, includeTree, runner, llvmAll, assertIo, strictDual, llvmCompileOnly } = parseArgs(process.argv.slice(2));
-    if (help || inputs.length === 0 || !outPath) {
-        console.log('Usage: node nodesrc/tests.js -i <dir_or_file> [-i ...] -o <out.json> [--dist <distDirHint>] [-j N] [--runner wasm|llvm|all] [--llvm-all] [--assert-io] [--strict-dual] [--llvm-compile-only] [--no-stdlib] [--no-tree]');
+    const {
+        help,
+        inputs,
+        outPath,
+        distHint,
+        jobs,
+        includeStdlib,
+        includeStdlibTouched,
+        includeTree,
+        includeTreeTouched,
+        runner,
+        llvmAll,
+        assertIo,
+        strictDual,
+        llvmCompileOnly,
+        changedOnly,
+        changedBase,
+    } = parseArgs(process.argv.slice(2));
+    if (help || (!changedOnly && inputs.length === 0) || !outPath) {
+        console.log('Usage: node nodesrc/tests.js -i <dir_or_file> [-i ...] -o <out.json> [--changed] [--changed-base <gitRef>] [--dist <distDirHint>] [-j N] [--runner wasm|llvm|all] [--llvm-all] [--assert-io] [--strict-dual] [--llvm-compile-only] [--no-stdlib|--with-stdlib] [--no-tree|--with-tree]');
         process.exit(help ? 0 : 2);
     }
 
+    const effectiveInputs = inputs.slice();
+    let effectiveIncludeStdlib = includeStdlib;
+    let effectiveIncludeTree = includeTree;
+    if (changedOnly) {
+        const changedInputs = collectChangedTestInputs(changedBase);
+        for (const c of changedInputs) {
+            if (!effectiveInputs.includes(c)) effectiveInputs.push(c);
+        }
+        if (!includeStdlibTouched) effectiveIncludeStdlib = false;
+        if (!includeTreeTouched) effectiveIncludeTree = false;
+    }
+
+    if (effectiveInputs.length === 0) {
+        const out = {
+            schema: 'neplg2-doctest/v1',
+            generated_at: new Date().toISOString(),
+            jobs,
+            runner,
+            llvm_all: llvmAll,
+            assert_io: assertIo,
+            strict_dual: strictDual,
+            llvm_compile_only: llvmCompileOnly,
+            dist_hint: distHint || null,
+            resolved_dist_dirs: [],
+            summary: { total: 0, passed: 0, failed: 0, errored: 0 },
+            results: [],
+            scan: {
+                changed: changedOnly,
+                changed_base: changedBase,
+                inputs: [],
+                include_stdlib: effectiveIncludeStdlib,
+                include_tree: effectiveIncludeTree,
+            },
+        };
+        const outAbs = path.resolve(outPath);
+        ensureDir(path.dirname(outAbs));
+        fs.writeFileSync(outAbs, JSON.stringify(out, null, 2));
+        console.log(JSON.stringify({
+            dist: { hint: distHint || null, resolved: [] },
+            summary: out.summary,
+            scan: out.scan,
+            top_issues: [],
+        }, null, 2));
+        return;
+    }
+
     const allCases = [];
-    const scanInputs = inputs.slice();
-    if (includeStdlib && !scanInputs.some((p) => path.resolve(p) === path.resolve('stdlib'))) {
+    const scanInputs = effectiveInputs.slice();
+    if (effectiveIncludeStdlib && !scanInputs.some((p) => path.resolve(p) === path.resolve('stdlib'))) {
         scanInputs.push('stdlib');
     }
     for (const p of scanInputs) {
@@ -864,7 +993,7 @@ async function main() {
         results = [...checkedWasm, ...llvmResults, ...compared];
     }
 
-    if (includeTree && runner !== 'llvm') {
+    if (effectiveIncludeTree && runner !== 'llvm') {
         try {
             const tree = await runTreeSuite(distHint || '');
             const treeResults = Array.isArray(tree?.results) ? tree.results : [];
@@ -911,6 +1040,13 @@ async function main() {
         llvm_compile_only: llvmCompileOnly,
         dist_hint: distHint || null,
         resolved_dist_dirs: resolvedDistDirs,
+        scan: {
+            changed: changedOnly,
+            changed_base: changedBase,
+            inputs: scanInputs.map((p) => path.relative(process.cwd(), path.resolve(p))),
+            include_stdlib: effectiveIncludeStdlib,
+            include_tree: effectiveIncludeTree,
+        },
         summary,
         results,
     };
@@ -926,6 +1062,7 @@ async function main() {
             resolved: resolvedDistDirs,
         },
         summary,
+        scan: out.scan,
         top_issues: topIssues,
     }, null, 2));
 

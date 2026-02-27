@@ -1,0 +1,34 @@
+# stdlib/option.n.md
+
+## option_main
+
+neplg2:test
+```neplg2
+
+#entry main
+#indent 4
+#target std
+
+#import "core/option" as *
+#import "std/test" as *
+
+fn main <()*> ()> ():
+    // Test is_some
+    assert is_some<.i32> some<.i32> 42;
+    assert_ne true is_none<.i32> some<.i32> 42;
+
+    // Test is_none
+    assert is_none<.i32> none<.i32>;
+    assert_ne true is_some<.i32> none<.i32>;
+
+    // Test unwrap on Some
+    assert_eq_i32 99 unwrap<.i32> some<.i32> 99;
+
+    // Test option_unwrap_or with Some
+    assert_eq_i32 10 option_unwrap_or<.i32> some<.i32> 10 5;
+
+    // Test option_unwrap_or with None
+    assert_eq_i32 5 option_unwrap_or<.i32> none<.i32> 5;
+
+    ()
+```

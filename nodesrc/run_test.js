@@ -37,7 +37,7 @@ function safeUnlink(p) {
     try { fs.unlinkSync(p); } catch {}
 }
 
-function runWasiBytes(wasmBytes, stdinText) {
+function runWasiBytes(wasmBytes, stdinText, argvList) {
     const wasmPath = mkTmpPath('nepl-doctest') + '.wasm';
     const stdinPath = mkTmpPath('wasi-stdin');
     const stdoutPath = mkTmpPath('wasi-stdout');
@@ -54,11 +54,14 @@ function runWasiBytes(wasmBytes, stdinText) {
 
     const wasi = new WASI({
         version: 'preview1',
-        args: [wasmPath],
+        args: [wasmPath, ...(Array.isArray(argvList) ? argvList.map((v) => String(v)) : [])],
         env: {},
         stdin: stdinFd,
         stdout: stdoutFd,
         stderr: stderrFd,
+        preopens: {
+            '/': process.cwd(),
+        },
     });
 
     let trapped = false;
@@ -186,6 +189,7 @@ async function runSingle(req, preloaded) {
         const source = req.source || '';
         const tags = Array.isArray(req.tags) ? req.tags : [];
         const stdinText = req.stdin || '';
+        const argvList = Array.isArray(req.argv) ? req.argv : [];
         const loaded = preloaded || await createRunner(req.distHint || '');
         const { api, meta } = loaded;
         if (hasTag(tags, 'skip')) {
@@ -256,7 +260,7 @@ async function runSingle(req, preloaded) {
             };
         }
 
-        const runRes = runWasiBytes(wasmU8, stdinText);
+        const runRes = runWasiBytes(wasmU8, stdinText, argvList);
 
         if (hasTag(tags, 'should_panic')) {
             const ok = runRes.trapped;

@@ -544,3 +544,33 @@ fn vec_free <.T> <(Vec<.T>)*>()> (v):
     let v_cap <i32> get v "cap"
     let v_data <i32> get v "data"
     dealloc v_data mul v_cap size_of<.T>
+
+//: push: vec_push の短縮エイリアス
+//:
+//: 目的:
+//: - パイプ演算子と組み合わせた記述を簡潔にします。
+//:
+//: 実装(アルゴリズム):
+//: - vec_push をそのまま再公開します。
+//:
+//: 注意(重要):
+//: - シグネチャは vec_push と同じです。
+//:
+//: 計算量:
+//: - ならし O(1)
+//:
+//: 使い方:
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/vec" as *
+//: fn main <()->i32> ():
+//:     let v:
+//:         vec_new<i32>
+//:         |> push<i32> 1
+//:         |> push<i32> 2;
+//:     if eq vec_len<i32> v 2 0 1
+//: ```
+fn push vec_push;

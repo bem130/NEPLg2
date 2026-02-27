@@ -92,3 +92,345 @@ fn main <()*>i32> ():
         then v1
         else 0
 ```
+
+## overload_new_selected_by_let_annotation
+
+neplg2:test
+ret: 7
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn new <()->i32> ():
+    7
+
+fn new <()->bool> ():
+    true
+
+fn main <()->i32> ():
+    let a <i32> new;
+    let b <bool> new;
+    if b a 0
+```
+
+## overload_new_ambiguous_without_expected_type
+
+neplg2:test[compile_fail]
+diag_id: 3005
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn new <()->i32> ():
+    1
+
+fn new <()->bool> ():
+    true
+
+fn main <()->i32> ():
+    let v new
+    0
+```
+
+## overload_len_for_string_and_vec
+
+neplg2:test
+ret: 8
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/string" as *
+#import "alloc/vec" as *
+#import "core/math" as *
+
+fn size <(str)->i32> (s):
+    i32_add 1000 1
+
+fn size <(Vec<i32>)->i32> (v):
+    vec_len<i32> v
+
+fn main <()->i32> ():
+    let v:
+        vec_new<i32>
+        |> push<i32> 3
+        |> push<i32> 5;
+    let a <i32> size v;
+    let b <i32> size "x";
+    if and eq a 2 eq b 1001 8 0
+```
+
+## overload_new_with_pipe_vec
+
+neplg2:test
+ret: 2
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+
+fn new <()*>Vec<i32>> ():
+    vec_new<i32>
+
+fn new <()->bool> ():
+    true
+
+fn main <()*>i32> ():
+    let v <Vec<i32>>:
+        <Vec<i32>> new
+        |> push<i32> 1
+        |> push<i32> 2;
+    vec_len<i32> v
+```
+
+## overload_result_inferred_from_outer_arg_context
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn choice <(i32)->i32> (v):
+    v
+
+fn choice <(i32)->bool> (v):
+    i32_ne v 0
+
+fn use_bool <(bool)->i32> (b):
+    if b 1 0
+
+fn main <()->i32> ():
+    use_bool choice 7
+```
+
+## overload_select_by_arity
+
+neplg2:test
+ret: 12
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn calc <(i32)->i32> (a):
+    i32_add a 1
+
+fn calc <(i32,i32)->i32> (a, b):
+    i32_add a b
+
+fn use_unary <(i32,(i32)->i32)->i32> (a, f):
+    f a
+
+fn use_binary <(i32,i32,(i32,i32)->i32)->i32> (a, b, f):
+    f a b
+
+fn main <()->i32> ():
+    let u <(i32)->i32> calc;
+    let v <(i32,i32)->i32> calc;
+    let a <i32> use_unary 5 u;
+    let b <i32> use_binary 3 4 v;
+    i32_add a b
+```
+
+## overload_select_by_arity_unary_simple
+
+neplg2:test
+ret: 6
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn calc <(i32)->i32> (a):
+    i32_add a 1
+
+fn calc <(i32,i32)->i32> (a, b):
+    i32_add a b
+
+fn main <()->i32> ():
+    calc 5
+```
+
+## overload_select_by_arity_from_param_context_unary_not_supported_yet
+
+neplg2:test[compile_fail]
+diag_id: 3016
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn calc <(i32)->i32> (a):
+    i32_add a 1
+
+fn calc <(i32,i32)->i32> (a, b):
+    i32_add a b
+
+fn use_unary <(i32,(i32)->i32)->i32> (a, f):
+    f a
+
+fn main <()->i32> ():
+    use_unary 5 calc
+```
+
+## overload_select_by_arity_from_param_context_binary_not_supported_yet
+
+neplg2:test[compile_fail]
+diag_id: 3016
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn calc <(i32)->i32> (a):
+    i32_add a 1
+
+fn calc <(i32,i32)->i32> (a, b):
+    i32_add a b
+
+fn use_binary <(i32,i32,(i32,i32)->i32)->i32> (a, b, f):
+    f a b
+
+fn main <()->i32> ():
+    use_binary 3 4 calc
+```
+
+## overload_select_by_arity_with_pipe_unary_not_supported_yet
+
+neplg2:test[compile_fail]
+diag_id: 3016
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn calc <(i32)->i32> (a):
+    i32_add a 1
+
+fn calc <(i32,i32)->i32> (a, b):
+    i32_add a b
+
+fn use_unary <(i32,(i32)->i32)->i32> (a, f):
+    f a
+
+fn main <()->i32> ():
+    5 |> use_unary calc
+```
+
+## overload_select_by_parameter_context
+
+neplg2:test
+ret: 2
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn choose <(i32)->i32> (v):
+    v
+
+fn choose <(i32)->bool> (v):
+    i32_ne v 0
+
+fn take_i32 <(i32)->i32> (v):
+    v
+
+fn take_bool <(bool)->i32> (v):
+    if v 2 0
+
+fn main <()->i32> ():
+    i32_add take_i32 choose 10 take_bool choose 1
+```
+
+## overload_select_by_explicit_result_ascription
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn convert <(i32)->i32> (v):
+    v
+
+fn convert <(i32)->bool> (v):
+    i32_ne v 0
+
+fn main <()->i32> ():
+    let b <bool> <bool> convert 9;
+    if b 1 0
+```
+
+## overload_ambiguous_same_input_no_context
+
+neplg2:test[compile_fail]
+diag_id: 3005
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn cast_like <(i32)->i32> (v):
+    v
+
+fn cast_like <(i32)->bool> (v):
+    i32_ne v 0
+
+fn main <()->i32> ():
+    let tmp cast_like 1
+    0
+```
+
+## overload_no_matching_by_argument_type
+
+neplg2:test[compile_fail]
+diag_id: 3006
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn parse <(i32,i32)->i32> (a, b):
+    a
+
+fn parse <(bool,bool)->i32> (a, b):
+    if a 1 0
+
+fn main <()->i32> ():
+    parse 1 true
+```
+
+## overload_too_many_arguments_reports_stack_extra
+
+neplg2:test[compile_fail]
+diag_id: 3016
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn f <(i32)->i32> (a):
+    a
+
+fn f <(i32,i32)->i32> (a, b):
+    a
+
+fn main <()->i32> ():
+    f 1 2 3
+```

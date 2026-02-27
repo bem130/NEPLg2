@@ -84,3 +84,17 @@ fn main <()->i32> ():
         Result::Err _e:
             1
 ```
+
+## intrinsic_argument_type_mismatch_reports_diag_id
+
+neplg2:test[compile_fail]
+diag_id: 3048
+```neplg2
+#target core
+#entry main
+#indent 4
+
+fn main <()->i32> ():
+    #intrinsic "i32_to_f32" <> (true)
+    0
+```

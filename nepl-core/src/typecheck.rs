@@ -1348,7 +1348,7 @@ fn check_function(
                 if let Some(raw) = checker.select_target_raw_body(b) {
                     raw
                 } else {
-                    match checker.check_block(b, 0, true) {
+                    match checker.check_block(b, 0, true, Some(result_ty)) {
                         Some((blk, _val)) => {
                             if checker.ctx.unify(blk.ty, result_ty).is_err() {
                                 checker.diagnostics.push(Diagnostic::error(
@@ -1653,6 +1653,145 @@ impl<'a> BlockChecker<'a> {
         None
     }
 
+    fn infer_expected_from_outer_consumer(
+        &mut self,
+        stack: &[StackEntry],
+        inner_pos: usize,
+        min_func_pos: usize,
+    ) -> Option<TypeId> {
+        for j in (min_func_pos..inner_pos).rev() {
+            if !stack[j].auto_call {
+                continue;
+            }
+            let rty = self.ctx.resolve_id(stack[j].ty);
+            let TypeKind::Function { params, .. } = self.ctx.get(rty) else {
+                continue;
+            };
+            let total_arity = params.len();
+            let arity = self.user_visible_arity(&stack[j].expr, total_arity);
+            if stack.len() < j + 1 + arity {
+                continue;
+            }
+            if inner_pos < j + 1 {
+                continue;
+            }
+            let user_arg_idx = inner_pos - (j + 1);
+            if user_arg_idx >= arity {
+                continue;
+            }
+            let capture_len = total_arity.saturating_sub(arity);
+            let arg_idx = capture_len + user_arg_idx;
+            if arg_idx >= total_arity {
+                continue;
+            }
+            for k in 0..arity {
+                if k == user_arg_idx {
+                    continue;
+                }
+                let outer_arg_pos = j + 1 + k;
+                if outer_arg_pos >= stack.len() {
+                    continue;
+                }
+                let pidx = capture_len + k;
+                if pidx >= total_arity {
+                    continue;
+                }
+                let pty = params[pidx];
+                let aty = stack[outer_arg_pos].ty;
+                let _ = self.ctx.unify(aty, pty);
+            }
+            return Some(self.ctx.resolve_id(params[arg_idx]));
+        }
+        None
+    }
+
+    fn infer_expected_from_outer_consumer_next_arg(
+        &mut self,
+        stack: &[StackEntry],
+        inner_pos: usize,
+        min_func_pos: usize,
+    ) -> Option<TypeId> {
+        for j in (min_func_pos..inner_pos).rev() {
+            if !stack[j].auto_call {
+                continue;
+            }
+            let rty = self.ctx.resolve_id(stack[j].ty);
+            let TypeKind::Function { params, .. } = self.ctx.get(rty) else {
+                continue;
+            };
+            let total_arity = params.len();
+            let arity = self.user_visible_arity(&stack[j].expr, total_arity);
+            if inner_pos < j + 1 {
+                continue;
+            }
+            let provided_user_args = inner_pos - (j + 1);
+            if provided_user_args >= arity {
+                continue;
+            }
+            let user_arg_idx = provided_user_args;
+            let capture_len = total_arity.saturating_sub(arity);
+            let arg_idx = capture_len + user_arg_idx;
+            if arg_idx >= total_arity {
+                continue;
+            }
+            for k in 0..provided_user_args {
+                let outer_arg_pos = j + 1 + k;
+                if outer_arg_pos >= stack.len() {
+                    continue;
+                }
+                let pidx = capture_len + k;
+                if pidx >= total_arity {
+                    continue;
+                }
+                let pty = params[pidx];
+                let aty = stack[outer_arg_pos].ty;
+                let _ = self.ctx.unify(aty, pty);
+            }
+            return Some(self.ctx.resolve_id(params[arg_idx]));
+        }
+        None
+    }
+
+    fn choose_callable_type_by_available_arity(
+        &mut self,
+        name: &str,
+        available_args: usize,
+    ) -> Option<TypeId> {
+        let callables = self.env.lookup_all_callables(name);
+        if callables.len() <= 1 {
+            return None;
+        }
+        let mut has_mixed_arity = false;
+        let mut first_arity: Option<usize> = None;
+        for b in &callables {
+            if let BindingKind::Func { arity, .. } = b.kind {
+                if first_arity.is_none() {
+                    first_arity = Some(arity);
+                } else if first_arity != Some(arity) {
+                    has_mixed_arity = true;
+                }
+            }
+        }
+        if !has_mixed_arity {
+            return None;
+        }
+
+        let mut best: Option<(usize, TypeId)> = None;
+        for b in callables {
+            if let BindingKind::Func { arity, .. } = b.kind {
+                if arity > available_args {
+                    continue;
+                }
+                match best {
+                    None => best = Some((arity, b.ty)),
+                    Some((best_arity, _)) if arity > best_arity => best = Some((arity, b.ty)),
+                    _ => {}
+                }
+            }
+        }
+        best.map(|(_, ty)| ty)
+    }
+
     fn is_concrete_type(&self, ty: TypeId) -> bool {
         let resolved = self.ctx.resolve_id(ty);
         !matches!(self.ctx.get(resolved), TypeKind::Var(v) if v.binding.is_none())
@@ -1839,6 +1978,7 @@ impl<'a> BlockChecker<'a> {
         block: &Block,
         base_depth: usize,
         new_scope: bool,
+        expected_last_ty: Option<TypeId>,
     ) -> Option<(HirBlock, Option<TypeId>)> {
         let old_effect = self.current_effect;
 
@@ -2063,7 +2203,12 @@ impl<'a> BlockChecker<'a> {
 
             match stmt {
                 Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => {
-                    match self.check_prefix(expr, base_depth, &mut stack) {
+                    let expected_stmt_ty = if Some(idx) == last_expr_idx {
+                        expected_last_ty
+                    } else {
+                        None
+                    };
+                    match self.check_prefix(expr, base_depth, &mut stack, expected_stmt_ty) {
                         Some((typed, dropped_from_prefix)) => {
                             let is_last_expr = Some(idx) == last_expr_idx;
                             let mut drop_result = !is_last_expr;
@@ -2074,10 +2219,13 @@ impl<'a> BlockChecker<'a> {
                             }
 
                             if dropped_from_prefix {
-                                self.diagnostics.push(Diagnostic::error(
-                                    "expression left extra values on the stack",
-                                    typed.span,
-                                ));
+                                self.diagnostics.push(
+                                    Diagnostic::error(
+                                        "expression left extra values on the stack",
+                                        typed.span,
+                                    )
+                                    .with_id(DiagnosticId::TypeStackExtraValues),
+                                );
                             }
 
                             // If there was an explicit semicolon token, require that the
@@ -2089,7 +2237,7 @@ impl<'a> BlockChecker<'a> {
                                     self.diagnostics.push(Diagnostic::error(
                                         "statement must leave exactly one value on the stack",
                                         sp,
-                                    ));
+                                    ).with_id(DiagnosticId::TypeStackExtraValues));
                                     while stack.len() > base_depth {
                                         stack.pop();
                                     }
@@ -2293,6 +2441,7 @@ impl<'a> BlockChecker<'a> {
         expr: &PrefixExpr,
         base_depth: usize,
         stack: &mut Vec<StackEntry>,
+        expected_last_ty: Option<TypeId>,
     ) -> Option<(HirExpr, bool)> {
         // Track indices of functions on the stack to avoid linear scanning in reduce_calls.
         // This makes reduction O(1) amortized instead of O(N^2).
@@ -2309,7 +2458,8 @@ impl<'a> BlockChecker<'a> {
         let mut last_expr: Option<HirExpr> = None;
         let mut pipe_pending: Option<StackEntry> = None;
         // (target_type, stack_depth_when_annotation_appeared)
-        let mut pending_ascription: Option<(TypeId, usize)> = None;
+        let mut pending_ascription: Option<(TypeId, usize)> =
+            expected_last_ty.map(|t| (t, base_depth));
 
         // Try to apply a pending ascription when the next expression is complete.
         fn try_apply_pending_ascription(
@@ -2384,6 +2534,7 @@ impl<'a> BlockChecker<'a> {
                             stack.push(entry);
                             last_expr = Some(stack.last().unwrap().expr.clone());
                         } else if let Some(binding) = {
+                            let callable_count = self.env.lookup_all_callables(&id.name).len();
                             // In head position of a prefix expression, prefer callable symbols
                             // over value symbols when both names coexist in the same scope.
                             // This keeps `add add 1` semantics stable even if `add` is also a value.
@@ -2401,15 +2552,30 @@ impl<'a> BlockChecker<'a> {
                                     self.env
                                         .lookup_value_for_read(&id.name, allow_undefined_nonmut)
                                 })
-                                .or_else(|| self.env.lookup_callable_any(&id.name))
+                                .or_else(|| {
+                                    if callable_count <= 1 {
+                                        self.env.lookup_callable_any(&id.name)
+                                    } else {
+                                        None
+                                    }
+                                })
                         } {
                             if *forced_value {
-                                if let BindingKind::Func { captures, .. } = &binding.kind {
-                                    if !captures.is_empty() {
+                                match &binding.kind {
+                                    BindingKind::Func { captures, .. } => {
+                                        if !captures.is_empty() {
+                                            self.diagnostics.push(Diagnostic::error(
+                                                "capturing function cannot be used as a function value yet",
+                                                id.span,
+                                            ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
+                                            return None;
+                                        }
+                                    }
+                                    _ => {
                                         self.diagnostics.push(Diagnostic::error(
-                                            "capturing function cannot be used as a function value yet",
+                                            "only callable symbols can be referenced with '@'",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeAtRequiresCallable));
                                         return None;
                                     }
                                 }
@@ -2438,7 +2604,7 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             "type arguments are not allowed for variables",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeVariableTypeArgsNotAllowed));
                                     }
                                     Vec::new()
                                 }
@@ -2457,6 +2623,21 @@ impl<'a> BlockChecker<'a> {
                             last_expr = Some(stack.last().unwrap().expr.clone());
                         } else {
                             let mut lookup_name = id.name.clone();
+                            let outer_expected_callable_arity =
+                                self.infer_expected_from_outer_consumer_next_arg(
+                                    &stack,
+                                    stack.len(),
+                                    0,
+                                )
+                                    .and_then(|expected_ty| {
+                                        let resolved_target = self.ctx.resolve(expected_ty);
+                                        match self.ctx.get(resolved_target) {
+                                            TypeKind::Function { params, .. } => {
+                                                Some(params.len())
+                                            }
+                                            _ => None,
+                                        }
+                                    });
                             let mut bindings = self.env.lookup_all_any_defined(&lookup_name);
                             if bindings.is_empty() {
                                 if let Some((ns, member)) = parse_variant_name(&id.name) {
@@ -2476,14 +2657,14 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             "only callable symbols can be referenced with '@'",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeAtRequiresCallable));
                                         return None;
                                     }
                                     if !type_args.is_empty() {
                                         self.diagnostics.push(Diagnostic::error(
                                             "type arguments are not allowed for variables",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeVariableTypeArgsNotAllowed));
                                     }
                                     let ty = binding.ty;
                                     stack.push(StackEntry {
@@ -2499,6 +2680,87 @@ impl<'a> BlockChecker<'a> {
                                     });
                                     last_expr = Some(stack.last().unwrap().expr.clone());
                                 } else {
+                                    let expected_callable_arity = pending_ascription
+                                        .and_then(|(target_ty, base_len)| {
+                                            if stack.len() == base_len {
+                                                let resolved_target = self.ctx.resolve(target_ty);
+                                                match self.ctx.get(resolved_target) {
+                                                    TypeKind::Function { params, .. } => {
+                                                        Some(params.len())
+                                                    }
+                                                    _ => None,
+                                                }
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .or(outer_expected_callable_arity);
+                                    if let Some(exp_arity) = expected_callable_arity {
+                                        let mut arity_candidates: Vec<&Binding> = bindings
+                                            .iter()
+                                            .copied()
+                                            .filter(|b| {
+                                                matches!(
+                                                    b.kind,
+                                                    BindingKind::Func { arity, .. } if arity == exp_arity
+                                                )
+                                            })
+                                            .collect();
+                                        if arity_candidates.len() == 1 {
+                                            let binding = arity_candidates.remove(0);
+                                            if *forced_value {
+                                                if let BindingKind::Func { captures, .. } =
+                                                    &binding.kind
+                                                {
+                                                    if !captures.is_empty() {
+                                                        self.diagnostics.push(Diagnostic::error(
+                                                            "capturing function cannot be used as a function value yet",
+                                                            id.span,
+                                                        ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
+                                                        return None;
+                                                    }
+                                                }
+                                            }
+                                            let mut explicit_args = Vec::new();
+                                            if !type_args.is_empty() {
+                                                for arg_expr in type_args {
+                                                    explicit_args.push(type_from_expr(
+                                                        self.ctx,
+                                                        self.labels,
+                                                        arg_expr,
+                                                    ));
+                                                }
+                                            }
+                                            let ty = binding.ty;
+                                            let fn_symbol = match &binding.kind {
+                                                BindingKind::Func { symbol, .. } => {
+                                                    symbol.clone()
+                                                }
+                                                _ => lookup_name.clone(),
+                                            };
+                                            stack.push(StackEntry {
+                                                ty,
+                                                expr: HirExpr {
+                                                    ty,
+                                                    // 期待関数型で一意に選べた過負荷関数は
+                                                    // ここで関数値として確定させる。
+                                                    kind: HirExprKind::FnValue(fn_symbol),
+                                                    span: id.span,
+                                                },
+                                                type_args: explicit_args,
+                                                assign: None,
+                                                auto_call: false,
+                                            });
+                                            last_expr = Some(stack.last().unwrap().expr.clone());
+                                            continue;
+                                        } else if arity_candidates.len() > 1 {
+                                            self.diagnostics.push(
+                                                Diagnostic::error("ambiguous overload", id.span)
+                                                    .with_id(DiagnosticId::TypeAmbiguousOverload),
+                                            );
+                                            return None;
+                                        }
+                                    }
                                     let mut effect = None;
                                     let mut arity = None;
                                     for b in &bindings {
@@ -2514,15 +2776,10 @@ impl<'a> BlockChecker<'a> {
                                                 self.diagnostics.push(Diagnostic::error(
                                                     "overloaded functions must have the same effect",
                                                     id.span,
-                                                ));
+                                                ).with_id(DiagnosticId::TypeOverloadEffectMismatch));
                                             }
                                             if arity.is_none() {
                                                 arity = Some(a);
-                                            } else if arity != Some(a) {
-                                                self.diagnostics.push(Diagnostic::error(
-                                                    "overloaded functions must have the same arity",
-                                                    id.span,
-                                                ));
                                             }
                                         }
                                     }
@@ -2538,7 +2795,7 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             "capturing function cannot be used as a function value yet",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
                                         return None;
                                     }
                                     let mut explicit_args = Vec::new();
@@ -2735,7 +2992,7 @@ impl<'a> BlockChecker<'a> {
                                 self.diagnostics.push(Diagnostic::error(
                                     "cannot set immutable variable",
                                     name.span,
-                                ));
+                                ).with_id(DiagnosticId::TypeImmutableMutation));
                             }
                             let func_ty = self.ctx.function(
                                 Vec::new(),
@@ -2756,10 +3013,13 @@ impl<'a> BlockChecker<'a> {
                             });
                             // defer applying ascription until the expression is complete
                             last_expr = Some(stack.last().unwrap().expr.clone());
-                        } else {
-                            self.diagnostics
-                                .push(Diagnostic::error("undefined variable", name.span));
-                        }
+                            } else {
+                                self.diagnostics
+                                    .push(
+                                        Diagnostic::error("undefined variable", name.span)
+                                            .with_id(DiagnosticId::TypeUndefinedVariable),
+                                    );
+                            }
                     }
                     Symbol::AddrOf(span) => {
                         if crate::log::is_verbose() {
@@ -2853,7 +3113,9 @@ impl<'a> BlockChecker<'a> {
                     let mut args = Vec::new();
                     for arg in &intrin.args {
                         let mut arg_stack = Vec::new();
-                        if let Some((hexpr, _)) = self.check_prefix(arg, 0, &mut arg_stack) {
+                        if let Some((hexpr, _)) =
+                            self.check_prefix(arg, 0, &mut arg_stack, None)
+                        {
                             args.push(hexpr);
                         } else {
                              return None;
@@ -2875,7 +3137,10 @@ impl<'a> BlockChecker<'a> {
                             type_args[0]
                         } else {
                             self.diagnostics
-                                .push(Diagnostic::error("callsite_span expects 1 type arg", *sp));
+                                .push(
+                                    Diagnostic::error("callsite_span expects 1 type arg", *sp)
+                                        .with_id(DiagnosticId::TypeIntrinsicTypeArgArityMismatch),
+                                );
                             self.ctx.unit()
                         }
                     } else if intrin.name == "get_field" || intrin.name == "set_field" {
@@ -2899,7 +3164,10 @@ impl<'a> BlockChecker<'a> {
                     } else if intrin.name == "set_field" {
                         self.ctx.unit()
                     } else {
-                        self.diagnostics.push(Diagnostic::error("unknown intrinsic", *sp));
+                        self.diagnostics.push(
+                            Diagnostic::error("unknown intrinsic", *sp)
+                                .with_id(DiagnosticId::TypeUnknownIntrinsic),
+                        );
                         self.ctx.unit()
                     };
 
@@ -2978,7 +3246,17 @@ impl<'a> BlockChecker<'a> {
                             if let Some((f_ty, offset)) = res {
                                 // Unify value type with field type
                                 if let Err(_) = self.ctx.unify(val.ty, f_ty) {
-                                     self.diagnostics.push(Diagnostic::error(format!("type mismatch in set_field: expected {}, found {}", self.ctx.type_to_string(f_ty), self.ctx.type_to_string(val.ty)), *sp));
+                                     self.diagnostics.push(
+                                         Diagnostic::error(
+                                             format!(
+                                                 "type mismatch in set_field: expected {}, found {}",
+                                                 self.ctx.type_to_string(f_ty),
+                                                 self.ctx.type_to_string(val.ty)
+                                             ),
+                                             *sp,
+                                         )
+                                         .with_id(DiagnosticId::TypeAssignmentTypeMismatch),
+                                     );
                                 }
 
                                 // Lower to store(add(obj, offset), val)
@@ -3033,12 +3311,12 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic expects 1 argument",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgArityMismatch));
                         } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.i32()) {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic argument type mismatch (expected i32)",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgTypeMismatch));
                         }
                     } else if intrin.name == "f32_to_i32" || intrin.name == "reinterpret_f32_i32"
                     {
@@ -3046,24 +3324,24 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic expects 1 argument",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgArityMismatch));
                         } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.f32()) {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic argument type mismatch (expected f32)",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgTypeMismatch));
                         }
                     } else if intrin.name == "u8_to_i32" {
                         if args.len() != 1 {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic expects 1 argument",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgArityMismatch));
                         } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.u8()) {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic argument type mismatch (expected u8)",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgTypeMismatch));
                         }
                     }
 
@@ -3106,7 +3384,9 @@ impl<'a> BlockChecker<'a> {
                     let mut elem_tys = Vec::new();
                     for elem in items {
                         let mut elem_stack = Vec::new();
-                        if let Some((hexpr, _)) = self.check_prefix(elem, 0, &mut elem_stack) {
+                        if let Some((hexpr, _)) =
+                            self.check_prefix(elem, 0, &mut elem_stack, None)
+                        {
                             elem_tys.push(hexpr.ty);
                             elems.push(hexpr);
                         } else {
@@ -3129,7 +3409,9 @@ impl<'a> BlockChecker<'a> {
                 }
                 PrefixItem::Group(inner, _sp) => {
                     let mut group_stack = Vec::new();
-                    if let Some((hexpr, _)) = self.check_prefix(inner, 0, &mut group_stack) {
+                    if let Some((hexpr, _)) =
+                        self.check_prefix(inner, 0, &mut group_stack, None)
+                    {
                         stack.push(StackEntry {
                             ty: hexpr.ty,
                             expr: hexpr,
@@ -3146,7 +3428,7 @@ impl<'a> BlockChecker<'a> {
                     // Treat blocks uniformly; parser now desugars `if:`/`if <cond>:`
                     // layout forms into ordinary prefix items, so the checker
                     // should not special-case `if` here.
-                    let (blk, val_ty) = self.check_block(b, 0, true)?;
+                    let (blk, val_ty) = self.check_block(b, 0, true, None)?;
                     if let Some(ty) = val_ty {
                         stack.push(StackEntry {
                             ty,
@@ -3174,12 +3456,15 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             "pipe already pending; consecutive |> not allowed",
                             *sp,
-                        ));
+                        ).with_id(DiagnosticId::TypePipeError));
                         continue;
                     }
                     if stack.len() == base_depth {
                         self.diagnostics
-                            .push(Diagnostic::error("pipe requires a value on the stack", *sp));
+                            .push(
+                                Diagnostic::error("pipe requires a value on the stack", *sp)
+                                    .with_id(DiagnosticId::TypePipeError),
+                            );
                         continue;
                     }
                     pipe_pending = stack.pop();
@@ -3206,12 +3491,15 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "pipe target must be a callable expression",
                                 expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypePipeError));
                             stack.push(val);
                         }
                     } else {
                         self.diagnostics
-                            .push(Diagnostic::error("pipe target missing", expr.span));
+                            .push(
+                                Diagnostic::error("pipe target missing", expr.span)
+                                    .with_id(DiagnosticId::TypePipeError),
+                            );
                         stack.push(val);
                     }
                 }
@@ -3377,7 +3665,10 @@ impl<'a> BlockChecker<'a> {
         if let Some(top) = stack.last_mut() {
             if let Err(_) = self.ctx.unify(top.ty, target) {
                 self.diagnostics
-                    .push(Diagnostic::error("type annotation mismatch", span));
+                    .push(
+                        Diagnostic::error("type annotation mismatch", span)
+                            .with_id(DiagnosticId::TypeAnnotationMismatch),
+                    );
             } else {
                 top.ty = target;
                 top.expr.ty = target;
@@ -3415,10 +3706,17 @@ impl<'a> BlockChecker<'a> {
                 func_pos = outer;
             }
 
+            let available_args = stack.len().saturating_sub(func_pos + 1);
+            let ty_for_infer = match &stack[func_pos].expr.kind {
+                HirExprKind::Var(name) => self
+                    .choose_callable_type_by_available_arity(name, available_args)
+                    .unwrap_or(stack[func_pos].ty),
+                _ => stack[func_pos].ty,
+            };
             let (inst_ty, fresh_args) = if !stack[func_pos].type_args.is_empty() {
-                (stack[func_pos].ty, stack[func_pos].type_args.clone())
+                (ty_for_infer, stack[func_pos].type_args.clone())
             } else {
-                self.ctx.instantiate(stack[func_pos].ty)
+                self.ctx.instantiate(ty_for_infer)
             };
             let func_ty = self.ctx.get(inst_ty);
             let (params, result, effect) = match func_ty {
@@ -3450,6 +3748,8 @@ impl<'a> BlockChecker<'a> {
                     None
                 }
             });
+            let outer_expected = self.infer_expected_from_outer_consumer(stack, func_pos, 0);
+            let expected_ret = expected_ret.or(outer_expected);
             let mut args = Vec::new();
             for _ in 0..args_to_take {
                 args.push(stack.remove(func_pos + 1));
@@ -3580,10 +3880,17 @@ impl<'a> BlockChecker<'a> {
                 func_pos = outer;
             }
 
+            let available_args = stack.len().saturating_sub(func_pos + 1);
+            let ty_for_infer = match &stack[func_pos].expr.kind {
+                HirExprKind::Var(name) => self
+                    .choose_callable_type_by_available_arity(name, available_args)
+                    .unwrap_or(stack[func_pos].ty),
+                _ => stack[func_pos].ty,
+            };
             let (inst_ty, fresh_args) = if !stack[func_pos].type_args.is_empty() {
-                (stack[func_pos].ty, stack[func_pos].type_args.clone())
+                (ty_for_infer, stack[func_pos].type_args.clone())
             } else {
-                self.ctx.instantiate(stack[func_pos].ty)
+                self.ctx.instantiate(ty_for_infer)
             };
             let func_ty = self.ctx.get(inst_ty);
             let (params, result, effect) = match func_ty {
@@ -3615,6 +3922,9 @@ impl<'a> BlockChecker<'a> {
                     None
                 }
             });
+            let outer_expected =
+                self.infer_expected_from_outer_consumer(stack, func_pos, min_func_pos);
+            let expected_ret = expected_ret.or(outer_expected);
             let mut args = Vec::new();
             for _ in 0..args_to_take {
                 args.push(stack.remove(func_pos + 1));
@@ -3647,7 +3957,7 @@ impl<'a> BlockChecker<'a> {
     fn check_match_expr(&mut self, m: &MatchExpr) -> Option<(HirExpr, TypeId)> {
         // evaluate scrutinee
         let mut tmp_stack = Vec::new();
-        if let Some((scrut_expr, _)) = self.check_prefix(&m.scrutinee, 0, &mut tmp_stack) {
+        if let Some((scrut_expr, _)) = self.check_prefix(&m.scrutinee, 0, &mut tmp_stack, None) {
             let scrut_ty = scrut_expr.ty;
             let resolved_ty = self.ctx.resolve(scrut_ty);
             let variants = match self.ctx.get(resolved_ty) {
@@ -3684,7 +3994,10 @@ impl<'a> BlockChecker<'a> {
             };
             if variants.is_none() {
                 self.diagnostics
-                    .push(Diagnostic::error("match scrutinee must be an enum", m.span));
+                    .push(
+                        Diagnostic::error("match scrutinee must be an enum", m.span)
+                            .with_id(DiagnosticId::TypeMatchScrutineeMustBeEnum),
+                    );
                 return None;
             }
             let variants = variants.unwrap();
@@ -3699,7 +4012,10 @@ impl<'a> BlockChecker<'a> {
                 };
                 if !seen.insert(arm_var_name.to_string()) {
                     self.diagnostics
-                        .push(Diagnostic::error("duplicate match arm", arm.variant.span));
+                        .push(
+                            Diagnostic::error("duplicate match arm", arm.variant.span)
+                                .with_id(DiagnosticId::TypeDuplicateMatchArm),
+                        );
                     continue;
                 }
                 let var_info = variants.iter().find(|v| v.name == arm_var_name);
@@ -3707,7 +4023,7 @@ impl<'a> BlockChecker<'a> {
                 self.diagnostics.push(Diagnostic::error(
                     alloc::format!("unknown enum variant '{}' in match", arm.variant.name),
                     arm.variant.span,
-                ));
+                ).with_id(DiagnosticId::TypeMatchUnknownVariant));
                     continue;
                 }
                 let var_info = var_info.unwrap();
@@ -3735,10 +4051,10 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             "variant has no payload to bind",
                             bind.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeMatchPayloadBindingInvalid));
                     }
                 }
-                let (blk, val_ty) = self.check_block(&arm.body, 0, false)?;
+                let (blk, val_ty) = self.check_block(&arm.body, 0, false, None)?;
                 self.env.pop_scope();
                 let body_ty = val_ty.unwrap_or(self.ctx.unit());
                 if let Some(t) = result_ty {
@@ -3750,7 +4066,7 @@ impl<'a> BlockChecker<'a> {
                                 self.ctx.type_to_string(body_ty)
                             ),
                             arm.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeMatchArmsTypeMismatch));
                     }
                 } else {
                     result_ty = Some(body_ty);
@@ -3769,7 +4085,10 @@ impl<'a> BlockChecker<'a> {
             for v in variants {
                 if !seen.contains(&v.name) {
                     self.diagnostics
-                        .push(Diagnostic::error("non-exhaustive match", m.span));
+                        .push(
+                            Diagnostic::error("non-exhaustive match", m.span)
+                                .with_id(DiagnosticId::TypeNonExhaustiveMatch),
+                        );
                     break;
                 }
             }
@@ -4028,7 +4347,7 @@ impl<'a> BlockChecker<'a> {
                     self.diagnostics.push(Diagnostic::error(
                         "type mismatch in assignment",
                         func.expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeAssignmentTypeMismatch));
                 }
                 match assign {
                     AssignKind::Let => {
@@ -4056,11 +4375,13 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "cannot set undefined variable",
                                 func.expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypeUndefinedVariable));
                         }
                         if !b_mut {
-                            self.diagnostics
-                                .push(Diagnostic::error("variable is not mutable", func.expr.span));
+                            self.diagnostics.push(
+                                Diagnostic::error("variable is not mutable", func.expr.span)
+                                    .with_id(DiagnosticId::TypeImmutableMutation),
+                            );
                         }
                         return Some(StackEntry {
                             ty: self.ctx.unit(),
@@ -4083,7 +4404,7 @@ impl<'a> BlockChecker<'a> {
                 self.diagnostics.push(Diagnostic::error(
                     format!("undefined variable for assignment: {}", name),
                     func.expr.span,
-                ));
+                ).with_id(DiagnosticId::TypeAssignmentUndefinedVariable));
                 return None;
             }
         }
@@ -4095,14 +4416,14 @@ impl<'a> BlockChecker<'a> {
                     self.diagnostics.push(Diagnostic::error(
                         "if expects three arguments",
                         func.expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeIfArityMismatch));
                     return None;
                 }
                 if self.ctx.unify(args[0].ty, self.ctx.bool()).is_err() {
                     self.diagnostics.push(Diagnostic::error(
                         "if condition must be bool",
                         args[0].expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeIfConditionTypeMismatch));
                 }
                 let branch_ty = self.ctx.unify(args[1].ty, args[2].ty).unwrap_or(args[1].ty);
                 return Some(StackEntry {
@@ -4126,20 +4447,20 @@ impl<'a> BlockChecker<'a> {
                     self.diagnostics.push(Diagnostic::error(
                         "while expects two arguments",
                         func.expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeWhileArityMismatch));
                     return None;
                 }
                 if self.ctx.unify(args[0].ty, self.ctx.bool()).is_err() {
                     self.diagnostics.push(Diagnostic::error(
                         "while condition must be bool",
                         args[0].expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeWhileConditionTypeMismatch));
                 }
                 if self.ctx.unify(args[1].ty, self.ctx.unit()).is_err() {
                     self.diagnostics.push(Diagnostic::error(
                         "while body must be unit",
                         args[1].expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeWhileBodyTypeMismatch));
                 }
                 return Some(StackEntry {
                     ty: self.ctx.unit(),
@@ -4347,7 +4668,7 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "type arguments do not match any overload",
                                 func.expr.span,
-                            ).with_id(DiagnosticId::TypeNoMatchingOverload));
+                            ).with_id(DiagnosticId::TypeOverloadTypeArgsMismatch));
                         } else {
                             self.diagnostics.push(Diagnostic::error(
                                 "no matching overload found",
@@ -4438,7 +4759,7 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "argument type mismatch",
                                 arg.expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypeArgumentTypeMismatch));
                         }
                     }
                     if matches!(self.current_effect, Effect::Pure) && matches!(c_effect, Effect::Impure)
@@ -4686,7 +5007,7 @@ impl<'a> BlockChecker<'a> {
                     self.diagnostics.push(Diagnostic::error(
                         "variable is not callable",
                         func.expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeVariableNotCallable));
                     return None;
                 }
             }
@@ -4705,7 +5026,7 @@ impl<'a> BlockChecker<'a> {
                     self.diagnostics.push(Diagnostic::error(
                         "capturing function cannot be used as a function value yet",
                         func.expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
                     false
                 } else {
                     true
@@ -4724,7 +5045,7 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             "capturing function cannot be passed as a function value yet",
                             func.expr.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
                         false
                     } else {
                         true
@@ -4737,7 +5058,7 @@ impl<'a> BlockChecker<'a> {
             self.diagnostics.push(Diagnostic::error(
                 "indirect call requires a function value",
                 func.expr.span,
-            ));
+            ).with_id(DiagnosticId::TypeIndirectCallRequiresFunctionValue));
             return None;
         }
 
