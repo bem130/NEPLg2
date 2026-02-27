@@ -2618,28 +2618,16 @@ impl Parser {
                 let idx = match role_to_index(r) {
                     Some(i) => i,
                     None => {
-                        return Err(
-                            Diagnostic::error("invalid marker in this if-layout form", expr.span)
-                                .with_id(DiagnosticId::ParserUnexpectedToken),
-                        );
+                        return Err(Diagnostic::error("invalid marker in this if-layout form", expr.span));
                     }
                 };
                 if let Some(prev_idx) = last_role_idx {
                     if idx < prev_idx {
-                        return Err(
-                            Diagnostic::error(
-                                "invalid marker order in if-layout block",
-                                expr.span,
-                            )
-                            .with_id(DiagnosticId::ParserUnexpectedToken),
-                        );
+                        return Err(Diagnostic::error("invalid marker order in if-layout block", expr.span));
                     }
                 }
                 if slots[idx].is_some() {
-                    return Err(
-                        Diagnostic::error("duplicate marker in if-layout block", expr.span)
-                            .with_id(DiagnosticId::ParserUnexpectedToken),
-                    );
+                    return Err(Diagnostic::error("duplicate marker in if-layout block", expr.span));
                 }
                 slots[idx] = Some(expr);
                 last_role_idx = Some(idx);
@@ -2648,10 +2636,7 @@ impl Parser {
                     next_unfilled += 1;
                 }
                 if next_unfilled >= expected {
-                    return Err(
-                        Diagnostic::error("too many expressions in if-layout block", expr.span)
-                            .with_id(DiagnosticId::ParserUnexpectedToken),
-                    );
+                    return Err(Diagnostic::error("too many expressions in if-layout block", expr.span));
                 }
                 slots[next_unfilled] = Some(expr);
                 next_unfilled += 1;
@@ -2659,10 +2644,10 @@ impl Parser {
         }
 
         if slots.iter().any(|s| s.is_none()) {
-            return Err(
-                Diagnostic::error("missing expression(s) in if-layout block", header_span)
-                    .with_id(DiagnosticId::ParserExpectedToken),
-            );
+            return Err(Diagnostic::error(
+                "missing expression(s) in if-layout block",
+                header_span,
+            ));
         }
 
         Ok(slots.into_iter().map(|s| s.unwrap()).collect())
@@ -2681,23 +2666,17 @@ impl Parser {
             let mut expr = match stmt {
                 Stmt::Expr(e) | Stmt::ExprSemi(e, _) => e,
                 other => {
-                    return Err(
-                        Diagnostic::error(
-                            "only expressions are allowed in if-layout block",
-                            self.stmt_span(&other),
-                        )
-                        .with_id(DiagnosticId::ParserUnexpectedToken),
-                    );
+                    return Err(Diagnostic::error(
+                        "only expressions are allowed in if-layout block",
+                        self.stmt_span(&other),
+                    ));
                 }
             };
 
             if let Some(role) = Self::take_role_from_expr(&mut expr) {
                 if expr.items.is_empty() {
                     if pending_role.is_some() {
-                        return Err(
-                            Diagnostic::error("duplicate marker in if-layout block", expr.span)
-                                .with_id(DiagnosticId::ParserUnexpectedToken),
-                        );
+                        return Err(Diagnostic::error("duplicate marker in if-layout block", expr.span));
                     }
                     pending_role = Some(role);
                 } else {
@@ -2711,10 +2690,10 @@ impl Parser {
         }
 
         if pending_role.is_some() {
-            return Err(
-                Diagnostic::error("missing expression(s) in if-layout block", header_span)
-                    .with_id(DiagnosticId::ParserExpectedToken),
-            );
+            return Err(Diagnostic::error(
+                "missing expression(s) in if-layout block",
+                header_span,
+            ));
         }
 
         let mut slots: Vec<Option<PrefixExpr>> = vec![None; expected];
@@ -2736,28 +2715,16 @@ impl Parser {
                 let idx = match role_to_index(r) {
                     Some(i) => i,
                     None => {
-                        return Err(
-                            Diagnostic::error("invalid marker in this if-layout form", expr.span)
-                                .with_id(DiagnosticId::ParserUnexpectedToken),
-                        );
+                        return Err(Diagnostic::error("invalid marker in this if-layout form", expr.span));
                     }
                 };
                 if let Some(prev_idx) = last_role_idx {
                     if idx < prev_idx {
-                        return Err(
-                            Diagnostic::error(
-                                "invalid marker order in if-layout block",
-                                expr.span,
-                            )
-                            .with_id(DiagnosticId::ParserUnexpectedToken),
-                        );
+                        return Err(Diagnostic::error("invalid marker order in if-layout block", expr.span));
                     }
                 }
                 if slots[idx].is_some() {
-                    return Err(
-                        Diagnostic::error("duplicate marker in if-layout block", expr.span)
-                            .with_id(DiagnosticId::ParserUnexpectedToken),
-                    );
+                    return Err(Diagnostic::error("duplicate marker in if-layout block", expr.span));
                 }
                 slots[idx] = Some(expr);
                 last_role_idx = Some(idx);
@@ -2766,10 +2733,7 @@ impl Parser {
                     next_unfilled += 1;
                 }
                 if next_unfilled >= expected {
-                    return Err(
-                        Diagnostic::error("too many expressions in if-layout block", expr.span)
-                            .with_id(DiagnosticId::ParserUnexpectedToken),
-                    );
+                    return Err(Diagnostic::error("too many expressions in if-layout block", expr.span));
                 }
                 slots[next_unfilled] = Some(expr);
                 next_unfilled += 1;
@@ -2777,10 +2741,10 @@ impl Parser {
         }
 
         if slots.iter().any(|s| s.is_none()) {
-            return Err(
-                Diagnostic::error("missing expression(s) in if-layout block", header_span)
-                    .with_id(DiagnosticId::ParserExpectedToken),
-            );
+            return Err(Diagnostic::error(
+                "missing expression(s) in if-layout block",
+                header_span,
+            ));
         }
 
         Ok(slots.into_iter().map(|s| s.unwrap()).collect())
@@ -2871,20 +2835,14 @@ impl Parser {
                 let idx = match role_to_index(r) {
                     Some(i) => i,
                     None => {
-                        return Err(
-                            Diagnostic::error(
-                                "invalid marker in this while-layout form",
-                                expr.span,
-                            )
-                            .with_id(DiagnosticId::ParserUnexpectedToken),
-                        );
+                        return Err(Diagnostic::error(
+                            "invalid marker in this while-layout form",
+                            expr.span,
+                        ));
                     }
                 };
                 if slots[idx].is_some() {
-                    return Err(
-                        Diagnostic::error("duplicate marker in while-layout block", expr.span)
-                            .with_id(DiagnosticId::ParserUnexpectedToken),
-                    );
+                    return Err(Diagnostic::error("duplicate marker in while-layout block", expr.span));
                 }
                 slots[idx] = Some(expr);
             } else {
@@ -2892,10 +2850,10 @@ impl Parser {
                     next_unfilled += 1;
                 }
                 if next_unfilled >= expected {
-                    return Err(
-                        Diagnostic::error("too many expressions in while-layout block", expr.span)
-                            .with_id(DiagnosticId::ParserUnexpectedToken),
-                    );
+                    return Err(Diagnostic::error(
+                        "too many expressions in while-layout block",
+                        expr.span,
+                    ));
                 }
                 slots[next_unfilled] = Some(expr);
                 next_unfilled += 1;
@@ -2903,10 +2861,10 @@ impl Parser {
         }
 
         if slots.iter().any(|s| s.is_none()) {
-            return Err(
-                Diagnostic::error("missing expression(s) in while-layout block", header_span)
-                    .with_id(DiagnosticId::ParserExpectedToken),
-            );
+            return Err(Diagnostic::error(
+                "missing expression(s) in while-layout block",
+                header_span,
+            ));
         }
 
         Ok(slots.into_iter().map(|s| s.unwrap()).collect())
@@ -2923,18 +2881,18 @@ impl Parser {
                 Stmt::Expr(e) | Stmt::ExprSemi(e, _) => exprs.push(e),
                 other => {
                     let sp = self.stmt_span(&other);
-                    return Err(
-                        Diagnostic::error("only expressions are allowed in argument layout", sp)
-                            .with_id(DiagnosticId::ParserUnexpectedToken),
-                    );
+                    return Err(Diagnostic::error(
+                        "only expressions are allowed in argument layout",
+                        sp,
+                    ));
                 }
             }
         }
         if exprs.is_empty() {
-            return Err(
-                Diagnostic::error("argument layout block must contain expressions", header_span)
-                    .with_id(DiagnosticId::ParserExpectedToken),
-            );
+            return Err(Diagnostic::error(
+                "argument layout block must contain expressions",
+                header_span,
+            ));
         }
         Ok(exprs)
     }
