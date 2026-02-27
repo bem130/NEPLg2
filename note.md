@@ -4570,3 +4570,21 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/tests/hashset.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/collections-scope-v2.json -j 2`
   - 結果: `57/57 pass`
+
+# 2026-02-27 作業メモ (collections: hashmap の struct 隠蔽を完了)
+- 目的:
+  - `hashmap` 公開 API の `i32` ポインタ露出を除去し、他 collections と同じ方針（型隠蔽 + move規則準拠）へ揃える。
+- 実装:
+  - `stdlib/alloc/collections/hashmap.nepl`
+    - `struct HashMap<.V>` を公開型として使用。
+    - `hashmap_new` の戻り値を `HashMap<.V>` へ変更。
+    - `hashmap_insert` / `hashmap_remove` を `HashMap<.V> -> HashMap<.V>` へ変更。
+    - `hashmap_get` / `hashmap_contains` / `hashmap_len` / `hashmap_free` を `HashMap<.V>` 引数へ変更。
+    - 内部アクセスは `get hm "hdr"` 経由へ統一。
+  - テスト更新:
+    - `stdlib/tests/hashmap.n.md`: 新シグネチャ + move規則に合わせてケースを再構成。
+    - `tests/pipe_collections.n.md`: `pipe_hashmap_usage` を `HashMap<.V>` 版へ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/collections-scope-v3.json -j 2`
+  - 結果: `60/60 pass`

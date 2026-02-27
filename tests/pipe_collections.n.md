@@ -143,16 +143,25 @@ ret: 1
 #import "core/option" as *
 
 fn main <()*>i32> ():
-    let hm <i32> hashmap_new<i32>;
-    hm |> hashmap_insert<i32> 7 70;
-    hm |> hashmap_insert<i32> 9 90;
-    let ok0 <bool> eq hashmap_len<i32> hm 2;
-    let ok1 <bool> match hashmap_get<i32> hm 9:
+    let hm0 <HashMap<i32>>:
+        hashmap_new<i32>
+        |> hashmap_insert<i32> 7 70
+        |> hashmap_insert<i32> 9 90;
+    let ok0 <bool> eq hashmap_len<i32> hm0 2;
+    let hm1 <HashMap<i32>>:
+        hashmap_new<i32>
+        |> hashmap_insert<i32> 7 70
+        |> hashmap_insert<i32> 9 90;
+    let ok1 <bool> match hashmap_get<i32> hm1 9:
         Option::Some v:
             eq v 90
         Option::None:
             false
-    let ok2 <bool> hashmap_contains<i32> hm 7;
+    let hm2 <HashMap<i32>>:
+        hashmap_new<i32>
+        |> hashmap_insert<i32> 7 70
+        |> hashmap_insert<i32> 9 90;
+    let ok2 <bool> hashmap_contains<i32> hm2 7;
     if and ok0 and ok1 ok2 1 0
 ```
 

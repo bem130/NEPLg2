@@ -19,6 +19,10 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/option" as *
+#import "core/field" as *
+
+struct HashMap<.V>:
+    hdr <i32>
 
 // hashmap: i32 キーの簡易ハッシュマップ
 //
@@ -93,7 +97,7 @@ fn hash_i32 <(i32)->i32> (key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashmap_new <.V> <()*>i32> ():
+fn hashmap_new <.V> <()*>HashMap<.V>> ():
     let cap <i32> 16
     let entry_size <i32> add 8 size_of<.V>
     let entries <i32> alloc mul cap entry_size
@@ -106,7 +110,7 @@ fn hashmap_new <.V> <()*>i32> ():
     store_i32 header 0  // count
     store_i32 add header 4 cap
     store_i32 add header 8 entries
-    header
+    HashMap<.V> header
 
 // hashmap_insert: キーに値を設定する
 //
@@ -134,9 +138,10 @@ fn hashmap_new <.V> <()*>i32> ():
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashmap_insert <.V> <(i32,i32,.V)*>()> (hm, key, val):
-    let cap <i32> load_i32 add hm 4
-    let entries <i32> load_i32 add hm 8
+fn hashmap_insert <.V> <(HashMap<.V>,i32,.V)*>HashMap<.V>> (hm, key, val):
+    let hdr <i32> get hm "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
     let idx <i32> mod_s abs hash_i32 key cap
     let mut cur <i32> idx
@@ -151,7 +156,7 @@ fn hashmap_insert <.V> <(i32,i32,.V)*>()> (hm, key, val):
                     store_i32 entry 1
                     store_i32 add entry 4 key
                     store<.V> add entry 8 val
-                    store_i32 hm add load_i32 hm 1
+                    store_i32 hdr add load_i32 hdr 1
                     set found 1
                 else:
                     let ekey <i32> load_i32 add entry 4
@@ -166,6 +171,7 @@ fn hashmap_insert <.V> <(i32,i32,.V)*>()> (hm, key, val):
                                 eq cur idx
                                 set found 1
                                 ()
+    hm
 
 // hashmap_get_loop: 線形探索の内部ループ
 //
@@ -243,9 +249,10 @@ fn hashmap_get_loop <.V> <(i32,i32,i32,i32,i32,i32)->Option<.V>> (entries, entry
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashmap_get <.V> <(i32,i32)->Option<.V>> (hm, key):
-    let cap <i32> load_i32 add hm 4
-    let entries <i32> load_i32 add hm 8
+fn hashmap_get <.V> <(HashMap<.V>,i32)->Option<.V>> (hm, key):
+    let hdr <i32> get hm "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
     let idx <i32> mod_s abs hash_i32 key cap
     hashmap_get_loop<.V> entries entry_size cap idx idx key
@@ -276,7 +283,7 @@ fn hashmap_get <.V> <(i32,i32)->Option<.V>> (hm, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashmap_contains <.V> <(i32,i32)->bool> (hm, key):
+fn hashmap_contains <.V> <(HashMap<.V>,i32)->bool> (hm, key):
     is_some<.V> hashmap_get<.V> hm key
 
 // hashmap_remove: キーを削除する
@@ -305,13 +312,13 @@ fn hashmap_contains <.V> <(i32,i32)->bool> (hm, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashmap_remove <.V> <(i32,i32)*>Option<.V>> (hm, key):
-    let cap <i32> load_i32 add hm 4
-    let entries <i32> load_i32 add hm 8
+fn hashmap_remove <.V> <(HashMap<.V>,i32)*>HashMap<.V>> (hm, key):
+    let hdr <i32> get hm "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
     let idx <i32> mod_s abs hash_i32 key cap
     let mut cur <i32> idx
-    let mut result <Option<.V>> none<.V>
     let mut done <i32> 0
     while eq done 0:
         do:
@@ -325,9 +332,8 @@ fn hashmap_remove <.V> <(i32,i32)*>Option<.V>> (hm, key):
                     if:
                         eq ekey key
                         then:
-                            set result some<.V> load<.V> add entry 8
                             store_i32 entry 0  // mark empty
-                            store_i32 hm sub load_i32 hm 1
+                            store_i32 hdr sub load_i32 hdr 1
                             set done 1
                         else:
                             set cur mod_s add cur 1 cap
@@ -335,7 +341,7 @@ fn hashmap_remove <.V> <(i32,i32)*>Option<.V>> (hm, key):
                                 eq cur idx
                                 set done 1
                                 ()
-    result
+    hm
 
 // hashmap_len: 要素数を返す
 //
@@ -363,8 +369,9 @@ fn hashmap_remove <.V> <(i32,i32)*>Option<.V>> (hm, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashmap_len <.V> <(i32)->i32> (hm):
-    load_i32 hm
+fn hashmap_len <.V> <(HashMap<.V>)->i32> (hm):
+    let hdr <i32> get hm "hdr"
+    load_i32 hdr
 
 // hashmap_free: メモリを解放する
 //
@@ -392,12 +399,13 @@ fn hashmap_len <.V> <(i32)->i32> (hm):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashmap_free <.V> <(i32)*>()> (hm):
-    let cap <i32> load_i32 add hm 4
-    let entries <i32> load_i32 add hm 8
+fn hashmap_free <.V> <(HashMap<.V>)*>()> (hm):
+    let hdr <i32> get hm "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
     dealloc entries mul cap entry_size
-    dealloc hm 12
+    dealloc hdr 12
 
 // abs: 絶対値を返す
 //
