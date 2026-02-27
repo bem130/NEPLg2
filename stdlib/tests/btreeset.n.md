@@ -18,32 +18,30 @@ fn main <()*> ()> ():
     assert btreeset_is_empty s0
     test_checked "new"
 
-    s0 |> btreeset_insert 5 |> assert;
-
-    s0 |> btreeset_insert 1 |> assert;
-
-    s0 |> btreeset_insert 3 |> assert;
+    assert btreeset_insert s0 5
+    assert btreeset_insert s0 1
+    assert btreeset_insert s0 3
 
     assert_eq_i32 3 btreeset_len s0
-    s0 |> btreeset_contains 1 |> assert;
-    s0 |> btreeset_contains 3 |> assert;
-    s0 |> btreeset_contains 5 |> assert;
-    s0 |> btreeset_contains 2 |> assert_ne true;
+    assert btreeset_contains s0 1
+    assert btreeset_contains s0 3
+    assert btreeset_contains s0 5
+    assert_ne true btreeset_contains s0 2
     test_checked "insert"
 
-    s0 |> btreeset_insert 3 |> assert_ne true;
+    assert_ne true btreeset_insert s0 3
     assert_eq_i32 3 btreeset_len s0
 
-    s0 |> btreeset_remove 1 |> assert;
-    s0 |> btreeset_contains 1 |> assert_ne true;
+    assert btreeset_remove s0 1
+    assert_ne true btreeset_contains s0 1
     assert_eq_i32 2 btreeset_len s0
     test_checked "remove"
 
-    s0 |> btreeset_remove 42 |> assert_ne true;
+    assert_ne true btreeset_remove s0 42
     btreeset_clear s0
     assert_eq_i32 0 btreeset_len s0
     assert btreeset_is_empty s0
-    s0 |> btreeset_contains 3 |> assert_ne true;
+    assert_ne true btreeset_contains s0 3
     test_checked "clear"
     btreeset_free s0
     ()

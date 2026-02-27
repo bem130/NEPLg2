@@ -16,7 +16,7 @@ neplg2:test
 #import "std/test" as *
 
 fn main <()*> ()> ():
-    match fs_read_to_string "stdlib/tests/fs.nepl":
+    match fs_read_to_string "stdlib/tests/fs.n.md":
         Result::Ok s:
             assert lt 0 len s;
             ()

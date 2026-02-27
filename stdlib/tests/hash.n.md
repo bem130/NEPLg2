@@ -7,6 +7,7 @@ neplg2:test
 
 #entry test_hash
 #indent 4
+#target std
 #import "alloc/hash/fnv1a32" as *
 #import "alloc/hash/sha256" as *
 #import "std/test" as *

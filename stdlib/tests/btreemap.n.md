@@ -20,26 +20,25 @@ fn main <()*> ()> ():
     assert_ne true btreemap_contains<i32> m0 1
     test_checked "new"
 
-    btreemap_insert<i32> m0 5 50;
-    btreemap_insert<i32> m0 1 10;
-    btreemap_insert<i32> m0 3 30;
-    let m1 <i32> m0;
-    assert_eq_i32 3 btreemap_len<i32> m1
-    m1 |> btreemap_contains<i32> 1 |> assert;
-    m1 |> btreemap_contains<i32> 3 |> assert;
-    m1 |> btreemap_contains<i32> 5 |> assert;
-    m1 |> btreemap_contains<i32> 2 |> assert_ne true;
+    assert is_none<i32> btreemap_insert<i32> m0 5 50
+    assert is_none<i32> btreemap_insert<i32> m0 1 10
+    assert is_none<i32> btreemap_insert<i32> m0 3 30
+    assert_eq_i32 3 btreemap_len<i32> m0
+    assert btreemap_contains<i32> m0 1
+    assert btreemap_contains<i32> m0 3
+    assert btreemap_contains<i32> m0 5
+    assert_ne true btreemap_contains<i32> m0 2
     test_checked "insert"
 
-    match m1 |> btreemap_get<i32> 1:
+    match btreemap_get<i32> m0 1:
         Option::Some v:
             assert_eq_i32 10 v
         Option::None:
             test_fail "btreemap_get 1 returned None"
 
-    m1 |> btreemap_get<i32> 2 |> is_none<i32> |> assert;
+    assert is_none<i32> btreemap_get<i32> m0 2
 
-    match btreemap_insert<i32> m1 3 31:
+    match btreemap_insert<i32> m0 3 31:
         Option::Some v:
             assert_eq_i32 30 v
         Option::None:
@@ -47,21 +46,21 @@ fn main <()*> ()> ():
     assert_eq_i32 3 btreemap_len<i32> m0
     test_checked "update"
 
-    match btreemap_remove<i32> m1 1:
+    match btreemap_remove<i32> m0 1:
         Option::Some v:
             assert_eq_i32 10 v
         Option::None:
             test_fail "remove existing returned None"
-    assert_eq_i32 2 btreemap_len<i32> m1
-    m1 |> btreemap_get<i32> 1 |> is_none<i32> |> assert;
+    assert_eq_i32 2 btreemap_len<i32> m0
+    assert is_none<i32> btreemap_get<i32> m0 1
     test_checked "remove"
 
-    btreemap_remove<i32> m1 42;
-    btreemap_clear<i32> m1;
-    assert_eq_i32 0 btreemap_len<i32> m1
-    assert btreemap_is_empty<i32> m1
-    m1 |> btreemap_contains<i32> 5 |> assert_ne true;
+    assert is_none<i32> btreemap_remove<i32> m0 42
+    btreemap_clear<i32> m0
+    assert_eq_i32 0 btreemap_len<i32> m0
+    assert btreemap_is_empty<i32> m0
+    assert_ne true btreemap_contains<i32> m0 5
     test_checked "clear"
-    btreemap_free<i32> m1
+    btreemap_free<i32> m0
     ()
 ```

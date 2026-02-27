@@ -118,6 +118,7 @@ fn main <()->i32> ():
 ## overload_new_ambiguous_without_expected_type
 
 neplg2:test[compile_fail]
+diag_id: 3005
 ```neplg2
 #entry main
 #indent 4
@@ -206,4 +207,120 @@ fn use_bool <(bool)->i32> (b):
 
 fn main <()->i32> ():
     use_bool choice 7
+```
+
+## overload_select_by_arity
+
+neplg2:test[compile_fail]
+diag_id: 3003
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn calc <(i32)->i32> (a):
+    i32_add a 1
+
+fn calc <(i32,i32)->i32> (a, b):
+    i32_add a b
+
+fn pick_unary <()->(i32)->i32> ():
+    calc
+
+fn pick_binary <()->(i32,i32)->i32> ():
+    calc
+
+fn main <()->i32> ():
+    let u pick_unary
+    let v pick_binary
+    let a <i32> u 5
+    let b <i32> v 3 4
+    i32_add a b
+```
+
+## overload_select_by_parameter_context
+
+neplg2:test
+ret: 2
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn choose <(i32)->i32> (v):
+    v
+
+fn choose <(i32)->bool> (v):
+    i32_ne v 0
+
+fn take_i32 <(i32)->i32> (v):
+    v
+
+fn take_bool <(bool)->i32> (v):
+    if v 2 0
+
+fn main <()->i32> ():
+    i32_add take_i32 choose 10 take_bool choose 1
+```
+
+## overload_select_by_explicit_result_ascription
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn convert <(i32)->i32> (v):
+    v
+
+fn convert <(i32)->bool> (v):
+    i32_ne v 0
+
+fn main <()->i32> ():
+    let b <bool> <bool> convert 9;
+    if b 1 0
+```
+
+## overload_ambiguous_same_input_no_context
+
+neplg2:test[compile_fail]
+diag_id: 3005
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn cast_like <(i32)->i32> (v):
+    v
+
+fn cast_like <(i32)->bool> (v):
+    i32_ne v 0
+
+fn main <()->i32> ():
+    cast_like 1
+```
+
+## overload_no_matching_by_argument_type
+
+neplg2:test[compile_fail]
+diag_id: 3006
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn parse <(i32,i32)->i32> (a, b):
+    a
+
+fn parse <(bool,bool)->i32> (a, b):
+    if a 1 0
+
+fn main <()->i32> ():
+    parse 1 true
 ```

@@ -3,6 +3,7 @@
 ## cliarg_main
 
 neplg2:test
+argv: ["--flag", "value"]
 ```neplg2
 
 #entry main

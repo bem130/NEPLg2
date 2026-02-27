@@ -7,6 +7,7 @@ neplg2:test
 
 #entry test_rand
 #indent 4
+#target std
 #import "core/rand/xorshift32" as *
 #import "std/test" as *
 #import "core/math" as *

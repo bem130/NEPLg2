@@ -203,6 +203,7 @@ function collectTestsFromPath(inputPath) {
                 expected_stdout: dt.stdout ?? null,
                 expected_stderr: dt.stderr ?? null,
                 expected_diag_ids: Array.isArray(dt.diag_ids) ? dt.diag_ids : [],
+                argv: Array.isArray(dt.argv) ? dt.argv : null,
             });
         }
     }
@@ -284,6 +285,7 @@ async function runAll(cases, jobs, distHint) {
                 source: c.source,
                 tags: c.tags,
                 stdin: c.stdin || '',
+                argv: Array.isArray(c.argv) ? c.argv : [],
                 distHint,
             };
             const r = await runSingle(req, loaded);
