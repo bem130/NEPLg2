@@ -4925,3 +4925,20 @@
   - `219/219 pass`
 - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-sizeof.json --no-tree`
   - `678/678 pass`
+
+# 2026-02-27 作業メモ (collections の Diag テスト追加)
+## 実施内容
+- `tests/collections_diag.n.md` を新規追加。
+- 追加した検証:
+  - `hashmap_remove` の未存在キーで `KeyNotFound` が返ること
+  - `hashset_remove` の未存在キーで `KeyNotFound` が返ること
+  - `hashmap_insert` の容量超過で `CapacityExceeded` が返ること
+  - `hashset_insert` の容量超過で `CapacityExceeded` が返ること
+- `diag_code_str d.code` を使ってコード一致を固定化。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i tests/collections_diag.n.md -o /tmp/tests-collections-diag.json --no-tree`
+  - `209/209 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-collections-diag.json --no-tree`
+  - `682/682 pass`
