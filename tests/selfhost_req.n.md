@@ -42,7 +42,7 @@ ret: 222
 
 #entry main
 #indent 4
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/cast" as *
 #import "core/option" as *
 
@@ -74,7 +74,7 @@ ret: 0
 #entry main
 #indent 4
 #import "alloc/string" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/option" as *
 
 fn main <()*>i32> ():

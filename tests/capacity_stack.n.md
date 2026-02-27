@@ -51,7 +51,7 @@ ret: 4096
 #indent 4
 #target core
 #import "core/math" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 
 fn main <()->i32> ():
     let mut v vec_new<i32>;
@@ -125,7 +125,7 @@ ret: 15
 #target core
 #import "core/math" as *
 #import "core/option" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 
 enum Kind:
     A

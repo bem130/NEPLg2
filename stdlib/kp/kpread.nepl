@@ -20,7 +20,7 @@
 #import "core/math" as *
 #import "core/option" as *
 #import "kp/kpread_core" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/field" as *
 
 fn scanner_new <()*>i32> ():

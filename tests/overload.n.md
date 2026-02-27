@@ -144,7 +144,7 @@ ret: 8
 #indent 4
 #target core
 #import "alloc/string" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/math" as *
 
 fn size <(str)->i32> (s):
@@ -171,7 +171,7 @@ ret: 2
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 
 fn new <()*>Vec<i32>> ():
     vec_new<i32>

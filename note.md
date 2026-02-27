@@ -4668,3 +4668,33 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> pass
   - `NO_COLOR=false node nodesrc/tests.js -i stdlib/alloc/collections/stack.nepl -i stdlib/tests/stack.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stack-safe-scope.json -j 2` -> `84/84 pass`
+
+# 2026-02-27 作業メモ (collections再配置: vec/sort を collections 配下へ移動)
+- 目的:
+  - `todo.md` の collections 再設計項目に沿って `vec/sort` を新配置へ移行する。
+- 実装:
+  - `stdlib/alloc/vec.nepl` -> `stdlib/alloc/collections/vec.nepl` へ移動。
+  - `stdlib/alloc/sort.nepl` -> `stdlib/alloc/collections/vec/sort.nepl` へ移動。
+  - `stdlib` / `tests` / `examples` / `tutorials` の import を一括更新:
+    - `"alloc/vec"` -> `"alloc/collections/vec"`
+    - `"alloc/sort"` -> `"alloc/collections/vec/sort"`
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - 次を対象に dual 実行: `243/243 pass`
+    - `stdlib/alloc/collections/vec.nepl`
+    - `stdlib/alloc/collections/vec/sort.nepl`
+    - `stdlib/alloc/encoding/json.nepl`
+    - `stdlib/alloc/hash/sha256.nepl`
+    - `stdlib/alloc/string.nepl`
+    - `stdlib/kp/kpgraph.nepl`
+    - `stdlib/kp/kpread.nepl`
+    - `stdlib/std/fs.nepl`
+    - `stdlib/tests/hash.n.md`
+    - `stdlib/tests/string.n.md`
+    - `stdlib/tests/vec.n.md`
+    - `tests/capacity_stack.n.md`
+    - `tests/overload.n.md`
+    - `tests/selfhost_req.n.md`
+    - `tests/sort.n.md`
+- 補足:
+  - `--changed` 全体実行では、既存のローカル変更 `stdlib/nm/parser.nepl` に起因する失敗が混ざるため、今回の移設検証は影響範囲を明示指定して実施した。

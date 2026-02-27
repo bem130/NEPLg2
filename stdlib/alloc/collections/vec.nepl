@@ -21,7 +21,7 @@
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 0 vec_len vec_new<i32>;
 //:     let a0 vec_new<i32>;
@@ -43,7 +43,7 @@
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()*>()> ():
 //:     let v0 vec_with_capacity<i32> 2;
 //:     let v1 vec_push<i32> v0 1;
@@ -63,7 +63,7 @@
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v0 vec_new<i32>;
 //:     let v1 vec_push<i32> v0 11;
@@ -118,7 +118,7 @@ struct Vec<.T>:
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v vec_new<i32>;
 //:     if eq vec_len<i32> v 0 0 1
@@ -148,7 +148,7 @@ fn vec_new <.T> <()*>Vec<.T>> ():
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v vec_with_capacity<i32> 16;
 //:     if eq vec_cap<i32> v 16 0 1
@@ -177,7 +177,7 @@ fn vec_with_capacity <.T> <(i32)*>Vec<.T>> (cap):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v0 vec_new<i32>;
 //:     let v1 vec_push<i32> v0 3;
@@ -206,7 +206,7 @@ fn vec_len <.T> <(Vec<.T>)->i32> (v):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v vec_new<i32>;
 //:     if gt vec_cap<i32> v 0 0 1
@@ -234,7 +234,7 @@ fn vec_cap <.T> <(Vec<.T>)->i32> (v):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v vec_new<i32>;
 //:     if gt vec_data_ptr<i32> v 0 0 1
@@ -263,7 +263,7 @@ fn vec_data_ptr <.T> <(Vec<.T>)->i32> (v):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //:| #import "core/field" as *
 //: fn main <()->i32> ():
 //:     let v0 vec_new<i32>;
@@ -298,7 +298,7 @@ fn vec_data_len <.T> <(Vec<.T>)->.Pair> (v):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v vec_new<i32>;
 //:     if vec_is_empty<i32> v 0 1
@@ -326,7 +326,7 @@ fn vec_is_empty <.T> <(Vec<.T>)->bool> (v):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v0 vec_new<i32>;
 //:     let v1 vec_push<i32> v0 7;
@@ -369,7 +369,7 @@ fn vec_push <.T> <(Vec<.T>,.T)*>Vec<.T>> (v, item):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():
 //:     let v0 vec_new<i32>;
@@ -414,7 +414,7 @@ fn vec_get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():
 //:     let v0 vec_new<i32>;
@@ -456,7 +456,7 @@ fn vec_set <.T> <(Vec<.T>,i32,.T)*>()> (v, idx, item):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():
 //:     let v0 vec_new<i32>;
@@ -502,7 +502,7 @@ fn vec_pop <.T> <(Vec<.T>)*>.Pair> (v):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v0 vec_new<i32>;
 //:     let v1 vec_push<i32> v0 1;
@@ -534,7 +534,7 @@ fn vec_clear <.T> <(Vec<.T>)*>Vec<.T>> (v):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v vec_new<i32>;
 //:     vec_free<i32> v;
@@ -565,7 +565,7 @@ fn vec_free <.T> <(Vec<.T>)*>()> (v):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //: fn main <()->i32> ():
 //:     let v:
 //:         vec_new<i32>

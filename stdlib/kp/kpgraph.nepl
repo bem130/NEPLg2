@@ -21,7 +21,7 @@
 //:| #import "kp/kpread" as *
 //:| #import "kp/kpwrite" as *
 //:| #import "kp/kpgraph" as *
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec" as *
 //:| #import "core/field" as *
 //:| #import "core/mem" as *
 //: fn main <()*> ()> ():
@@ -53,7 +53,7 @@
 
 #import "core/mem" as *
 #import "core/math" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/field" as *
 #import "kp/kpread" as *
 #import "kp/kpwrite" as *

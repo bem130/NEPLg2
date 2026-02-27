@@ -8,8 +8,8 @@ ret: 1234
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/math" as *
 
 fn make_vec4 <()*>Vec<i32>> ():
@@ -33,8 +33,8 @@ ret: 1234
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/math" as *
 
 fn make_vec4 <()*>Vec<i32>> ():
@@ -58,8 +58,8 @@ ret: 1334
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 #import "core/mem" as *
 #import "core/math" as *
@@ -94,8 +94,8 @@ ret: 0
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -113,8 +113,8 @@ ret: 1
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -133,8 +133,8 @@ ret: 5
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -155,8 +155,8 @@ ret: 1234
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/math" as *
 
 fn make_vec4 <()*>Vec<i32>> ():
@@ -180,8 +180,8 @@ ret: 1434
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 #import "core/mem" as *
 #import "core/math" as *
@@ -216,8 +216,8 @@ ret: 0
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -235,8 +235,8 @@ ret: 1
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -255,8 +255,8 @@ ret: 5
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -277,8 +277,8 @@ ret: 1534
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 #import "core/mem" as *
 #import "core/math" as *
@@ -313,8 +313,8 @@ ret: 0
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -332,8 +332,8 @@ ret: 1
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -352,8 +352,8 @@ ret: 5
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/field" as *
 
 fn main <()->i32> ():
@@ -374,8 +374,8 @@ ret: 1234
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/math" as *
 
 fn make_vec4 <()*>Vec<i32>> ():
@@ -399,8 +399,8 @@ ret: 10
 #entry main
 #indent 4
 #target core
-#import "alloc/vec" as *
-#import "alloc/sort" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/math" as *
 
 fn make_vec4 <()*>Vec<i32>> ():
@@ -431,7 +431,7 @@ ret: 1234
 #entry main
 #indent 4
 #target core
-#import "alloc/sort" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/mem" as *
 #import "core/math" as *
 
@@ -459,7 +459,7 @@ ret: 2234
 #entry main
 #indent 4
 #target core
-#import "alloc/sort" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/mem" as *
 #import "core/math" as *
 
@@ -489,7 +489,7 @@ ret: 3234
 #entry main
 #indent 4
 #target core
-#import "alloc/sort" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/mem" as *
 #import "core/math" as *
 
@@ -519,7 +519,7 @@ ret: 4234
 #entry main
 #indent 4
 #target core
-#import "alloc/sort" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/mem" as *
 #import "core/math" as *
 
@@ -538,7 +538,7 @@ ret: 5234
 #entry main
 #indent 4
 #target core
-#import "alloc/sort" as *
+#import "alloc/collections/vec/sort" as *
 #import "core/mem" as *
 #import "core/math" as *
 

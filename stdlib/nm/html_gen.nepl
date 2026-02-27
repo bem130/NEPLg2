@@ -17,7 +17,7 @@
 #indent 4
 
 #import "alloc/string" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/option" as *
 #import "core/mem" as *
 #import "core/math" as *

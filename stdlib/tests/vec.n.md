@@ -9,7 +9,7 @@ neplg2:test
 #indent 4
 #target std
 
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/cast" as *
 #import "core/option" as *
 #import "std/test" as *
