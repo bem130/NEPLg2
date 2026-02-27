@@ -75,16 +75,25 @@ ret: 1
 #import "core/option" as *
 
 fn main <()*>i32> ():
-    let m <i32> btreemap_new<i32>;
-    m |> btreemap_insert<i32> 3 30;
-    m |> btreemap_insert<i32> 1 10;
-    let ok0 <bool> eq btreemap_len<i32> m 2;
-    let ok1 <bool> match btreemap_get<i32> m 3:
+    let m0 <BTreeMap<i32>>:
+        btreemap_new<i32>
+        |> btreemap_insert<i32> 3 30
+        |> btreemap_insert<i32> 1 10;
+    let ok0 <bool> eq btreemap_len<i32> m0 2;
+    let m1 <BTreeMap<i32>>:
+        btreemap_new<i32>
+        |> btreemap_insert<i32> 3 30
+        |> btreemap_insert<i32> 1 10;
+    let ok1 <bool> match btreemap_get<i32> m1 3:
         Option::Some v:
             eq v 30
         Option::None:
             false
-    let ok2 <bool> btreemap_contains<i32> m 1;
+    let m2 <BTreeMap<i32>>:
+        btreemap_new<i32>
+        |> btreemap_insert<i32> 3 30
+        |> btreemap_insert<i32> 1 10;
+    let ok2 <bool> btreemap_contains<i32> m2 1;
     if and ok0 and ok1 ok2 1 0
 ```
 
@@ -101,12 +110,22 @@ ret: 1
 #import "core/math" as *
 
 fn main <()*>i32> ():
-    let s <i32> btreeset_new;
-    s |> btreeset_insert 5;
-    s |> btreeset_insert 2;
-    let ok0 <bool> btreeset_contains s 5;
-    let ok1 <bool> eq btreeset_len s 2;
-    let ok2 <bool> s |> btreeset_remove 5;
+    let s0 <BTreeSet>:
+        btreeset_new
+        |> btreeset_insert 5
+        |> btreeset_insert 2;
+    let ok0 <bool> btreeset_contains s0 5;
+    let s1 <BTreeSet>:
+        btreeset_new
+        |> btreeset_insert 5
+        |> btreeset_insert 2;
+    let ok1 <bool> eq btreeset_len s1 2;
+    let s2 <BTreeSet>:
+        btreeset_new
+        |> btreeset_insert 5
+        |> btreeset_insert 2
+        |> btreeset_remove 5;
+    let ok2 <bool> if btreeset_contains s2 5 false true;
     if and ok0 and ok1 ok2 1 0
 ```
 

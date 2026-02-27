@@ -4532,3 +4532,24 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> pass
   - `NO_COLOR=false node nodesrc/tests.js -i tests/pipe_collections.n.md -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/list.n.md -i stdlib/tests/stack.n.md --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-pipe-collections-hash.json -j 2` -> `547/547 pass`
+
+# 2026-02-27 作業メモ (collections: btreemap/btreeset の struct 隠蔽)
+- 目的:
+  - `collections` の公開 API から `i32` ポインタを隠蔽し、データ型を明示的な struct で扱える形へ寄せる。
+- 実装:
+  - `stdlib/alloc/collections/btreemap.nepl`
+    - `struct BTreeMap<.V>` を追加（`hdr <i32>`）。
+    - 公開関数シグネチャを `i32` から `BTreeMap<.V>` へ変更。
+    - `insert/remove/clear` は更新後の `BTreeMap<.V>` を返す形へ変更。
+  - `stdlib/alloc/collections/btreeset.nepl`
+    - `struct BTreeSet` を追加（`hdr <i32>`）。
+    - 公開関数シグネチャを `i32` から `BTreeSet` へ変更。
+    - `insert/remove/clear` は更新後の `BTreeSet` を返す形へ変更。
+  - テスト更新:
+    - `stdlib/tests/btreemap.n.md`
+    - `stdlib/tests/btreeset.n.md`
+    - `tests/pipe_collections.n.md`
+    - move 規則に合わせ、値取得系（`get/contains/len`）と更新系（`insert/remove`）の利用を再束縛または別インスタンスで分離。
+- 検証:
+  - `node nodesrc/tests.js -i tests/stack_collections.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/collections-scope.json -j 2`
+  - 結果: `54/54 pass`
