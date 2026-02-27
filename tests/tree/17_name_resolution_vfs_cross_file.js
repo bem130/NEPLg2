@@ -37,7 +37,6 @@ fn main <()->i32> ():
             addRef.resolved_def.span.file_path.includes('/stdlib/core/math.nepl'),
             'resolved_def should point to stdlib/core/math.nepl'
         );
-
         return { checked: 5, reference_count: refs.length };
     },
 };

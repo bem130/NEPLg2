@@ -2078,16 +2078,23 @@ pub fn analyze_semantics(source: &str) -> JsValue {
                                 &JsValue::from_str("scope_depth"),
                                 &JsValue::from_f64(def.scope_depth as f64),
                             );
+                        let _ = Reflect::set(
+                            &resolved,
+                            &JsValue::from_str("span"),
+                            &span_to_js(source, def.span),
+                        );
+                        if let Some(doc) = &def.doc {
                             let _ = Reflect::set(
                                 &resolved,
-                                &JsValue::from_str("span"),
-                                &span_to_js(source, def.span),
+                                &JsValue::from_str("doc"),
+                                &JsValue::from_str(doc),
                             );
-                            let _ = Reflect::set(
-                                &item,
-                                &JsValue::from_str("resolved_definition"),
-                                &resolved,
-                            );
+                        }
+                        let _ = Reflect::set(
+                            &item,
+                            &JsValue::from_str("resolved_definition"),
+                            &resolved,
+                        );
                         } else {
                             let _ = Reflect::set(
                                 &item,
@@ -2126,14 +2133,21 @@ pub fn analyze_semantics(source: &str) -> JsValue {
                                 &JsValue::from_str("scope_depth"),
                                 &JsValue::from_f64(def.scope_depth as f64),
                             );
+                        let _ = Reflect::set(
+                            &cand_def,
+                            &JsValue::from_str("span"),
+                            &span_to_js(source, def.span),
+                        );
+                        if let Some(doc) = &def.doc {
                             let _ = Reflect::set(
                                 &cand_def,
-                                &JsValue::from_str("span"),
-                                &span_to_js(source, def.span),
+                                &JsValue::from_str("doc"),
+                                &JsValue::from_str(doc),
                             );
-                            cand_defs.push(&cand_def);
                         }
+                        cand_defs.push(&cand_def);
                     }
+                }
                     let _ = Reflect::set(
                         &item,
                         &JsValue::from_str("candidate_definitions"),
@@ -2424,6 +2438,13 @@ pub fn analyze_semantics_with_vfs(entry_path: &str, source: &str, vfs: JsValue) 
                             &JsValue::from_str("span"),
                             &span_to_js_with_map(source, def.span, Some(&source_map)),
                         );
+                        if let Some(doc) = &def.doc {
+                            let _ = Reflect::set(
+                                &resolved,
+                                &JsValue::from_str("doc"),
+                                &JsValue::from_str(doc),
+                            );
+                        }
                         let _ = Reflect::set(
                             &item,
                             &JsValue::from_str("resolved_definition"),
@@ -2472,6 +2493,13 @@ pub fn analyze_semantics_with_vfs(entry_path: &str, source: &str, vfs: JsValue) 
                             &JsValue::from_str("span"),
                             &span_to_js_with_map(source, def.span, Some(&source_map)),
                         );
+                        if let Some(doc) = &def.doc {
+                            let _ = Reflect::set(
+                                &cand_def,
+                                &JsValue::from_str("doc"),
+                                &JsValue::from_str(doc),
+                            );
+                        }
                         cand_defs.push(&cand_def);
                     }
                 }

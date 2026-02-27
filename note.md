@@ -4130,3 +4130,17 @@
   - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
 - todo反映:
   - `todo.md` 2番から「`analyze_name_resolution` で import/alias/use 跨ぎ時の定義元ファイル情報を返す」を削除（完了）。
+# 2026-02-27 作業メモ (LSP/API phase2 継続: token_resolution に doc 情報を付加)
+- 目的:
+  - Hover 向け表示情報を増やすため、定義ジャンプ情報と同じ経路で doc comment も取得できるようにする。
+- 実装:
+  - `nepl-web/src/lib.rs`
+    - `analyze_semantics` / `analyze_semantics_with_vfs` の `token_resolution` 組み立て時に、
+      `resolved_definition` と `candidate_definitions` へ `doc` を付与（存在時のみ）。
+  - `tests/tree/16_semantics_vfs_cross_file.js`
+  - `tests/tree/17_name_resolution_vfs_cross_file.js`
+    - VFS 跨ぎ定義解決テストを維持しつつ、API回帰が出ないことを確認。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node tests/tree/run.js` -> `17/17 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
