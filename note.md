@@ -4942,3 +4942,30 @@
   - `209/209 pass`
 - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-collections-diag.json --no-tree`
   - `682/682 pass`
+
+# 2026-02-27 作業メモ (alloc/diag 再設計: Diag/Error 連携 + コメント形式統一)
+## 実施内容
+- `stdlib/alloc/diag/error.nepl`
+  - `DiagCode <-> ErrorKind` の相互写像 API を追加:
+    - `diag_code_to_error_kind`
+    - `error_kind_to_diag_code`
+  - `Diag <-> Error` 変換 API を追加:
+    - `diag_to_error`
+    - `error_to_diag`
+  - `Diag` 文字列化を `message` 返却へ変更し、`Diag` フィールド同時参照の move 競合を解消。
+  - ファイル内の非ドキュメントコメント `//` を `//:` に統一。
+- `stdlib/alloc/diag/diag.nepl`
+  - ファイル内の非ドキュメントコメント `//` を `//:` に統一。
+- `stdlib/tests/error.n.md`
+  - `diag_to_error` / `error_to_diag` の往復ケースを追加し、期待値を固定化。
+
+## 根本原因
+- `Diag` は値構造体で、`d.code` と `d.message` の同時参照が move 競合を起こしていた。
+- `diag_to_error` がこの経路を直接踏んでいたため compile fail が発生していた。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i stdlib/tests/error.n.md -i stdlib/tests/diag.n.md -i tests/collections_diag.n.md -o /tmp/tests-diag-redesign-focus.json --no-tree`
+  - `211/211 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-diag-redesign.json --no-tree`
+  - `682/682 pass`
