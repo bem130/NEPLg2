@@ -2655,32 +2655,66 @@ impl<'a> BlockChecker<'a> {
                             stack.push(entry);
                             last_expr = Some(stack.last().unwrap().expr.clone());
                         } else if let Some(binding) = {
-                            let callable_count = self.env.lookup_all_callables(&id.name).len();
+                            let expected_function_from_outer = self
+                                .infer_expected_from_outer_consumer_next_arg(
+                                    &stack,
+                                    stack.len(),
+                                    0,
+                                )
+                                .map(|t| {
+                                    let resolved = self.ctx.resolve(t);
+                                    matches!(self.ctx.get(resolved), TypeKind::Function { .. })
+                                })
+                                .unwrap_or(false);
+                            let expected_function_from_ascription = pending_ascription
+                                .and_then(|(target_ty, base_len)| {
+                                    if stack.len() == base_len {
+                                        let resolved = self.ctx.resolve(target_ty);
+                                        match self.ctx.get(resolved) {
+                                            TypeKind::Function { .. } => Some(true),
+                                            _ => Some(false),
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap_or(false);
+                            let expected_function_from_outer =
+                                expected_function_from_outer || expected_function_from_ascription;
+                            let value_candidate =
+                                self.env
+                                    .lookup_value_for_read(&id.name, !in_let_self_init);
+                            let has_any_value = self.env.lookup_value_any(&id.name).is_some();
+                            let value_is_function = value_candidate
+                                .map(|b| {
+                                    let rty = self.ctx.resolve_id(b.ty);
+                                    matches!(self.ctx.get(rty), TypeKind::Function { .. })
+                                })
+                                .unwrap_or(false);
                             // In head position of a prefix expression, prefer callable symbols
-                            // over value symbols when both names coexist in the same scope.
-                            // This keeps `add add 1` semantics stable even if `add` is also a value.
+                            // over non-function value symbols when both names coexist.
+                            // If the value itself is a function type, prefer the value.
                             let preferred_callable = if !*forced_value
                                 && stack.is_empty()
                                 && expr.items.get(idx + 1).is_some()
+                                && (!has_any_value || !value_is_function)
                             {
                                 self.env.lookup_callable_any(&id.name)
                             } else {
                                 None
                             };
-                            let allow_undefined_nonmut = !in_let_self_init;
-                            preferred_callable
+                            let selected = preferred_callable
+                                .or(value_candidate)
                                 .or_else(|| {
-                                    self.env
-                                        .lookup_value_for_read(&id.name, allow_undefined_nonmut)
-                                })
-                                .or_else(|| {
-                                    if callable_count <= 1 {
+                                    if !has_any_value {
                                         self.env.lookup_callable_any(&id.name)
                                     } else {
                                         None
                                     }
-                                })
+                                });
+                            selected.map(|binding| (binding, expected_function_from_outer))
                         } {
+                            let (binding, expected_function_from_outer) = binding;
                             if *forced_value {
                                 match &binding.kind {
                                     BindingKind::Func { captures, .. } => {
@@ -2702,13 +2736,17 @@ impl<'a> BlockChecker<'a> {
                                 }
                             }
                             let ty = binding.ty;
-                            let auto_call = match binding.kind {
-                                BindingKind::Func { .. } => !*forced_value,
-                                _ => true,
+                            let auto_call = match &binding.kind {
+                                BindingKind::Func { .. } => {
+                                    !*forced_value && !expected_function_from_outer
+                                }
+                                _ => !*forced_value,
                             };
-                            let hir_kind = match binding.kind {
-                                BindingKind::Func { .. } if *forced_value => {
-                                    HirExprKind::FnValue(id.name.clone())
+                            let hir_kind = match &binding.kind {
+                                BindingKind::Func { symbol, .. }
+                                    if *forced_value || expected_function_from_outer =>
+                                {
+                                    HirExprKind::FnValue(symbol.clone())
                                 }
                                 _ => HirExprKind::Var(id.name.clone()),
                             };
@@ -3016,7 +3054,7 @@ impl<'a> BlockChecker<'a> {
                     } => {
                         // Use current-scope lookup so `let` always creates a local binding
                         // (shadowing outer bindings) rather than reusing an outer binding.
-                        let ty = if let Some(b) = self.env.lookup_current(&name.name) {
+                        let ty = if let Some(b) = self.env.lookup_current_value(&name.name) {
                             if b.no_shadow && b.span != name.span {
                                 self.diagnostics.push(Diagnostic::error(
                                     format!("cannot shadow non-shadowable symbol '{}'", name.name),
@@ -3110,7 +3148,7 @@ impl<'a> BlockChecker<'a> {
                     Symbol::Set { name } => {
                         if let Some(binding) = self
                             .env
-                            .lookup_current(&name.name)
+                            .lookup_current_value(&name.name)
                             .or_else(|| self.env.lookup_value(&name.name))
                         {
                             if !binding.mutable {
@@ -3841,7 +3879,7 @@ impl<'a> BlockChecker<'a> {
 
             let available_args = stack.len().saturating_sub(func_pos + 1);
             let ty_for_infer = match &stack[func_pos].expr.kind {
-                HirExprKind::Var(name) => self
+                HirExprKind::Var(name) if self.env.lookup_value(name).is_none() => self
                     .choose_callable_type_by_available_arity(name, available_args)
                     .unwrap_or(stack[func_pos].ty),
                 _ => stack[func_pos].ty,
@@ -4016,7 +4054,7 @@ impl<'a> BlockChecker<'a> {
 
             let available_args = stack.len().saturating_sub(func_pos + 1);
             let ty_for_infer = match &stack[func_pos].expr.kind {
-                HirExprKind::Var(name) => self
+                HirExprKind::Var(name) if self.env.lookup_value(name).is_none() => self
                     .choose_callable_type_by_available_arity(name, available_args)
                     .unwrap_or(stack[func_pos].ty),
                 _ => stack[func_pos].ty,
@@ -4719,7 +4757,15 @@ impl<'a> BlockChecker<'a> {
         // General call or let/set
         if let HirExprKind::Var(name) = &func.expr.kind {
             let bindings = self.env.lookup_all_callables(name);
-            if !bindings.is_empty() {
+            let has_function_value_binding = self
+                .env
+                .lookup_value(name)
+                .map(|b| {
+                    let rty = self.ctx.resolve_id(b.ty);
+                    matches!(self.ctx.get(rty), TypeKind::Function { .. })
+                })
+                .unwrap_or(false);
+            if !bindings.is_empty() && !has_function_value_binding {
                 {
                     let explicit_type_args = type_args.clone();
                     let use_expected = expected_ret.is_some() && bindings.len() > 1;
@@ -5326,7 +5372,7 @@ impl Env {
             let has_value = scope.values.iter().any(|b| b.name == binding.name);
             let has_callable = scope.callables.iter().any(|b| b.name == binding.name);
             if binding.kind.is_var() {
-                if has_value || has_callable {
+                if has_value {
                     return Err(());
                 }
                 scope.values.push(binding);
@@ -5349,6 +5395,12 @@ impl Env {
                 .find(|b| b.name == name)
                 .or_else(|| scope.callables.iter().rev().find(|b| b.name == name))
         })
+    }
+
+    fn lookup_current_value(&self, name: &str) -> Option<&Binding> {
+        self.scopes
+            .last()
+            .and_then(|scope| scope.values.iter().rev().find(|b| b.name == name))
     }
 
     fn lookup_current_mut(&mut self, name: &str) -> Option<&mut Binding> {
@@ -5407,6 +5459,15 @@ impl Env {
             .find(|b| matches!(b.kind, BindingKind::Var))
     }
 
+    fn lookup_value_any(&self, name: &str) -> Option<&Binding> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(b) = scope.values.iter().rev().find(|b| b.name == name) {
+                return Some(b);
+            }
+        }
+        None
+    }
+
     fn lookup_value_for_read(
         &self,
         name: &str,
@@ -5428,12 +5489,14 @@ impl Env {
     fn lookup_all_callables(&self, name: &str) -> Vec<&Binding> {
         let mut items = Vec::new();
         for scope in self.scopes.iter().rev() {
-            items.extend(
-                scope
-                    .callables
-                    .iter()
-                    .filter(|b| b.name == name && b.defined),
-            );
+            let mut found_in_scope = false;
+            for b in scope.callables.iter().filter(|b| b.name == name && b.defined) {
+                items.push(b);
+                found_in_scope = true;
+            }
+            if found_in_scope {
+                break;
+            }
         }
         items
     }

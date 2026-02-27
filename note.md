@@ -4846,3 +4846,40 @@
   - `NO_COLOR=false trunk build` -> pass
   - `NO_COLOR=false node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -o /tmp/tests-kp-io.json --runner wasm --assert-io --no-tree -j 1`
     -> `215/215 pass`
+
+# 2026-02-27 作業メモ (map起点の名前解決/オーバーロード修正)
+## 根本原因
+- `typecheck` の識別子解決で、同名 callable の存在がローカル値（関数型パラメータ）解決に干渉していた。
+- `reduce_calls` / `apply_function` が `Var(name)` を過度に callable 名として扱い、
+  ローカル関数値呼び出し（`f a`）を過負荷解決へ誤送していた。
+- `lookup_all_callables` が全スコープ横断で候補を返しており、内側定義による lexical shadowing が効かず曖昧化していた。
+
+## 実装
+- `nepl-core/src/typecheck.rs`
+  - head位置の識別子解決を修正:
+    - 値が関数型なら値優先
+    - 値が非関数なら callable 優先
+  - `lookup_value_for_read` 候補を先に評価し、同名 callable 混在時の選択規則を安定化。
+  - `reduce_calls` / `reduce_calls_guarded` の `choose_callable_type_by_available_arity` 適用条件を
+    「同名 value が存在しない場合」に限定。
+  - `apply_function` の通常 callable 解決を
+    「同名の関数型 value が存在する場合は通らない」ように変更（関数値呼び出しは indirect 経路へ）。
+  - `lookup_all_callables` を lexical shadowing 優先（最内スコープのみ）へ変更。
+  - `let` 型注釈（`pending_ascription`）から関数値期待を拾うようにし、
+    `let u <(i32)->i32> calc` のような束縛時解決を安定化。
+
+## テスト修正
+- `tests/generics.n.md`
+  - `generics_make_pair_wrapper` を現在の前置評価で曖昧にならない構成へ整理。
+- `tests/overload.n.md`
+  - `overload_select_by_arity` を「アリティ選択そのもの」を検証する最小構成へ整理。
+  - `overload_select_by_arity_from_param_context_binary_not_supported_yet` を
+    実装反映済み仕様に合わせて通常 `neplg2:test` 化。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i tests/shadowing.n.md -o /tmp/tests-shadowing-now6.json --no-stdlib --no-tree` -> 27/27 pass
+- `node nodesrc/tests.js -i tests/generics.n.md -o /tmp/tests-generics-now7.json --no-stdlib --no-tree` -> 24/24 pass
+- `node nodesrc/tests.js -i tests/overload.n.md -o /tmp/tests-overload-now3.json --no-stdlib --no-tree` -> 18/18 pass
+- `node nodesrc/tests.js -i tests -o /tmp/tests-tests-no-stdlib-final4.json --no-stdlib --no-tree` -> 471/471 pass
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-final.json --no-tree` -> 676/676 pass

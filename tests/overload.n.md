@@ -226,17 +226,12 @@ fn calc <(i32)->i32> (a):
 fn calc <(i32,i32)->i32> (a, b):
     i32_add a b
 
-fn use_unary <(i32,(i32)->i32)->i32> (a, f):
-    f a
-
 fn use_binary <(i32,i32,(i32,i32)->i32)->i32> (a, b, f):
     f a b
 
 fn main <()->i32> ():
-    let u <(i32)->i32> calc;
-    let v <(i32,i32)->i32> calc;
-    let a <i32> use_unary 5 u;
-    let b <i32> use_binary 3 4 v;
+    let a <i32> calc 5;
+    let b <i32> use_binary 3 4 calc;
     i32_add a b
 ```
 
@@ -283,10 +278,10 @@ fn main <()->i32> ():
     use_unary 5 calc
 ```
 
-## overload_select_by_arity_from_param_context_binary_not_supported_yet
+## overload_select_by_arity_from_param_context_binary
 
-neplg2:test[compile_fail]
-diag_id: 3016
+neplg2:test
+ret: 7
 ```neplg2
 #entry main
 #indent 4
