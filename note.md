@@ -4909,3 +4909,19 @@
   - `212/212 pass`
 - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-regression.json --no-tree`
   - `676/676 pass`
+
+# 2026-02-27 作業メモ (sizeof / intrinsic テスト拡張)
+## 実施内容
+- `tests/sizeof.n.md` に以下のテストを追加:
+  - `sizeof_collection_structs`
+    - `Vec<i32>` / `Stack<i32>` / `HashMap<i32>` / `HashSet` の `size_of` 検証。
+  - `sizeof_diag_structs`
+    - `Span` / `Error` / `Diag` の `size_of` 検証。
+- 既存 `tests/intrinsic.n.md` と合わせて `size_of` 系の回帰検証セットを強化。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i tests/sizeof.n.md -i tests/intrinsic.n.md -o /tmp/tests-sizeof-intrinsic.json --no-tree`
+  - `219/219 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-sizeof.json --no-tree`
+  - `678/678 pass`

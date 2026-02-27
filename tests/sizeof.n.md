@@ -168,6 +168,66 @@ fn main <()->i32> ():
             1
 ```
 
+## sizeof_collection_structs
+
+neplg2:test
+ret: 0
+```neplg2
+#target std
+#entry main
+#indent 4
+#import "core/math" as *
+#import "core/mem" as *
+#import "alloc/collections/vec" as *
+#import "alloc/collections/stack" as *
+#import "alloc/collections/hashmap" as *
+#import "alloc/collections/hashset" as *
+
+fn main <()->i32> ():
+    if:
+        eq size_of<Vec<i32>> 12
+        then:
+            if:
+                eq size_of<Stack<i32>> 4
+                then:
+                    if:
+                        eq size_of<HashMap<i32>> 4
+                        then:
+                            if eq size_of<HashSet> 4 0 4
+                        else:
+                            3
+                else:
+                    2
+        else:
+            1
+```
+
+## sizeof_diag_structs
+
+neplg2:test
+ret: 0
+```neplg2
+#target std
+#entry main
+#indent 4
+#import "core/math" as *
+#import "core/mem" as *
+#import "alloc/diag/error" as *
+
+fn main <()->i32> ():
+    if:
+        eq size_of<Span> 12
+        then:
+            if:
+                eq size_of<Error> 4
+                then:
+                    if eq size_of<Diag> 8 0 3
+                else:
+                    2
+        else:
+            1
+```
+
 ## sizeof_generic_param_requires_dot
 
 neplg2:test[compile_fail]
