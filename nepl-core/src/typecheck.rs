@@ -3137,7 +3137,10 @@ impl<'a> BlockChecker<'a> {
                             type_args[0]
                         } else {
                             self.diagnostics
-                                .push(Diagnostic::error("callsite_span expects 1 type arg", *sp));
+                                .push(
+                                    Diagnostic::error("callsite_span expects 1 type arg", *sp)
+                                        .with_id(DiagnosticId::TypeIntrinsicTypeArgArityMismatch),
+                                );
                             self.ctx.unit()
                         }
                     } else if intrin.name == "get_field" || intrin.name == "set_field" {
@@ -3243,7 +3246,17 @@ impl<'a> BlockChecker<'a> {
                             if let Some((f_ty, offset)) = res {
                                 // Unify value type with field type
                                 if let Err(_) = self.ctx.unify(val.ty, f_ty) {
-                                     self.diagnostics.push(Diagnostic::error(format!("type mismatch in set_field: expected {}, found {}", self.ctx.type_to_string(f_ty), self.ctx.type_to_string(val.ty)), *sp));
+                                     self.diagnostics.push(
+                                         Diagnostic::error(
+                                             format!(
+                                                 "type mismatch in set_field: expected {}, found {}",
+                                                 self.ctx.type_to_string(f_ty),
+                                                 self.ctx.type_to_string(val.ty)
+                                             ),
+                                             *sp,
+                                         )
+                                         .with_id(DiagnosticId::TypeAssignmentTypeMismatch),
+                                     );
                                 }
 
                                 // Lower to store(add(obj, offset), val)
@@ -3298,12 +3311,12 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic expects 1 argument",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgArityMismatch));
                         } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.i32()) {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic argument type mismatch (expected i32)",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgTypeMismatch));
                         }
                     } else if intrin.name == "f32_to_i32" || intrin.name == "reinterpret_f32_i32"
                     {
@@ -3311,24 +3324,24 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic expects 1 argument",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgArityMismatch));
                         } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.f32()) {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic argument type mismatch (expected f32)",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgTypeMismatch));
                         }
                     } else if intrin.name == "u8_to_i32" {
                         if args.len() != 1 {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic expects 1 argument",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgArityMismatch));
                         } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.u8()) {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic argument type mismatch (expected u8)",
                                 *sp,
-                            ));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgTypeMismatch));
                         }
                     }
 
@@ -4010,7 +4023,7 @@ impl<'a> BlockChecker<'a> {
                 self.diagnostics.push(Diagnostic::error(
                     alloc::format!("unknown enum variant '{}' in match", arm.variant.name),
                     arm.variant.span,
-                ));
+                ).with_id(DiagnosticId::TypeMatchUnknownVariant));
                     continue;
                 }
                 let var_info = var_info.unwrap();
@@ -4038,7 +4051,7 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             "variant has no payload to bind",
                             bind.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeMatchPayloadBindingInvalid));
                     }
                 }
                 let (blk, val_ty) = self.check_block(&arm.body, 0, false, None)?;
@@ -4053,7 +4066,7 @@ impl<'a> BlockChecker<'a> {
                                 self.ctx.type_to_string(body_ty)
                             ),
                             arm.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeMatchArmsTypeMismatch));
                     }
                 } else {
                     result_ty = Some(body_ty);
@@ -4334,7 +4347,7 @@ impl<'a> BlockChecker<'a> {
                     self.diagnostics.push(Diagnostic::error(
                         "type mismatch in assignment",
                         func.expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeAssignmentTypeMismatch));
                 }
                 match assign {
                     AssignKind::Let => {
@@ -4391,7 +4404,7 @@ impl<'a> BlockChecker<'a> {
                 self.diagnostics.push(Diagnostic::error(
                     format!("undefined variable for assignment: {}", name),
                     func.expr.span,
-                ));
+                ).with_id(DiagnosticId::TypeAssignmentUndefinedVariable));
                 return None;
             }
         }
@@ -4403,14 +4416,14 @@ impl<'a> BlockChecker<'a> {
                     self.diagnostics.push(Diagnostic::error(
                         "if expects three arguments",
                         func.expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeIfArityMismatch));
                     return None;
                 }
                 if self.ctx.unify(args[0].ty, self.ctx.bool()).is_err() {
                     self.diagnostics.push(Diagnostic::error(
                         "if condition must be bool",
                         args[0].expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeIfConditionTypeMismatch));
                 }
                 let branch_ty = self.ctx.unify(args[1].ty, args[2].ty).unwrap_or(args[1].ty);
                 return Some(StackEntry {
@@ -4434,20 +4447,20 @@ impl<'a> BlockChecker<'a> {
                     self.diagnostics.push(Diagnostic::error(
                         "while expects two arguments",
                         func.expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeWhileArityMismatch));
                     return None;
                 }
                 if self.ctx.unify(args[0].ty, self.ctx.bool()).is_err() {
                     self.diagnostics.push(Diagnostic::error(
                         "while condition must be bool",
                         args[0].expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeWhileConditionTypeMismatch));
                 }
                 if self.ctx.unify(args[1].ty, self.ctx.unit()).is_err() {
                     self.diagnostics.push(Diagnostic::error(
                         "while body must be unit",
                         args[1].expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeWhileBodyTypeMismatch));
                 }
                 return Some(StackEntry {
                     ty: self.ctx.unit(),

@@ -1141,3 +1141,33 @@ fn main <()->i32> ():
                 else 9
     v
 ```
+
+## if_condition_must_be_bool_reports_diag_id
+
+neplg2:test[compile_fail]
+diag_id: 3039
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn main <()->i32> ():
+    if 1 10 20
+```
+
+## while_body_must_be_unit_reports_diag_id
+
+neplg2:test[compile_fail]
+diag_id: 3042
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let mut i <i32> 0;
+    while lt i 3:
+        add i 1
+    0
+```

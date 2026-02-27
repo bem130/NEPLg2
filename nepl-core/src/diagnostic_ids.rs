@@ -81,6 +81,32 @@ pub enum DiagnosticId {
     TypeAtRequiresCallable = 3023,
     /// 変数に型引数は適用できない。
     TypeVariableTypeArgsNotAllowed = 3024,
+    /// 代入時の型不一致。
+    TypeAssignmentTypeMismatch = 3036,
+    /// 代入対象の変数が未定義。
+    TypeAssignmentUndefinedVariable = 3037,
+    /// if の引数個数不一致。
+    TypeIfArityMismatch = 3038,
+    /// if の条件式型不一致。
+    TypeIfConditionTypeMismatch = 3039,
+    /// while の引数個数不一致。
+    TypeWhileArityMismatch = 3040,
+    /// while の条件式型不一致。
+    TypeWhileConditionTypeMismatch = 3041,
+    /// while の本体式型不一致。
+    TypeWhileBodyTypeMismatch = 3042,
+    /// match で未知のバリアントを指定。
+    TypeMatchUnknownVariant = 3043,
+    /// payload を持たないバリアントへの束縛。
+    TypeMatchPayloadBindingInvalid = 3044,
+    /// match の arm 型不一致。
+    TypeMatchArmsTypeMismatch = 3045,
+    /// intrinsic の型引数個数不一致。
+    TypeIntrinsicTypeArgArityMismatch = 3046,
+    /// intrinsic の引数個数不一致。
+    TypeIntrinsicArgArityMismatch = 3047,
+    /// intrinsic の引数型不一致。
+    TypeIntrinsicArgTypeMismatch = 3048,
 }
 
 impl DiagnosticId {
@@ -128,6 +154,19 @@ impl DiagnosticId {
             3022 => Some(DiagnosticId::TypeArgumentTypeMismatch),
             3023 => Some(DiagnosticId::TypeAtRequiresCallable),
             3024 => Some(DiagnosticId::TypeVariableTypeArgsNotAllowed),
+            3036 => Some(DiagnosticId::TypeAssignmentTypeMismatch),
+            3037 => Some(DiagnosticId::TypeAssignmentUndefinedVariable),
+            3038 => Some(DiagnosticId::TypeIfArityMismatch),
+            3039 => Some(DiagnosticId::TypeIfConditionTypeMismatch),
+            3040 => Some(DiagnosticId::TypeWhileArityMismatch),
+            3041 => Some(DiagnosticId::TypeWhileConditionTypeMismatch),
+            3042 => Some(DiagnosticId::TypeWhileBodyTypeMismatch),
+            3043 => Some(DiagnosticId::TypeMatchUnknownVariant),
+            3044 => Some(DiagnosticId::TypeMatchPayloadBindingInvalid),
+            3045 => Some(DiagnosticId::TypeMatchArmsTypeMismatch),
+            3046 => Some(DiagnosticId::TypeIntrinsicTypeArgArityMismatch),
+            3047 => Some(DiagnosticId::TypeIntrinsicArgArityMismatch),
+            3048 => Some(DiagnosticId::TypeIntrinsicArgTypeMismatch),
             _ => None,
         }
     }
@@ -184,6 +223,29 @@ impl DiagnosticId {
             }
             DiagnosticId::TypeVariableTypeArgsNotAllowed => {
                 "type arguments are not allowed for variables"
+            }
+            DiagnosticId::TypeAssignmentTypeMismatch => "type mismatch in assignment",
+            DiagnosticId::TypeAssignmentUndefinedVariable => {
+                "undefined variable for assignment"
+            }
+            DiagnosticId::TypeIfArityMismatch => "if expects three arguments",
+            DiagnosticId::TypeIfConditionTypeMismatch => "if condition must be bool",
+            DiagnosticId::TypeWhileArityMismatch => "while expects two arguments",
+            DiagnosticId::TypeWhileConditionTypeMismatch => "while condition must be bool",
+            DiagnosticId::TypeWhileBodyTypeMismatch => "while body must be unit",
+            DiagnosticId::TypeMatchUnknownVariant => "unknown enum variant in match",
+            DiagnosticId::TypeMatchPayloadBindingInvalid => {
+                "variant has no payload to bind"
+            }
+            DiagnosticId::TypeMatchArmsTypeMismatch => {
+                "match arms have incompatible types"
+            }
+            DiagnosticId::TypeIntrinsicTypeArgArityMismatch => {
+                "callsite_span expects 1 type arg"
+            }
+            DiagnosticId::TypeIntrinsicArgArityMismatch => "intrinsic expects 1 argument",
+            DiagnosticId::TypeIntrinsicArgTypeMismatch => {
+                "intrinsic argument type mismatch"
             }
         }
     }

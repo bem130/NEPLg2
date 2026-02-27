@@ -238,6 +238,42 @@
 
 # 2026-02-27 作業メモ (`noshadow` stdlib 段階適用: phase 1)
 - 目的:
+
+# 2026-02-27 作業メモ (typecheck 診断IDの適用拡張)
+- 目的:
+  - parser/overload 系に続き、typecheck の主要失敗経路でも `diag_id` を安定付与し、`compile_fail` で機械検証できる範囲を広げる。
+- 原因:
+  - 代入/if/while/match/intrinsic の一部エラーがメッセージ文字列のみで識別され、回帰時に精密検証しづらかった。
+- 実装:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `3036..3048` を追加。
+      - `TypeAssignmentTypeMismatch(3036)`
+      - `TypeAssignmentUndefinedVariable(3037)`
+      - `TypeIfArityMismatch(3038)`
+      - `TypeIfConditionTypeMismatch(3039)`
+      - `TypeWhileArityMismatch(3040)`
+      - `TypeWhileConditionTypeMismatch(3041)`
+      - `TypeWhileBodyTypeMismatch(3042)`
+      - `TypeMatchUnknownVariant(3043)`
+      - `TypeMatchPayloadBindingInvalid(3044)`
+      - `TypeMatchArmsTypeMismatch(3045)`
+      - `TypeIntrinsicTypeArgArityMismatch(3046)`
+      - `TypeIntrinsicArgArityMismatch(3047)`
+      - `TypeIntrinsicArgTypeMismatch(3048)`
+  - `nepl-core/src/typecheck.rs`
+    - 上記経路の `Diagnostic::error(...)` に `with_id(...)` を付与。
+  - `tests/if.n.md`
+    - `if_condition_must_be_bool_reports_diag_id` (`diag_id: 3039`) を追加。
+    - `while_body_must_be_unit_reports_diag_id` (`diag_id: 3042`) を追加。
+  - `tests/intrinsic.n.md`
+    - `intrinsic_argument_type_mismatch_reports_diag_id` (`diag_id: 3048`) を追加。
+    - 失敗原因がテスト記法ミスだったため、`#intrinsic` 呼び出しを正構文 `#intrinsic "i32_to_f32" <> (true)` に修正。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/if.n.md -i tests/intrinsic.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-if-intrinsic-diagids.json -j 2`
+    -> `184/184 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/functions.n.md -i tests/overload.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-functions-overload-after-diagids.json -j 2`
+    -> `111/111 pass`
   - `todo.md` 2番の「`noshadow` の stdlib 適用拡大」を、既存コードと衝突しない範囲から段階導入する。
 - 実施内容:
   - `stdlib/std/test.nepl` の主要 API を `fn noshadow` 化:
