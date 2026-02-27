@@ -577,7 +577,7 @@ fn resolve_target(
                 if let Some((_, prev_span)) = found {
                     diags.push(
                         Diagnostic::error("multiple #target directives are not allowed", *span)
-                            .with_id(DiagnosticId::MultipleTargetDirective.as_u32())
+                            .with_id(DiagnosticId::MultipleTargetDirective)
                             .with_secondary_label(prev_span, Some("previous #target here".into())),
                     );
                 } else {
@@ -586,7 +586,7 @@ fn resolve_target(
             } else {
                 diags.push(
                     Diagnostic::error("unknown target in #target", *span)
-                        .with_id(DiagnosticId::UnknownTargetDirective.as_u32()),
+                        .with_id(DiagnosticId::UnknownTargetDirective),
                 );
             }
         }
@@ -604,7 +604,7 @@ fn resolve_target(
                             "multiple #target directives are not allowed",
                             *span,
                         )
-                        .with_id(DiagnosticId::MultipleTargetDirective.as_u32())
+                        .with_id(DiagnosticId::MultipleTargetDirective)
                         .with_secondary_label(prev_span, Some("previous #target here".into())));
                     } else {
                         found = Some((t, *span));
@@ -612,7 +612,7 @@ fn resolve_target(
                 } else {
                     diags.push(
                         Diagnostic::error("unknown target in #target", *span)
-                            .with_id(DiagnosticId::UnknownTargetDirective.as_u32()),
+                            .with_id(DiagnosticId::UnknownTargetDirective),
                     );
                 }
             }

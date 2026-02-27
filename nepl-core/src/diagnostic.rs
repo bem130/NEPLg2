@@ -6,6 +6,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use crate::diagnostic_ids::DiagnosticId;
 use crate::span::Span;
 
 /// Severity level of a diagnostic message.
@@ -33,7 +34,7 @@ pub struct Label {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub severity: Severity,
-    pub id: Option<u32>,
+    pub id: Option<DiagnosticId>,
     pub code: Option<&'static str>,
     pub message: String,
     pub primary: Label,
@@ -78,7 +79,7 @@ impl Diagnostic {
     }
 
     /// 短い数値IDを付与します（表示層での参照用）。
-    pub fn with_id(mut self, id: u32) -> Diagnostic {
+    pub fn with_id(mut self, id: DiagnosticId) -> Diagnostic {
         self.id = Some(id);
         self
     }

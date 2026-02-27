@@ -1075,7 +1075,10 @@ fn render_diagnostics(diags: &[Diagnostic], sm: &SourceMap) {
             Severity::Warning => "warning",
         };
         let code = d.code.unwrap_or("");
-        let id_display = d.id.map(|v| format!("[D{}]", v)).unwrap_or_default();
+        let id_display = d
+            .id
+            .map(|v| format!("[D{}]", v.as_u32()))
+            .unwrap_or_default();
         let primary = &d.primary;
         let (line, col) = sm
             .line_col(primary.span.file_id, primary.span.start)

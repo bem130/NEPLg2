@@ -1,3 +1,23 @@
+# 2026-02-27 作業メモ (診断IDを `DiagnosticId` enum で型保持)
+- 目的:
+  - 診断IDを `Option<u32>` の生値保持から `Option<DiagnosticId>` へ変更し、生成側・表示側の整合性を型で保証する。
+- 実装:
+  - `nepl-core/src/diagnostic.rs`
+    - `Diagnostic.id` を `Option<DiagnosticId>` に変更。
+    - `with_id` 引数を `DiagnosticId` に変更。
+  - `nepl-core/src/compiler.rs`
+    - target 診断の `.with_id(...)` 呼び出しを enum 直指定へ変更。
+  - `nepl-web/src/lib.rs`
+    - diagnostics JSON の `id` は `as_u32()` で出力。
+    - `id_message` は `DiagnosticId::message()` で解決。
+    - 表示用 `[Dxxxx]` 文字列も `as_u32()` で統一。
+  - `nepl-cli/src/main.rs`
+    - 表示用 `[Dxxxx]` を `as_u32()` 基準で統一。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-diag-enum.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `573/573 pass`
+  - `node tests/tree/run.js` -> `18/18 pass`
+
 # 2026-02-27 作業メモ (診断IDの enum 化と compile_fail ID検証の統合)
 - 目的:
   - 診断IDを `const` 群ではなく `enum` で一元管理し、WASM/LLVM/CLI/Web/テストが同じID体系を参照するようにする。
