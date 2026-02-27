@@ -4588,3 +4588,23 @@
   - `NO_COLOR=false trunk build` -> pass
   - `node nodesrc/tests.js -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/collections-scope-v3.json -j 2`
   - 結果: `60/60 pass`
+
+# 2026-02-27 作業メモ (collections: hashmap_str/hashset_str の struct隠蔽)
+- 目的:
+  - `hashmap_str` / `hashset_str` の公開APIから `i32` ポインタ露出を除去し、collections全体の型方針を統一する。
+- 実装:
+  - `stdlib/alloc/collections/hashmap_str.nepl`
+    - `struct HashMapStr<.V> { hdr <i32> }` を導入。
+    - `new/insert/remove/len/free/get/contains` を `HashMapStr<.V>` 前提へ変更。
+    - `insert/remove` は更新後の `HashMapStr<.V>` を返す形へ変更。
+  - `stdlib/alloc/collections/hashset_str.nepl`
+    - `struct HashSetStr { hdr <i32> }` を導入。
+    - `new/insert/remove/len/free/contains` を `HashSetStr` 前提へ変更。
+    - `insert/remove` は更新後の `HashSetStr` を返す形へ変更。
+  - テスト更新:
+    - `stdlib/tests/hashmap_str.n.md`
+    - `stdlib/tests/hashset_str.n.md`
+    - move規則に合わせて読み取り系チェックを別インスタンスで分離。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/hashmap_str.nepl -i stdlib/alloc/collections/hashset_str.nepl -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/hashstr-final-scope.json -j 2`
+  - 結果: `10/10 pass`
