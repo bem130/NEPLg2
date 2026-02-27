@@ -155,7 +155,26 @@ NEPLg2 にはビルトイン関数をほぼ置かず、モジュール import �
 cargo test --workspace --locked
 ```
 
-stdlib doctest なども含めた検証は、`nodesrc/tests.js` を使用します。
+`trunk build` 後に `nodesrc/tests.js` を使います。
+
+開発中の差分確認（高速）:
+
+```bash
+NO_COLOR=false trunk build
+NO_COLOR=false node nodesrc/tests.js --changed --changed-base HEAD -o /tmp/tests-changed.json --runner wasm --no-tree -j 2
+```
+
+最終確認（フル）:
+
+```bash
+NO_COLOR=false trunk build
+NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2
+```
+
+補助オプション:
+- `--changed`: Git 差分の `.n.md` / `.nepl` のみ実行（デフォルトで `stdlib` 自動追加と `tree` 実行を無効化）。
+- `--changed-base <ref>`: 差分比較の基準を指定（既定 `HEAD`）。
+- `--with-stdlib` / `--with-tree`: `--changed` 時でも強制的に有効化。
 
 ## 開発ドキュメント
 

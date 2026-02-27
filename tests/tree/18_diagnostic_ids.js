@@ -1,7 +1,7 @@
 const { assert } = require('./_shared');
 
 module.exports = {
-    id: 'diagnostic_ids_for_target_and_loader',
+    id: 'diagnostic_ids_for_target_loader_parser_typecheck',
     async run(api) {
         const badTarget = `#entry main
 #indent 4
@@ -36,6 +36,76 @@ fn main <()->i32> ():
         const loaderDiag = missingDs.find((d) => d?.id === 1003);
         assert.ok(loaderDiag, 'loader diagnostic should include id=1003');
 
-        return { checked: 5, diagnostics_count: diagnostics.length + missingDs.length };
+        const parseBad = `#entry main
+#indent 4
+#target core
+
+fn main <()->i32> ():
+    let
+`;
+        const parseRes = api.analyze_semantics(parseBad);
+        const parseDs = Array.isArray(parseRes?.diagnostics) ? parseRes.diagnostics : [];
+        assert.ok(
+            parseDs.some((d) => d?.id === 2003),
+            'parse diagnostics should include parser expected-identifier id=2003'
+        );
+
+        const undefVar = `#entry main
+#indent 4
+#target core
+fn main <()->i32> ():
+    unknown_symbol
+`;
+        const undefRes = api.analyze_semantics(undefVar);
+        const undefDs = Array.isArray(undefRes?.diagnostics) ? undefRes.diagnostics : [];
+        assert.ok(
+            undefDs.some((d) => d?.id === 3001),
+            'typecheck diagnostics should include undefined identifier id=3001'
+        );
+
+        const overloadAmb = `#entry main
+#indent 4
+#target core
+
+fn cast <(i32)->i32> (x): x
+fn cast <(i32)->f32> (x): i32_to_f32 x
+fn main <()->i32> ():
+    let y cast 1
+    0
+`;
+        const overloadRes = api.analyze_semantics(overloadAmb);
+        const overloadDs = Array.isArray(overloadRes?.diagnostics) ? overloadRes.diagnostics : [];
+        assert.ok(
+            overloadDs.some((d) => d?.id === 3005),
+            'overload diagnostics should include ambiguous overload id=3005'
+        );
+
+        const lexBad = `#entry main
+#indent xx
+#target core
+fn main <()->i32> ():
+    $
+`;
+        const lexRes = api.analyze_lex(lexBad);
+        const lexDs = Array.isArray(lexRes?.diagnostics) ? lexRes.diagnostics : [];
+        assert.ok(
+            lexDs.some((d) => d?.id === 2001),
+            'lexer diagnostics should include invalid #indent id=2001'
+        );
+        assert.ok(
+            lexDs.some((d) => d?.id === 1202),
+            'lexer diagnostics should include unknown token id=1202'
+        );
+
+        return {
+            checked: 10,
+            diagnostics_count:
+                diagnostics.length +
+                missingDs.length +
+                parseDs.length +
+                undefDs.length +
+                overloadDs.length +
+                lexDs.length,
+        };
     },
 };

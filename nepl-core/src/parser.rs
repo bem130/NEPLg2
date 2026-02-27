@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 
 use crate::ast::*;
 use crate::diagnostic::Diagnostic;
+use crate::diagnostic_ids::DiagnosticId;
 use crate::lexer::{LexResult, Token, TokenKind};
 use crate::span::{FileId, Span};
 
@@ -64,6 +65,19 @@ struct Parser {
 }
 
 impl Parser {
+    fn error_with_id(
+        &self,
+        id: DiagnosticId,
+        message: impl Into<String>,
+        span: Span,
+    ) -> Diagnostic {
+        Diagnostic::error(message, span).with_id(id)
+    }
+
+    fn push_error_with_id(&mut self, id: DiagnosticId, message: impl Into<String>, span: Span) {
+        self.diagnostics.push(self.error_with_id(id, message, span));
+    }
+
     fn parse_layout_marker_symbol(&mut self, name: &str) -> PrefixItem {
         let span = self.next().unwrap().span;
         PrefixItem::Symbol(Symbol::Ident(
@@ -191,10 +205,11 @@ impl Parser {
             } else {
                 (Span::dummy(), "EOF".to_string())
             };
-            self.diagnostics.push(Diagnostic::error(
+            self.push_error_with_id(
+                DiagnosticId::ParserExpectedToken,
                 alloc::format!("expected {:?}, found {}", kind, found),
                 span,
-            ));
+            );
             None
         }
     }
@@ -615,10 +630,11 @@ impl Parser {
                     Some(TokenKind::KwImpl) => self.parse_impl(),
                     _ => {
                         let span = self.peek_span().unwrap_or_else(Span::dummy);
-                        self.diagnostics.push(Diagnostic::error(
+                        self.push_error_with_id(
+                            DiagnosticId::ParserUnexpectedToken,
                             "unexpected token after pub",
                             span,
-                        ));
+                        );
                         self.next();
                         None
                     }
@@ -1617,7 +1633,10 @@ impl Parser {
                 _ => {
                     let span = self.peek_span().unwrap_or_else(Span::dummy);
                     self.diagnostics
-                        .push(Diagnostic::error("unexpected token in expression", span));
+                        .push(
+                            Diagnostic::error("unexpected token in expression", span)
+                                .with_id(DiagnosticId::ParserUnexpectedToken),
+                        );
                     self.next();
                 }
             }
@@ -1674,7 +1693,10 @@ impl Parser {
             } else {
                 let sp = self.peek_span().unwrap_or_else(Span::dummy);
                 self.diagnostics
-                    .push(Diagnostic::error("expected ')' after parenthesized expression", sp));
+                    .push(
+                        Diagnostic::error("expected ')' after parenthesized expression", sp)
+                            .with_id(DiagnosticId::ParserExpectedToken),
+                    );
                 sp
             };
             let span = lp_span.join(rp).unwrap_or(lp_span);
@@ -1751,10 +1773,11 @@ impl Parser {
                 }
                 _ if in_trailing_semis => {
                     let sp = self.peek_span().unwrap_or_else(Span::dummy);
-                    self.diagnostics.push(Diagnostic::error(
-                        "unexpected token after ';' (only one statement per line)",
-                        sp,
-                    ));
+                        self.push_error_with_id(
+                            DiagnosticId::ParserUnexpectedToken,
+                            "unexpected token after ';' (only one statement per line)",
+                            sp,
+                        );
                     while !self.is_end(&TokenEnd::Line)
                         && !matches!(self.peek_kind(), Some(TokenKind::Comma | TokenKind::RParen))
                     {
@@ -2021,7 +2044,10 @@ impl Parser {
                 _ => {
                     let span = self.peek_span().unwrap_or_else(Span::dummy);
                     self.diagnostics
-                        .push(Diagnostic::error("unexpected token in expression", span));
+                        .push(
+                            Diagnostic::error("unexpected token in expression", span)
+                                .with_id(DiagnosticId::ParserUnexpectedToken),
+                        );
                     self.next();
                 }
             }
@@ -2059,7 +2085,10 @@ impl Parser {
         } else {
             let sp = self.peek_span().unwrap_or_else(Span::dummy);
             self.diagnostics
-                .push(Diagnostic::error("expected ':' after match", sp));
+                .push(
+                    Diagnostic::error("expected ':' after match", sp)
+                        .with_id(DiagnosticId::ParserExpectedToken),
+                );
             Span::dummy()
         };
         let arms = self.parse_match_arms()?;
@@ -2109,7 +2138,10 @@ impl Parser {
                 TokenKind::Semicolon => {
                     let sp = self.next().unwrap().span;
                     self.diagnostics
-                        .push(Diagnostic::error("';' must appear at end of a line", sp));
+                        .push(
+                            Diagnostic::error("';' must appear at end of a line", sp)
+                                .with_id(DiagnosticId::ParserUnexpectedToken),
+                        );
                     // recovery: skip until colon or end of line
                     while !self.is_end(&TokenEnd::Line) {
                         self.next();
@@ -2869,7 +2901,10 @@ impl Parser {
         if !self.consume_if(&TokenKind::Newline) {
             let sp = self.peek_span().unwrap_or_else(Span::dummy);
             self.diagnostics
-                .push(Diagnostic::error("expected newline after match ':'", sp));
+                .push(
+                    Diagnostic::error("expected newline after match ':'", sp)
+                        .with_id(DiagnosticId::ParserExpectedToken),
+                );
         }
         self.expect(&TokenKind::Indent)?;
         let mut arms = Vec::new();
@@ -3091,7 +3126,10 @@ impl Parser {
             _ => {
                 let span = self.peek_span().unwrap_or_else(Span::dummy);
                 self.diagnostics
-                    .push(Diagnostic::error("invalid type expression", span));
+                    .push(
+                        Diagnostic::error("invalid type expression", span)
+                            .with_id(DiagnosticId::ParserInvalidTypeExpr),
+                    );
                 self.next();
                 None
             }
@@ -3141,8 +3179,10 @@ impl Parser {
             n
         } else {
             let sp = at_span.unwrap_or(tok.span);
-            self.diagnostics
-                .push(Diagnostic::error("expected identifier after '@'", sp));
+            self.diagnostics.push(
+                Diagnostic::error("expected identifier after '@'", sp)
+                    .with_id(DiagnosticId::ParserExpectedIdentifier),
+            );
             return None;
         };
 
@@ -3179,13 +3219,16 @@ impl Parser {
                 if let Some(TokenKind::IntLiteral(v)) = self.peek_kind() {
                     let idx_text = v.clone();
                     let idx_tok = self.next().unwrap();
-                    self.diagnostics.push(Diagnostic::error(
-                        alloc::format!(
-                            "legacy tuple field access '.{}' is removed; use 'get <tuple> {}'",
-                            idx_text, idx_text
-                        ),
-                        dot_span.join(idx_tok.span).unwrap_or(dot_span),
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            alloc::format!(
+                                "legacy tuple field access '.{}' is removed; use 'get <tuple> {}'",
+                                idx_text, idx_text
+                            ),
+                            dot_span.join(idx_tok.span).unwrap_or(dot_span),
+                        )
+                        .with_id(DiagnosticId::ParserUnexpectedToken),
+                    );
                     break;
                 }
                 break;
@@ -3229,10 +3272,13 @@ impl Parser {
         if Self::is_reserved_layout_word(&full)
             && !Self::is_allowed_layout_marker_usage(current_items, &full)
         {
-            self.diagnostics.push(Diagnostic::error(
-                alloc::format!("'{}' is a reserved keyword and cannot be used as an identifier", full),
-                end_span,
-            ));
+            self.diagnostics.push(
+                Diagnostic::error(
+                    alloc::format!("'{}' is a reserved keyword and cannot be used as an identifier", full),
+                    end_span,
+                )
+                .with_id(DiagnosticId::ParserReservedKeywordIdentifier),
+            );
         }
 
         Some(PrefixItem::Symbol(Symbol::Ident(
@@ -3274,10 +3320,11 @@ impl Parser {
             } else {
                 (Span::dummy(), "EOF".to_string())
             };
-            self.diagnostics.push(Diagnostic::error(
+            self.push_error_with_id(
+                DiagnosticId::ParserExpectedToken,
                 alloc::format!("expected {:?}, found {}", kind, found),
                 span,
-            ));
+            );
             None
         }
     }
@@ -3288,13 +3335,16 @@ impl Parser {
                 let tok = self.next().unwrap();
                 if let TokenKind::Ident(n) = tok.kind {
                     if Self::is_reserved_layout_word(&n) {
-                        self.diagnostics.push(Diagnostic::error(
-                            alloc::format!(
-                                "'{}' is a reserved keyword and cannot be used as an identifier",
-                                n
-                            ),
-                            tok.span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                alloc::format!(
+                                    "'{}' is a reserved keyword and cannot be used as an identifier",
+                                    n
+                                ),
+                                tok.span,
+                            )
+                            .with_id(DiagnosticId::ParserReservedKeywordIdentifier),
+                        );
                         return None;
                     }
                     Some((n, tok.span))
@@ -3305,24 +3355,31 @@ impl Parser {
             Some(k) => {
                 if let Some(kw) = Self::reserved_keyword_token_name(&k) {
                     let tok = self.next().unwrap();
-                    self.diagnostics.push(Diagnostic::error(
-                        alloc::format!(
-                            "'{}' is a reserved keyword and cannot be used as an identifier",
-                            kw
-                        ),
-                        tok.span,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            alloc::format!(
+                                "'{}' is a reserved keyword and cannot be used as an identifier",
+                                kw
+                            ),
+                            tok.span,
+                        )
+                        .with_id(DiagnosticId::ParserReservedKeywordIdentifier),
+                    );
                     return None;
                 }
                 let span = self.peek_span().unwrap_or_else(Span::dummy);
-                self.diagnostics
-                    .push(Diagnostic::error("expected identifier", span));
+                self.diagnostics.push(
+                    Diagnostic::error("expected identifier", span)
+                        .with_id(DiagnosticId::ParserExpectedIdentifier),
+                );
                 None
             }
             None => {
                 let span = self.peek_span().unwrap_or_else(Span::dummy);
-                self.diagnostics
-                    .push(Diagnostic::error("expected identifier", span));
+                self.diagnostics.push(
+                    Diagnostic::error("expected identifier", span)
+                        .with_id(DiagnosticId::ParserExpectedIdentifier),
+                );
                 None
             }
         }

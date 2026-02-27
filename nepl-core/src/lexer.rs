@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 
 use crate::ast::Effect;
 use crate::diagnostic::Diagnostic;
+use crate::diagnostic_ids::DiagnosticId;
 use crate::span::{FileId, Span};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -453,8 +454,10 @@ impl LexState {
                     line_offset as u32,
                     (line_offset + body.len()) as u32,
                 );
-                self.diagnostics
-                    .push(Diagnostic::error("invalid #indent argument", span));
+                self.diagnostics.push(
+                    Diagnostic::error("invalid #indent argument", span)
+                        .with_id(DiagnosticId::ParserExpectedToken),
+                );
             }
         } else if body.starts_with("import") {
             let arg = body.strip_prefix("import").unwrap().trim();
@@ -584,8 +587,10 @@ impl LexState {
                     span,
                 });
             } else {
-                self.diagnostics
-                    .push(Diagnostic::error("invalid #extern syntax", span));
+                self.diagnostics.push(
+                    Diagnostic::error("invalid #extern syntax", span)
+                        .with_id(DiagnosticId::ParserInvalidExternSignature),
+                );
             }
         } else if body.starts_with("wasm") {
             // expect trailing colon
@@ -633,8 +638,10 @@ impl LexState {
                 line_offset as u32,
                 (line_offset + content_len) as u32,
             );
-            self.diagnostics
-                .push(Diagnostic::error("unknown directive", span));
+            self.diagnostics.push(
+                Diagnostic::error("unknown directive", span)
+                    .with_id(DiagnosticId::LexerUnknownDirective),
+            );
         }
     }
 
@@ -903,8 +910,10 @@ impl LexState {
 
     fn unknown(&mut self, start: usize, end: usize) {
         let span = Span::new(self.file_id, start as u32, end as u32);
-        self.diagnostics
-            .push(Diagnostic::error("unknown token", span));
+        self.diagnostics.push(
+            Diagnostic::error("unknown token", span)
+                .with_id(DiagnosticId::LexerUnknownToken),
+        );
     }
 
     fn flush_dedent(&mut self, pos: usize) {

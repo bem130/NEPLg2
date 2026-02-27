@@ -1,3 +1,62 @@
+# 2026-02-27 作業メモ (テスト実行高速化: changed モード追加)
+- 目的:
+  - 全件実行が遅いため、変更ファイルだけを対象に回せる実行経路を追加する。
+- 実装:
+  - `nodesrc/tests.js`
+    - `--changed` を追加し、`git diff` と untracked から `.n.md/.nepl` の変更ファイルを自動収集。
+    - `--changed-base <ref>` を追加（既定 `HEAD`）。
+    - `--with-stdlib` / `--with-tree` を追加。
+    - `--changed` 時は明示指定がない限り `stdlib` 自動追加と `tree` 実行を無効化。
+    - 実行結果 JSON と要約出力に `scan` 情報（実際の入力/モード）を追加。
+  - `README.md`
+    - 高速差分実行コマンドとフル実行コマンドを明記。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js --changed --changed-base HEAD -o /tmp/tests-changed.json --runner wasm --no-tree -j 2` -> changed 対象のみ走査（`total 48`）
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/overload.n.md --no-stdlib --no-tree -o /tmp/tests-overload-quick.json --runner wasm -j 2` -> `7/7 pass`
+
+# 2026-02-27 作業メモ (診断ID: lexer 生成側の明示付与を追加)
+- 目的:
+  - parser/typecheck/resolve に続いて、lexer 主要診断にも `with_id(DiagnosticId::...)` を明示する。
+- 実装:
+  - `nepl-core/src/lexer.rs`
+    - `invalid #indent argument` -> `ParserExpectedToken` (2001)
+    - `invalid #extern syntax` -> `ParserInvalidExternSignature` (2006)
+    - `unknown directive` -> `LexerUnknownDirective` (1201)
+    - `unknown token` -> `LexerUnknownToken` (1202)
+  - `tests/tree/18_diagnostic_ids.js`
+    - lexer 診断IDの検証ケースを追加（`#indent xx` と `$`）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node tests/tree/run.js` -> `18/18 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-after-lexer-id.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `573/573 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-lexer-id.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1657/1657 pass`
+
+# 2026-02-27 作業メモ (診断ID: parser生成側の明示付与 + 自動推測の撤去)
+- 目的:
+  - 「`from_message` で推測しない。診断生成側で enum を付与する」方針へ戻す。
+  - parser/typecheck/name-resolution/overload の代表経路で `with_id(DiagnosticId::...)` を明示化する。
+- 実装:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - 診断ID enum を拡張（parser/typecheck/resolve 系の主要カテゴリを追加）。
+    - `from_message` は削除。
+  - `nepl-core/src/diagnostic.rs`
+    - `Diagnostic::error/warning` の自動推測付与を撤去し、`id=None` を既定に戻した。
+  - `nepl-core/src/parser.rs`
+    - `DiagnosticId` を import。
+    - `expect/expect_with_span/expect_ident` と主要 parser エラーに `with_id(...)` を明示付与。
+  - `nepl-core/src/resolve.rs`
+    - `ambiguous import` に `DiagnosticId::AmbiguousImport` を付与。
+  - `nepl-core/src/typecheck.rs`
+    - 代表経路（return型不一致、未定義識別子、shadow違反、overload曖昧/未一致）に `with_id(...)` を付与。
+  - `tests/tree/18_diagnostic_ids.js`
+    - target/loader に加え parser/typecheck/overload のID検証を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node tests/tree/run.js` -> `18/18 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-diag-explicit-parser.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `573/573 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-explicit-diag-parser.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1657/1657 pass`
+
 # 2026-02-27 作業メモ (診断IDを `DiagnosticId` enum で型保持)
 - 目的:
   - 診断IDを `Option<u32>` の生値保持から `Option<DiagnosticId>` へ変更し、生成側・表示側の整合性を型で保証する。
