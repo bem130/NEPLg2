@@ -215,9 +215,35 @@
 - 目的:
   - `noshadow` 導入後の実仕様（warning と error の境界）を実装と同じ粒度で共有する。
 - 変更:
-  - `doc/shadowing.md` を追加。
-  - 同名・同一シグネチャ再定義、オーバーロード、`noshadow` 保護規則を整理。
-  - 対応テストケースを併記し、仕様確認導線を明確化。
+- `doc/shadowing.md` を追加。
+- 同名・同一シグネチャ再定義、オーバーロード、`noshadow` 保護規則を整理。
+- 対応テストケースを併記し、仕様確認導線を明確化。
+
+# 2026-02-27 作業メモ (overload/functions テスト拡充 + 診断ID拡張)
+- 目的:
+  - `tests/functions.n.md` / `tests/overload.n.md` のオーバーロード系ケースを増やし、`compile_fail` の `diag_id` 検証を強化する。
+  - 関数値まわりの代表診断に診断IDを付与する。
+- 実装:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `DiagnosticId::TypeCapturingFunctionValueUnsupported = 3017`
+    - `DiagnosticId::TypeIndirectCallRequiresFunctionValue = 3018`
+    - `DiagnosticId::TypeVariableNotCallable = 3019`
+    を追加。
+  - `nepl-core/src/typecheck.rs`
+    - capture 関数値未対応、間接呼び出し失敗、非呼び出し可能変数の診断に `with_id(...)` を付与。
+    - 識別子解決時の過負荷 arity 差異で即エラーにしないよう修正（下流での解決に委譲）。
+    - 外側関数の「次に来る引数」文脈から期待関数型を推定する補助
+      `infer_expected_from_outer_consumer_next_arg` を追加。
+  - `tests/functions.n.md`
+    - capture 関連 `compile_fail` に `diag_id` を明示。
+    - 非呼び出し可能変数ケースを追加し、現挙動に合わせて `diag_id: 3016` を固定。
+  - `tests/overload.n.md`
+    - arity 選択（引数文脈/pipe）の追加ケースを作成。
+    - 現状未対応のため `compile_fail[D3016]` として明示化し、将来の改善対象を固定。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/overload.n.md -i tests/functions.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-overload-functions-final.json -j 2`
+    -> `109/109 pass`
 
 # 2026-02-27 作業メモ (`std/test` の target 重複定義を解消)
 - 背景:

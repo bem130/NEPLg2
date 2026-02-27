@@ -65,6 +65,12 @@ pub enum DiagnosticId {
     TypeNoShadowConflict = 3015,
     /// 式が余剰値をスタックに残した。
     TypeStackExtraValues = 3016,
+    /// capture 付き関数値は未対応。
+    TypeCapturingFunctionValueUnsupported = 3017,
+    /// 関数値でない値への間接呼び出し。
+    TypeIndirectCallRequiresFunctionValue = 3018,
+    /// 呼び出し不可能な変数を呼ぼうとした。
+    TypeVariableNotCallable = 3019,
 }
 
 impl DiagnosticId {
@@ -104,6 +110,9 @@ impl DiagnosticId {
             3014 => Some(DiagnosticId::TypeNoShadowViolation),
             3015 => Some(DiagnosticId::TypeNoShadowConflict),
             3016 => Some(DiagnosticId::TypeStackExtraValues),
+            3017 => Some(DiagnosticId::TypeCapturingFunctionValueUnsupported),
+            3018 => Some(DiagnosticId::TypeIndirectCallRequiresFunctionValue),
+            3019 => Some(DiagnosticId::TypeVariableNotCallable),
             _ => None,
         }
     }
@@ -141,6 +150,13 @@ impl DiagnosticId {
             DiagnosticId::TypeNoShadowViolation => "cannot shadow non-shadowable symbol",
             DiagnosticId::TypeNoShadowConflict => "noshadow declaration conflicts",
             DiagnosticId::TypeStackExtraValues => "expression left extra values on the stack",
+            DiagnosticId::TypeCapturingFunctionValueUnsupported => {
+                "capturing function cannot be used as a function value yet"
+            }
+            DiagnosticId::TypeIndirectCallRequiresFunctionValue => {
+                "indirect call requires a function value"
+            }
+            DiagnosticId::TypeVariableNotCallable => "variable is not callable",
         }
     }
 

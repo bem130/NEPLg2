@@ -260,6 +260,75 @@ fn main <()->i32> ():
     calc 5
 ```
 
+## overload_select_by_arity_from_param_context_unary_not_supported_yet
+
+neplg2:test[compile_fail]
+diag_id: 3016
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn calc <(i32)->i32> (a):
+    i32_add a 1
+
+fn calc <(i32,i32)->i32> (a, b):
+    i32_add a b
+
+fn use_unary <(i32,(i32)->i32)->i32> (a, f):
+    f a
+
+fn main <()->i32> ():
+    use_unary 5 calc
+```
+
+## overload_select_by_arity_from_param_context_binary_not_supported_yet
+
+neplg2:test[compile_fail]
+diag_id: 3016
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn calc <(i32)->i32> (a):
+    i32_add a 1
+
+fn calc <(i32,i32)->i32> (a, b):
+    i32_add a b
+
+fn use_binary <(i32,i32,(i32,i32)->i32)->i32> (a, b, f):
+    f a b
+
+fn main <()->i32> ():
+    use_binary 3 4 calc
+```
+
+## overload_select_by_arity_with_pipe_unary_not_supported_yet
+
+neplg2:test[compile_fail]
+diag_id: 3016
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn calc <(i32)->i32> (a):
+    i32_add a 1
+
+fn calc <(i32,i32)->i32> (a, b):
+    i32_add a b
+
+fn use_unary <(i32,(i32)->i32)->i32> (a, f):
+    f a
+
+fn main <()->i32> ():
+    5 |> use_unary calc
+```
+
 ## overload_select_by_parameter_context
 
 neplg2:test

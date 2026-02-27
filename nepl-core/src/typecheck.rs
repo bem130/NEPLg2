@@ -1705,6 +1705,53 @@ impl<'a> BlockChecker<'a> {
         None
     }
 
+    fn infer_expected_from_outer_consumer_next_arg(
+        &mut self,
+        stack: &[StackEntry],
+        inner_pos: usize,
+        min_func_pos: usize,
+    ) -> Option<TypeId> {
+        for j in (min_func_pos..inner_pos).rev() {
+            if !stack[j].auto_call {
+                continue;
+            }
+            let rty = self.ctx.resolve_id(stack[j].ty);
+            let TypeKind::Function { params, .. } = self.ctx.get(rty) else {
+                continue;
+            };
+            let total_arity = params.len();
+            let arity = self.user_visible_arity(&stack[j].expr, total_arity);
+            if inner_pos < j + 1 {
+                continue;
+            }
+            let provided_user_args = inner_pos - (j + 1);
+            if provided_user_args >= arity {
+                continue;
+            }
+            let user_arg_idx = provided_user_args;
+            let capture_len = total_arity.saturating_sub(arity);
+            let arg_idx = capture_len + user_arg_idx;
+            if arg_idx >= total_arity {
+                continue;
+            }
+            for k in 0..provided_user_args {
+                let outer_arg_pos = j + 1 + k;
+                if outer_arg_pos >= stack.len() {
+                    continue;
+                }
+                let pidx = capture_len + k;
+                if pidx >= total_arity {
+                    continue;
+                }
+                let pty = params[pidx];
+                let aty = stack[outer_arg_pos].ty;
+                let _ = self.ctx.unify(aty, pty);
+            }
+            return Some(self.ctx.resolve_id(params[arg_idx]));
+        }
+        None
+    }
+
     fn choose_callable_type_by_available_arity(
         &mut self,
         name: &str,
@@ -2519,7 +2566,7 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             "capturing function cannot be used as a function value yet",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
                                         return None;
                                     }
                                 }
@@ -2567,6 +2614,21 @@ impl<'a> BlockChecker<'a> {
                             last_expr = Some(stack.last().unwrap().expr.clone());
                         } else {
                             let mut lookup_name = id.name.clone();
+                            let outer_expected_callable_arity =
+                                self.infer_expected_from_outer_consumer_next_arg(
+                                    &stack,
+                                    stack.len(),
+                                    0,
+                                )
+                                    .and_then(|expected_ty| {
+                                        let resolved_target = self.ctx.resolve(expected_ty);
+                                        match self.ctx.get(resolved_target) {
+                                            TypeKind::Function { params, .. } => {
+                                                Some(params.len())
+                                            }
+                                            _ => None,
+                                        }
+                                    });
                             let mut bindings = self.env.lookup_all_any_defined(&lookup_name);
                             if bindings.is_empty() {
                                 if let Some((ns, member)) = parse_variant_name(&id.name) {
@@ -2622,7 +2684,8 @@ impl<'a> BlockChecker<'a> {
                                             } else {
                                                 None
                                             }
-                                        });
+                                        })
+                                        .or(outer_expected_callable_arity);
                                     if let Some(exp_arity) = expected_callable_arity {
                                         let mut arity_candidates: Vec<&Binding> = bindings
                                             .iter()
@@ -2644,7 +2707,7 @@ impl<'a> BlockChecker<'a> {
                                                         self.diagnostics.push(Diagnostic::error(
                                                             "capturing function cannot be used as a function value yet",
                                                             id.span,
-                                                        ));
+                                                        ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
                                                         return None;
                                                     }
                                                 }
@@ -2708,11 +2771,6 @@ impl<'a> BlockChecker<'a> {
                                             }
                                             if arity.is_none() {
                                                 arity = Some(a);
-                                            } else if arity != Some(a) {
-                                                self.diagnostics.push(Diagnostic::error(
-                                                    "overloaded functions must have the same arity",
-                                                    id.span,
-                                                ));
                                             }
                                         }
                                     }
@@ -2728,7 +2786,7 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             "capturing function cannot be used as a function value yet",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
                                         return None;
                                     }
                                     let mut explicit_args = Vec::new();
@@ -4927,7 +4985,7 @@ impl<'a> BlockChecker<'a> {
                     self.diagnostics.push(Diagnostic::error(
                         "variable is not callable",
                         func.expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeVariableNotCallable));
                     return None;
                 }
             }
@@ -4946,7 +5004,7 @@ impl<'a> BlockChecker<'a> {
                     self.diagnostics.push(Diagnostic::error(
                         "capturing function cannot be used as a function value yet",
                         func.expr.span,
-                    ));
+                    ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
                     false
                 } else {
                     true
@@ -4965,7 +5023,7 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             "capturing function cannot be passed as a function value yet",
                             func.expr.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
                         false
                     } else {
                         true
@@ -4978,7 +5036,7 @@ impl<'a> BlockChecker<'a> {
             self.diagnostics.push(Diagnostic::error(
                 "indirect call requires a function value",
                 func.expr.span,
-            ));
+            ).with_id(DiagnosticId::TypeIndirectCallRequiresFunctionValue));
             return None;
         }
 
