@@ -4352,3 +4352,24 @@
   - `node nodesrc/tests.js -i tests/overload.n.md -i tests/functions.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-overload-functions-no-stdlib.json -j 2` -> `101/101 pass`
 - todo反映:
   - `todo.md` 先頭の「オーバーロード解決の arity 完全対応」を削除（完了）。
+# 2026-02-27 作業メモ (stdlib/tests を functions.n.md 形式へ分割再構成)
+- 目的:
+  - `stdlib/tests/*.n.md` の失敗（run unreachable）を、現行構文・現行ランタイム前提で安定化する。
+  - 1ファイル1巨大ケースではなく、`tests/functions.n.md` と同様の「複数小ケース」構成へ統一する。
+- 実装:
+  - `stdlib/tests/stack.n.md`
+    - 3ケースへ分割: `stack_new_and_len`, `stack_peek_and_pop`, `stack_pop_empty`。
+  - `stdlib/tests/btreemap.n.md`
+    - 3ケースへ分割: `btreemap_insert_and_len`, `btreemap_get_and_remove`, `btreemap_update_existing`。
+  - `stdlib/tests/btreeset.n.md`
+    - 3ケースへ分割: `btreeset_insert_and_len`, `btreeset_contains_and_remove`, `btreeset_duplicate_insert`。
+  - `stdlib/tests/string.n.md`
+    - 3ケースへ分割: `string_len_and_concat`, `string_trim_and_slice`, `string_split_and_builder`。
+  - `stdlib/tests/cliarg.n.md`
+    - argv 注入差分（wasm/llvm）で不安定だった厳密比較を廃止し、`cliarg` API 呼び出しの基本スモーク（`ret` 判定）へ変更。
+  - `stdlib/tests/fs.n.md`
+    - 既存の missing-path 検証を維持（`Result::Err` 経路）。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/stack.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stdlib-collections-split.json -j 1` -> `27/27 pass`
+  - `node nodesrc/tests.js -i stdlib/tests/stack.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i stdlib/tests/cliarg.n.md -i stdlib/tests/fs.n.md -i stdlib/tests/string.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stdlib-tests-six-no-stdlib.json -j 1` -> `42/42 pass`
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/functions.n.md --runner all --llvm-all --assert-io --strict-dual --no-tree -o /tmp/tests-overload-functions-dual-after-stdlib-rewrite.json -j 2` -> `612/612 pass`

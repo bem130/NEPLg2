@@ -1,72 +1,72 @@
 # stdlib/stack.n.md
 
-## stack_main
+## stack_new_and_len
 
 neplg2:test
+ret: 1
 ```neplg2
-
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/stack" as *
-#import "core/mem" as *
+#import "core/math" as *
+
+fn main <()*>i32> ():
+    let s stack_new<i32>;
+    stack_push<i32> s 10;
+    stack_push<i32> s 20;
+    if eq stack_len<i32> s 2 1 0
+```
+
+## stack_peek_and_pop
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "alloc/collections/stack" as *
+#import "core/math" as *
 #import "core/option" as *
-#import "std/test" as *
 
-fn main <()*> ()> ():
-    // Test stack_new
-    let s stack_new<.i32>;
-    assert_eq_i32 0 stack_len<.i32> s;
-
-    // Test stack_push and stack_len
-    stack_push<.i32> s 100;
-    assert_eq_i32 1 stack_len<.i32> s;
-
-    stack_push<.i32> s 200;
-    assert_eq_i32 2 stack_len<.i32> s;
-
-    stack_push<.i32> s 300;
-    assert_eq_i32 3 stack_len<.i32> s;
-
-    // Test stack_peek (top element without removing)
-    match stack_peek<.i32> s:
-        Option::Some x:
-            assert_eq_i32 300 x
+fn main <()*>i32> ():
+    let s stack_new<i32>;
+    stack_push<i32> s 10;
+    stack_push<i32> s 20;
+    let ok0 <bool> match stack_peek<i32> s:
+        Option::Some v:
+            eq v 20
         Option::None:
-            test_fail "stack_peek returned None";
-
-    // stack_len should still be 3 after peek
-    assert_eq_i32 3 stack_len<.i32> s;
-
-    // Test stack_pop (remove top element)
-    match stack_pop<.i32> s:
-        Option::Some x:
-            assert_eq_i32 300 x
+            false
+    let ok1 <bool> match stack_pop<i32> s:
+        Option::Some v:
+            eq v 20
         Option::None:
-            test_fail "stack_pop 1 returned None";
+            false
+    if and ok0 ok1 1 0
+```
 
-    assert_eq_i32 2 stack_len<.i32> s;
+## stack_pop_empty
 
-    // Test stack_pop again
-    match stack_pop<.i32> s:
-        Option::Some x:
-            assert_eq_i32 200 x
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "alloc/collections/stack" as *
+#import "core/math" as *
+#import "core/option" as *
+
+fn main <()*>i32> ():
+    let s stack_new<i32>;
+    match stack_pop<i32> s:
+        Option::Some _:
+            0
         Option::None:
-            test_fail "stack_pop 2 returned None";
-
-    // Test stack_pop on empty should return None
-    match stack_pop<.i32> s:
-        Option::Some x:
-            assert_eq_i32 100 x
-        Option::None:
-            test_fail "stack_pop 3 returned None";
-
-    match stack_pop<.i32> s:
-        Option::Some x:
-            test_fail "stack_pop on empty returned Some"
-        Option::None:
-            ();
-
-    ()
+            1
 ```

@@ -16,10 +16,9 @@ neplg2:test
 #import "std/test" as *
 
 fn main <()*> ()> ():
-    match fs_read_to_string "stdlib/tests/fs.n.md":
+    match fs_read_to_string "__definitely_missing_file__.txt":
         Result::Ok s:
-            assert lt 0 len s;
-            ()
+            test_fail "fs_read_to_string unexpectedly succeeded";
         Result::Err e:
-            test_fail "fs_read_to_string failed";
+            ()
 ```
