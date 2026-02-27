@@ -182,6 +182,17 @@ function defaultScenarios() {
             },
         },
         {
+            name: 'syntax_color_ansi',
+            steps: [{ delayMs: 120, bytes: 'q\n' }],
+            expect: (r) => {
+                const merged = `${r.stdout}\n${r.stderr}`;
+                assertCond(r.code === 0, `syntax_color_ansi exit code=${r.code}`);
+                assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
+                assertCond(r.stdout.includes('\x1b[33;40m#entry'), 'directive color ansi missing');
+                assertCond(r.stdout.includes('\x1b[36;40mfn'), 'keyword color ansi missing');
+            },
+        },
+        {
             name: 'editor_features',
             steps: [
                 { delayMs: 80, bytes: '2' },

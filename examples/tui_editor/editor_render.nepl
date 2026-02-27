@@ -1,0 +1,218 @@
+#indent 4
+#target wasix
+
+#import "core/math" as *
+#import "core/field" as *
+#import "alloc/string" as *
+#import "platforms/wasix/tui" as tui
+#import "./editor_text" as et
+
+fn find_comment_start <(str)*>i32> (line):
+    let n <i32> len line;
+    let mut i <i32> 0;
+    let mut ci <i32> n;
+    while lt add i 1 n:
+        do:
+            if:
+                and eq load_u8 add line add 4 i 47 eq load_u8 add line add 4 add i 1 47
+                then:
+                    set ci i;
+                    set i n;
+                else:
+                    set i add i 1;
+    ci
+
+fn style_keyword_head <(str)*>str> (code):
+    if:
+        ge len code 3
+        then:
+            if:
+                and and eq load_u8 add code 4 102 eq load_u8 add code 5 110 eq load_u8 add code 6 32
+                then:
+                    concat tui::style_text 6 0 "fn" et::safe_slice code 2 len code
+                else:
+                    if:
+                        ge len code 4
+                        then:
+                            if:
+                                and and and eq load_u8 add code 4 108 eq load_u8 add code 5 101 eq load_u8 add code 6 116 eq load_u8 add code 7 32
+                                then:
+                                    concat tui::style_text 6 0 "let" et::safe_slice code 3 len code
+                                else:
+                                    if:
+                                        and eq load_u8 add code 4 105 eq load_u8 add code 5 102
+                                        then:
+                                            concat tui::style_text 6 0 "if" et::safe_slice code 2 len code
+                                        else:
+                                            code
+                        else:
+                            if:
+                                and eq load_u8 add code 4 105 eq load_u8 add code 5 102
+                                then:
+                                    concat tui::style_text 6 0 "if" et::safe_slice code 2 len code
+                                else:
+                                    code
+        else:
+            code
+
+fn render_code_line <(str)*>str> (line):
+    if:
+        eq len line 0
+        then:
+            line
+        else:
+            if:
+                eq load_u8 add line 4 35
+                then:
+                    tui::style_text 3 0 line
+                else:
+                    let ci <i32> find_comment_start line;
+                    if:
+                        lt ci len line
+                        then:
+                            let code <str> et::safe_slice line 0 ci;
+                            let cmt <str> et::safe_slice line ci len line;
+                            concat style_keyword_head code tui::style_text 2 0 cmt
+                        else:
+                            style_keyword_head line
+
+fn render_code_area <(str)*>str> (line):
+    render_code_line line
+
+fn get_line_at_render <(str,i32)*>str> (text, line_no):
+    let mut cur <str> text;
+    let mut i <i32> 0;
+    while lt i line_no:
+        do:
+            let n <i32> len cur;
+            let mut j <i32> 0;
+            let mut found_nl <bool> false;
+            while and lt j n not found_nl:
+                do:
+                    if:
+                        eq load_u8 add cur add 4 j 10
+                        then:
+                            set found_nl true
+                        else:
+                            set j add j 1;
+            if:
+                found_nl
+                then:
+                    set cur et::safe_slice cur add j 1 n
+                else:
+                    set cur "";
+            set i add i 1;
+    let n2 <i32> len cur;
+    let mut k <i32> 0;
+    let mut found_nl2 <bool> false;
+    while and lt k n2 not found_nl2:
+        do:
+            if:
+                eq load_u8 add cur add 4 k 10
+                then:
+                    set found_nl2 true
+                else:
+                    set k add k 1;
+    if:
+        found_nl2
+        then:
+            et::safe_slice cur 0 k
+        else:
+            cur
+
+fn line_with_cursor <(str,i32)*>str> (raw, col):
+    raw
+
+fn line_with_cursor_bg <(str,i32)*>str> (raw, col):
+    if:
+        lt col 0
+        then:
+            raw
+        else:
+            if:
+                gt col len raw
+                then:
+                    raw
+                else:
+                    if:
+                        eq col len raw
+                        then:
+                            let a <str> et::safe_slice raw 0 col;
+                            let c <str> tui::style_text 0 6 " ";
+                            concat a c
+                        else:
+                            let a <str> et::safe_slice raw 0 col;
+                            let ch <str> et::safe_slice raw col add col 1;
+                            let b <str> et::safe_slice raw add col 1 len raw;
+                            let c <str> tui::style_text 0 6 ch;
+                            let x <str> concat a c;
+                            concat x b
+
+fn right_pane_line <(i32,str,str)*>str> (line_idx, msg, path):
+    if:
+        eq line_idx 0
+        then:
+            " Tabs: [1][2][3]  Save[s]  RunHint[r] "
+        else:
+            if:
+                eq line_idx 1
+                then:
+                    " Move: Arrow / HJKL, JumpDef[g], Quit[q]"
+                else:
+                    if:
+                        eq line_idx 2
+                        then:
+                            concat " File: " path
+                        else:
+                            if:
+                                eq line_idx 4
+                                then:
+                                    " Run in side terminal:"
+                                else:
+                                    if:
+                                        eq line_idx 5
+                                        then:
+                                            let a <str> concat " nepl-cli --input " path;
+                                            concat a " --run"
+                                        else:
+                                            if:
+                                                eq line_idx 7
+                                                then:
+                                                    concat " Msg: " msg
+                                                else:
+                                                    ""
+
+fn draw_editor <(i32,i32,i32,i32,str,i32,str,str,i32)*>()> (buf, cols, rows, frame, text, cursor, msg, path, tab):
+    let inner <i32> sub cols 2;
+    let left_w <i32> div_s inner 2;
+    let right_w <i32> sub inner left_w;
+    let p <.Pair> et::cursor_line_col text cursor;
+
+    let t0 <str> concat " NEPLg2 TUI Editor / Tab " from_i32 add tab 1;
+    tui::buffer_set_line buf 1 tui::line_box t0 cols;
+    let s0 <str> concat " Frame: " from_i32 frame;
+    let s1 <str> concat s0 "  Ln: ";
+    let s2 <str> concat s1 from_i32 add get p 0 1;
+    let s3 <str> concat s2 "  Col: ";
+    let s4 <str> concat s3 from_i32 add get p 1 1;
+    tui::buffer_set_line buf 2 tui::line_box s4 cols;
+
+    let mut r <i32> 3;
+    while lt r rows:
+        do:
+            let line_idx <i32> sub r 3;
+            let raw <str> get_line_at_render text line_idx;
+            let left_clip <str> tui::line_clip_to_cols raw left_w;
+            let left_pad <str> tui::line_pad_to_cols left_clip left_w;
+            let l0 <str> if eq line_idx get p 0 line_with_cursor_bg left_pad get p 1 render_code_area left_pad;
+            let right <str> right_pane_line line_idx msg path;
+            let right_clip <str> tui::line_clip_to_cols right right_w;
+            let r0 <str> tui::line_pad_to_cols right_clip right_w;
+            let body <str> concat l0 r0;
+            let boxed <str> tui::line_box body cols;
+            tui::buffer_set_line buf r boxed;
+            set r add r 1;
+
+    tui::buffer_set_line buf rows tui::line_box path cols;
+    tui::buffer_present_diff buf;
+    ()
