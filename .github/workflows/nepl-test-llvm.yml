@@ -48,6 +48,21 @@ jobs:
               with:
                   version: latest
 
+            - name: Install wasm-bindgen-cli (pinned, retry)
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  for i in 1 2 3 4 5; do
+                    if cargo install --locked wasm-bindgen-cli --version 0.2.108; then
+                      wasm-bindgen --version
+                      exit 0
+                    fi
+                    echo "wasm-bindgen-cli install failed (attempt $i), retrying..."
+                    sleep $((i * 5))
+                  done
+                  echo "failed to install wasm-bindgen-cli after retries"
+                  exit 1
+
             - name: Cache Cargo build
               uses: Swatinem/rust-cache@v2
               with:
