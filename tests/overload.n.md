@@ -346,3 +346,22 @@ fn parse <(bool,bool)->i32> (a, b):
 fn main <()->i32> ():
     parse 1 true
 ```
+
+## overload_too_many_arguments_reports_stack_extra
+
+neplg2:test[compile_fail]
+diag_id: 3016
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn f <(i32)->i32> (a):
+    a
+
+fn f <(i32,i32)->i32> (a, b):
+    a
+
+fn main <()->i32> ():
+    f 1 2 3
+```

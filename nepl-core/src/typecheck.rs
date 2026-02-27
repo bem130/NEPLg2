@@ -2172,10 +2172,13 @@ impl<'a> BlockChecker<'a> {
                             }
 
                             if dropped_from_prefix {
-                                self.diagnostics.push(Diagnostic::error(
-                                    "expression left extra values on the stack",
-                                    typed.span,
-                                ));
+                                self.diagnostics.push(
+                                    Diagnostic::error(
+                                        "expression left extra values on the stack",
+                                        typed.span,
+                                    )
+                                    .with_id(DiagnosticId::TypeStackExtraValues),
+                                );
                             }
 
                             // If there was an explicit semicolon token, require that the
@@ -2187,7 +2190,7 @@ impl<'a> BlockChecker<'a> {
                                     self.diagnostics.push(Diagnostic::error(
                                         "statement must leave exactly one value on the stack",
                                         sp,
-                                    ));
+                                    ).with_id(DiagnosticId::TypeStackExtraValues));
                                     while stack.len() > base_depth {
                                         stack.pop();
                                     }

@@ -1,3 +1,20 @@
+# 2026-02-27 作業メモ (compile_fail 用診断IDの拡張: スタック余剰値)
+- 目的:
+  - `compile_fail` で「呼び出し arity 不整合により余剰値が残る」ケースを `diag_id` で固定検証できるようにする。
+- 実装:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `DiagnosticId::TypeStackExtraValues = 3016` を追加。
+    - `from_u32` / `message` に同IDを追加。
+  - `nepl-core/src/typecheck.rs`
+    - `expression left extra values on the stack` に `with_id(DiagnosticId::TypeStackExtraValues)` を付与。
+    - `statement must leave exactly one value on the stack` にも同IDを付与。
+  - `tests/overload.n.md`
+    - `overload_too_many_arguments_reports_stack_extra` を追加。
+    - `compile_fail` + `diag_id: 3016` で検証。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/functions.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-overload-functions.json -j 2` -> `100/100 pass`
+
 # 2026-02-27 作業メモ (compile_fail の diag_id 検証強化 + overload arity 調査)
 - 目的:
   - `compile_fail` テストで `diag_id` 一致を WASM/LLVM の両方で検証可能にする。

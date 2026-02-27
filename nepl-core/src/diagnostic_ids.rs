@@ -63,6 +63,8 @@ pub enum DiagnosticId {
     TypeNoShadowViolation = 3014,
     /// no-shadow 宣言の衝突。
     TypeNoShadowConflict = 3015,
+    /// 式が余剰値をスタックに残した。
+    TypeStackExtraValues = 3016,
 }
 
 impl DiagnosticId {
@@ -101,6 +103,7 @@ impl DiagnosticId {
             3013 => Some(DiagnosticId::TypePipeError),
             3014 => Some(DiagnosticId::TypeNoShadowViolation),
             3015 => Some(DiagnosticId::TypeNoShadowConflict),
+            3016 => Some(DiagnosticId::TypeStackExtraValues),
             _ => None,
         }
     }
@@ -137,6 +140,7 @@ impl DiagnosticId {
             DiagnosticId::TypePipeError => "pipe usage error",
             DiagnosticId::TypeNoShadowViolation => "cannot shadow non-shadowable symbol",
             DiagnosticId::TypeNoShadowConflict => "noshadow declaration conflicts",
+            DiagnosticId::TypeStackExtraValues => "expression left extra values on the stack",
         }
     }
 
