@@ -3915,7 +3915,7 @@
   - 実コード行（`#target wasi` など）は未変更。
 - 検証:
   - `NO_COLOR=false trunk build` は成功。
-  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` 実行結果:
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` 実行結果:
     - `total=1781, passed=1205, failed=576, errored=0`
     - 失敗の代表は `tests/kp.n.md` / `tests/string.n.md` の wasm/llvm 実行差分（stdout mismatch）で、今回の target 表記変更による新規失敗は確認できない（件数が既知値と一致）。
 - 補足:
@@ -4110,6 +4110,23 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> pass
   - `node tests/tree/run.js` -> `16/16 pass`
-  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
 - todo反映:
   - `todo.md` 2番から「token 単位の型情報 API に定義ジャンプ情報（import 先含む）を統合する」を削除（完了）。
+# 2026-02-27 作業メモ (LSP/API phase2: name_resolution の VFS 版を追加)
+- 目的:
+  - `todo.md` 2番の残件だった「`analyze_name_resolution` の import/alias/use 跨ぎ定義元情報」を API で返せるようにする。
+- 実装:
+  - `nepl-web/src/lib.rs`
+    - `analyze_name_resolution_with_vfs(entry_path, source, vfs, options)` を追加。
+    - `Loader + SourceMap` 経由で複数ファイルを読み込み、`name_resolution_payload_to_js(..., Some(&source_map), ...)` を使って
+      定義・参照・shadow の `span.file_path` を返すようにした。
+    - 失敗時は `loader error` 診断と空配列 payload を返す。
+  - `tests/tree/17_name_resolution_vfs_cross_file.js` を追加。
+    - `core/math` の `add` 参照に対して `resolved_def.span.file_path` が `/stdlib/core/math.nepl` になることを検証。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node tests/tree/run.js` -> `17/17 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
+- todo反映:
+  - `todo.md` 2番から「`analyze_name_resolution` で import/alias/use 跨ぎ時の定義元ファイル情報を返す」を削除（完了）。

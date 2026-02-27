@@ -1834,6 +1834,116 @@ pub fn analyze_name_resolution_with_options(source: &str, options: JsValue) -> J
     out.into()
 }
 
+/// VFS を使って import/alias/use を含む複数ファイルの名前解決情報を返します。
+#[wasm_bindgen]
+pub fn analyze_name_resolution_with_vfs(
+    entry_path: &str,
+    source: &str,
+    vfs: JsValue,
+    options: JsValue,
+) -> JsValue {
+    let warn_important_shadow = Reflect::get(&options, &JsValue::from_str("warn_important_shadow"))
+        .ok()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    let stdlib_root = PathBuf::from("/stdlib");
+    let mut sources = stdlib_sources(&stdlib_root);
+    merge_vfs_sources(&mut sources, Some(vfs));
+
+    let mut loader = Loader::new(stdlib_root);
+    let mut provider = |path: &PathBuf| {
+        sources.get(path).cloned().ok_or_else(|| {
+            nepl_core::loader::LoaderError::Io(format!("missing source: {}", path.display()))
+        })
+    };
+    let loaded = loader.load_inline_with_provider(
+        PathBuf::from(entry_path),
+        source.to_string(),
+        &mut provider,
+    );
+
+    let out = js_sys::Object::new();
+    let _ = Reflect::set(
+        &out,
+        &JsValue::from_str("stage"),
+        &JsValue::from_str("name_resolution"),
+    );
+
+    match loaded {
+        Ok(loaded) => {
+            let mut trace = NameResolutionTrace::new_with_options(warn_important_shadow);
+            trace_block(&mut trace, &loaded.module.root);
+            let payload = name_resolution_payload_to_js(source, Some(&loaded.source_map), &trace);
+            let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(true));
+            let _ = Reflect::set(
+                &out,
+                &JsValue::from_str("diagnostics"),
+                &js_sys::Array::new(),
+            );
+            let _ = Reflect::set(
+                &out,
+                &JsValue::from_str("definitions"),
+                &Reflect::get(&payload, &JsValue::from_str("definitions")).unwrap_or(JsValue::NULL),
+            );
+            let _ = Reflect::set(
+                &out,
+                &JsValue::from_str("references"),
+                &Reflect::get(&payload, &JsValue::from_str("references")).unwrap_or(JsValue::NULL),
+            );
+            let _ = Reflect::set(
+                &out,
+                &JsValue::from_str("shadows"),
+                &Reflect::get(&payload, &JsValue::from_str("shadows")).unwrap_or(JsValue::NULL),
+            );
+            let _ = Reflect::set(
+                &out,
+                &JsValue::from_str("shadow_diagnostics"),
+                &Reflect::get(&payload, &JsValue::from_str("shadow_diagnostics"))
+                    .unwrap_or(JsValue::NULL),
+            );
+            let _ = Reflect::set(
+                &out,
+                &JsValue::from_str("by_name"),
+                &Reflect::get(&payload, &JsValue::from_str("by_name")).unwrap_or(JsValue::NULL),
+            );
+            let _ = Reflect::set(
+                &out,
+                &JsValue::from_str("policy"),
+                &Reflect::get(&payload, &JsValue::from_str("policy")).unwrap_or(JsValue::NULL),
+            );
+        }
+        Err(e) => {
+            let mut ds = Vec::new();
+            ds.push(Diagnostic::error(format!("loader error: {}", e), Span::dummy()));
+            let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(false));
+            let _ = Reflect::set(
+                &out,
+                &JsValue::from_str("diagnostics"),
+                &diagnostics_to_js(source, &ds),
+            );
+            let _ = Reflect::set(&out, &JsValue::from_str("definitions"), &js_sys::Array::new());
+            let _ = Reflect::set(&out, &JsValue::from_str("references"), &js_sys::Array::new());
+            let _ = Reflect::set(&out, &JsValue::from_str("shadows"), &js_sys::Array::new());
+            let _ = Reflect::set(
+                &out,
+                &JsValue::from_str("shadow_diagnostics"),
+                &js_sys::Array::new(),
+            );
+            let _ = Reflect::set(&out, &JsValue::from_str("by_name"), &js_sys::Object::new());
+            let policy = js_sys::Object::new();
+            let _ = Reflect::set(
+                &policy,
+                &JsValue::from_str("warn_important_shadow"),
+                &JsValue::from_bool(warn_important_shadow),
+            );
+            let _ = Reflect::set(&out, &JsValue::from_str("policy"), &policy);
+        }
+    }
+
+    out.into()
+}
+
 /// 字句・構文・型検査の情報を統合し、LSP 向けの詳細解析結果を返します。
 ///
 /// 返却する主な情報:

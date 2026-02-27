@@ -10,7 +10,6 @@
 - capture あり関数値は closure conversion の設計を確定して段階導入する。
 
 2. LSP/API 拡張（phase 2）
-- `analyze_name_resolution` で、import/alias/use 跨ぎ時の定義元ファイル情報（jump 先）を返す。
 - Hover/Inlay Hint 向けに式範囲・引数範囲・推論型・関連 doc comment を返す API を追加する。
 
 3. 診断体系の再整理
