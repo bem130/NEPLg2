@@ -645,9 +645,10 @@ fn main <()->i32> ():
     id 1
 ```
 
-## overloads_with_different_arity_are_error
+## overloads_with_different_arity_are_allowed
 
-neplg2:test[compile_fail]
+neplg2:test
+ret: 1
 ```neplg2
 
 #entry main
@@ -663,9 +664,10 @@ fn main <()->i32> ():
     foo 1
 ```
 
-## overloads_ambiguous_return_type_is_error
+## overloads_by_return_type_are_resolved_by_expected_type
 
-neplg2:test[compile_fail]
+neplg2:test
+ret: 1
 ```neplg2
 
 #entry main

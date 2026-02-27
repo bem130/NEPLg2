@@ -4373,3 +4373,19 @@
   - `node nodesrc/tests.js -i stdlib/tests/stack.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stdlib-collections-split.json -j 1` -> `27/27 pass`
   - `node nodesrc/tests.js -i stdlib/tests/stack.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i stdlib/tests/cliarg.n.md -i stdlib/tests/fs.n.md -i stdlib/tests/string.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stdlib-tests-six-no-stdlib.json -j 1` -> `42/42 pass`
   - `node nodesrc/tests.js -i tests/overload.n.md -i tests/functions.n.md --runner all --llvm-all --assert-io --strict-dual --no-tree -o /tmp/tests-overload-functions-dual-after-stdlib-rewrite.json -j 2` -> `612/612 pass`
+# 2026-02-27 作業メモ (過負荷仕様に合わせた neplg2 テスト更新 + stdlib/tests 分割整備)
+- 目的:
+  - `tests/neplg2.n.md` の compile_fail 期待が現仕様（異 arity オーバーロード許可・期待型で戻り値過負荷を選択）と不整合だったため、仕様準拠に更新する。
+  - `stdlib/tests` の巨大単一ケースを `tests/functions.n.md` 形式の小分割ケースへ統一し、切り分けしやすくする。
+- 実装:
+  - `tests/neplg2.n.md`
+    - `overloads_with_different_arity_are_error` を `overloads_with_different_arity_are_allowed` に変更。
+    - `overloads_ambiguous_return_type_is_error` を `overloads_by_return_type_are_resolved_by_expected_type` に変更。
+    - いずれも `compile_fail` から `ret: 1` の成功テストへ変更。
+  - `stdlib/tests/stack.n.md`, `stdlib/tests/btreemap.n.md`, `stdlib/tests/btreeset.n.md`, `stdlib/tests/string.n.md`, `stdlib/tests/cliarg.n.md`
+    - 1ファイル1巨大ケースを複数小ケースへ再構成。
+    - 旧シグネチャや曖昧な `eq` 連結を除去し、現行構文で安定動作する形に整理。
+- 検証:
+  - `node nodesrc/tests.js -i tests/neplg2.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-neplg2-current.json -j 1` -> `112/112 pass`
+  - `node nodesrc/tests.js -i stdlib/tests/stack.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i stdlib/tests/cliarg.n.md -i stdlib/tests/fs.n.md -i stdlib/tests/string.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stdlib-tests-six-no-stdlib.json -j 1` -> `42/42 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --runner all --llvm-all --assert-io --strict-dual --no-tree -o /tmp/tests-dual-full-current.json -j 2` -> `1739/1739 pass`
