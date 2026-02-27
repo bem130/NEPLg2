@@ -4698,3 +4698,26 @@
     - `tests/sort.n.md`
 - 補足:
   - `--changed` 全体実行では、既存のローカル変更 `stdlib/nm/parser.nepl` に起因する失敗が混ざるため、今回の移設検証は影響範囲を明示指定して実施した。
+
+# 2026-02-27 作業メモ (collections: ringbuffer/queue 追加)
+- 目的:
+  - `todo.md` の collections 再設計項目に沿って、FIFO基盤の `RingBuffer` と `Queue` を追加する。
+- 実装:
+  - 追加: `stdlib/alloc/collections/ringbuffer.nepl`
+    - `RingBuffer<.T>` 構造体（len/cap/head/data）
+    - `ringbuffer_new/with_capacity/push_back/pop_front/peek_front/len/is_empty/clear/free`
+    - 失敗系は `Result<..., Diag>`、取得系は `Option`
+  - 追加: `stdlib/alloc/collections/queue.nepl`
+    - `Queue<.T>` を `RingBuffer<.T>` で実装
+    - `queue_new/with_capacity/push/pop/peek/len/is_empty/clear/free`
+  - 追加テスト:
+    - `stdlib/tests/ringbuffer.n.md`
+    - `stdlib/tests/queue.n.md`
+    - `tests/ringbuffer_collections.n.md`
+    - `tests/queue_collections.n.md`
+    - `tests/pipe_collections.n.md` に ringbuffer/queue ケース追加
+- 不具合修正:
+  - move セマンティクス違反（同一値の再利用）を、既存方針どおり「同一構築を別束縛に分離」で解消。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i stdlib/alloc/collections/ringbuffer.nepl -i stdlib/alloc/collections/queue.nepl -i stdlib/tests/ringbuffer.n.md -i stdlib/tests/queue.n.md -i tests/ringbuffer_collections.n.md -i tests/queue_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-ringbuffer-queue.json -j 2` -> `42/42 pass`

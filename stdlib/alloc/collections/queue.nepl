@@ -1,0 +1,89 @@
+//: queue: FIFOキューを扱うライブラリ
+//:
+//: [目的/もくてき]:
+//: - `push` / `pop` / `peek` を前から取り出す FIFO として提供します。
+//:
+//: [実装/じっそう]:
+//: - 内部に `RingBuffer<.T>` を保持し、操作を委譲します。
+//:
+//: [注意/ちゅうい]:
+//: - `push` は `Result<Queue<.T>, Diag>` を返します。
+//: - `pop` / `peek` は `Option<.T>` を返します。
+
+#indent 4
+
+#import "core/option" as *
+#import "core/result" as *
+#import "core/field" as *
+#import "alloc/diag/error" as *
+#import "alloc/collections/ringbuffer" as *
+
+struct Queue<.T>:
+    rb <RingBuffer<.T>>
+
+//: queue_new: 空のQueueを作る
+fn queue_new <.T> <()*>Result<Queue<.T>, Diag>> ():
+    match ringbuffer_new<.T>:
+        Result::Ok rb:
+            ok<Queue<.T>, Diag> Queue rb
+        Result::Err d:
+            err<Queue<.T>, Diag> d
+
+//: queue_with_capacity: 初期容量を指定して作る
+fn queue_with_capacity <.T> <(i32)*>Result<Queue<.T>, Diag>> (cap):
+    match ringbuffer_with_capacity<.T> cap:
+        Result::Ok rb:
+            ok<Queue<.T>, Diag> Queue rb
+        Result::Err d:
+            err<Queue<.T>, Diag> d
+
+//: queue_len: 要素数を返す
+fn queue_len <.T> <(Queue<.T>)->i32> (q):
+    ringbuffer_len<.T> get q "rb"
+
+//: queue_is_empty: 空判定
+fn queue_is_empty <.T> <(Queue<.T>)->bool> (q):
+    ringbuffer_is_empty<.T> get q "rb"
+
+//: queue_push: 末尾へ追加
+fn queue_push <.T> <(Queue<.T>, .T)*>Result<Queue<.T>, Diag>> (q, item):
+    match ringbuffer_push_back<.T> get q "rb" item:
+        Result::Ok rb2:
+            ok<Queue<.T>, Diag> Queue rb2
+        Result::Err d:
+            err<Queue<.T>, Diag> d
+
+//: queue_pop: 先頭から取り出す
+fn queue_pop <.T> <(Queue<.T>)*>Option<.T>> (q):
+    ringbuffer_pop_front<.T> get q "rb"
+
+//: queue_peek: 先頭を参照
+fn queue_peek <.T> <(Queue<.T>)->Option<.T>> (q):
+    ringbuffer_peek_front<.T> get q "rb"
+
+//: queue_clear: 全削除
+fn queue_clear <.T> <(Queue<.T>)*>Queue<.T>> (q):
+    let rb2 <RingBuffer<.T>> ringbuffer_clear<.T> get q "rb"
+    Queue rb2
+
+//: queue_free: 内部メモリを解放
+fn queue_free <.T> <(Queue<.T>)*>()> (q):
+    ringbuffer_free<.T> get q "rb"
+
+fn push <.T> <(Queue<.T>, .T)*>Result<Queue<.T>, Diag>> (q, item):
+    queue_push<.T> q item
+
+fn pop <.T> <(Queue<.T>)*>Option<.T>> (q):
+    queue_pop<.T> q
+
+fn peek <.T> <(Queue<.T>)->Option<.T>> (q):
+    queue_peek<.T> q
+
+fn len <.T> <(Queue<.T>)->i32> (q):
+    queue_len<.T> q
+
+fn clear <.T> <(Queue<.T>)*>Queue<.T>> (q):
+    queue_clear<.T> q
+
+fn free <.T> <(Queue<.T>)*>()> (q):
+    queue_free<.T> q

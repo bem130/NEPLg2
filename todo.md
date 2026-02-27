@@ -25,7 +25,6 @@
 
 6. stdlib/collections 再設計
 - `collections` 配下の既存データ構造を新配置に合わせて改修する。
-- リングバッファと queue を `collections` に追加し、テストを整備する。
 
 ---
 ### 以下編集禁止
