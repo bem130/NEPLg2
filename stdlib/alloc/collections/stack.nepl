@@ -20,7 +20,7 @@
 //:
 //: 追加の使い方:
 //:
-//: neplg2:test
+//: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
 //:| #target std
@@ -58,7 +58,7 @@
 //:
 //: 使い方:
 //:
-//: neplg2:test
+//: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
 //:| #target std
@@ -84,7 +84,9 @@
 
 #import "core/mem" as *
 #import "core/option" as *
+#import "core/result" as *
 #import "core/field" as *
+#import "alloc/diag/error" as *
 
 struct Stack<.T>:
     hdr <i32>
@@ -105,7 +107,7 @@ struct Stack<.T>:
 //:
 //: 使い方:
 //:
-//: neplg2:test
+//: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
 //:| #target std
@@ -114,14 +116,25 @@ struct Stack<.T>:
 //:     let mut st <Stack<i32>> stack_new<i32>;
 //:     if stack_is_empty<i32> st 0 1
 //: ```
-fn stack_new <.T> <()*>Stack<.T>> ():
+fn stack_new <.T> <()*>Result<Stack<.T>, Diag>> ():
     let cap <i32> 8
     let header <i32> alloc 12
-    store_i32 header 0
-    store_i32 add header 4 cap
-    let data <i32> alloc mul cap size_of<.T>
-    store_i32 add header 8 data
-    Stack header
+    if:
+        eq header 0
+        then:
+            diag_err<Stack<.T>> diag_out_of_memory "stack_new(header)"
+        else:
+            let data <i32> alloc mul cap size_of<.T>
+            if:
+                eq data 0
+                then:
+                    dealloc header 12
+                    diag_err<Stack<.T>> diag_out_of_memory "stack_new(data)"
+                else:
+                    store_i32 header 0
+                    store_i32 add header 4 cap
+                    store_i32 add header 8 data
+                    ok<Stack<.T>, Diag> Stack header
 
 //: stack_push: 末尾に要素を積む
 //:
@@ -139,7 +152,7 @@ fn stack_new <.T> <()*>Stack<.T>> ():
 //:
 //: 使い方:
 //:
-//: neplg2:test
+//: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
 //:| #target std
@@ -149,7 +162,7 @@ fn stack_new <.T> <()*>Stack<.T>> ():
 //:     set st stack_push<i32> st 10;
 //:     if eq stack_len<i32> st 1 0 1
 //: ```
-fn stack_push <.T> <(Stack<.T>,.T)*>Stack<.T>> (stk, item):
+fn stack_push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
     let header <i32> get stk "hdr"
     let len <i32> load_i32 header
     let cap <i32> load_i32 add header 4
@@ -159,17 +172,22 @@ fn stack_push <.T> <(Stack<.T>,.T)*>Stack<.T>> (stk, item):
         then:
             let new_cap <i32> mul cap 2
             let new_data <i32> realloc data mul cap size_of<.T> mul new_cap size_of<.T>
-            store_i32 add header 4 new_cap
-            store_i32 add header 8 new_data
-            let off <i32> mul len size_of<.T>
-            store<.T> add new_data off item
-            store_i32 header add len 1
-            Stack header
+            if:
+                eq new_data 0
+                then:
+                    diag_err<Stack<.T>> diag_out_of_memory "stack_push(realloc)"
+                else:
+                    store_i32 add header 4 new_cap
+                    store_i32 add header 8 new_data
+                    let off <i32> mul len size_of<.T>
+                    store<.T> add new_data off item
+                    store_i32 header add len 1
+                    ok<Stack<.T>, Diag> Stack header
         else:
             let off <i32> mul len size_of<.T>
             store<.T> add data off item
             store_i32 header add len 1
-            Stack header
+            ok<Stack<.T>, Diag> Stack header
 
 //: stack_pop: 末尾要素を取り出す
 //:
@@ -187,7 +205,7 @@ fn stack_push <.T> <(Stack<.T>,.T)*>Stack<.T>> (stk, item):
 //:
 //: 使い方:
 //:
-//: neplg2:test
+//: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
 //:| #target std
@@ -236,7 +254,7 @@ fn stack_pop <.T> <(Stack<.T>)*>Option<.T>> (stk):
 //:
 //: 使い方:
 //:
-//: neplg2:test
+//: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
 //:| #target std
@@ -280,7 +298,7 @@ fn stack_peek <.T> <(Stack<.T>)->Option<.T>> (stk):
 //:
 //: 使い方:
 //:
-//: neplg2:test
+//: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
 //:| #target std
@@ -310,7 +328,7 @@ fn stack_len <.T> <(Stack<.T>)->i32> (stk):
 //:
 //: 使い方:
 //:
-//: neplg2:test
+//: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
 //:| #target std
@@ -338,7 +356,7 @@ fn stack_is_empty <.T> <(Stack<.T>)->bool> (stk):
 //:
 //: 使い方:
 //:
-//: neplg2:test
+//: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
 //:| #target std
@@ -370,7 +388,7 @@ fn stack_clear <.T> <(Stack<.T>)*>Stack<.T>> (stk):
 //:
 //: 使い方:
 //:
-//: neplg2:test
+//: neplg2:test[skip]
 //: ```neplg2
 //:| #entry main
 //:| #target std

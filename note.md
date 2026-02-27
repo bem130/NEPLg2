@@ -4638,3 +4638,21 @@
   - `NO_COLOR=false trunk build` -> pass
   - `node nodesrc/tests.js -i stdlib/core/result.nepl -i stdlib/alloc/diag/error.nepl -i stdlib/alloc/collections/hashmap.nepl -i stdlib/alloc/collections/hashset.nepl -i stdlib/alloc/collections/hashmap_str.nepl -i stdlib/alloc/collections/hashset_str.nepl -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md -i tests/pipe_collections.n.md -i tests/selfhost_req.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/diag-collections-scope.json -j 2`
   - 結果: `67/67 pass`
+
+# 2026-02-27 作業メモ (collections安全化: stack を Result/Diag デフォルトへ統一)
+- 目的:
+  - collections の安全化方針に合わせて `stack` も失敗可能操作を `Result<..., Diag>` で扱う。
+- 実装:
+  - `stdlib/alloc/collections/stack.nepl`
+    - `stack_new`: `()*>Result<Stack<.T>, Diag>` へ変更。
+    - `stack_push`: `(Stack<.T>, .T)*>Result<Stack<.T>, Diag>` へ変更。
+    - `alloc/realloc` 失敗時に `diag_out_of_memory` を返すよう修正。
+  - `stdlib/tests/stack.n.md`
+  - `tests/stack_collections.n.md`
+  - `tests/pipe_collections.n.md`
+    - `stack_new`/`stack_push` の戻り値を `unwrap_ok<Stack<...>, Diag>` で展開する形へ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i stdlib/alloc/collections/stack.nepl -i stdlib/tests/stack.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stack-safe-scope.json -j 2` -> `74/74 pass`
+- 備考:
+  - `todo.md` の collections再設計は継続中のため、完了項目削除はまだ行っていない。

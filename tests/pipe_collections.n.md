@@ -38,20 +38,28 @@ ret: 1
 #target std
 
 #import "alloc/collections/stack" as *
+#import "alloc/diag/error" as *
 #import "core/math" as *
 #import "core/option" as *
 #import "core/field" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
     let s0 <Stack<i32>>:
         stack_new<i32>
+        |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 10
-        |> stack_push<i32> 20;
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> stack_push<i32> 20
+        |> unwrap_ok<Stack<i32>, Diag>;
     let ok0 <bool> eq stack_len<i32> s0 2;
     let s1 <Stack<i32>>:
         stack_new<i32>
+        |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 10
-        |> stack_push<i32> 20;
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> stack_push<i32> 20
+        |> unwrap_ok<Stack<i32>, Diag>;
     let p stack_pop<i32> s1;
     let ok1 <bool> match p:
         Option::Some v:

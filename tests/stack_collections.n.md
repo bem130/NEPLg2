@@ -10,12 +10,14 @@ ret: 1
 #target std
 
 #import "alloc/collections/stack" as *
+#import "alloc/diag/error" as *
 #import "core/math" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
-    let mut s <Stack<i32>> stack_new<i32>;
-    set s stack_push<i32> s 10;
-    set s stack_push<i32> s 20;
+    let mut s <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+    set s unwrap_ok<Stack<i32>, Diag> stack_push<i32> s 10;
+    set s unwrap_ok<Stack<i32>, Diag> stack_push<i32> s 20;
     if eq stack_len<i32> s 2 1 0
 ```
 
@@ -29,15 +31,20 @@ ret: 1
 #target std
 
 #import "alloc/collections/stack" as *
+#import "alloc/diag/error" as *
 #import "core/math" as *
 #import "core/option" as *
 #import "core/field" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
     let s0 <Stack<i32>>:
         stack_new<i32>
+        |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 10
-        |> stack_push<i32> 20;
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> stack_push<i32> 20
+        |> unwrap_ok<Stack<i32>, Diag>;
     let ok0 <bool> match stack_peek<i32> s0:
         Option::Some v:
             eq v 20
@@ -45,8 +52,11 @@ fn main <()*>i32> ():
             false
     let s1 <Stack<i32>>:
         stack_new<i32>
+        |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 10
-        |> stack_push<i32> 20;
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> stack_push<i32> 20
+        |> unwrap_ok<Stack<i32>, Diag>;
     let p stack_pop<i32> s1;
     let ok1 <bool> match p:
         Option::Some v:
@@ -66,12 +76,14 @@ ret: 1
 #target std
 
 #import "alloc/collections/stack" as *
+#import "alloc/diag/error" as *
 #import "core/math" as *
 #import "core/option" as *
 #import "core/field" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
-    let s <Stack<i32>> stack_new<i32>;
+    let s <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
     let p stack_pop<i32> s;
     match p:
         Option::Some _:
@@ -90,13 +102,18 @@ ret: 1
 #target std
 
 #import "alloc/collections/stack" as *
+#import "alloc/diag/error" as *
 #import "core/math" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
     let s <Stack<i32>>:
         stack_new<i32>
+        |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 10
-        |> stack_push<i32> 20;
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> stack_push<i32> 20
+        |> unwrap_ok<Stack<i32>, Diag>;
     if eq stack_len<i32> s 2 1 0
 ```
 
@@ -110,15 +127,20 @@ ret: 1
 #target std
 
 #import "alloc/collections/stack" as *
+#import "alloc/diag/error" as *
 #import "core/math" as *
 #import "core/option" as *
 #import "core/field" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
     let s0 <Stack<i32>>:
         stack_new<i32>
+        |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 10
-        |> stack_push<i32> 20;
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> stack_push<i32> 20
+        |> unwrap_ok<Stack<i32>, Diag>;
     let ok0 <bool> match s0 |> stack_peek<i32>:
         Option::Some v:
             eq v 20
@@ -126,8 +148,11 @@ fn main <()*>i32> ():
             false
     let s1 <Stack<i32>>:
         stack_new<i32>
+        |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 10
-        |> stack_push<i32> 20;
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> stack_push<i32> 20
+        |> unwrap_ok<Stack<i32>, Diag>;
     let p s1 |> stack_pop<i32>;
     let ok1 <bool> match p:
         Option::Some v:
@@ -147,12 +172,14 @@ ret: 1
 #target std
 
 #import "alloc/collections/stack" as *
+#import "alloc/diag/error" as *
 #import "core/math" as *
 #import "core/option" as *
 #import "core/field" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
-    let s <Stack<i32>> stack_new<i32>;
+    let s <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
     let p s |> stack_pop<i32>;
     match p:
         Option::Some _:
