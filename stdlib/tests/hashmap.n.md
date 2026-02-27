@@ -103,7 +103,7 @@ fn main <()*> ()> ():
     assert contains<i32> g1 7;
     let h0 <HashMap<i32>> must_hm new<i32>;
     let h1 <HashMap<i32>> must_hm insert<i32> h0 7 70;
-    match hashmap_get<i32> h1 7:
+    match get<i32> h1 7:
         Option::Some v:
             assert_eq_i32 70 v
         Option::None:

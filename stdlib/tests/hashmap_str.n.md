@@ -89,7 +89,7 @@ fn main <()*> ()> ():
     assert hashmap_str_contains<i32> a1 "k";
     let b0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
     let b1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> b0 "k" 9;
-    match hashmap_str_get<i32> b1 "k":
+    match get<i32> b1 "k":
         Option::Some v:
             assert_eq_i32 9 v
         Option::None:

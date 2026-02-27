@@ -4773,3 +4773,43 @@
   - `stdlib/tests/hash.n.md` / `hashmap.n.md` / `hashset.n.md` / `hashmap_str.n.md` / `hashset_str.n.md` / `tests/selfhost_req.n.md` -> すべて pass
 - llvm 対象（`--no-stdlib --runner llvm --llvm-all`）:
   - `stdlib/tests/hash.n.md` / `hashmap.n.md` / `hashset.n.md` / `hashmap_str.n.md` / `hashset_str.n.md` / `tests/selfhost_req.n.md` -> すべて pass
+
+# 2026-02-27 作業メモ (typecheck: get/put 特別処理の再調査)
+## 実施内容
+- `nepl-core/src/typecheck.rs`
+  - `TypeCtx::same` 呼び出しを `resolve_id` 比較へ修正（ビルド不能の直接原因を解消）。
+  - `resolve_field_access` を診断あり/なしで使い分けられる `resolve_field_access_with_mode` に分離。
+  - `get/put` 特別処理を「field 解決できたときのみ適用、失敗時は通常オーバーロードへフォールバック」に変更。
+  - `apply_function` への型引数伝播を修正し、`reduce_calls*` からは `func_entry.type_args`（明示型引数のみ）を渡すように変更。
+
+## 現在の状態
+- `NO_COLOR=false trunk build` は通過。
+- ただし `target/debug/nepl-cli --target wasi --profile debug --input /tmp/hm.nepl --output /tmp/hm-out` で
+  `core/math.nepl` / `alloc/collections/vec.nepl` / `alloc/string.nepl` の `get` 呼び出しが
+  `D3006` / `D3021` で失敗する状態が継続。
+
+## 原因仮説
+- `get` の過負荷候補があるときのシンボル解決で、field 用 `get`（`core/field`）と collections 側 `get` の混在により
+  呼び出し時の候補絞り込みが壊れている可能性が高い。
+- 特に `D3021`（type args mismatch）は、明示していない場面で型引数経路が残っていることを示唆しており、
+  `PrefixItem::Symbol` -> `StackEntry::type_args` -> `apply_function` までの経路を追加で追う必要がある。
+
+## 次アクション
+- `get/put` に限定した最小ケースで `StackEntry::type_args` の生成/搬送をトレース。
+- `lookup_all_callables` と `lookup_all_any_defined` のスコープ優先規則が
+  field/collections の同名解決を壊していないか確認。
+- 最小修正で `core/field get` と collections `get` の両立を回復後、
+  `stdlib/tests/hashmap*.n.md` を wasm/llvm 直列で再検証。
+
+## 追記（2026-02-27）
+- 根本原因:
+  - ジェネリック関数を hoist するとき、`type_contains_unbound_var` 経由でシンボル名を素の関数名にしていたため、
+    同名オーバーロード（`get`）が同一シンボルに衝突していた。
+  - その結果、`HashMap` 版 `get` 呼び出しが別実装へ解決され、`alias get failed` を誘発していた。
+- 修正:
+  - `nepl-core/src/typecheck.rs` の hoist で、ジェネリクス有無に関係なく
+    `mangle_function_symbol` を使って関数シンボルを一意化した。
+- 検証:
+  - `NO_COLOR=false trunk build` 通過。
+  - `node nodesrc/tests.js -i stdlib/tests/hashmap.n.md -o /tmp/hashmap-focus-wasm.json --runner wasm --assert-io --no-tree -j 1` 通過（206/206）。
+  - `node nodesrc/tests.js -i stdlib/tests/hashmap_str.n.md -o /tmp/hashmap-str-focus-wasm.json --runner wasm --assert-io --no-tree -j 1` 通過（206/206）。

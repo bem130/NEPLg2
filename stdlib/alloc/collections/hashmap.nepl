@@ -428,6 +428,13 @@ fn insert <.V> <(HashMap<.V>,i32,.V)*>Result<HashMap<.V>, Diag>> (hm, key, val):
 fn contains <.V> <(HashMap<.V>,i32)->bool> (hm, key):
     hashmap_contains<.V> hm key
 
+//: get: `hashmap_get` の短縮名
+//:
+//: 目的:
+//: - 値取得を短い名前で呼び出せるようにします。
+fn get <.V> <(HashMap<.V>,i32)->Option<.V>> (hm, key):
+    hashmap_get<.V> hm key
+
 //: remove: `hashmap_remove` の短縮名
 //:
 //: 目的:
@@ -931,3 +938,10 @@ fn hashmap_str_free <.V> <(HashMapStr<.V>)*>()> (hm):
     let entry_size <i32> add 8 size_of<.V>
     dealloc entries mul cap entry_size
     dealloc hdr 12
+
+//: get: `hashmap_str_get` の短縮名
+//:
+//: 目的:
+//: - 文字列キー版の値取得を短い名前で呼び出せるようにします。
+fn get <.V> <(HashMapStr<.V>,str)->Option<.V>> (hm, key):
+    hashmap_str_get<.V> hm key
