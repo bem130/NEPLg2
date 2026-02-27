@@ -1,18 +1,9 @@
-//: error: tests/error.nepl に関する機能を提供するライブラリ
-//:
-//: [目的/もくてき]:
-//: - このモジュールの公開 API を提供します。
-//: - 実装の変更時に最小限の doctest 実行経路を維持します。
-//:
-//: [注意/ちゅうい]:
-//: - 利用時は各関数の「目的」「注意」「計算量」を確認してください。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//: ()
-//: ```
+# stdlib/error.n.md
+
+## error_main
+
+neplg2:test
+```neplg2
 
 #entry main
 #indent 4
@@ -24,19 +15,6 @@
 #import "alloc/string" as *
 #import "std/test" as *
 
-//: main: 主な用途
-//:
-//: [目的/もくてき]:
-//: - main の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
 fn main <()*> ()> ():
     // Test error_new formatting
     let e1 <Error> error_new ErrorKind::Failure "test failure";
@@ -60,3 +38,4 @@ fn main <()*> ()> ():
     assert gt len sf 0;
 
     ()
+```

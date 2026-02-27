@@ -1,18 +1,9 @@
-//: string: tests/string.nepl に関する機能を提供するライブラリ
-//:
-//: [目的/もくてき]:
-//: - このモジュールの公開 API を提供します。
-//: - 実装の変更時に最小限の doctest 実行経路を維持します。
-//:
-//: [注意/ちゅうい]:
-//: - 利用時は各関数の「目的」「注意」「計算量」を確認してください。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//: ()
-//: ```
+# stdlib/string.n.md
+
+## string_main
+
+neplg2:test
+```neplg2
 
 #entry main
 #indent 4
@@ -23,19 +14,6 @@
 #import "core/option" as *
 #import "std/test" as *
 
-//: main: 主な用途
-//:
-//: [目的/もくてき]:
-//: - main の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
 fn main <()*> ()> ():
     // Test len with literals
     assert_eq_i32 3 len "abc";
@@ -63,14 +41,16 @@ fn main <()*> ()> ():
     assert_eq_i32 2 len s42;
 
     // Test concat (basic strings)
-    let hello "hello";
-    let world "world";
-    let greeting concat hello world;
+    let greeting:
+        "hello"
+        |> concat "world";
     assert_eq_i32 10 len greeting;
 
     // Test concat with empty strings
     let empty "";
-    let test concat empty "test";
+    let test:
+        empty
+        |> concat "test";
     assert_eq_i32 4 len test;
 
     // Test trim
@@ -112,12 +92,21 @@ fn main <()*> ()> ():
     assert_eq_i32 1 vec_len<str> parts3;
 
     // Test StringBuilder
-    let mut sb <StringBuilder> string_builder_new;
-    set sb sb_append sb "Error: ";
-    set sb sb_append_i32 sb 404;
-    set sb sb_append sb " Not Found";
-    let msg <str> sb_build sb;
+    let msg <str>:
+        string_builder_new
+        |> sb_append "Error: "
+        |> sb_append_i32 404
+        |> sb_append " Not Found"
+        |> sb_build;
     assert_str_eq "Error: 404 Not Found" msg;
     assert_eq_i32 20 len msg;
 
+    let lines <str>:
+        string_builder_new
+        |> sb_append_line "first"
+        |> sb_append_line "second"
+        |> sb_build;
+    assert_str_eq "first\nsecond\n" lines;
+
     ()
+```

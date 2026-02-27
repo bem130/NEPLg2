@@ -1,0 +1,43 @@
+# stdlib/hashset_str.n.md
+
+## hashset_str_main
+
+neplg2:test
+```neplg2
+
+#entry main
+#indent 4
+#target std
+
+#import "alloc/collections/hashset_str" as *
+#import "alloc/string" as *
+#import "std/test" as *
+
+fn main <()*> ()> ():
+    let hs <i32> hashset_str_new
+    assert_eq_i32 0 hashset_str_len hs
+    assert_ne true hashset_str_contains hs "foo"
+    test_checked "new"
+
+    assert hashset_str_insert hs "foo"
+    assert hashset_str_insert hs "bar"
+    assert_ne true hashset_str_insert hs "foo"
+    assert_eq_i32 2 hashset_str_len hs
+    assert hashset_str_contains hs "foo"
+    assert hashset_str_contains hs "bar"
+    test_checked "insert"
+
+    let s1 <str> concat "a" "b"
+    let s2 <str> concat "a" "b"
+    assert hashset_str_insert hs s1
+    assert hashset_str_contains hs s2
+    test_checked "content"
+
+    assert hashset_str_remove hs "foo"
+    assert_ne true hashset_str_contains hs "foo"
+    assert_ne true hashset_str_remove hs "zzz"
+    test_checked "remove"
+
+    hashset_str_free hs
+    ()
+```
