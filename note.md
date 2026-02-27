@@ -1,3 +1,21 @@
+# 2026-02-27 作業メモ (GitHub Actions: wasm-bindgen ダウンロード失敗の安定化)
+- 背景:
+  - `trunk build` 実行時に、Trunk 内部の `wasm-bindgen` 自動ダウンロードが接続断で失敗するケースが発生。
+  - エラー例: `failed downloading release archive` / `connection closed before message completed`
+- 実装:
+  - `trunk` を使う workflow へ、事前に `wasm-bindgen-cli 0.2.108` を導入する step を追加。
+  - 追加先:
+    - `.github/workflows/gh-pages.yml`
+    - `.github/workflows/nepl-test-wasi.yml`
+    - `.github/workflows/nepl-test-llvm.yml`
+    - `.github/workflows/nmd-doctest.yml`
+  - 導入方法:
+    - `cargo install --locked wasm-bindgen-cli --version 0.2.108`
+    - 5回リトライ + backoff（5s,10s,15s,20s,25s）
+- 期待効果:
+  - Trunk の実行中ダウンロード依存を減らし、ネットワーク瞬断時の失敗率を低減。
+  - 失敗時も step 単位で再試行されるため、CI 全体の安定性が向上。
+
 # 2026-02-27 作業メモ (`@` 強制関数値とオーバーロード関連の診断ID拡張)
 - 目的:
   - `@` を callable 以外へ適用したときの誤受理を根本修正する。
@@ -4813,3 +4831,18 @@
   - `NO_COLOR=false trunk build` 通過。
   - `node nodesrc/tests.js -i stdlib/tests/hashmap.n.md -o /tmp/hashmap-focus-wasm.json --runner wasm --assert-io --no-tree -j 1` 通過（206/206）。
   - `node nodesrc/tests.js -i stdlib/tests/hashmap_str.n.md -o /tmp/hashmap-str-focus-wasm.json --runner wasm --assert-io --no-tree -j 1` 通過（206/206）。
+
+# 2026-02-27 作業メモ (kp コメント形式の統一)
+- 目的:
+  - `//` はドキュメントコメントとして扱わない方針に合わせ、`stdlib/kp` のコメント形式を `//:` に統一する。
+- 実装:
+  - `stdlib/kp/kpread.nepl`
+    - 行頭 `//` コメントを `//:` に統一。
+    - 関数内部の補助コメント行（BOM判定・進行保証・列初期化など）は削除して、通常コードのみ残す構成に整理。
+  - `stdlib/kp/kpwrite.nepl`
+    - 行頭 `//` コメントを `//:` に統一。
+    - 関数内部の行末 `//` コメントと補助コメント行を削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -o /tmp/tests-kp-io.json --runner wasm --assert-io --no-tree -j 1`
+    -> `215/215 pass`

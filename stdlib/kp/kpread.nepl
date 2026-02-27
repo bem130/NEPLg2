@@ -26,47 +26,47 @@
 fn scanner_new <()*>i32> ():
     scanner_new_impl_i 0
 
-// kpread: 競技プログラミング用高速スキャナ
-//
-// 目的:
-// - 標準入力を一度に読み込み、空白区切りのトークンを高速にパースします。
-// - i32、長さ N の配列、H x W 行列、EOF までの読み込みなどのヘルパーを提供します。
-//
-// 実装(アルゴリズム):
-// - WASI fd_read をループで使用し、拡張可能なヒープバッファに入力を読み込みます。
-// - カーソル (pos) を保持し、スキャン中に進めます。
-//
-// 注意(重要):
-// - スキャナは入力全体をメモリに保持します (O(bytes))。
-// - scanner_read_i32 は次のトークンが整数であることを前提としています。
-//   (次のトークンが整数でない場合、進まずに 0 を返す可能性があります。)
-//   scanner_read_all_i32 は防御的であり、非整数トークンをスキップします。
-//
-// 計算量:
-// - 標準入力の読み込み: O(bytes)
-// - スキャン: O(bytes)
-// - 整数のパース: O(digits)
+//: kpread: 競技プログラミング用高速スキャナ
+//: 
+//: 目的:
+//: - 標準入力を一度に読み込み、空白区切りのトークンを高速にパースします。
+//: - i32、長さ N の配列、H x W 行列、EOF までの読み込みなどのヘルパーを提供します。
+//: 
+//: 実装(アルゴリズム):
+//: - WASI fd_read をループで使用し、拡張可能なヒープバッファに入力を読み込みます。
+//: - カーソル (pos) を保持し、スキャン中に進めます。
+//: 
+//: 注意(重要):
+//: - スキャナは入力全体をメモリに保持します (O(bytes))。
+//: - scanner_read_i32 は次のトークンが整数であることを前提としています。
+//:   (次のトークンが整数でない場合、進まずに 0 を返す可能性があります。)
+//:   scanner_read_all_i32 は防御的であり、非整数トークンをスキップします。
+//: 
+//: 計算量:
+//: - 標準入力の読み込み: O(bytes)
+//: - スキャン: O(bytes)
+//: - 整数のパース: O(digits)
 
-// スキャナヘッダのレイアウト (ヒープ上の 12 バイト)
-// - [0] buf_ptr: 入力バッファの開始位置
-// - [4] len:     バッファの長さ
-// - [8] pos:     現在のカーソル位置
+//: スキャナヘッダのレイアウト (ヒープ上の 12 バイト)
+//: - [0] buf_ptr: 入力バッファの開始位置
+//: - [4] len:     バッファの長さ
+//: - [8] pos:     現在のカーソル位置
 
-// scanner_skip_ws: ASCII 空白（および先頭の BOM）をスキップする
-//
-// 目的:
-// - pos を次のトークンの開始位置まで進めます。
-//
-// 実装(アルゴリズム):
-// - pos==0 の場合、UTF-8 BOM (EF BB BF) または UTF-16 BOM (FF FE / FE FF) を検出してスキップします。
-// - その後、NUL、スペース、タブ、\n、\r をスキップします。
-//
-// 注意(重要):
-// - ASCII 空白のみを扱います。これはコンテスト入力を意図しています。
-// - NUL は空白として扱われます。
-//
-// 計算量:
-// - O(スキップしたバイト数)
+//: scanner_skip_ws: ASCII 空白（および先頭の BOM）をスキップする
+//: 
+//: 目的:
+//: - pos を次のトークンの開始位置まで進めます。
+//: 
+//: 実装(アルゴリズム):
+//: - pos==0 の場合、UTF-8 BOM (EF BB BF) または UTF-16 BOM (FF FE / FE FF) を検出してスキップします。
+//: - その後、NUL、スペース、タブ、\n、\r をスキップします。
+//: 
+//: 注意(重要):
+//: - ASCII 空白のみを扱います。これはコンテスト入力を意図しています。
+//: - NUL は空白として扱われます。
+//: 
+//: 計算量:
+//: - O(スキップしたバイト数)
 //: scanner_skip_ws: 主な用途
 //:
 //: [目的/もくてき]:
@@ -85,7 +85,6 @@ fn scanner_skip_ws <(i32)*>()> (sc):
     let len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
 
-    // BOM skip (kept for compatibility)
     if:
         eq p 0
         then:
@@ -98,13 +97,11 @@ fn scanner_skip_ws <(i32)*>()> (sc):
                         ge len 3
                         then:
                             let b2 <i32> load_u8 add buf 2;
-                            // UTF-8 BOM: EF BB BF
                             if:
                                 and and eq b0 239 eq b1 187 eq b2 191
                                 then:
                                     set p 3;
                                 else:
-                                    // UTF-16 BOM: FF FE or FE FF
                                     if:
                                         or and eq b0 255 eq b1 254 and eq b0 254 eq b1 255
                                         then:
@@ -161,16 +158,16 @@ fn scanner_skip_ws <(i32)*>()> (sc):
     store_i32 add sc 8 p;
     ()
 
-// scanner_is_eof: トークンが残っていないか確認する
-//
-// 目的:
-// - 空白のみが残っている場合に true を返します。
-//
-// 実装(アルゴリズム):
-// - scanner_skip_ws を呼び出し、pos と len を比較します。
-//
-// 計算量:
-// - O(スキップした空白数)
+//: scanner_is_eof: トークンが残っていないか確認する
+//: 
+//: 目的:
+//: - 空白のみが残っている場合に true を返します。
+//: 
+//: 実装(アルゴリズム):
+//: - scanner_skip_ws を呼び出し、pos と len を比較します。
+//: 
+//: 計算量:
+//: - O(スキップした空白数)
 //: scanner_is_eof: 主な用途
 //:
 //: [目的/もくてき]:
@@ -190,17 +187,17 @@ fn scanner_is_eof <(i32)*>bool> (sc):
     let p <i32> load_i32 add sc 8;
     ge p len
 
-// scanner_skip_token: アロケーションなしで 1 トークン消費する
-//
-// 目的:
-// - 文字列を作成せずに pos を 1 トークン分（空白区切り）進めます。
-// - scanner_read_all_i32 で進行を保証するために使用されます。
-//
-// 実装(アルゴリズム):
-// - 空白をスキップし、次の空白まで進めます。
-//
-// 計算量:
-// - O(トークン長)
+//: scanner_skip_token: アロケーションなしで 1 トークン消費する
+//: 
+//: 目的:
+//: - 文字列を作成せずに pos を 1 トークン分（空白区切り）進めます。
+//: - scanner_read_all_i32 で進行を保証するために使用されます。
+//: 
+//: 実装(アルゴリズム):
+//: - 空白をスキップし、次の空白まで進めます。
+//: 
+//: 計算量:
+//: - O(トークン長)
 //: scanner_skip_token: 主な用途
 //:
 //: [目的/もくてき]:
@@ -253,20 +250,20 @@ fn scanner_skip_token <(i32)*>()> (sc):
     store_i32 add sc 8 p;
     ()
 
-// scanner_read_token: 次のトークンを文字列として読み込む
-//
-// 目的:
-// - 次の空白区切りトークンを str として返します。
-//
-// 実装(アルゴリズム):
-// - 空白をスキップしてトークンの終わりを見つけ、新しい文字列領域にバイトをコピーします。
-//
-// 注意(重要):
-// - トークンごとにアロケーションが発生します。整数のみが必要な場合、大量の入力では避けてください。
-// - EOF の場合は "" を返します。
-//
-// 計算量:
-// - O(トークン長)
+//: scanner_read_token: 次のトークンを文字列として読み込む
+//: 
+//: 目的:
+//: - 次の空白区切りトークンを str として返します。
+//: 
+//: 実装(アルゴリズム):
+//: - 空白をスキップしてトークンの終わりを見つけ、新しい文字列領域にバイトをコピーします。
+//: 
+//: 注意(重要):
+//: - トークンごとにアロケーションが発生します。整数のみが必要な場合、大量の入力では避けてください。
+//: - EOF の場合は "" を返します。
+//: 
+//: 計算量:
+//: - O(トークン長)
 //: scanner_read_token: 主な用途
 //:
 //: [目的/もくてき]:
@@ -333,20 +330,20 @@ fn scanner_read_token <(i32)*>str> (sc):
             store_i32 add sc 8 p;
             s
 
-// scanner_read_i32: 次のトークンを i32 として読み込む（符号付き 10 進数）
-//
-// 目的:
-// - 次のトークンを 10 進符号付き整数としてパースします。
-//
-// 実装(アルゴリズム):
-// - オプションの先頭 '-' を処理し、val=val*10+digit で数字をパースします。
-//
-// 注意(重要):
-// - 次のトークンが整数トークンでない場合、進まずに 0 を返す可能性があります。
-// - EOF の場合は 0 を返します。
-//
-// 計算量:
-// - O(桁数)
+//: scanner_read_i32: 次のトークンを i32 として読み込む（符号付き 10 進数）
+//: 
+//: 目的:
+//: - 次のトークンを 10 進符号付き整数としてパースします。
+//: 
+//: 実装(アルゴリズム):
+//: - オプションの先頭 '-' を処理し、val=val*10+digit で数字をパースします。
+//: 
+//: 注意(重要):
+//: - 次のトークンが整数トークンでない場合、進まずに 0 を返す可能性があります。
+//: - EOF の場合は 0 を返します。
+//: 
+//: 計算量:
+//: - O(桁数)
 //: scanner_read_i32: 主な用途
 //:
 //: [目的/もくてき]:
@@ -769,13 +766,13 @@ fn scanner_read_vec_i64 <(i32, i32)*>Vec<i64>> (sc, n):
             set i add i 1;
     v
 
-// scanner_read_vec_i32: n 個の i32 値を読み込む
-//
-// 目的:
-// - n 個の整数を Vec<i32> に読み込みます。
-//
-// 計算量:
-// - O(n)
+//: scanner_read_vec_i32: n 個の i32 値を読み込む
+//: 
+//: 目的:
+//: - n 個の整数を Vec<i32> に読み込みます。
+//: 
+//: 計算量:
+//: - O(n)
 //: scanner_read_vec_i32: 主な用途
 //:
 //: [目的/もくてき]:
@@ -799,13 +796,13 @@ fn scanner_read_vec_i32 <(i32, i32)*>Vec<i32>> (sc, n):
             set i add i 1;
     v
 
-// scanner_read_matrix_i32: h x w の整数行列を読み込む
-//
-// 目的:
-// - w 個の整数からなる行を h 行読み込み、Vec<Vec<i32>> を返します。
-//
-// 計算量:
-// - O(h*w)
+//: scanner_read_matrix_i32: h x w の整数行列を読み込む
+//: 
+//: 目的:
+//: - w 個の整数からなる行を h 行読み込み、Vec<Vec<i32>> を返します。
+//: 
+//: 計算量:
+//: - O(h*w)
 //: scanner_read_matrix_i32: 主な用途
 //:
 //: [目的/もくてき]:
@@ -829,21 +826,21 @@ fn scanner_read_matrix_i32 <(i32, i32, i32)*>Vec<Vec<i32>>> (sc, h, w):
             set i add i 1;
     res
 
-// scanner_read_all_i32: EOF までの残りの整数トークンをすべて読み込む
-//
-// 目的:
-// - 現在のカーソルから EOF までスキャンし、整数トークンを Vec<i32> に収集します。
-//
-// 実装(アルゴリズム):
-// - 空白をスキップします。EOF なら停止します。
-// - 次の非空白バイトが '-' または '0'..'9' なら整数を読み込みます。
-// - それ以外の場合、進行を保証するために 1 トークンをスキップします（防御的）。
-//
-// 注意(重要):
-// - 非整数トークンは破棄されます。
-//
-// 計算量:
-// - O(残りのバイト数)
+//: scanner_read_all_i32: EOF までの残りの整数トークンをすべて読み込む
+//: 
+//: 目的:
+//: - 現在のカーソルから EOF までスキャンし、整数トークンを Vec<i32> に収集します。
+//: 
+//: 実装(アルゴリズム):
+//: - 空白をスキップします。EOF なら停止します。
+//: - 次の非空白バイトが '-' または '0'..'9' なら整数を読み込みます。
+//: - それ以外の場合、進行を保証するために 1 トークンをスキップします（防御的）。
+//: 
+//: 注意(重要):
+//: - 非整数トークンは破棄されます。
+//: 
+//: 計算量:
+//: - O(残りのバイト数)
 //: scanner_read_all_i32: 主な用途
 //:
 //: [目的/もくてき]:
@@ -880,17 +877,16 @@ fn scanner_read_all_i32 <(i32)*>Vec<i32>> (sc):
                             let x <i32> scanner_read_i32 sc;
                             set out vec_push<i32> out x;
                         else:
-                            // Not an integer token; consume it to guarantee progress.
                             scanner_skip_token sc;
                             ();
 
     out
 
-// -------- 一般的なコンテスト入力ヘルパー (A / L,R / H を Vec として扱う) --------
+//: -------- 一般的なコンテスト入力ヘルパー (A / L,R / H を Vec として扱う) --------
 
-// NAInput: 以下の形式の入力
-//   N
-//   A1 A2 ... AN
+//: NAInput: 以下の形式の入力
+//:   N
+//:   A1 A2 ... AN
 //: NAInput: 構造体の概要
 //:
 //: [目的/もくてき]:
@@ -908,15 +904,15 @@ struct NAInput:
     n <i32>
     a <Vec<i32>>
 
-// IntervalQueriesInput: 以下の形式の入力
-//   N Q
-//   L1 R1
-//   ...
-//   LQ RQ
-//
-// 注意(重要):
-// - 区間クエリでよくあるコンテスト形式です。
-// - Q は多くの問題文での M に相当します。
+//: IntervalQueriesInput: 以下の形式の入力
+//:   N Q
+//:   L1 R1
+//:   ...
+//:   LQ RQ
+//: 
+//: 注意(重要):
+//: - 区間クエリでよくあるコンテスト形式です。
+//: - Q は多くの問題文での M に相当します。
 //: IntervalQueriesInput: 構造体の概要
 //:
 //: [目的/もくてき]:
@@ -936,16 +932,16 @@ struct IntervalQueriesInput:
     left <Vec<i32>>
     right <Vec<i32>>
 
-// QueryTuplesInput: 以下の形式の入力
-//   N Q
-//   x1_1 x1_2 ... x1_K
-//   ...
-//   xQ_1 xQ_2 ... xQ_K
-//
-// 注意(重要):
-// - 値を列優先順序 (column-major order) で格納します:
-//     cols[c][i] は i 番目のタプルの c 番目の値です。
-// - これは 2xQ (L,R) を 3xQ, 4xQ, ... に自然に一般化したものです。
+//: QueryTuplesInput: 以下の形式の入力
+//:   N Q
+//:   x1_1 x1_2 ... x1_K
+//:   ...
+//:   xQ_1 xQ_2 ... xQ_K
+//: 
+//: 注意(重要):
+//: - 値を列優先順序 (column-major order) で格納します:
+//:     cols[c][i] は i 番目のタプルの c 番目の値です。
+//: - これは 2xQ (L,R) を 3xQ, 4xQ, ... に自然に一般化したものです。
 //: QueryTuplesInput: 構造体の概要
 //:
 //: [目的/もくてき]:
@@ -965,9 +961,9 @@ struct QueryTuplesInput:
     k <i32>
     cols <Vec<Vec<i32>>>
 
-// NDRHInput: 以下の形式の入力
-//   N D R
-//   H1 H2 ... HN
+//: NDRHInput: 以下の形式の入力
+//:   N D R
+//:   H1 H2 ... HN
 //: NDRHInput: 構造体の概要
 //:
 //: [目的/もくてき]:
@@ -989,13 +985,13 @@ struct NDRHInput:
 
 
 
-// scanner_read_na_i32: (N, A[1..N]) を読み込む
-//
-// 目的:
-// - "N の後に N 個の整数" という形式を読み込み、A を Vec<i32> として返します。
-//
-// 計算量:
-// - O(n)
+//: scanner_read_na_i32: (N, A[1..N]) を読み込む
+//: 
+//: 目的:
+//: - "N の後に N 個の整数" という形式を読み込み、A を Vec<i32> として返します。
+//: 
+//: 計算量:
+//: - O(n)
 //: scanner_read_na_i32: 主な用途
 //:
 //: [目的/もくてき]:
@@ -1014,13 +1010,13 @@ fn scanner_read_na_i32 <(i32)*>NAInput> (sc):
     let a <Vec<i32>> scanner_read_vec_i32 sc n;
     NAInput n a
 
-// scanner_read_interval_queries_i32: (N, Q, left[1..Q], right[1..Q]) を読み込む
-//
-// 目的:
-// - Q 個の区間を読み込み、左端/右端を別々のベクタとして返します。
-//
-// 計算量:
-// - O(q)
+//: scanner_read_interval_queries_i32: (N, Q, left[1..Q], right[1..Q]) を読み込む
+//: 
+//: 目的:
+//: - Q 個の区間を読み込み、左端/右端を別々のベクタとして返します。
+//: 
+//: 計算量:
+//: - O(q)
 //: scanner_read_interval_queries_i32: 主な用途
 //:
 //: [目的/もくてき]:
@@ -1053,18 +1049,18 @@ fn scanner_read_interval_queries_i32 <(i32)*>IntervalQueriesInput> (sc):
     IntervalQueriesInput n q left right
 
 
-// scanner_read_query_tuples_i32: (N, Q, K 列) を列ベクタとして読み込む
-//
-// 目的:
-// - 各行が K 個の整数を持つ Q 行を読み込みます。
-// - 列アクセスを容易にするため、結果を K 個の列 (Vec<Vec<i32>>) として格納します。
-//
-// 注意(重要):
-// - L/R が必要な場合は k=2 で呼び出し、cols[0], cols[1] を取得してください。
-// - 3xQ, 4xQ, ... の場合は k=3,4,... を渡します。
-//
-// 計算量:
-// - O(q * k)
+//: scanner_read_query_tuples_i32: (N, Q, K 列) を列ベクタとして読み込む
+//: 
+//: 目的:
+//: - 各行が K 個の整数を持つ Q 行を読み込みます。
+//: - 列アクセスを容易にするため、結果を K 個の列 (Vec<Vec<i32>>) として格納します。
+//: 
+//: 注意(重要):
+//: - L/R が必要な場合は k=2 で呼び出し、cols[0], cols[1] を取得してください。
+//: - 3xQ, 4xQ, ... の場合は k=3,4,... を渡します。
+//: 
+//: 計算量:
+//: - O(q * k)
 //: scanner_read_query_tuples_i32: 主な用途
 //:
 //: [目的/もくてき]:
@@ -1084,14 +1080,12 @@ fn scanner_read_query_tuples_i32 <(i32, i32)*>QueryTuplesInput> (sc, k):
 
     let mut cols <Vec<Vec<i32>>> vec_new<Vec<i32>>;
 
-    // Initialize k empty columns
     let mut c0 <i32> 0;
     while lt c0 k:
         do:
             set cols vec_push<Vec<i32>> cols vec_new<i32>;
             set c0 add c0 1;
 
-    // Fill columns
     let mut i <i32> 0;
     while lt i q:
         do:
@@ -1100,7 +1094,6 @@ fn scanner_read_query_tuples_i32 <(i32, i32)*>QueryTuplesInput> (sc, k):
                 do:
                     let x <i32> scanner_read_i32 sc;
 
-                    // cols[c].push(x)
                     let col <Vec<i32>> unwrap<Vec<i32>> vec_get<Vec<i32>> cols c;
                     let new_col <Vec<i32>> vec_push<i32> col x;
                     vec_set<Vec<i32>> cols c new_col;
@@ -1112,11 +1105,11 @@ fn scanner_read_query_tuples_i32 <(i32, i32)*>QueryTuplesInput> (sc, k):
     QueryTuplesInput n q k cols
 
 
-// query_tuples_col_i32: QueryTuplesInput から c 番目の列を取得する
-//
-// 注意(重要):
-// - cols[c] に格納されている Vec<i32> を返します。
-// - インデックスは 0 <= c < t.k を満たす必要があります。
+//: query_tuples_col_i32: QueryTuplesInput から c 番目の列を取得する
+//: 
+//: 注意(重要):
+//: - cols[c] に格納されている Vec<i32> を返します。
+//: - インデックスは 0 <= c < t.k を満たす必要があります。
 //: query_tuples_col_i32: 主な用途
 //:
 //: [目的/もくてき]:
@@ -1133,13 +1126,13 @@ fn scanner_read_query_tuples_i32 <(i32, i32)*>QueryTuplesInput> (sc, k):
 fn query_tuples_col_i32 <(QueryTuplesInput, i32)->Vec<i32>> (t, c):
     unwrap<Vec<i32>> vec_get<Vec<i32>> get t "cols" c
 
-// scanner_read_ndrh_i32: (N, D, R, H[1..N]) を読み込む
-//
-// 目的:
-// - "N D R の後に N 個の整数" という形式を読み込み、H を Vec<i32> として返します。
-//
-// 計算量:
-// - O(n)
+//: scanner_read_ndrh_i32: (N, D, R, H[1..N]) を読み込む
+//: 
+//: 目的:
+//: - "N D R の後に N 個の整数" という形式を読み込み、H を Vec<i32> として返します。
+//: 
+//: 計算量:
+//: - O(n)
 //: scanner_read_ndrh_i32: 主な用途
 //:
 //: [目的/もくてき]:
