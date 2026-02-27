@@ -2556,8 +2556,13 @@ fn summarize_diagnostics_for_message(diags: &[crate::diagnostic::Diagnostic]) ->
     }
     let mut uniq = BTreeSet::new();
     for d in errs.iter().take(8) {
+        let id_prefix = match d.id {
+            Some(id) => format!("[D{}] ", id.as_u32()),
+            None => String::new(),
+        };
         uniq.insert(format!(
-            "{} (file={}, start={}, end={})",
+            "{}{} (file={}, start={}, end={})",
+            id_prefix,
             d.message,
             d.primary.span.file_id.0,
             d.primary.span.start,

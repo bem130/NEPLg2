@@ -4721,3 +4721,23 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> pass
   - `NO_COLOR=false node nodesrc/tests.js -i stdlib/alloc/collections/ringbuffer.nepl -i stdlib/alloc/collections/queue.nepl -i stdlib/tests/ringbuffer.n.md -i stdlib/tests/queue.n.md -i tests/ringbuffer_collections.n.md -i tests/queue_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-ringbuffer-queue.json -j 2` -> `42/42 pass`
+# 2026-02-27 作業メモ (main健全性確認後のブランチ復帰と根本修正)
+- 目的:
+  - `main` の健全性を `trunk build` + `nodesrc/tests` で再確認し、`refactor/stdlib-modernize-pipe-result` に戻して継続可能状態へ復帰する。
+  - `tests/neplg2.n.md` の失敗2件（wasm/llvmで計4件）を原因特定して解消する。
+- 原因:
+  - 失敗ID `tests/neplg2.n.md::doctest#37/#38` は `#target` 系ではなく、実際には「オーバーロード」テストだった。
+  - テスト期待値が旧仕様の `compile_fail` のまま残っており、現実装（arity解決・戻り値文脈解決）と不整合だった。
+- 実装:
+  - `tests/neplg2.n.md`
+    - `overloads_with_different_arity_are_error` を `..._are_allowed` に更新し、`compile_fail` から `ret: 1` の実行検証へ変更。
+    - `overloads_ambiguous_return_type_is_error` を `overloads_can_be_resolved_by_return_context` に更新し、`compile_fail` から `ret: 1` へ変更。
+  - 併せて、作業ツリーに残っていた以下の修正を継続:
+    - `nepl-core/src/compiler.rs`（target 解決時の診断経路）
+    - `nepl-core/src/codegen_llvm.rs`（LLVM側診断要約）
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -i tests/if.n.md -i tests/intrinsic.n.md -o /tmp/tests-targeted-after-neplg2-fix.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 1`
+    -> `828/828 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-sync.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
+    -> `1822/1822 pass`
