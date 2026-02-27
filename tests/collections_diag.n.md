@@ -101,3 +101,47 @@ fn main <()*>()> ():
         Result::Err d:
             assert_str_eq "CapacityExceeded" diag_code_str d.code;
 ```
+
+## queue_pop_empty_returns_none
+
+neplg2:test
+```neplg2
+#target std
+#entry main
+#indent 4
+#import "alloc/collections/queue" as *
+#import "alloc/diag/error" as *
+#import "core/option" as *
+#import "core/result" as *
+#import "std/test" as *
+
+fn main <()*>()> ():
+    let q <Queue<i32>> unwrap_ok<Queue<i32>, Diag> queue_new<i32>;
+    match queue_pop<i32> q:
+        Option::Some _v:
+            test_fail "expected none";
+        Option::None:
+            assert true;
+```
+
+## ringbuffer_pop_empty_returns_none
+
+neplg2:test
+```neplg2
+#target std
+#entry main
+#indent 4
+#import "alloc/collections/ringbuffer" as *
+#import "alloc/diag/error" as *
+#import "core/option" as *
+#import "core/result" as *
+#import "std/test" as *
+
+fn main <()*>()> ():
+    let rb <RingBuffer<i32>> unwrap_ok<RingBuffer<i32>, Diag> ringbuffer_new<i32>;
+    match ringbuffer_pop_front<i32> rb:
+        Option::Some _v:
+            test_fail "expected none";
+        Option::None:
+            assert true;
+```

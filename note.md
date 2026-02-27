@@ -4969,3 +4969,18 @@
   - `211/211 pass`
 - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-diag-redesign.json --no-tree`
   - `682/682 pass`
+
+# 2026-02-27 作業メモ (collections 安全化テスト拡張: queue/ringbuffer 空操作)
+## 実施内容
+- `tests/collections_diag.n.md` に以下を追加:
+  - `queue_pop_empty_returns_none`
+  - `ringbuffer_pop_empty_returns_none`
+- 目的:
+  - 不正操作（空コレクションからの取り出し）が `Option::None` で安全に扱われることを固定化。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i tests/collections_diag.n.md -i stdlib/tests/error.n.md -i stdlib/tests/diag.n.md -o /tmp/tests-collections-diag-next.json --no-tree`
+  - `213/213 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-diag-and-collections.json --no-tree`
+  - `684/684 pass`
