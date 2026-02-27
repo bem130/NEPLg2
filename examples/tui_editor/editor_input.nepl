@@ -1,0 +1,72 @@
+#indent 4
+#target wasix
+
+#import "core/math" as *
+
+fn is_csi_left <(i32,i32,i32)*>bool> (buf, n, i):
+    if:
+        gt sub n i 2
+        then:
+            if:
+                and eq load_u8 add buf i 27 eq load_u8 add buf add i 1 91
+                then:
+                    eq load_u8 add buf add i 2 68
+                else:
+                    false
+        else:
+            false
+
+fn is_csi_right <(i32,i32,i32)*>bool> (buf, n, i):
+    if:
+        gt sub n i 2
+        then:
+            if:
+                and eq load_u8 add buf i 27 eq load_u8 add buf add i 1 91
+                then:
+                    eq load_u8 add buf add i 2 67
+                else:
+                    false
+        else:
+            false
+
+fn is_csi_up <(i32,i32,i32)*>bool> (buf, n, i):
+    if:
+        gt sub n i 2
+        then:
+            if:
+                and eq load_u8 add buf i 27 eq load_u8 add buf add i 1 91
+                then:
+                    eq load_u8 add buf add i 2 65
+                else:
+                    false
+        else:
+            false
+
+fn is_csi_down <(i32,i32,i32)*>bool> (buf, n, i):
+    if:
+        gt sub n i 2
+        then:
+            if:
+                and eq load_u8 add buf i 27 eq load_u8 add buf add i 1 91
+                then:
+                    eq load_u8 add buf add i 2 66
+                else:
+                    false
+        else:
+            false
+
+fn is_printable_edit <(i32)*>bool> (ch):
+    and ge ch 32 lt ch 127
+
+fn next_input_index <(i32,i32,i32)*>i32> (buf, n, i):
+    if:
+        gt sub n i 2
+        then:
+            if:
+                and eq load_u8 add buf i 27 eq load_u8 add buf add i 1 91
+                then:
+                    add i 3
+                else:
+                    add i 1
+        else:
+            add i 1
