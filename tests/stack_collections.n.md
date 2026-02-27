@@ -1,4 +1,4 @@
-# stdlib/stack.n.md
+# tests/stack_collections.n.md
 
 ## stack_new_and_len
 

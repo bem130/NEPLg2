@@ -18,6 +18,10 @@
 
 #import "core/mem" as *
 #import "core/option" as *
+#import "core/field" as *
+
+struct BTreeMap<.V>:
+    hdr <i32>
 
 // btreemap: i32 キーの順序付きマップ
 //
@@ -65,7 +69,7 @@
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn btreemap_new <.V> <()*>i32> ():
+fn btreemap_new <.V> <()*>BTreeMap<.V>> ():
     let cap <i32> 8
     let keys <i32> alloc mul cap 4
     let vals <i32> alloc mul cap size_of<.V>
@@ -74,7 +78,7 @@ fn btreemap_new <.V> <()*>i32> ():
     store_i32 add header 4 cap
     store_i32 add header 8 keys
     store_i32 add header 12 vals
-    header
+    BTreeMap<.V> header
 
 // btreemap_len: 要素数を返す
 //
@@ -102,8 +106,9 @@ fn btreemap_new <.V> <()*>i32> ():
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn btreemap_len <.V> <(i32)->i32> (hm):
-    load_i32 hm
+fn btreemap_len <.V> <(BTreeMap<.V>)->i32> (hm):
+    let hdr <i32> get hm "hdr"
+    load_i32 hdr
 
 // btreemap_is_empty: 空か判定する
 //
@@ -131,8 +136,8 @@ fn btreemap_len <.V> <(i32)->i32> (hm):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn btreemap_is_empty <.V> <(i32)->bool> (hm):
-    eq load_i32 hm 0
+fn btreemap_is_empty <.V> <(BTreeMap<.V>)->bool> (hm):
+    eq btreemap_len<.V> hm 0
 
 // btreemap_lower_bound: 二分探索で挿入位置を求める
 //
@@ -234,10 +239,11 @@ fn btreemap_is_at <(i32,i32,i32,i32)->bool> (keys, len, idx, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn btreemap_get <.V> <(i32,i32)->Option<.V>> (hm, key):
-    let len <i32> load_i32 hm
-    let keys <i32> load_i32 add hm 8
-    let vals <i32> load_i32 add hm 12
+fn btreemap_get <.V> <(BTreeMap<.V>,i32)->Option<.V>> (hm, key):
+    let hdr <i32> get hm "hdr"
+    let len <i32> load_i32 hdr
+    let keys <i32> load_i32 add hdr 8
+    let vals <i32> load_i32 add hdr 12
     let idx <i32> btreemap_lower_bound keys key 0 len
     if:
         btreemap_is_at keys len idx key
@@ -273,9 +279,10 @@ fn btreemap_get <.V> <(i32,i32)->Option<.V>> (hm, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn btreemap_contains <.V> <(i32,i32)->bool> (hm, key):
-    let len <i32> load_i32 hm
-    let keys <i32> load_i32 add hm 8
+fn btreemap_contains <.V> <(BTreeMap<.V>,i32)->bool> (hm, key):
+    let hdr <i32> get hm "hdr"
+    let len <i32> load_i32 hdr
+    let keys <i32> load_i32 add hdr 8
     let idx <i32> btreemap_lower_bound keys key 0 len
     btreemap_is_at keys len idx key
 
@@ -307,18 +314,18 @@ fn btreemap_contains <.V> <(i32,i32)->bool> (hm, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn btreemap_insert <.V> <(i32,i32,.V)*>Option<.V>> (hm, key, val):
-    let len <i32> load_i32 hm
-    let mut cap <i32> load_i32 add hm 4
-    let mut keys <i32> load_i32 add hm 8
-    let mut vals <i32> load_i32 add hm 12
+fn btreemap_insert <.V> <(BTreeMap<.V>,i32,.V)*>BTreeMap<.V>> (hm, key, val):
+    let hdr <i32> get hm "hdr"
+    let len <i32> load_i32 hdr
+    let mut cap <i32> load_i32 add hdr 4
+    let mut keys <i32> load_i32 add hdr 8
+    let mut vals <i32> load_i32 add hdr 12
     let idx <i32> btreemap_lower_bound keys key 0 len
     if:
         btreemap_is_at keys len idx key
         then:
-            let old <.V> load<.V> add vals mul idx size_of<.V>
             store<.V> add vals mul idx size_of<.V> val
-            some<.V> old
+            hm
         else:
             if:
                 eq len cap
@@ -327,9 +334,9 @@ fn btreemap_insert <.V> <(i32,i32,.V)*>Option<.V>> (hm, key, val):
                     set keys realloc keys mul cap 4 mul new_cap 4
                     set vals realloc vals mul cap size_of<.V> mul new_cap size_of<.V>
                     set cap new_cap
-                    store_i32 add hm 4 cap
-                    store_i32 add hm 8 keys
-                    store_i32 add hm 12 vals
+                    store_i32 add hdr 4 cap
+                    store_i32 add hdr 8 keys
+                    store_i32 add hdr 12 vals
                 else:
                     ()
             let mut i <i32> sub len 1
@@ -342,8 +349,8 @@ fn btreemap_insert <.V> <(i32,i32,.V)*>Option<.V>> (hm, key, val):
                     set i sub i 1
             store_i32 add keys mul idx 4 key
             store<.V> add vals mul idx size_of<.V> val
-            store_i32 hm add len 1
-            none<.V>
+            store_i32 hdr add len 1
+            hm
 
 // btreemap_remove: キーを削除する
 //
@@ -371,15 +378,15 @@ fn btreemap_insert <.V> <(i32,i32,.V)*>Option<.V>> (hm, key, val):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn btreemap_remove <.V> <(i32,i32)*>Option<.V>> (hm, key):
-    let len <i32> load_i32 hm
-    let keys <i32> load_i32 add hm 8
-    let vals <i32> load_i32 add hm 12
+fn btreemap_remove <.V> <(BTreeMap<.V>,i32)*>BTreeMap<.V>> (hm, key):
+    let hdr <i32> get hm "hdr"
+    let len <i32> load_i32 hdr
+    let keys <i32> load_i32 add hdr 8
+    let vals <i32> load_i32 add hdr 12
     let idx <i32> btreemap_lower_bound keys key 0 len
     if:
         btreemap_is_at keys len idx key
         then:
-            let old <.V> load<.V> add vals mul idx size_of<.V>
             let mut i <i32> add idx 1
             while lt i len:
                 do:
@@ -388,10 +395,10 @@ fn btreemap_remove <.V> <(i32,i32)*>Option<.V>> (hm, key):
                     let v <.V> load<.V> add vals mul i size_of<.V>
                     store<.V> add vals mul sub i 1 size_of<.V> v
                     set i add i 1
-            store_i32 hm sub len 1
-            some<.V> old
+            store_i32 hdr sub len 1
+            hm
         else:
-            none<.V>
+            hm
 
 // btreemap_clear: すべての要素を削除する
 //
@@ -419,8 +426,10 @@ fn btreemap_remove <.V> <(i32,i32)*>Option<.V>> (hm, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn btreemap_clear <.V> <(i32)*>()> (hm):
-    store_i32 hm 0
+fn btreemap_clear <.V> <(BTreeMap<.V>)*>BTreeMap<.V>> (hm):
+    let hdr <i32> get hm "hdr"
+    store_i32 hdr 0
+    hm
 
 // btreemap_free: メモリを解放する
 //
@@ -448,10 +457,11 @@ fn btreemap_clear <.V> <(i32)*>()> (hm):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn btreemap_free <.V> <(i32)*>()> (hm):
-    let cap <i32> load_i32 add hm 4
-    let keys <i32> load_i32 add hm 8
-    let vals <i32> load_i32 add hm 12
+fn btreemap_free <.V> <(BTreeMap<.V>)*>()> (hm):
+    let hdr <i32> get hm "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let keys <i32> load_i32 add hdr 8
+    let vals <i32> load_i32 add hdr 12
     dealloc keys mul cap 4
     dealloc vals mul cap size_of<.V>
-    dealloc hm 16
+    dealloc hdr 16

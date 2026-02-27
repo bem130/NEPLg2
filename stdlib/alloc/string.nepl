@@ -20,7 +20,7 @@
 #import "core/result" as *
 #import "core/option" as *
 #import "core/math" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/field" as *
 
 // string: 文字列操作（長さ付きUTF-8）

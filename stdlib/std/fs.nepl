@@ -14,7 +14,7 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/result" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "alloc/string" as *
 
 //: fs: ファイル読み込み（WASI / LLVM）

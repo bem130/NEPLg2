@@ -4499,3 +4499,202 @@
   - `node nodesrc/tests.js -i tests/neplg2.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-neplg2-current.json -j 1` -> `112/112 pass`
   - `node nodesrc/tests.js -i stdlib/tests/stack.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i stdlib/tests/cliarg.n.md -i stdlib/tests/fs.n.md -i stdlib/tests/string.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stdlib-tests-six-no-stdlib.json -j 1` -> `42/42 pass`
   - `node nodesrc/tests.js -i tests -i stdlib --runner all --llvm-all --assert-io --strict-dual --no-tree -o /tmp/tests-dual-full-current.json -j 2` -> `1739/1739 pass`
+
+# 2026-02-27 作業メモ (collections pipe回帰の根本修正)
+- 目的:
+  - `tests/pipe_collections.n.md` の実行失敗（`memory access out of bounds`）と、`stdlib/nm/*.nepl` の `ambiguous overload` 回帰を同時に根本解消する。
+- 原因:
+  - `list` で pipe 用エイリアスとして `cons` を `list_cons` に直接束縛していたため、`xs |> cons 3` が `cons xs 3`（引数順逆）として解釈され、不正ポインタを next に格納して OOB を誘発していた。
+  - `new/len/...` の汎用短名エイリアス導入により、`as *` 取り込み時の候補集合が過剰化し、`nm` 側でオーバーロード曖昧化を発生させていた。
+- 実装:
+  - `stdlib/alloc/collections/list.nepl`
+    - `list_push_front <(i32,.T)*>i32>` を追加（pipeの第一引数規約に合わせた安全な先頭追加）。
+    - `list_len` / `list_get` を pure 署名で再帰実装に統一（副作用文脈依存を除去）。
+    - 汎用短名エイリアス群を除去し、曖昧化源を遮断。
+  - `tests/pipe_collections.n.md`
+    - すべて明示 API 呼び出しへ更新。
+    - list ケースは `list_push_front` を用いた pipe 検証に変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/pipe_collections.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i stdlib/tests/list.n.md -i stdlib/tests/stack.n.md -i stdlib/nm/parser.nepl -i stdlib/nm/html_gen.nepl --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-pipe-tree-collections-after-fix.json -j 2` -> `566/566 pass`
+  - `NO_COLOR=false node nodesrc/tests.js --changed --changed-base HEAD --runner all --llvm-all --assert-io --strict-dual --no-tree -o /tmp/tests-changed-after-pipe-fix.json -j 2` -> `49/49 pass`
+- 差分/課題:
+  - 汎用短名 alias をグローバル導入する方式は、現行のオーバーロード解決では回帰リスクが高い。今後はモジュール接頭辞APIを基本とし、必要なら resolver/typecheck 側の候補絞り込み拡張を先行してから再導入する。
+
+# 2026-02-27 作業メモ (pipe collections テスト拡張: hashmap/hashset)
+- 目的:
+  - tree系（btree）に続き、hash 系コレクションでも pipe の第一引数移動が安定動作することを固定する。
+- 実装:
+  - `tests/pipe_collections.n.md` に以下を追加:
+    - `pipe_hashmap_usage`
+    - `pipe_hashset_usage`
+  - どちらも短名 alias ではなく明示 API（`hashmap_*`, `hashset_*`）で検証。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/pipe_collections.n.md -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/list.n.md -i stdlib/tests/stack.n.md --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-pipe-collections-hash.json -j 2` -> `547/547 pass`
+
+# 2026-02-27 作業メモ (collections: btreemap/btreeset の struct 隠蔽)
+- 目的:
+  - `collections` の公開 API から `i32` ポインタを隠蔽し、データ型を明示的な struct で扱える形へ寄せる。
+- 実装:
+  - `stdlib/alloc/collections/btreemap.nepl`
+    - `struct BTreeMap<.V>` を追加（`hdr <i32>`）。
+    - 公開関数シグネチャを `i32` から `BTreeMap<.V>` へ変更。
+    - `insert/remove/clear` は更新後の `BTreeMap<.V>` を返す形へ変更。
+  - `stdlib/alloc/collections/btreeset.nepl`
+    - `struct BTreeSet` を追加（`hdr <i32>`）。
+    - 公開関数シグネチャを `i32` から `BTreeSet` へ変更。
+    - `insert/remove/clear` は更新後の `BTreeSet` を返す形へ変更。
+  - テスト更新:
+    - `stdlib/tests/btreemap.n.md`
+    - `stdlib/tests/btreeset.n.md`
+    - `tests/pipe_collections.n.md`
+    - move 規則に合わせ、値取得系（`get/contains/len`）と更新系（`insert/remove`）の利用を再束縛または別インスタンスで分離。
+- 検証:
+  - `node nodesrc/tests.js -i tests/stack_collections.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/collections-scope.json -j 2`
+  - 結果: `54/54 pass`
+
+# 2026-02-27 作業メモ (collections: hashset の struct 隠蔽)
+- 目的:
+  - `hashset` 公開 API の `i32` ポインタ露出を除去する。
+- 実装:
+  - `stdlib/alloc/collections/hashset.nepl`
+    - `struct HashSet` を追加（`hdr <i32>`）。
+    - `hashset_new` の戻り値を `HashSet` へ変更。
+    - `hashset_contains` / `hashset_len` / `hashset_free` を `HashSet` 引数へ変更。
+    - `hashset_insert` / `hashset_remove` は更新後の `HashSet` を返す形へ変更。
+  - `stdlib/tests/hashset.n.md`
+    - 新シグネチャと move 規則に合わせてテストを再構成。
+  - `tests/pipe_collections.n.md`
+    - hashset の pipe ケースを `HashSet` 版へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/hashset.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/collections-scope-v2.json -j 2`
+  - 結果: `57/57 pass`
+
+# 2026-02-27 作業メモ (collections: hashmap の struct 隠蔽を完了)
+- 目的:
+  - `hashmap` 公開 API の `i32` ポインタ露出を除去し、他 collections と同じ方針（型隠蔽 + move規則準拠）へ揃える。
+- 実装:
+  - `stdlib/alloc/collections/hashmap.nepl`
+    - `struct HashMap<.V>` を公開型として使用。
+    - `hashmap_new` の戻り値を `HashMap<.V>` へ変更。
+    - `hashmap_insert` / `hashmap_remove` を `HashMap<.V> -> HashMap<.V>` へ変更。
+    - `hashmap_get` / `hashmap_contains` / `hashmap_len` / `hashmap_free` を `HashMap<.V>` 引数へ変更。
+    - 内部アクセスは `get hm "hdr"` 経由へ統一。
+  - テスト更新:
+    - `stdlib/tests/hashmap.n.md`: 新シグネチャ + move規則に合わせてケースを再構成。
+    - `tests/pipe_collections.n.md`: `pipe_hashmap_usage` を `HashMap<.V>` 版へ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/collections-scope-v3.json -j 2`
+  - 結果: `60/60 pass`
+
+# 2026-02-27 作業メモ (collections: hashmap_str/hashset_str の struct隠蔽)
+- 目的:
+  - `hashmap_str` / `hashset_str` の公開APIから `i32` ポインタ露出を除去し、collections全体の型方針を統一する。
+- 実装:
+  - `stdlib/alloc/collections/hashmap_str.nepl`
+    - `struct HashMapStr<.V> { hdr <i32> }` を導入。
+    - `new/insert/remove/len/free/get/contains` を `HashMapStr<.V>` 前提へ変更。
+    - `insert/remove` は更新後の `HashMapStr<.V>` を返す形へ変更。
+  - `stdlib/alloc/collections/hashset_str.nepl`
+    - `struct HashSetStr { hdr <i32> }` を導入。
+    - `new/insert/remove/len/free/contains` を `HashSetStr` 前提へ変更。
+    - `insert/remove` は更新後の `HashSetStr` を返す形へ変更。
+  - テスト更新:
+    - `stdlib/tests/hashmap_str.n.md`
+    - `stdlib/tests/hashset_str.n.md`
+    - move規則に合わせて読み取り系チェックを別インスタンスで分離。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/hashmap_str.nepl -i stdlib/alloc/collections/hashset_str.nepl -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/hashstr-final-scope.json -j 2`
+  - 結果: `10/10 pass`
+
+# 2026-02-27 作業メモ (safe stdlib をデフォルト化: Result/Diag)
+- 目的:
+  - collections API を「別名オプション」ではなく、`Result/Diag` を返す安全APIとして標準化する。
+- 根本原因:
+  - `alloc/diag/error.nepl` で `concat` 依存の import が欠落し、識別子解決が崩れていた。
+  - collections 実装の `if` 分岐に旧記法 `do:` が残存し、型/制御フロー解析が崩れていた。
+- 実装:
+  - `stdlib/alloc/diag/error.nepl`
+    - `#import "alloc/string" as *` を追加。
+    - `DiagCode` / `Diag` / `diag_err` 系を維持し、安全APIの基盤を有効化。
+  - `stdlib/alloc/collections/hashmap.nepl`
+  - `stdlib/alloc/collections/hashset.nepl`
+  - `stdlib/alloc/collections/hashmap_str.nepl`
+  - `stdlib/alloc/collections/hashset_str.nepl`
+    - `new/insert/remove` を `Result<..., Diag>` 返却のデフォルトAPIとして確定。
+    - `if` 分岐内の無効な `do:` を除去し、正常な式フローへ修正。
+  - テスト更新:
+    - `stdlib/tests/hashmap.n.md`
+    - `stdlib/tests/hashset.n.md`
+    - `stdlib/tests/hashmap_str.n.md`
+    - `stdlib/tests/hashset_str.n.md`
+    - `tests/pipe_collections.n.md`
+    - `tests/selfhost_req.n.md`
+    - `unwrap_ok_i` 依存を除去し、各テスト内で `must_*`（`Result` を受けるローカル関数）へ統一。
+    - move規則に合わせて値再利用パターンを分離。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i stdlib/core/result.nepl -i stdlib/alloc/diag/error.nepl -i stdlib/alloc/collections/hashmap.nepl -i stdlib/alloc/collections/hashset.nepl -i stdlib/alloc/collections/hashmap_str.nepl -i stdlib/alloc/collections/hashset_str.nepl -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md -i tests/pipe_collections.n.md -i tests/selfhost_req.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/diag-collections-scope.json -j 2`
+  - 結果: `67/67 pass`
+
+# 2026-02-27 作業メモ (collections安全化: stack を Result/Diag デフォルトへ統一)
+- 目的:
+  - collections の安全化方針に合わせて `stack` も失敗可能操作を `Result<..., Diag>` で扱う。
+- 実装:
+  - `stdlib/alloc/collections/stack.nepl`
+    - `stack_new`: `()*>Result<Stack<.T>, Diag>` へ変更。
+    - `stack_push`: `(Stack<.T>, .T)*>Result<Stack<.T>, Diag>` へ変更。
+    - `alloc/realloc` 失敗時に `diag_out_of_memory` を返すよう修正。
+  - `stdlib/tests/stack.n.md`
+  - `tests/stack_collections.n.md`
+  - `tests/pipe_collections.n.md`
+    - `stack_new`/`stack_push` の戻り値を `unwrap_ok<Stack<...>, Diag>` で展開する形へ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i stdlib/alloc/collections/stack.nepl -i stdlib/tests/stack.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stack-safe-scope.json -j 2` -> `74/74 pass`
+- 備考:
+  - `todo.md` の collections再設計は継続中のため、完了項目削除はまだ行っていない。
+
+# 2026-02-27 作業メモ (stack doctest の再有効化)
+- 目的:
+  - `stack` の API 変更（`stack_new`/`stack_push` が `Result` 返却）に合わせ、`stack.nepl` 内 doctest を実行対象へ戻す。
+- 原因:
+  - 先行修正時、古い使用例が混在していたため `neplg2:test[skip]` で一時退避されていた。
+- 実装:
+  - `stdlib/alloc/collections/stack.nepl` の全 `neplg2:test[skip]` を `neplg2:test` に戻した。
+  - doctest 内の初期化/追加処理を `unwrap_ok<Stack<...>, Diag>` 経由に統一した。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i stdlib/alloc/collections/stack.nepl -i stdlib/tests/stack.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stack-safe-scope.json -j 2` -> `84/84 pass`
+
+# 2026-02-27 作業メモ (collections再配置: vec/sort を collections 配下へ移動)
+- 目的:
+  - `todo.md` の collections 再設計項目に沿って `vec/sort` を新配置へ移行する。
+- 実装:
+  - `stdlib/alloc/vec.nepl` -> `stdlib/alloc/collections/vec.nepl` へ移動。
+  - `stdlib/alloc/sort.nepl` -> `stdlib/alloc/collections/vec/sort.nepl` へ移動。
+  - `stdlib` / `tests` / `examples` / `tutorials` の import を一括更新:
+    - `"alloc/vec"` -> `"alloc/collections/vec"`
+    - `"alloc/sort"` -> `"alloc/collections/vec/sort"`
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - 次を対象に dual 実行: `243/243 pass`
+    - `stdlib/alloc/collections/vec.nepl`
+    - `stdlib/alloc/collections/vec/sort.nepl`
+    - `stdlib/alloc/encoding/json.nepl`
+    - `stdlib/alloc/hash/sha256.nepl`
+    - `stdlib/alloc/string.nepl`
+    - `stdlib/kp/kpgraph.nepl`
+    - `stdlib/kp/kpread.nepl`
+    - `stdlib/std/fs.nepl`
+    - `stdlib/tests/hash.n.md`
+    - `stdlib/tests/string.n.md`
+    - `stdlib/tests/vec.n.md`
+    - `tests/capacity_stack.n.md`
+    - `tests/overload.n.md`
+    - `tests/selfhost_req.n.md`
+    - `tests/sort.n.md`
+- 補足:
+  - `--changed` 全体実行では、既存のローカル変更 `stdlib/nm/parser.nepl` に起因する失敗が混ざるため、今回の移設検証は影響範囲を明示指定して実施した。

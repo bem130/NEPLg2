@@ -54,7 +54,7 @@ ret: 1
 #target std
 
 #import "alloc/string" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/math" as *
 
 fn main <()*>i32> ():

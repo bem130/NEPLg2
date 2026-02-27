@@ -11,7 +11,7 @@ neplg2:test
 #import "alloc/hash/fnv1a32" as *
 #import "alloc/hash/sha256" as *
 #import "std/test" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/math" as *
 
 fn test_hash <()*>i32> ():

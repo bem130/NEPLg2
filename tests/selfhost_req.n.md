@@ -42,7 +42,7 @@ ret: 222
 
 #entry main
 #indent 4
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/cast" as *
 #import "core/option" as *
 
@@ -74,7 +74,7 @@ ret: 0
 #entry main
 #indent 4
 #import "alloc/string" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/option" as *
 
 fn main <()*>i32> ():
@@ -112,16 +112,24 @@ ret: 10
 #entry main
 #indent 4
 #import "alloc/collections/hashmap_str" as *
+#import "alloc/diag/error" as *
 #import "alloc/string" as *
 #import "core/option" as *
+#import "core/result" as *
+
+fn must_hms <(Result<HashMapStr<i32>, Diag>)*>HashMapStr<i32>> (r):
+    match r:
+        Result::Ok hm:
+            hm
+        Result::Err _d:
+            #intrinsic "unreachable" <> ()
 
 fn main <()*>i32> ():
     // 要件: キーに str を指定できる HashMap
-    let mut map <i32> hashmap_str_new<i32>;
-    
-    hashmap_str_insert<i32> map "foo" 10;
-    hashmap_str_insert<i32> map "bar" 20;
-    
+    let map0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
+    let map1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> map0 "foo" 10;
+    let map <HashMapStr<i32>> must_hms hashmap_str_insert<i32> map1 "bar" 20;
+
     match hashmap_str_get<i32> map "foo":
         Option::Some v:
             v

@@ -15,7 +15,7 @@
 //: ```
 
 #indent 4
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 
 // sha256: SHA-256 Hash (Draft/Skeleton)
 //

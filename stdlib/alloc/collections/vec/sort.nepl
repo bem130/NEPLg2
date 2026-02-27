@@ -12,8 +12,8 @@
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//:| #import "alloc/sort" as *
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec/sort" as *
+//:| #import "alloc/collections/vec" as *
 //:| #import "core/math" as *
 //: fn mk <()*>Vec<i32>> ():
 //:     let v0 vec_new<i32>;
@@ -37,8 +37,8 @@
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//:| #import "alloc/sort" as *
-//:| #import "alloc/vec" as *
+//:| #import "alloc/collections/vec/sort" as *
+//:| #import "alloc/collections/vec" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let u0 vec_new<i32>;
@@ -55,7 +55,7 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/cast" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/field" as *
 
 

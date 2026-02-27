@@ -2,16 +2,17 @@
 //:
 //: [目的/もくてき]:
 //: - `push` / `pop` / `peek` / `len` など、スタック操作の基本 API を提供します。
-//: - parser や探索処理で使いやすい軽量なポインタベース実装を提供します。
+//: - parser や探索処理で使いやすい軽量なスタック実装を提供します。
 //:
 //: [実装/じっそう]:
-//: - スタック本体は `i32` ポインタで表し、ヘッダ `[len, cap, data_ptr]` と要素領域を保持します。
+//: - スタック本体は `Vec<.T>` で表し、内部でヘッダ `[len, cap, data_ptr]` を保持します。
 //: - 容量不足時は 2 倍拡張して `realloc` します。
 //:
 //: [注意/ちゅうい]:
-//: - `stack_push` / `stack_clear` は破壊的更新です。
-//: - `stack_pop` / `stack_peek` は空の場合 `Option::None` を返します。
-//: - `stack_free` 後のポインタは再利用できません。
+//: - `stack_push` / `stack_clear` は更新後の `Stack<.T>` を返します。
+//: - `stack_pop` は `Option<.T>` を返します。
+//: - `stack_peek` は値のみを返します。
+//: - `stack_free` 後のスタック値は再利用できません。
 //:
 //: [計算量/けいさんりょう]:
 //: - `stack_len`/`stack_is_empty`/`stack_peek`/`stack_pop` は O(1)。
@@ -25,24 +26,44 @@
 //:| #target std
 //:| #import "alloc/collections/stack" as *
 //:| #import "alloc/string" as *
+//:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
+//:| #import "core/field" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st stack_new<i32>;
-//:     stack_push<i32> st 10;
-//:     stack_push<i32> st 20;
-//:     let ok0 if eq stack_len<i32> st 2 1 0;
-//:     let ok1 match stack_peek<i32> st:
+//:     let st0 <Stack<i32>>:
+//:         stack_new<i32>
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 10
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 20
+//:         |> unwrap_ok<Stack<i32>, Diag>;
+//:     let ok0 if eq stack_len<i32> st0 2 1 0;
+//:     let st1 <Stack<i32>>:
+//:         stack_new<i32>
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 10
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 20
+//:         |> unwrap_ok<Stack<i32>, Diag>;
+//:     let ok1 match stack_peek<i32> st1:
 //:         Option::Some x:
 //:             if eq x 20 1 0
 //:         Option::None:
 //:             0
-//:     match stack_pop<i32> st:
+//:     let st2 <Stack<i32>>:
+//:         stack_new<i32>
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 10
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 20
+//:         |> unwrap_ok<Stack<i32>, Diag>;
+//:     let p stack_pop<i32> st2;
+//:     let ok2 match p:
 //:         Option::Some x:
-//:             ()
+//:             if eq x 20 1 0
 //:         Option::None:
-//:             ()
-//:     stack_clear<i32> st;
-//:     let ok2 if stack_is_empty<i32> st 1 0;
+//:             0
 //:     add ok0 add ok1 ok2
 //: ```
 //:
@@ -54,33 +75,37 @@
 //:| #target std
 //:| #import "alloc/collections/stack" as *
 //:| #import "alloc/string" as *
+//:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
+//:| #import "core/field" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st stack_new<str>;
-//:     stack_push<str> st "a";
-//:     stack_push<str> st "b";
-//:     let ok0 match stack_pop<str> st:
+//:     let st <Stack<str>>:
+//:         stack_new<str>
+//:         |> unwrap_ok<Stack<str>, Diag>
+//:         |> stack_push<str> "a"
+//:         |> unwrap_ok<Stack<str>, Diag>
+//:         |> stack_push<str> "b"
+//:         |> unwrap_ok<Stack<str>, Diag>;
+//:     let p stack_pop<str> st;
+//:     let ok0 match p:
 //:         Option::Some x:
 //:             if str_eq x "b" 1 0
 //:         Option::None:
 //:             0
-//:     let ok1 match stack_pop<str> st:
-//:         Option::Some x:
-//:             if str_eq x "a" 1 0
-//:         Option::None:
-//:             0
-//:     let ok2 match stack_pop<str> st:
-//:         Option::Some _:
-//:             0
-//:         Option::None:
-//:             1
-//:     add ok0 add ok1 ok2
+//:     ok0
 //: ```
 
 #indent 4
 
 #import "core/mem" as *
 #import "core/option" as *
+#import "core/result" as *
+#import "core/field" as *
+#import "alloc/diag/error" as *
+
+struct Stack<.T>:
+    hdr <i32>
 
 //: stack_new: 空のスタックを作る
 //:
@@ -91,7 +116,7 @@
 //: - ヘッダ 12 バイトとデータ領域を確保します。
 //:
 //: 注意(重要):
-//: - 返り値はヘッダのポインタです。
+//: - 返り値は内部ヘッダを保持する `Stack<.T>` です。
 //:
 //: 計算量:
 //: - O(1)
@@ -103,18 +128,31 @@
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st stack_new<i32>;
+//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
 //:     if stack_is_empty<i32> st 0 1
 //: ```
-fn stack_new <.T> <()*>i32> ():
+fn stack_new <.T> <()*>Result<Stack<.T>, Diag>> ():
     let cap <i32> 8
     let header <i32> alloc 12
-    store_i32 header 0  // len
-    store_i32 add header 4 cap
-    let data <i32> alloc mul cap size_of<.T>
-    store_i32 add header 8 data
-    header
+    if:
+        eq header 0
+        then:
+            diag_err<Stack<.T>> diag_out_of_memory "stack_new(header)"
+        else:
+            let data <i32> alloc mul cap size_of<.T>
+            if:
+                eq data 0
+                then:
+                    dealloc header 12
+                    diag_err<Stack<.T>> diag_out_of_memory "stack_new(data)"
+                else:
+                    store_i32 header 0
+                    store_i32 add header 4 cap
+                    store_i32 add header 8 data
+                    ok<Stack<.T>, Diag> Stack header
 
 //: stack_push: 末尾に要素を積む
 //:
@@ -125,7 +163,7 @@ fn stack_new <.T> <()*>i32> ():
 //: - 容量不足なら 2 倍に拡張して realloc します。
 //:
 //: 注意(重要):
-//: - スタックは破壊的に更新されます。
+//: - 更新後のスタックを返すので、呼び出し側で束縛し直してください。
 //:
 //: 計算量:
 //: - ならし O(1)
@@ -137,29 +175,39 @@ fn stack_new <.T> <()*>i32> ():
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st stack_new<i32>;
-//:     stack_push<i32> st 10;
+//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 10;
 //:     if eq stack_len<i32> st 1 0 1
 //: ```
-fn stack_push <.T> <(i32,.T)*>()> (stk, item):
-    let len <i32> load_i32 stk
-    let cap <i32> load_i32 add stk 4
-    let data <i32> load_i32 add stk 8
+fn stack_push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
+    let header <i32> get stk "hdr"
+    let len <i32> load_i32 header
+    let cap <i32> load_i32 add header 4
+    let data <i32> load_i32 add header 8
     if:
         eq len cap
         then:
             let new_cap <i32> mul cap 2
             let new_data <i32> realloc data mul cap size_of<.T> mul new_cap size_of<.T>
-            store_i32 add stk 4 new_cap
-            store_i32 add stk 8 new_data
-            let offset <i32> mul len size_of<.T>
-            store<.T> add new_data offset item
-            store_i32 stk add len 1
+            if:
+                eq new_data 0
+                then:
+                    diag_err<Stack<.T>> diag_out_of_memory "stack_push(realloc)"
+                else:
+                    store_i32 add header 4 new_cap
+                    store_i32 add header 8 new_data
+                    let off <i32> mul len size_of<.T>
+                    store<.T> add new_data off item
+                    store_i32 header add len 1
+                    ok<Stack<.T>, Diag> Stack header
         else:
-            let offset <i32> mul len size_of<.T>
-            store<.T> add data offset item
-            store_i32 stk add len 1
+            let off <i32> mul len size_of<.T>
+            store<.T> add data off item
+            store_i32 header add len 1
+            ok<Stack<.T>, Diag> Stack header
 
 //: stack_pop: 末尾要素を取り出す
 //:
@@ -170,7 +218,7 @@ fn stack_push <.T> <(i32,.T)*>()> (stk, item):
 //: - len==0 なら None、そうでなければ最後の要素を load します。
 //:
 //: 注意(重要):
-//: - 取り出した値は Option で返します。
+//: - 返り値は `Option<.T>` です。
 //:
 //: 計算量:
 //: - O(1)
@@ -182,28 +230,35 @@ fn stack_push <.T> <(i32,.T)*>()> (stk, item):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st stack_new<i32>;
-//:     stack_push<i32> st 10;
-//:     match stack_pop<i32> st:
+//:     let st <Stack<i32>>:
+//:         stack_new<i32>
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 10
+//:         |> unwrap_ok<Stack<i32>, Diag>;
+//:     let p stack_pop<i32> st;
+//:     match p:
 //:         Option::Some x:
 //:             if eq x 10 0 1
 //:         Option::None:
 //:             1
 //: ```
-fn stack_pop <.T> <(i32)*>Option<.T>> (stk):
-    let len <i32> load_i32 stk
+fn stack_pop <.T> <(Stack<.T>)*>Option<.T>> (stk):
+    let header <i32> get stk "hdr"
+    let len <i32> load_i32 header
     if:
         eq len 0
         then:
             none<.T>
         else:
             let new_len <i32> sub len 1
-            let data <i32> load_i32 add stk 8
-            let offset <i32> mul new_len size_of<.T>
-            let item <.T> load<.T> add data offset
-            store_i32 stk new_len
+            let data <i32> load_i32 add header 8
+            let off <i32> mul new_len size_of<.T>
+            let item <.T> load<.T> add data off
+            store_i32 header new_len
             some<.T> item
 
 //: stack_peek: 末尾要素を覗く
@@ -215,7 +270,7 @@ fn stack_pop <.T> <(i32)*>Option<.T>> (stk):
 //: - len==0 なら None、そうでなければ最後の要素を load します。
 //:
 //: 注意(重要):
-//: - スタックは変更されません。
+//: - 返り値は `Option<.T>` です。
 //:
 //: 計算量:
 //: - O(1)
@@ -227,26 +282,32 @@ fn stack_pop <.T> <(i32)*>Option<.T>> (stk):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st stack_new<i32>;
-//:     stack_push<i32> st 20;
+//:     let st <Stack<i32>>:
+//:         stack_new<i32>
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 20
+//:         |> unwrap_ok<Stack<i32>, Diag>;
 //:     match stack_peek<i32> st:
 //:         Option::Some x:
 //:             if eq x 20 0 1
 //:         Option::None:
 //:             1
 //: ```
-fn stack_peek <.T> <(i32)->Option<.T>> (stk):
-    let len <i32> load_i32 stk
+fn stack_peek <.T> <(Stack<.T>)->Option<.T>> (stk):
+    let header <i32> get stk "hdr"
+    let len <i32> load_i32 header
     if:
         eq len 0
         then:
             none<.T>
         else:
-            let data <i32> load_i32 add stk 8
-            let offset <i32> mul sub len 1 size_of<.T>
-            some<.T> load<.T> add data offset
+            let data <i32> load_i32 add header 8
+            let off <i32> mul sub len 1 size_of<.T>
+            some<.T> load<.T> add data off
 
 //: stack_len: 長さを返す
 //:
@@ -269,14 +330,16 @@ fn stack_peek <.T> <(i32)->Option<.T>> (stk):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st stack_new<i32>;
-//:     stack_push<i32> st 1;
-//:     stack_push<i32> st 2;
+//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 1;
+//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 2;
 //:     if eq stack_len<i32> st 2 0 1
 //: ```
-fn stack_len <.T> <(i32)->i32> (stk):
-    load_i32 stk
+fn stack_len <.T> <(Stack<.T>)->i32> (stk):
+    load_i32 get stk "hdr"
 
 //: stack_is_empty: 空か判定する
 //:
@@ -299,12 +362,14 @@ fn stack_len <.T> <(i32)->i32> (stk):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st stack_new<i32>;
+//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
 //:     if stack_is_empty<i32> st 0 1
 //: ```
-fn stack_is_empty <.T> <(i32)->bool> (stk):
-    eq load_i32 stk 0
+fn stack_is_empty <.T> <(Stack<.T>)->bool> (stk):
+    eq stack_len<.T> stk 0
 
 //: stack_clear: すべての要素を削除する
 //:
@@ -327,14 +392,18 @@ fn stack_is_empty <.T> <(i32)->bool> (stk):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st stack_new<i32>;
-//:     stack_push<i32> st 9;
-//:     stack_clear<i32> st;
+//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 9;
+//:     set st stack_clear<i32> st;
 //:     if stack_is_empty<i32> st 0 1
 //: ```
-fn stack_clear <.T> <(i32)*>()> (stk):
-    store_i32 stk 0
+fn stack_clear <.T> <(Stack<.T>)*>Stack<.T>> (stk):
+    let header <i32> get stk "hdr"
+    store_i32 header 0
+    stk
 
 //: stack_free: メモリを解放する
 //:
@@ -357,13 +426,22 @@ fn stack_clear <.T> <(i32)*>()> (stk):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st stack_new<i32>;
+//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
 //:     stack_free<i32> st;
 //:     0
 //: ```
-fn stack_free <.T> <(i32)*>()> (stk):
-    let cap <i32> load_i32 add stk 4
-    let data <i32> load_i32 add stk 8
+fn stack_free <.T> <(Stack<.T>)*>()> (stk):
+    let header <i32> get stk "hdr"
+    let cap <i32> load_i32 add header 4
+    let data <i32> load_i32 add header 8
     dealloc data mul cap size_of<.T>
-    dealloc stk 12
+    dealloc header 12
+
+fn stack_pop_keep <.T> <(Stack<.T>)*>Option<.T>> (stk):
+    stack_pop<.T> stk
+
+fn stack_peek_keep <.T> <(Stack<.T>)->Option<.T>> (stk):
+    stack_peek<.T> stk

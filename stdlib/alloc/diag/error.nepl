@@ -20,6 +20,7 @@
 #import "core/math" as *
 #import "core/option" as *
 #import "core/result" as *
+#import "alloc/string" as *
 
 // error: エラー型と簡易コンテキスト付与
 //
@@ -132,6 +133,137 @@ struct Span:
 //: - 定義そのものは O(1) です。
 struct Error:
     ptr <i32>
+
+//: DiagCode: collections などで使う失敗コード
+//:
+//: 目的:
+//: - ライブラリ操作失敗を機械可読なコードで表します。
+//:
+//: 実装(アルゴリズム):
+//: - enum で種別を定義します。
+//:
+//: 注意(重要):
+//: - 追加時は `diag_code_str` とテストを更新してください。
+enum DiagCode:
+    OutOfMemory
+    EmptyCollection
+    IndexOutOfBounds
+    KeyNotFound
+    CapacityExceeded
+    InvalidOperation
+
+//: Diag: 軽量な失敗情報
+//:
+//: 目的:
+//: - code と message をまとめて返す共通型です。
+//:
+//: 実装(アルゴリズム):
+//: - `DiagCode` と `str` の 2 フィールド構造体です。
+struct Diag:
+    code <DiagCode>
+    message <str>
+
+//: diag_new: Diag を構築する
+//:
+//: 目的:
+//: - code と message から `Diag` を作ります。
+//:
+//: 計算量:
+//: - O(1)
+fn diag_new <(DiagCode,str)->Diag> (code, message):
+    Diag code message
+
+//: diag_code_str: DiagCode を文字列化する
+//:
+//: 目的:
+//: - ログ/テスト比較用にコード名を返します。
+//:
+//: 計算量:
+//: - O(1)
+fn diag_code_str <(DiagCode)->str> (code):
+    match code:
+        DiagCode::OutOfMemory:
+            "OutOfMemory"
+        DiagCode::EmptyCollection:
+            "EmptyCollection"
+        DiagCode::IndexOutOfBounds:
+            "IndexOutOfBounds"
+        DiagCode::KeyNotFound:
+            "KeyNotFound"
+        DiagCode::CapacityExceeded:
+            "CapacityExceeded"
+        DiagCode::InvalidOperation:
+            "InvalidOperation"
+
+//: diag_to_string: Diag を人間向け文字列にする
+//:
+//: 目的:
+//: - `Diag` を `"Code: message"` 形式へ整形します。
+//:
+//: 計算量:
+//: - O(n)
+fn diag_to_string <(Diag)*>str> (d):
+    let p0 <str> diag_code_str d.code
+    let p1 <str> concat p0 ": "
+    concat p1 d.message
+
+//: diag_err: Diag を Result::Err に包む
+//:
+//: 目的:
+//: - `Result<.T, Diag>` を返す関数で共通利用します。
+//:
+//: 計算量:
+//: - O(1)
+fn diag_err <.T> <(Diag)->Result<.T, Diag>> (d):
+    err<.T, Diag> d
+
+//: diag_out_of_memory: メモリ不足診断を作る
+//:
+//: 目的:
+//: - op 名を含む OutOfMemory 診断を返します。
+//:
+//: 計算量:
+//: - O(n)
+fn diag_out_of_memory <(str)*>Diag> (op):
+    let p0 <str> concat op ": "
+    let p1 <str> concat p0 "allocation failed"
+    diag_new DiagCode::OutOfMemory p1
+
+//: diag_empty_collection: 空コレクション診断を作る
+//:
+//: 目的:
+//: - 空状態での不正操作を表す診断を返します。
+//:
+//: 計算量:
+//: - O(n)
+fn diag_empty_collection <(str)*>Diag> (op):
+    let p0 <str> concat op ": "
+    let p1 <str> concat p0 "collection is empty"
+    diag_new DiagCode::EmptyCollection p1
+
+//: diag_capacity_exceeded: 容量超過診断を作る
+//:
+//: 目的:
+//: - 固定容量構造での挿入失敗を表す診断を返します。
+//:
+//: 計算量:
+//: - O(n)
+fn diag_capacity_exceeded <(str)*>Diag> (op):
+    let p0 <str> concat op ": "
+    let p1 <str> concat p0 "capacity exceeded"
+    diag_new DiagCode::CapacityExceeded p1
+
+//: diag_key_not_found: キー未検出診断を作る
+//:
+//: 目的:
+//: - remove/get 系でキーが無い場合の診断を返します。
+//:
+//: 計算量:
+//: - O(n)
+fn diag_key_not_found <(str)*>Diag> (op):
+    let p0 <str> concat op ": "
+    let p1 <str> concat p0 "key not found"
+    diag_new DiagCode::KeyNotFound p1
 
 // kind_to_i32: ErrorKind を i32 に変換する
 //
