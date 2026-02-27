@@ -102,3 +102,51 @@ fn main <()*>i32> ():
     let ok2 <bool> s |> btreeset_remove 5;
     if and ok0 and ok1 ok2 1 0
 ```
+
+## pipe_hashmap_usage
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "alloc/collections/hashmap" as *
+#import "core/math" as *
+#import "core/option" as *
+
+fn main <()*>i32> ():
+    let hm <i32> hashmap_new<i32>;
+    hm |> hashmap_insert<i32> 7 70;
+    hm |> hashmap_insert<i32> 9 90;
+    let ok0 <bool> eq hashmap_len<i32> hm 2;
+    let ok1 <bool> match hashmap_get<i32> hm 9:
+        Option::Some v:
+            eq v 90
+        Option::None:
+            false
+    let ok2 <bool> hashmap_contains<i32> hm 7;
+    if and ok0 and ok1 ok2 1 0
+```
+
+## pipe_hashset_usage
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "alloc/collections/hashset" as *
+#import "core/math" as *
+
+fn main <()*>i32> ():
+    let hs <i32> hashset_new;
+    let ok0 <bool> hs |> hashset_insert 4;
+    let ok1 <bool> hs |> hashset_insert 8;
+    let ok2 <bool> eq hashset_len hs 2;
+    let ok3 <bool> hashset_contains hs 8;
+    if and ok0 and ok1 and ok2 ok3 1 0
+```

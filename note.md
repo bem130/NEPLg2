@@ -4520,3 +4520,15 @@
   - `NO_COLOR=false node nodesrc/tests.js --changed --changed-base HEAD --runner all --llvm-all --assert-io --strict-dual --no-tree -o /tmp/tests-changed-after-pipe-fix.json -j 2` -> `49/49 pass`
 - 差分/課題:
   - 汎用短名 alias をグローバル導入する方式は、現行のオーバーロード解決では回帰リスクが高い。今後はモジュール接頭辞APIを基本とし、必要なら resolver/typecheck 側の候補絞り込み拡張を先行してから再導入する。
+
+# 2026-02-27 作業メモ (pipe collections テスト拡張: hashmap/hashset)
+- 目的:
+  - tree系（btree）に続き、hash 系コレクションでも pipe の第一引数移動が安定動作することを固定する。
+- 実装:
+  - `tests/pipe_collections.n.md` に以下を追加:
+    - `pipe_hashmap_usage`
+    - `pipe_hashset_usage`
+  - どちらも短名 alias ではなく明示 API（`hashmap_*`, `hashset_*`）で検証。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/pipe_collections.n.md -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/list.n.md -i stdlib/tests/stack.n.md --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-pipe-collections-hash.json -j 2` -> `547/547 pass`
