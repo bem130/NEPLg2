@@ -4553,3 +4553,20 @@
 - 検証:
   - `node nodesrc/tests.js -i tests/stack_collections.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/collections-scope.json -j 2`
   - 結果: `54/54 pass`
+
+# 2026-02-27 作業メモ (collections: hashset の struct 隠蔽)
+- 目的:
+  - `hashset` 公開 API の `i32` ポインタ露出を除去する。
+- 実装:
+  - `stdlib/alloc/collections/hashset.nepl`
+    - `struct HashSet` を追加（`hdr <i32>`）。
+    - `hashset_new` の戻り値を `HashSet` へ変更。
+    - `hashset_contains` / `hashset_len` / `hashset_free` を `HashSet` 引数へ変更。
+    - `hashset_insert` / `hashset_remove` は更新後の `HashSet` を返す形へ変更。
+  - `stdlib/tests/hashset.n.md`
+    - 新シグネチャと move 規則に合わせてテストを再構成。
+  - `tests/pipe_collections.n.md`
+    - hashset の pipe ケースを `HashSet` 版へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/hashset.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/collections-scope-v2.json -j 2`
+  - 結果: `57/57 pass`

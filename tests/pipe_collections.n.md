@@ -169,10 +169,15 @@ ret: 1
 #import "core/math" as *
 
 fn main <()*>i32> ():
-    let hs <i32> hashset_new;
-    let ok0 <bool> hs |> hashset_insert 4;
-    let ok1 <bool> hs |> hashset_insert 8;
-    let ok2 <bool> eq hashset_len hs 2;
-    let ok3 <bool> hashset_contains hs 8;
-    if and ok0 and ok1 and ok2 ok3 1 0
+    let hs0 <HashSet>:
+        hashset_new
+        |> hashset_insert 4
+        |> hashset_insert 8;
+    let ok2 <bool> eq hashset_len hs0 2;
+    let hs1 <HashSet>:
+        hashset_new
+        |> hashset_insert 4
+        |> hashset_insert 8;
+    let ok3 <bool> hashset_contains hs1 8;
+    if and ok2 ok3 1 0
 ```

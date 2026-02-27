@@ -18,6 +18,10 @@
 
 #import "core/mem" as *
 #import "core/math" as *
+#import "core/field" as *
+
+struct HashSet:
+    hdr <i32>
 
 // hashset: i32 キーの簡易集合
 //
@@ -141,7 +145,7 @@ fn hashset_contains_loop <(i32,i32,i32,i32,i32,i32)->bool> (entries, entry_size,
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_new <()*>i32> ():
+fn hashset_new <()*>HashSet> ():
     let cap <i32> 16
     let entry_size <i32> 8
     let entries <i32> alloc mul cap entry_size
@@ -154,7 +158,7 @@ fn hashset_new <()*>i32> ():
     store_i32 header 0
     store_i32 add header 4 cap
     store_i32 add header 8 entries
-    header
+    HashSet header
 
 // hashset_insert: 要素を追加する
 //
@@ -182,9 +186,10 @@ fn hashset_new <()*>i32> ():
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_insert <(i32,i32)*>bool> (hs, key):
-    let cap <i32> load_i32 add hs 4
-    let entries <i32> load_i32 add hs 8
+fn hashset_insert <(HashSet,i32)*>HashSet> (hs, key):
+    let hdr <i32> get hs "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
     let idx <i32> mod_s abs hash_i32 key cap
     let mut cur <i32> idx
@@ -199,8 +204,7 @@ fn hashset_insert <(i32,i32)*>bool> (hs, key):
                 then:
                     store_i32 entry 1
                     store_i32 add entry 4 key
-                    store_i32 hs add load_i32 hs 1
-                    set result true
+                    store_i32 hdr add load_i32 hdr 1
                     set done 1
                 else:
                     let ekey <i32> load_i32 add entry 4
@@ -213,7 +217,7 @@ fn hashset_insert <(i32,i32)*>bool> (hs, key):
                                 eq cur idx
                                 then set done 1
                                 else ()
-    result
+    hs
 
 // hashset_contains: 要素の存在確認
 //
@@ -241,9 +245,10 @@ fn hashset_insert <(i32,i32)*>bool> (hs, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_contains <(i32,i32)->bool> (hs, key):
-    let cap <i32> load_i32 add hs 4
-    let entries <i32> load_i32 add hs 8
+fn hashset_contains <(HashSet,i32)->bool> (hs, key):
+    let hdr <i32> get hs "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
     let idx <i32> mod_s abs hash_i32 key cap
     hashset_contains_loop entries entry_size cap idx idx key
@@ -274,9 +279,10 @@ fn hashset_contains <(i32,i32)->bool> (hs, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_remove <(i32,i32)*>bool> (hs, key):
-    let cap <i32> load_i32 add hs 4
-    let entries <i32> load_i32 add hs 8
+fn hashset_remove <(HashSet,i32)*>HashSet> (hs, key):
+    let hdr <i32> get hs "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
     let idx <i32> mod_s abs hash_i32 key cap
     let mut cur <i32> idx
@@ -295,8 +301,7 @@ fn hashset_remove <(i32,i32)*>bool> (hs, key):
                         eq ekey key
                         then:
                             store_i32 entry 0
-                            store_i32 hs sub load_i32 hs 1
-                            set result true
+                            store_i32 hdr sub load_i32 hdr 1
                             set done 1
                         else:
                             set cur mod_s add cur 1 cap
@@ -304,7 +309,7 @@ fn hashset_remove <(i32,i32)*>bool> (hs, key):
                                 eq cur idx
                                 then set done 1
                                 else ()
-    result
+    hs
 
 // hashset_len: 要素数を返す
 //
@@ -332,8 +337,9 @@ fn hashset_remove <(i32,i32)*>bool> (hs, key):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_len <(i32)->i32> (hs):
-    load_i32 hs
+fn hashset_len <(HashSet)->i32> (hs):
+    let hdr <i32> get hs "hdr"
+    load_i32 hdr
 
 // hashset_free: メモリを解放する
 //
@@ -361,11 +367,12 @@ fn hashset_len <(i32)->i32> (hs):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn hashset_free <(i32)*>()> (hs):
-    let cap <i32> load_i32 add hs 4
-    let entries <i32> load_i32 add hs 8
+fn hashset_free <(HashSet)*>()> (hs):
+    let hdr <i32> get hs "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
     dealloc entries mul cap 8
-    dealloc hs 12
+    dealloc hdr 12
 
 // abs: 絶対値を返す
 //
