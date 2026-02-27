@@ -4741,3 +4741,20 @@
     -> `828/828 pass`
   - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-sync.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2`
     -> `1822/1822 pass`
+# 2026-02-27 作業メモ (stdlib stack の短縮API追加)
+- 目的:
+  - `alloc/collections/stack` で prefix なし呼び出しを可能にし、pipe 記法での可読性を上げる。
+- 実装:
+  - `stdlib/alloc/collections/stack.nepl`
+    - 既存 API への委譲として短縮関数を追加:
+      - `new`, `push`, `pop`, `peek`, `len`, `clear`, `free`
+    - 各短縮関数に日本語ドキュメントコメントを追加。
+  - `stdlib/tests/stack.n.md`
+    - `stack_alias_pipe_api` テストを追加し、短縮 API + pipe 記法での動作を固定化。
+- 失敗原因と対処:
+  - 初回テスト失敗は `web/dist` の stdlib bundle 未更新が原因。
+  - `trunk build` 後に再実行して解消。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i stdlib/tests/stack.n.md -o /tmp/tests-stack-alias-after-build.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 1`
+    -> `556/556 pass`

@@ -187,3 +187,42 @@ fn main <()*>i32> ():
         Option::None:
             1
 ```
+
+## stack_alias_pipe_api
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "alloc/collections/stack" as *
+#import "alloc/diag/error" as *
+#import "core/math" as *
+#import "core/option" as *
+#import "core/field" as *
+#import "core/result" as *
+
+fn main <()*>i32> ():
+    let s0 <Stack<i32>>:
+        new<i32>
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> push<i32> 1
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> push<i32> 2
+        |> unwrap_ok<Stack<i32>, Diag>;
+    let p pop<i32> s0;
+    let ok0 <bool> match p:
+        Option::Some v:
+            eq v 2
+        Option::None:
+            false
+    let s1 <Stack<i32>>:
+        new<i32>
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> push<i32> 5
+        |> unwrap_ok<Stack<i32>, Diag>;
+    let ok1 <bool> eq len<i32> s1 1;
+    if and ok0 ok1 1 0
+```

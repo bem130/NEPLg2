@@ -445,3 +445,115 @@ fn stack_pop_keep <.T> <(Stack<.T>)*>Option<.T>> (stk):
 
 fn stack_peek_keep <.T> <(Stack<.T>)->Option<.T>> (stk):
     stack_peek<.T> stk
+
+//: new: `stack_new` の短縮名
+//:
+//: 目的:
+//: - `Stack<.T>` を短い名前で生成できるようにします。
+//:
+//: 実装(アルゴリズム):
+//: - `stack_new` へ委譲します。
+//:
+//: 注意(重要):
+//: - 返り値は `Result<Stack<.T>, Diag>` です。
+//:
+//: 計算量:
+//: - `stack_new` と同じです。
+fn new <.T> <()*>Result<Stack<.T>, Diag>> ():
+    stack_new<.T>
+
+//: push: `stack_push` の短縮名
+//:
+//: 目的:
+//: - `Stack<.T>` への追加を短い名前で呼び出せるようにします。
+//:
+//: 実装(アルゴリズム):
+//: - `stack_push` へ委譲します。
+//:
+//: 注意(重要):
+//: - 返り値は `Result<Stack<.T>, Diag>` です。
+//:
+//: 計算量:
+//: - `stack_push` と同じです。
+fn push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
+    stack_push<.T> stk item
+
+//: pop: `stack_pop` の短縮名
+//:
+//: 目的:
+//: - 末尾要素の取り出しを短い名前で呼び出せるようにします。
+//:
+//: 実装(アルゴリズム):
+//: - `stack_pop` へ委譲します。
+//:
+//: 注意(重要):
+//: - 返り値は `Option<.T>` です。
+//:
+//: 計算量:
+//: - `stack_pop` と同じです。
+fn pop <.T> <(Stack<.T>)*>Option<.T>> (stk):
+    stack_pop<.T> stk
+
+//: peek: `stack_peek` の短縮名
+//:
+//: 目的:
+//: - 末尾参照を短い名前で呼び出せるようにします。
+//:
+//: 実装(アルゴリズム):
+//: - `stack_peek` へ委譲します。
+//:
+//: 注意(重要):
+//: - 返り値は `Option<.T>` です。
+//:
+//: 計算量:
+//: - `stack_peek` と同じです。
+fn peek <.T> <(Stack<.T>)->Option<.T>> (stk):
+    stack_peek<.T> stk
+
+//: len: `stack_len` の短縮名
+//:
+//: 目的:
+//: - 長さ取得を短い名前で呼び出せるようにします。
+//:
+//: 実装(アルゴリズム):
+//: - `stack_len` へ委譲します。
+//:
+//: 注意(重要):
+//: - 返り値は `i32` です。
+//:
+//: 計算量:
+//: - `stack_len` と同じです。
+fn len <.T> <(Stack<.T>)->i32> (stk):
+    stack_len<.T> stk
+
+//: clear: `stack_clear` の短縮名
+//:
+//: 目的:
+//: - クリア操作を短い名前で呼び出せるようにします。
+//:
+//: 実装(アルゴリズム):
+//: - `stack_clear` へ委譲します。
+//:
+//: 注意(重要):
+//: - 更新後の `Stack<.T>` を返します。
+//:
+//: 計算量:
+//: - `stack_clear` と同じです。
+fn clear <.T> <(Stack<.T>)*>Stack<.T>> (stk):
+    stack_clear<.T> stk
+
+//: free: `stack_free` の短縮名
+//:
+//: 目的:
+//: - 解放操作を短い名前で呼び出せるようにします。
+//:
+//: 実装(アルゴリズム):
+//: - `stack_free` へ委譲します。
+//:
+//: 注意(重要):
+//: - 呼び出し後の `Stack<.T>` は再利用できません。
+//:
+//: 計算量:
+//: - `stack_free` と同じです。
+fn free <.T> <(Stack<.T>)*>()> (stk):
+    stack_free<.T> stk
