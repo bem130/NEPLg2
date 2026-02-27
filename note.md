@@ -4656,3 +4656,15 @@
   - `NO_COLOR=false node nodesrc/tests.js -i stdlib/alloc/collections/stack.nepl -i stdlib/tests/stack.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stack-safe-scope.json -j 2` -> `74/74 pass`
 - 備考:
   - `todo.md` の collections再設計は継続中のため、完了項目削除はまだ行っていない。
+
+# 2026-02-27 作業メモ (stack doctest の再有効化)
+- 目的:
+  - `stack` の API 変更（`stack_new`/`stack_push` が `Result` 返却）に合わせ、`stack.nepl` 内 doctest を実行対象へ戻す。
+- 原因:
+  - 先行修正時、古い使用例が混在していたため `neplg2:test[skip]` で一時退避されていた。
+- 実装:
+  - `stdlib/alloc/collections/stack.nepl` の全 `neplg2:test[skip]` を `neplg2:test` に戻した。
+  - doctest 内の初期化/追加処理を `unwrap_ok<Stack<...>, Diag>` 経由に統一した。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i stdlib/alloc/collections/stack.nepl -i stdlib/tests/stack.n.md -i tests/stack_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stack-safe-scope.json -j 2` -> `84/84 pass`

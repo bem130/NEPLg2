@@ -20,24 +20,32 @@
 //:
 //: 追加の使い方:
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
 //:| #import "alloc/string" as *
+//:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
 //:| #import "core/field" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
 //:     let st0 <Stack<i32>>:
 //:         stack_new<i32>
+//:         |> unwrap_ok<Stack<i32>, Diag>
 //:         |> stack_push<i32> 10
-//:         |> stack_push<i32> 20;
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 20
+//:         |> unwrap_ok<Stack<i32>, Diag>;
 //:     let ok0 if eq stack_len<i32> st0 2 1 0;
 //:     let st1 <Stack<i32>>:
 //:         stack_new<i32>
+//:         |> unwrap_ok<Stack<i32>, Diag>
 //:         |> stack_push<i32> 10
-//:         |> stack_push<i32> 20;
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 20
+//:         |> unwrap_ok<Stack<i32>, Diag>;
 //:     let ok1 match stack_peek<i32> st1:
 //:         Option::Some x:
 //:             if eq x 20 1 0
@@ -45,8 +53,11 @@
 //:             0
 //:     let st2 <Stack<i32>>:
 //:         stack_new<i32>
+//:         |> unwrap_ok<Stack<i32>, Diag>
 //:         |> stack_push<i32> 10
-//:         |> stack_push<i32> 20;
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 20
+//:         |> unwrap_ok<Stack<i32>, Diag>;
 //:     let p stack_pop<i32> st2;
 //:     let ok2 match p:
 //:         Option::Some x:
@@ -58,19 +69,24 @@
 //:
 //: 使い方:
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
 //:| #import "alloc/string" as *
+//:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
 //:| #import "core/field" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
 //:     let st <Stack<str>>:
 //:         stack_new<str>
+//:         |> unwrap_ok<Stack<str>, Diag>
 //:         |> stack_push<str> "a"
-//:         |> stack_push<str> "b";
+//:         |> unwrap_ok<Stack<str>, Diag>
+//:         |> stack_push<str> "b"
+//:         |> unwrap_ok<Stack<str>, Diag>;
 //:     let p stack_pop<str> st;
 //:     let ok0 match p:
 //:         Option::Some x:
@@ -107,13 +123,15 @@ struct Stack<.T>:
 //:
 //: 使い方:
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let mut st <Stack<i32>> stack_new<i32>;
+//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
 //:     if stack_is_empty<i32> st 0 1
 //: ```
 fn stack_new <.T> <()*>Result<Stack<.T>, Diag>> ():
@@ -152,14 +170,16 @@ fn stack_new <.T> <()*>Result<Stack<.T>, Diag>> ():
 //:
 //: 使い方:
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let mut st <Stack<i32>> stack_new<i32>;
-//:     set st stack_push<i32> st 10;
+//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 10;
 //:     if eq stack_len<i32> st 1 0 1
 //: ```
 fn stack_push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
@@ -205,17 +225,20 @@ fn stack_push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
 //:
 //: 使い方:
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
-//:| #import "core/field" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
 //:     let st <Stack<i32>>:
 //:         stack_new<i32>
-//:         |> stack_push<i32> 10;
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 10
+//:         |> unwrap_ok<Stack<i32>, Diag>;
 //:     let p stack_pop<i32> st;
 //:     match p:
 //:         Option::Some x:
@@ -254,16 +277,20 @@ fn stack_pop <.T> <(Stack<.T>)*>Option<.T>> (stk):
 //:
 //: 使い方:
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
 //:     let st <Stack<i32>>:
 //:         stack_new<i32>
-//:         |> stack_push<i32> 20;
+//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> stack_push<i32> 20
+//:         |> unwrap_ok<Stack<i32>, Diag>;
 //:     match stack_peek<i32> st:
 //:         Option::Some x:
 //:             if eq x 20 0 1
@@ -298,15 +325,17 @@ fn stack_peek <.T> <(Stack<.T>)->Option<.T>> (stk):
 //:
 //: 使い方:
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let mut st <Stack<i32>> stack_new<i32>;
-//:     set st stack_push<i32> st 1;
-//:     set st stack_push<i32> st 2;
+//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 1;
+//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 2;
 //:     if eq stack_len<i32> st 2 0 1
 //: ```
 fn stack_len <.T> <(Stack<.T>)->i32> (stk):
@@ -328,13 +357,15 @@ fn stack_len <.T> <(Stack<.T>)->i32> (stk):
 //:
 //: 使い方:
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let mut st <Stack<i32>> stack_new<i32>;
+//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
 //:     if stack_is_empty<i32> st 0 1
 //: ```
 fn stack_is_empty <.T> <(Stack<.T>)->bool> (stk):
@@ -356,14 +387,16 @@ fn stack_is_empty <.T> <(Stack<.T>)->bool> (stk):
 //:
 //: 使い方:
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let mut st <Stack<i32>> stack_new<i32>;
-//:     set st stack_push<i32> st 9;
+//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 9;
 //:     set st stack_clear<i32> st;
 //:     if stack_is_empty<i32> st 0 1
 //: ```
@@ -388,13 +421,15 @@ fn stack_clear <.T> <(Stack<.T>)*>Stack<.T>> (stk):
 //:
 //: 使い方:
 //:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/stack" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let mut st <Stack<i32>> stack_new<i32>;
+//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
 //:     stack_free<i32> st;
 //:     0
 //: ```
