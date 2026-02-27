@@ -27,6 +27,15 @@ struct AllocState {
     args: Vec<Vec<u8>>,
     files: BTreeMap<i32, FileState>,
     next_fd: i32,
+    tty_cols: u32,
+    tty_rows: u32,
+    tty_width: u32,
+    tty_height: u32,
+    tty_stdin_tty: bool,
+    tty_stdout_tty: bool,
+    tty_stderr_tty: bool,
+    tty_echo: bool,
+    tty_line_buffered: bool,
 }
 
 struct FileState {
@@ -820,6 +829,98 @@ fn run_wasm(
             },
         )?;
         linker.func_wrap(
+            "wasix_32v1",
+            "tty_get",
+            |mut caller: Caller<'_, AllocState>, tty_ptr: i32| -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if tty_ptr < 0 {
+                    return 21;
+                }
+                let base = tty_ptr as usize;
+                if base + 21 > memory.data(&caller).len() {
+                    return 21;
+                }
+                let cols = caller.data().tty_cols.to_le_bytes();
+                let rows = caller.data().tty_rows.to_le_bytes();
+                let width = caller.data().tty_width.to_le_bytes();
+                let height = caller.data().tty_height.to_le_bytes();
+                if memory.write(&mut caller, base, &cols).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 4, &rows).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 8, &width).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 12, &height).is_err() {
+                    return 21;
+                }
+                let stdin_tty = [if caller.data().tty_stdin_tty { 1 } else { 0 }];
+                let stdout_tty = [if caller.data().tty_stdout_tty { 1 } else { 0 }];
+                let stderr_tty = [if caller.data().tty_stderr_tty { 1 } else { 0 }];
+                let echo = [if caller.data().tty_echo { 1 } else { 0 }];
+                let line_buffered = [if caller.data().tty_line_buffered { 1 } else { 0 }];
+                if memory.write(&mut caller, base + 16, &stdin_tty).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 17, &stdout_tty).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 18, &stderr_tty).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 19, &echo).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 20, &line_buffered).is_err() {
+                    return 21;
+                }
+                0
+            },
+        )?;
+        linker.func_wrap(
+            "wasix_32v1",
+            "tty_set",
+            |mut caller: Caller<'_, AllocState>, tty_ptr: i32| -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if tty_ptr < 0 {
+                    return 21;
+                }
+                let base = tty_ptr as usize;
+                let data = memory.data(&caller);
+                if base + 21 > data.len() {
+                    return 21;
+                }
+                let cols = u32::from_le_bytes(data[base..base + 4].try_into().unwrap());
+                let rows = u32::from_le_bytes(data[base + 4..base + 8].try_into().unwrap());
+                let width = u32::from_le_bytes(data[base + 8..base + 12].try_into().unwrap());
+                let height = u32::from_le_bytes(data[base + 12..base + 16].try_into().unwrap());
+                let stdin_tty = data[base + 16] != 0;
+                let stdout_tty = data[base + 17] != 0;
+                let stderr_tty = data[base + 18] != 0;
+                let echo = data[base + 19] != 0;
+                let line_buffered = data[base + 20] != 0;
+                let state = caller.data_mut();
+                state.tty_cols = cols;
+                state.tty_rows = rows;
+                state.tty_width = width;
+                state.tty_height = height;
+                state.tty_stdin_tty = stdin_tty;
+                state.tty_stdout_tty = stdout_tty;
+                state.tty_stderr_tty = stderr_tty;
+                state.tty_echo = echo;
+                state.tty_line_buffered = line_buffered;
+                0
+            },
+        )?;
+        linker.func_wrap(
             "wasi_snapshot_preview1",
             "fd_read",
             |mut caller: Caller<'_, AllocState>,
@@ -997,6 +1098,16 @@ fn run_wasm(
             },
         )?;
     }
+    let tty_cols = std::env::var("COLUMNS")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(80);
+    let tty_rows = std::env::var("LINES")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(25);
     let mut store = Store::new(
         &engine,
         AllocState {
@@ -1007,6 +1118,15 @@ fn run_wasm(
             args: args_bytes,
             files: BTreeMap::new(),
             next_fd: 4,
+            tty_cols,
+            tty_rows,
+            tty_width: tty_cols,
+            tty_height: tty_rows,
+            tty_stdin_tty: true,
+            tty_stdout_tty: true,
+            tty_stderr_tty: true,
+            tty_echo: true,
+            tty_line_buffered: true,
         },
     );
     let instance_pre = linker
@@ -1034,6 +1154,7 @@ fn detect_module_target(module: &nepl_core::ast::Module) -> Option<CompileTarget
         if let nepl_core::ast::Directive::Target { target, .. } = d {
             match target.as_str() {
                 "wasi" | "std" => Some(CompileTarget::Wasi),
+                "wasix" => Some(CompileTarget::Wasix),
                 "wasm" | "core" => Some(CompileTarget::Wasm),
                 "llvm" => Some(CompileTarget::Llvm),
                 _ => None,
@@ -1051,6 +1172,7 @@ fn detect_module_target(module: &nepl_core::ast::Module) -> Option<CompileTarget
         {
             match target.as_str() {
                 "wasi" | "std" => Some(CompileTarget::Wasi),
+                "wasix" => Some(CompileTarget::Wasix),
                 "wasm" | "core" => Some(CompileTarget::Wasm),
                 "llvm" => Some(CompileTarget::Llvm),
                 _ => None,

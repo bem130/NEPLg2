@@ -4303,3 +4303,23 @@
     - 対応: `mkdir -p web/dist_ts web/examples` 実施後、build 成功。
   - `NO_COLOR=false node nodesrc/tests.js --changed --changed-base HEAD -o /tmp/tests-changed-tui.json --runner wasm --no-tree -j 2`
     - 結果: `total=0, passed=0, failed=0, errored=0`（今回差分に該当する `.n.md/.nepl` テストケースなし）。
+# 2026-02-27 作業メモ (`--run` ランタイムへ wasix TUI 互換を追加)
+- 目的:
+  - `nepl-cli --run` で `#target wasix` の TUI サンプルが動かない根本原因（`wasix_32v1::tty_get/tty_set` 未実装）を解消し、`wasmer run` と同様に動作する状態にする。
+- 実装:
+  - `nepl-cli/src/main.rs`
+    - `AllocState` に TTY 状態を追加（cols/rows/width/height, stdin/stdout/stderr tty, echo, line_buffered）。
+    - `run_wasm` の linker に以下を実装:
+      - `wasix_32v1::tty_get`
+      - `wasix_32v1::tty_set`
+    - 初期TTYサイズは `COLUMNS` / `LINES` を優先し、未設定時は `80x25` を使用。
+    - `detect_module_target` に `wasix` を追加し、`#target wasix` のとき `--run` が適切に Wasix ランタイム分岐へ入るよう修正。
+- 検証 (`--run`):
+  - `printf 'q' | timeout 8s target/debug/nepl-cli --input examples/wasix_tui_demo.nepl --run`
+  - `printf 'q' | timeout 8s target/debug/nepl-cli --input examples/wasix_tui_menu.nepl --run`
+  - `printf 'q' | timeout 8s target/debug/nepl-cli --input examples/wasix_tui_fullscreen.nepl --run`
+  - `printf 'q' | timeout 8s target/debug/nepl-cli --input examples/wasix_tui_progress.nepl --run`
+  - 4件とも正常終了（`Done` / `Goodbye` / `Bye`）を確認。
+- 互換確認 (`wasmer run`):
+  - 同一 `.wasm`（`/tmp/wasix_examples/*.wasm`）に対して同じ `q` 入力で実行。
+  - 4件とも `--run` と同様に表示・終了することを確認。
