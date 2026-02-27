@@ -1,3 +1,23 @@
+# 2026-02-27 作業メモ (オーバーロード再開発: 外側引数文脈の期待型伝播)
+- 目的:
+  - `assert cast 1` や `push<u8> cast 65` のような式で、外側関数の引数文脈から戻り値オーバーロードを解決できるようにする。
+- 原因:
+  - 既存実装は `expected_ret` を型注釈由来でしか渡しておらず、外側コンシューマの引数型（bool/u8 等）を見ていなかった。
+  - そのため `cast` が `ambiguous overload` になっていた。
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - `infer_expected_from_outer_consumer` を追加し、外側呼び出しの該当引数型を期待戻り値として抽出。
+    - さらに外側呼び出しの「他引数」を先に `unify` して型変数を具体化し、`push<u8> cast 65` のような generic 文脈でも期待型を決定できるようにした。
+    - `reduce_calls` / `reduce_calls_guarded` で `expected_ret.or(outer_expected)` を適用。
+  - `stdlib/tests/vec.n.md`
+    - move 規則に合わせて `Vec` の再利用パターンを修正（同一値の再使用を分離）。
+  - `tests/overload.n.md`
+    - `overload_result_inferred_from_outer_arg_context` を追加し、外側引数文脈での戻り値オーバーロード解決を固定化。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/overload.n.md --no-stdlib --no-tree -o /tmp/tests-overload-after-context2.json --runner all --llvm-all --assert-io --strict-dual -j 2` -> `23/23 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i stdlib/tests/cast.n.md -i stdlib/tests/vec.n.md -i tests/overload.n.md --no-stdlib --no-tree -o /tmp/tests-overload-stdlib-focus5.json --runner all --llvm-all --assert-io --strict-dual -j 2` -> `29/29 pass`
+
 # 2026-02-27 作業メモ (テスト実行高速化: changed モード追加)
 - 目的:
   - 全件実行が遅いため、変更ファイルだけを対象に回せる実行経路を追加する。

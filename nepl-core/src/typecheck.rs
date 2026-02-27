@@ -1653,6 +1653,58 @@ impl<'a> BlockChecker<'a> {
         None
     }
 
+    fn infer_expected_from_outer_consumer(
+        &mut self,
+        stack: &[StackEntry],
+        inner_pos: usize,
+        min_func_pos: usize,
+    ) -> Option<TypeId> {
+        for j in (min_func_pos..inner_pos).rev() {
+            if !stack[j].auto_call {
+                continue;
+            }
+            let rty = self.ctx.resolve_id(stack[j].ty);
+            let TypeKind::Function { params, .. } = self.ctx.get(rty) else {
+                continue;
+            };
+            let total_arity = params.len();
+            let arity = self.user_visible_arity(&stack[j].expr, total_arity);
+            if stack.len() < j + 1 + arity {
+                continue;
+            }
+            if inner_pos < j + 1 {
+                continue;
+            }
+            let user_arg_idx = inner_pos - (j + 1);
+            if user_arg_idx >= arity {
+                continue;
+            }
+            let capture_len = total_arity.saturating_sub(arity);
+            let arg_idx = capture_len + user_arg_idx;
+            if arg_idx >= total_arity {
+                continue;
+            }
+            for k in 0..arity {
+                if k == user_arg_idx {
+                    continue;
+                }
+                let outer_arg_pos = j + 1 + k;
+                if outer_arg_pos >= stack.len() {
+                    continue;
+                }
+                let pidx = capture_len + k;
+                if pidx >= total_arity {
+                    continue;
+                }
+                let pty = params[pidx];
+                let aty = stack[outer_arg_pos].ty;
+                let _ = self.ctx.unify(aty, pty);
+            }
+            return Some(self.ctx.resolve_id(params[arg_idx]));
+        }
+        None
+    }
+
     fn is_concrete_type(&self, ty: TypeId) -> bool {
         let resolved = self.ctx.resolve_id(ty);
         !matches!(self.ctx.get(resolved), TypeKind::Var(v) if v.binding.is_none())
@@ -2735,7 +2787,7 @@ impl<'a> BlockChecker<'a> {
                                 self.diagnostics.push(Diagnostic::error(
                                     "cannot set immutable variable",
                                     name.span,
-                                ));
+                                ).with_id(DiagnosticId::TypeImmutableMutation));
                             }
                             let func_ty = self.ctx.function(
                                 Vec::new(),
@@ -2756,10 +2808,13 @@ impl<'a> BlockChecker<'a> {
                             });
                             // defer applying ascription until the expression is complete
                             last_expr = Some(stack.last().unwrap().expr.clone());
-                        } else {
-                            self.diagnostics
-                                .push(Diagnostic::error("undefined variable", name.span));
-                        }
+                            } else {
+                                self.diagnostics
+                                    .push(
+                                        Diagnostic::error("undefined variable", name.span)
+                                            .with_id(DiagnosticId::TypeUndefinedVariable),
+                                    );
+                            }
                     }
                     Symbol::AddrOf(span) => {
                         if crate::log::is_verbose() {
@@ -2899,7 +2954,10 @@ impl<'a> BlockChecker<'a> {
                     } else if intrin.name == "set_field" {
                         self.ctx.unit()
                     } else {
-                        self.diagnostics.push(Diagnostic::error("unknown intrinsic", *sp));
+                        self.diagnostics.push(
+                            Diagnostic::error("unknown intrinsic", *sp)
+                                .with_id(DiagnosticId::TypeUnknownIntrinsic),
+                        );
                         self.ctx.unit()
                     };
 
@@ -3174,12 +3232,15 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             "pipe already pending; consecutive |> not allowed",
                             *sp,
-                        ));
+                        ).with_id(DiagnosticId::TypePipeError));
                         continue;
                     }
                     if stack.len() == base_depth {
                         self.diagnostics
-                            .push(Diagnostic::error("pipe requires a value on the stack", *sp));
+                            .push(
+                                Diagnostic::error("pipe requires a value on the stack", *sp)
+                                    .with_id(DiagnosticId::TypePipeError),
+                            );
                         continue;
                     }
                     pipe_pending = stack.pop();
@@ -3206,12 +3267,15 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "pipe target must be a callable expression",
                                 expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypePipeError));
                             stack.push(val);
                         }
                     } else {
                         self.diagnostics
-                            .push(Diagnostic::error("pipe target missing", expr.span));
+                            .push(
+                                Diagnostic::error("pipe target missing", expr.span)
+                                    .with_id(DiagnosticId::TypePipeError),
+                            );
                         stack.push(val);
                     }
                 }
@@ -3377,7 +3441,10 @@ impl<'a> BlockChecker<'a> {
         if let Some(top) = stack.last_mut() {
             if let Err(_) = self.ctx.unify(top.ty, target) {
                 self.diagnostics
-                    .push(Diagnostic::error("type annotation mismatch", span));
+                    .push(
+                        Diagnostic::error("type annotation mismatch", span)
+                            .with_id(DiagnosticId::TypeAnnotationMismatch),
+                    );
             } else {
                 top.ty = target;
                 top.expr.ty = target;
@@ -3450,6 +3517,8 @@ impl<'a> BlockChecker<'a> {
                     None
                 }
             });
+            let outer_expected = self.infer_expected_from_outer_consumer(stack, func_pos, 0);
+            let expected_ret = expected_ret.or(outer_expected);
             let mut args = Vec::new();
             for _ in 0..args_to_take {
                 args.push(stack.remove(func_pos + 1));
@@ -3615,6 +3684,9 @@ impl<'a> BlockChecker<'a> {
                     None
                 }
             });
+            let outer_expected =
+                self.infer_expected_from_outer_consumer(stack, func_pos, min_func_pos);
+            let expected_ret = expected_ret.or(outer_expected);
             let mut args = Vec::new();
             for _ in 0..args_to_take {
                 args.push(stack.remove(func_pos + 1));
@@ -3684,7 +3756,10 @@ impl<'a> BlockChecker<'a> {
             };
             if variants.is_none() {
                 self.diagnostics
-                    .push(Diagnostic::error("match scrutinee must be an enum", m.span));
+                    .push(
+                        Diagnostic::error("match scrutinee must be an enum", m.span)
+                            .with_id(DiagnosticId::TypeMatchScrutineeMustBeEnum),
+                    );
                 return None;
             }
             let variants = variants.unwrap();
@@ -3699,7 +3774,10 @@ impl<'a> BlockChecker<'a> {
                 };
                 if !seen.insert(arm_var_name.to_string()) {
                     self.diagnostics
-                        .push(Diagnostic::error("duplicate match arm", arm.variant.span));
+                        .push(
+                            Diagnostic::error("duplicate match arm", arm.variant.span)
+                                .with_id(DiagnosticId::TypeDuplicateMatchArm),
+                        );
                     continue;
                 }
                 let var_info = variants.iter().find(|v| v.name == arm_var_name);
@@ -3769,7 +3847,10 @@ impl<'a> BlockChecker<'a> {
             for v in variants {
                 if !seen.contains(&v.name) {
                     self.diagnostics
-                        .push(Diagnostic::error("non-exhaustive match", m.span));
+                        .push(
+                            Diagnostic::error("non-exhaustive match", m.span)
+                                .with_id(DiagnosticId::TypeNonExhaustiveMatch),
+                        );
                     break;
                 }
             }
@@ -4056,11 +4137,13 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "cannot set undefined variable",
                                 func.expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypeUndefinedVariable));
                         }
                         if !b_mut {
-                            self.diagnostics
-                                .push(Diagnostic::error("variable is not mutable", func.expr.span));
+                            self.diagnostics.push(
+                                Diagnostic::error("variable is not mutable", func.expr.span)
+                                    .with_id(DiagnosticId::TypeImmutableMutation),
+                            );
                         }
                         return Some(StackEntry {
                             ty: self.ctx.unit(),

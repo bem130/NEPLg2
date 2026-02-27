@@ -92,3 +92,118 @@ fn main <()*>i32> ():
         then v1
         else 0
 ```
+
+## overload_new_selected_by_let_annotation
+
+neplg2:test
+ret: 7
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn new <()->i32> ():
+    7
+
+fn new <()->bool> ():
+    true
+
+fn main <()->i32> ():
+    let a <i32> new;
+    let b <bool> new;
+    if b a 0
+```
+
+## overload_new_ambiguous_without_expected_type
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn new <()->i32> ():
+    1
+
+fn new <()->bool> ():
+    true
+
+fn main <()->i32> ():
+    new
+```
+
+## overload_len_for_string_and_vec
+
+neplg2:test
+ret: 8
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/string" as *
+#import "alloc/vec" as *
+#import "core/math" as *
+
+fn size <(str)->i32> (s):
+    i32_add 1000 1
+
+fn size <(Vec<i32>)->i32> (v):
+    vec_len<i32> v
+
+fn main <()->i32> ():
+    let v:
+        vec_new<i32>
+        |> push<i32> 3
+        |> push<i32> 5;
+    let a <i32> size v;
+    let b <i32> size "x";
+    if and eq a 2 eq b 1001 8 0
+```
+
+## overload_new_with_pipe_vec
+
+neplg2:test
+ret: 2
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/vec" as *
+
+fn new <()*>Vec<i32>> ():
+    vec_new<i32>
+
+fn new <()->bool> ():
+    true
+
+fn main <()*>i32> ():
+    let v <Vec<i32>>:
+        <Vec<i32>> new
+        |> push<i32> 1
+        |> push<i32> 2;
+    vec_len<i32> v
+```
+
+## overload_result_inferred_from_outer_arg_context
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn choice <(i32)->i32> (v):
+    v
+
+fn choice <(i32)->bool> (v):
+    i32_ne v 0
+
+fn use_bool <(bool)->i32> (b):
+    if b 1 0
+
+fn main <()->i32> ():
+    use_bool choice 7
+```
