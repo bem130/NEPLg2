@@ -17,7 +17,7 @@
 #indent 4
 
 #import "alloc/string" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 #import "core/option" as *
 #import "core/mem" as *
 #import "core/math" as *
@@ -247,16 +247,15 @@ fn safe_line <(i32, i32)*>str> (lines_mem, i):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn close_one_section <(i32, Vec<Node>)*>Vec<Node>> (stk, root):
-    match stack_pop<NestSection> stk:
+fn close_one_section <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
+    match stack_pop_keep<NestSection> stk:
         Option::Some sec:
             let node <Node> Node::Section sec;
-            // Append to parent if exists, else to root
-            match stack_peek<NestSection> stk:
+            match stack_peek_keep<NestSection> stk:
                 Option::Some top:
                     let parent_level <i32> get top "level";
                     let parent_heading <Heading> get top "heading";
-                    match stack_pop<NestSection> stk:
+                    match stack_pop_keep<NestSection> stk:
                         Option::Some parent:
                             let kids <Vec<Node>> vec_push<Node> get parent "children" node;
                             let parent2 <NestSection> NestSection parent_level parent_heading kids;
@@ -282,13 +281,13 @@ fn close_one_section <(i32, Vec<Node>)*>Vec<Node>> (stk, root):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn close_to_level <(i32, Vec<Node>, i32)*>Vec<Node>> (stk, root, new_level):
+fn close_to_level <(Stack<NestSection>, Vec<Node>, i32)*>Vec<Node>> (stk, root, new_level):
     // Close while top.level >= new_level
     let mut r <Vec<Node>> root;
     let mut done <bool> false;
     while not done:
         do:
-            match stack_peek<NestSection> stk:
+            match stack_peek_keep<NestSection> stk:
                 Option::Some top:
                     if:
                         ge get top "level" new_level
@@ -316,12 +315,12 @@ fn close_to_level <(i32, Vec<Node>, i32)*>Vec<Node>> (stk, root, new_level):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn close_all_sections <(i32, Vec<Node>)*>Vec<Node>> (stk, root):
+fn close_all_sections <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
     let mut r <Vec<Node>> root;
     let mut done <bool> false;
     while not done:
         do:
-            match stack_peek<NestSection> stk:
+            match stack_peek_keep<NestSection> stk:
                 Option::Some _:
                     set r close_one_section stk r;
                     ()
