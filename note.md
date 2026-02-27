@@ -4329,3 +4329,26 @@
   - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
 - todo反映:
   - `todo.md` 2番（旧 LSP/API phase2）を削除し、残項目を繰り上げ。
+# 2026-02-27 作業メモ (オーバーロード arity 解決の根本修正)
+- 目的:
+  - `let u <(i32)->i32> calc` のような関数値文脈で、同名・異 arity 過負荷が正しく一意選択されるようにする。
+- 原因:
+  - `Symbol::Ident` 解決で、過負荷関数でも先に `lookup_callable_any` が 1件を拾い、期待型/arity ベースの選択ロジックに到達していなかった。
+  - その結果、`calc` が誤った候補（または未確定値）として残り、`no matching overload` / `extra stack` へ波及していた。
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - 複数 callable を持つ識別子では、単純 `lookup_callable_any` にフォールバックしないよう修正。
+    - `pending_ascription` 由来の期待 arity で一意に候補が決まった場合、`FnValue` として確定し `auto_call=false` にするよう修正。
+    - `FnValue` には関数名ではなく実シンボル（`BindingKind::Func.symbol`）を保持するよう修正。
+- テスト更新:
+  - `tests/overload.n.md`
+    - `overload_select_by_arity` を `compile_fail (diag_id:3006)` から成功ケース（`ret: 12`）へ変更。
+- 関連ドキュメントテスト修正:
+  - `stdlib/core/option.nepl` / `stdlib/core/result.nepl`
+    - `should_panic` doctest で最終式が `i32` になっていたため `D3004` になっていた。`let v ...; ()` へ修正して、型整合を維持したまま panic 経路を検証できるようにした。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i stdlib/core/option.nepl -i stdlib/core/result.nepl --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-option-result-dual.json -j 2` -> `18/18 pass`
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/functions.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-overload-functions-no-stdlib.json -j 2` -> `101/101 pass`
+- todo反映:
+  - `todo.md` 先頭の「オーバーロード解決の arity 完全対応」を削除（完了）。

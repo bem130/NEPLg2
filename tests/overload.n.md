@@ -212,8 +212,8 @@ fn main <()->i32> ():
 
 ## overload_select_by_arity
 
-neplg2:test[compile_fail]
-diag_id: 3006
+neplg2:test
+ret: 12
 ```neplg2
 #entry main
 #indent 4

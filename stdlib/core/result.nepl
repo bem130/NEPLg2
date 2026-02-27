@@ -38,7 +38,8 @@
 //:| #import "core/result" as *
 //: // Err を unwrap_ok すると unreachable で落ちることを期待
 //: fn main <()*>()> ():
-//:     unwrap_ok err<i32, str> "boom";
+//:     let v <i32> unwrap_ok err<i32, str> "boom";
+//:     ()
 //: ```
 //:
 //: neplg2:test[compile_fail]

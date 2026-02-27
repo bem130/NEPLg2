@@ -5,28 +5,23 @@
 - 間に合わせ修正を避け、原因が同一の失敗はまとめて解消する。
 - 実装進捗・結果・失敗分析は `note.md` に記録し、`todo.md` は未完了のみを保持する。
 
-1. オーバーロード解決の arity 完全対応
-- `calc 5` / `calc 3 4` のような同名・異 arity オーバーロードを、直接呼び出しでも確実に解決する。
-- 関数値文脈（`let f <(i32)->i32> calc`、高階関数引数）での arity 解決を安定化する。
-- `tests/overload.n.md` の `overload_select_by_arity` を compile_fail から成功ケースへ戻す。
-
-2. 高階関数・call_indirect
+1. 高階関数・call_indirect
 - capture あり関数値は closure conversion の設計を確定して段階導入する。
 
-3. Web Playground / tests.html 強化
+2. Web Playground / tests.html 強化
 - VSCode 拡張予定の情報（名前解決/型情報/式範囲/定義ジャンプ候補）を Playground で表示する。
 - `web/tests.html` の詳細展開時にソースと解析結果（AST/resolve/semantics）を併記する。
 
-4. `examples/js_interpreter` 実装（言語仕様固定後）
+3. `examples/js_interpreter` 実装（言語仕様固定後）
 - `examples/js_interpreter` に JavaScript インタプリタを実装する。
 - 言語仕様は変更せず、stdlib の再設計・改良のみで不足を埋める。
 - Node.js 実行結果との同値性回帰テストを追加する。
 
-5. stdlib の段階的リファクタリング（言語仕様安定後）
+4. stdlib の段階的リファクタリング（言語仕様安定後）
 - `stdlib/kp` のドキュメントコメント/ドキュメントテスト形式を基準に、他 stdlib へ統一展開する。
 - 複雑データ処理の箇所を中心に改行 `|>` パイプを活用し、可読性とメモリ安全性を両立する。
 
-6. LLVM IR target 追加（nepl-cli 限定）
+5. LLVM IR target 追加（nepl-cli 限定）
 
 ---
 ### 以下編集禁止

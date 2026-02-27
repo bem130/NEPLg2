@@ -39,7 +39,8 @@
 //:| #import "core/option" as *
 //: // None を unwrap すると unreachable で落ちることを期待
 //: fn main <()*>()> ():
-//:     unwrap none<i32>;
+//:     let v <i32> unwrap none<i32>;
+//:     ()
 //: ```
 //:
 //: neplg2:test

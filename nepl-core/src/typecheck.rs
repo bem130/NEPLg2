@@ -2487,6 +2487,7 @@ impl<'a> BlockChecker<'a> {
                             stack.push(entry);
                             last_expr = Some(stack.last().unwrap().expr.clone());
                         } else if let Some(binding) = {
+                            let callable_count = self.env.lookup_all_callables(&id.name).len();
                             // In head position of a prefix expression, prefer callable symbols
                             // over value symbols when both names coexist in the same scope.
                             // This keeps `add add 1` semantics stable even if `add` is also a value.
@@ -2504,7 +2505,13 @@ impl<'a> BlockChecker<'a> {
                                     self.env
                                         .lookup_value_for_read(&id.name, allow_undefined_nonmut)
                                 })
-                                .or_else(|| self.env.lookup_callable_any(&id.name))
+                                .or_else(|| {
+                                    if callable_count <= 1 {
+                                        self.env.lookup_callable_any(&id.name)
+                                    } else {
+                                        None
+                                    }
+                                })
                         } {
                             if *forced_value {
                                 if let BindingKind::Func { captures, .. } = &binding.kind {
@@ -2653,20 +2660,24 @@ impl<'a> BlockChecker<'a> {
                                                 }
                                             }
                                             let ty = binding.ty;
+                                            let fn_symbol = match &binding.kind {
+                                                BindingKind::Func { symbol, .. } => {
+                                                    symbol.clone()
+                                                }
+                                                _ => lookup_name.clone(),
+                                            };
                                             stack.push(StackEntry {
                                                 ty,
                                                 expr: HirExpr {
                                                     ty,
-                                                    kind: if *forced_value {
-                                                        HirExprKind::FnValue(lookup_name.clone())
-                                                    } else {
-                                                        HirExprKind::Var(lookup_name.clone())
-                                                    },
+                                                    // 期待関数型で一意に選べた過負荷関数は
+                                                    // ここで関数値として確定させる。
+                                                    kind: HirExprKind::FnValue(fn_symbol),
                                                     span: id.span,
                                                 },
                                                 type_args: explicit_args,
                                                 assign: None,
-                                                auto_call: !*forced_value,
+                                                auto_call: false,
                                             });
                                             last_expr = Some(stack.last().unwrap().expr.clone());
                                             continue;
