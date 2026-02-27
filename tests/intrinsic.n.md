@@ -98,3 +98,31 @@ fn main <()->i32> ():
     #intrinsic "i32_to_f32" <> (true)
     0
 ```
+
+## intrinsic_size_of_std_layout
+
+neplg2:test
+ret: 0
+```neplg2
+#target std
+#entry main
+#indent 4
+#import "core/math" as *
+
+struct Pair:
+    a <i32>
+    b <str>
+
+fn main <()->i32> ():
+    if:
+        eq size_of<str> 4
+        then:
+            if:
+                eq size_of<Pair> 8
+                then:
+                    if eq align_of<Pair> 4 0 3
+                else:
+                    2
+        else:
+            1
+```

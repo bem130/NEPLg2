@@ -88,6 +88,86 @@ fn main <()->i32> ():
             1
 ```
 
+## sizeof_algebraic_types
+
+neplg2:test
+ret: 0
+```neplg2
+#target core
+#entry main
+#indent 4
+#import "core/math" as *
+#import "core/mem" as *
+#import "core/option" as *
+#import "core/result" as *
+
+fn main <()->i32> ():
+    let s_i32 <i32> size_of<i32>;
+    let s_str <i32> size_of<str>;
+    let s_opt_i32 <i32> size_of<Option<i32>>;
+    let s_opt_str <i32> size_of<Option<str>>;
+    let s_res_i32_str <i32> size_of<Result<i32, str>>;
+    if:
+        lt s_opt_i32 s_i32
+        then:
+            1
+        else:
+            if:
+                lt s_opt_str s_str
+                then:
+                    2
+                else:
+                    if:
+                        lt s_res_i32_str s_opt_i32
+                        then:
+                            3
+                        else:
+                            0
+```
+
+## sizeof_nested_generic_struct
+
+neplg2:test
+ret: 0
+```neplg2
+#target core
+#entry main
+#indent 4
+#import "core/math" as *
+#import "core/mem" as *
+#import "core/option" as *
+#import "core/result" as *
+
+struct Cell<.T>:
+    v <.T>
+
+struct Node<.T>:
+    head <.T>
+    tail <Option<.T>>
+
+fn main <()->i32> ():
+    let s_cell_i64 <i32> size_of<Cell<i64>>;
+    let s_i64 <i32> size_of<i64>;
+    let s_node_i32 <i32> size_of<Node<i32>>;
+    let s_res <i32> size_of<Result<Node<i32>, Cell<i64>>>;
+    if:
+        eq s_cell_i64 s_i64
+        then:
+            if:
+                lt s_node_i32 s_i64
+                then:
+                    2
+                else:
+                    if:
+                        lt s_res s_node_i32
+                        then:
+                            3
+                        else:
+                            0
+        else:
+            1
+```
+
 ## sizeof_generic_param_requires_dot
 
 neplg2:test[compile_fail]
