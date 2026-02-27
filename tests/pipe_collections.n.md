@@ -40,13 +40,20 @@ ret: 1
 #import "alloc/collections/stack" as *
 #import "core/math" as *
 #import "core/option" as *
+#import "core/field" as *
 
 fn main <()*>i32> ():
-    let s <i32> stack_new<i32>;
-    s |> stack_push<i32> 10;
-    s |> stack_push<i32> 20;
-    let ok0 <bool> eq stack_len<i32> s 2;
-    let ok1 <bool> match stack_pop<i32> s:
+    let s0 <Stack<i32>>:
+        stack_new<i32>
+        |> stack_push<i32> 10
+        |> stack_push<i32> 20;
+    let ok0 <bool> eq stack_len<i32> s0 2;
+    let s1 <Stack<i32>>:
+        stack_new<i32>
+        |> stack_push<i32> 10
+        |> stack_push<i32> 20;
+    let p stack_pop<i32> s1;
+    let ok1 <bool> match p:
         Option::Some v:
             eq v 20
         Option::None:

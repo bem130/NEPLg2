@@ -3664,9 +3664,17 @@ impl<'a> BlockChecker<'a> {
     fn apply_ascription(&mut self, stack: &mut [StackEntry], target: TypeId, span: Span) {
         if let Some(top) = stack.last_mut() {
             if let Err(_) = self.ctx.unify(top.ty, target) {
+                let actual_ty = self.ctx.type_to_string(top.ty);
+                let expected_ty = self.ctx.type_to_string(target);
                 self.diagnostics
                     .push(
-                        Diagnostic::error("type annotation mismatch", span)
+                        Diagnostic::error(
+                            format!(
+                                "type annotation mismatch (expected {}, got {})",
+                                expected_ty, actual_ty
+                            ),
+                            span,
+                        )
                             .with_id(DiagnosticId::TypeAnnotationMismatch),
                     );
             } else {
