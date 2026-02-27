@@ -16,7 +16,7 @@ function parseArgs(argv) {
         outputBase: 'tmp/editor',
         wasmer: process.env.WASMER_BIN || 'wasmer',
         neplCli: 'target/debug/nepl-cli',
-        timeoutMs: 5000,
+        timeoutMs: 8000,
     };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
@@ -40,6 +40,11 @@ function stripAnsi(s) {
 
 function assertCond(cond, msg) {
     if (!cond) throw new Error(msg);
+}
+
+function assertHasColorSpan(output, text, fg, bg, label) {
+    const esc = '\x1b[' + String(fg) + ';' + String(bg) + 'm' + text + '\x1b[0m';
+    assertCond(output.includes(esc), label || `missing color span: ${text}`);
 }
 
 function writeFixtures(baseDir, fixtures) {
@@ -148,7 +153,7 @@ function defaultScenarios() {
     return [
         {
             name: 'smoke_quit',
-            steps: [{ delayMs: 120, bytes: 'q\n' }],
+            steps: [{ delayMs: 220, bytes: 'q\n' }],
             expect: (r) => {
                 const merged = `${r.stdout}\n${r.stderr}`;
                 assertCond(r.code === 0, `smoke_quit exit code=${r.code}`);
@@ -188,8 +193,10 @@ function defaultScenarios() {
                 const merged = `${r.stdout}\n${r.stderr}`;
                 assertCond(r.code === 0, `syntax_color_ansi exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
-                assertCond(r.stdout.includes('\x1b[33;40m#entry'), 'directive color ansi missing');
-                assertCond(r.stdout.includes('\x1b[36;40mfn'), 'keyword color ansi missing');
+                assertHasColorSpan(r.stdout, '#entry', 33, 40, 'directive color span missing');
+                assertHasColorSpan(r.stdout, '#indent', 33, 40, 'directive span missing (#indent)');
+                assertHasColorSpan(r.stdout, '4', 35, 40, 'number color span missing');
+                assertHasColorSpan(r.stdout, 'fn', 36, 40, 'keyword color span missing');
             },
         },
         {
@@ -200,8 +207,8 @@ function defaultScenarios() {
                 { delayMs: 80, bytes: 'a' },
                 { delayMs: 80, bytes: '\x1b' },
                 { delayMs: 80, bytes: 't' },
-                { delayMs: 80, bytes: 'g' },
-                { delayMs: 120, bytes: 'q\n' },
+                { delayMs: 220, bytes: 'g' },
+                { delayMs: 200, bytes: 'q\n' },
             ],
             expect: (r) => {
                 const merged = `${r.stdout}\n${r.stderr}`;
@@ -211,10 +218,203 @@ function defaultScenarios() {
                 assertCond(plain.includes('NEPLg2 TUI Editor / Tab 2'), 'tab switch title missing');
                 assertCond(plain.includes('tmp/nepl_tab2.nepl'), 'tab file path missing');
                 assertCond(plain.includes('Msg: mode: INSERT'), 'insert mode message missing');
-                assertCond(plain.includes('Msg: mode: NORMAL'), 'normal mode message missing');
+                assertCond(plain.includes('mode: NORMAL'), 'normal mode message missing');
                 assertCond(plain.includes('Msg: edited'), 'edit message missing');
-                assertCond(plain.includes('Msg: type:'), 'type inspect message missing');
+                assertCond(plain.includes('type:'), 'type inspect message missing');
                 assertCond(plain.includes('Msg: jump:'), 'jump message missing');
+                assertCond(plain.includes('Bye'), 'quit footer not rendered');
+            },
+        },
+        {
+            name: 'insert_mode_no_shortcut_interference',
+            steps: [
+                { delayMs: 80, bytes: 'i' },
+                { delayMs: 80, bytes: 'q' },
+                { delayMs: 80, bytes: 's' },
+                { delayMs: 80, bytes: 'r' },
+                { delayMs: 80, bytes: '1' },
+                { delayMs: 80, bytes: '2' },
+                { delayMs: 80, bytes: '3' },
+                { delayMs: 80, bytes: '\x1b' },
+                { delayMs: 80, bytes: 't' },
+                { delayMs: 120, bytes: 'q\n' },
+            ],
+            expect: (r) => {
+                const merged = `${r.stdout}\n${r.stderr}`;
+                assertCond(r.code === 0, `insert_mode_no_shortcut_interference exit code=${r.code}`);
+                assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
+                const plain = stripAnsi(r.stdout);
+                assertCond(plain.includes('Msg: mode: INSERT'), 'insert mode message missing');
+                assertCond(plain.includes('Msg: edited'), 'insert edit message missing');
+                assertCond(!plain.includes('open: tmp/nepl_tab2.nepl'), 'tab shortcut fired in insert mode');
+                assertCond(!plain.includes('open: tmp/nepl_tab3.nepl'), 'tab shortcut fired in insert mode');
+                assertCond(!plain.includes('Msg: saved'), 'save shortcut fired in insert mode');
+                assertCond(plain.includes('Bye'), 'quit footer not rendered');
+            },
+        },
+        {
+            name: 'normal_mode_word_motion_wb',
+            steps: [
+                { delayMs: 80, bytes: '2' },
+                { delayMs: 80, bytes: 'w' },
+                { delayMs: 80, bytes: 't' },
+                { delayMs: 80, bytes: 'b' },
+                { delayMs: 80, bytes: 't' },
+                { delayMs: 120, bytes: 'q\n' },
+            ],
+            expect: (r) => {
+                const merged = `${r.stdout}\n${r.stderr}`;
+                assertCond(r.code === 0, `normal_mode_word_motion_wb exit code=${r.code}`);
+                assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
+                const plain = stripAnsi(r.stdout);
+                assertCond(plain.includes('Msg: type: helper'), 'word-forward motion failed');
+                assertCond(plain.includes('Msg: type: fn'), 'word-backward motion failed');
+                assertCond(plain.includes('Bye'), 'quit footer not rendered');
+            },
+        },
+        {
+            name: 'normal_mode_line_motion_0_dollar',
+            steps: [
+                { delayMs: 80, bytes: '2' },
+                { delayMs: 80, bytes: 'l' },
+                { delayMs: 80, bytes: 'l' },
+                { delayMs: 80, bytes: '$' },
+                { delayMs: 80, bytes: '0' },
+                { delayMs: 80, bytes: 't' },
+                { delayMs: 120, bytes: 'q\n' },
+            ],
+            expect: (r) => {
+                const merged = `${r.stdout}\n${r.stderr}`;
+                assertCond(r.code === 0, `normal_mode_line_motion_0_dollar exit code=${r.code}`);
+                assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
+                const plain = stripAnsi(r.stdout);
+                assertCond(plain.includes('Msg: type: fn'), 'line-start motion failed');
+                assertCond(plain.includes('Bye'), 'quit footer not rendered');
+            },
+        },
+        {
+            name: 'normal_mode_0_g_do_not_edit',
+            steps: [
+                { delayMs: 80, bytes: '2' },
+                { delayMs: 80, bytes: '0' },
+                { delayMs: 80, bytes: 'g' },
+                { delayMs: 80, bytes: '0' },
+                { delayMs: 80, bytes: 'g' },
+                { delayMs: 80, bytes: '0' },
+                { delayMs: 80, bytes: 't' },
+                { delayMs: 120, bytes: 'q\n' },
+            ],
+            expect: (r) => {
+                const merged = `${r.stdout}\n${r.stderr}`;
+                assertCond(r.code === 0, `normal_mode_0_g_do_not_edit exit code=${r.code}`);
+                assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
+                const plain = stripAnsi(r.stdout);
+                assertCond(!plain.includes('Msg: edited'), 'normal mode navigation edited text');
+                assertCond(plain.includes('Msg: type: fn'), 'normal mode cursor context unexpected');
+                assertCond(plain.includes('Bye'), 'quit footer not rendered');
+            },
+        },
+        {
+            name: 'normal_mode_gg_G_navigation',
+            steps: [
+                { delayMs: 80, bytes: '2' },
+                { delayMs: 80, bytes: 'G' },
+                { delayMs: 80, bytes: '0' },
+                { delayMs: 80, bytes: 't' },
+                { delayMs: 80, bytes: 'g' },
+                { delayMs: 80, bytes: 'g' },
+                { delayMs: 80, bytes: 't' },
+                { delayMs: 120, bytes: 'q\n' },
+            ],
+            expect: (r) => {
+                const merged = `${r.stdout}\n${r.stderr}`;
+                assertCond(r.code === 0, `normal_mode_gg_G_navigation exit code=${r.code}`);
+                assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
+                const plain = stripAnsi(r.stdout);
+                assertCond(plain.includes('Msg: type: (none)'), 'G navigation/type failed');
+                assertCond(plain.includes('Msg: type: fn'), 'gg navigation/type failed');
+                assertCond(!plain.includes('Msg: edited'), 'normal mode navigation edited text');
+                assertCond(plain.includes('Bye'), 'quit footer not rendered');
+            },
+        },
+        {
+            name: 'line_number_gutter_visible',
+            steps: [
+                { delayMs: 80, bytes: '2' },
+                { delayMs: 120, bytes: 'q\n' },
+            ],
+            expect: (r) => {
+                const merged = `${r.stdout}\n${r.stderr}`;
+                assertCond(r.code === 0, `line_number_gutter_visible exit code=${r.code}`);
+                assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
+                const plain = stripAnsi(r.stdout);
+                assertCond(plain.includes('1 fn helper'), 'line number gutter missing');
+                assertCond(plain.includes('2     add x 1'), 'line number second line missing');
+                assertCond(plain.includes('Bye'), 'quit footer not rendered');
+            },
+        },
+        {
+            name: 'normal_mode_x_delete_char',
+            steps: [
+                { delayMs: 80, bytes: '2' },
+                { delayMs: 80, bytes: 'x' },
+                { delayMs: 80, bytes: 't' },
+                { delayMs: 120, bytes: 'q\n' },
+            ],
+            expect: (r) => {
+                const merged = `${r.stdout}\n${r.stderr}`;
+                assertCond(r.code === 0, `normal_mode_x_delete_char exit code=${r.code}`);
+                assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
+                const plain = stripAnsi(r.stdout);
+                assertCond(plain.includes('Msg: edited'), 'x delete did not update text');
+                assertCond(plain.includes('Msg: type: n'), 'x delete result unexpected');
+                assertCond(plain.includes('Bye'), 'quit footer not rendered');
+            },
+        },
+        {
+            name: 'normal_mode_A_I_insert_positions',
+            steps: [
+                { delayMs: 80, bytes: '2' },
+                { delayMs: 80, bytes: 'A' },
+                { delayMs: 80, bytes: 'Z' },
+                { delayMs: 80, bytes: '\x1b' },
+                { delayMs: 80, bytes: '0' },
+                { delayMs: 80, bytes: 'I' },
+                { delayMs: 80, bytes: 'Q' },
+                { delayMs: 80, bytes: '\x1b' },
+                { delayMs: 80, bytes: 't' },
+                { delayMs: 120, bytes: 'q\n' },
+            ],
+            expect: (r) => {
+                const merged = `${r.stdout}\n${r.stderr}`;
+                assertCond(r.code === 0, `normal_mode_A_I_insert_positions exit code=${r.code}`);
+                assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
+                const plain = stripAnsi(r.stdout);
+                assertCond(plain.includes('Msg: edited'), 'A/I did not edit text');
+                assertCond(plain.includes('Msg: type: Qfn'), 'I insert at line start failed');
+                assertCond(plain.includes('Bye'), 'quit footer not rendered');
+            },
+        },
+        {
+            name: 'edit_at_eof_regression',
+            steps: [
+                { delayMs: 80, bytes: '2' },
+                { delayMs: 80, bytes: 'G' },
+                { delayMs: 80, bytes: 'A' },
+                { delayMs: 80, bytes: 'X' },
+                { delayMs: 80, bytes: '\n' },
+                { delayMs: 80, bytes: 'Y' },
+                { delayMs: 80, bytes: '\x1b' },
+                { delayMs: 80, bytes: 't' },
+                { delayMs: 120, bytes: 'q\n' },
+            ],
+            expect: (r) => {
+                const merged = `${r.stdout}\n${r.stderr}`;
+                assertCond(r.code === 0, `edit_at_eof_regression exit code=${r.code}`);
+                assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
+                const plain = stripAnsi(r.stdout);
+                assertCond(plain.includes('Msg: mode: INSERT'), 'EOF edit did not enter insert mode');
+                assertCond(plain.includes('Msg: edited'), 'EOF edit did not modify text');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },

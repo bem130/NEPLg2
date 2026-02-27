@@ -4739,3 +4739,219 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> pass
   - `NO_COLOR=false node nodesrc/tests.js -i stdlib/alloc/collections/ringbuffer.nepl -i stdlib/alloc/collections/queue.nepl -i stdlib/tests/ringbuffer.n.md -i stdlib/tests/queue.n.md -i tests/ringbuffer_collections.n.md -i tests/queue_collections.n.md -i tests/pipe_collections.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-ringbuffer-queue.json -j 2` -> `42/42 pass`
+# 2026-02-27 作業メモ (examples/tui_editor 分割実装の継続)
+- 目的:
+  - `examples/tui_editor/` を分割構成で実装し、コンパイル可能な状態で前進させる。
+- 実装:
+  - `examples/tui_editor/main.nepl`
+    - エディタのメインループ、タブ切替、保存、カーソル移動、定義ジャンプ呼び出しを保持。
+    - `safe_cols` / `safe_rows` を追加し、端末サイズが小さい環境でのバッファ確保下限を導入。
+  - `examples/tui_editor/editor_text.nepl`
+    - 文字編集・カーソル移動・単語抽出・定義検索のロジックを分離維持。
+  - `examples/tui_editor/editor_fs.nepl`
+    - WASI の `path_open/fd_write/fd_close` による保存処理を分離維持。
+  - `examples/tui_editor/editor_render.nepl`
+    - 描画を `render_code_line` / `right_pane_line` / `draw_editor` に分離。
+    - `draw_editor` 内の関数合成を一時変数化し、実行時評価順を明確化。
+- 原因調査:
+  - `draw_editor` での複合式が `invalid wasm generated` を誘発するため、最小化→段階復帰で原因を切り分けた。
+  - 現在は `draw_editor` の wasm 検証エラーは解消済み。
+  - `main` の入力処理安全化（境界チェック導入）を試行したが、現行コンパイラで別の wasm 検証エラーを誘発するため、いったんコンパイル優先の形へ戻した。
+- 検証:
+
+# 2026-02-27 作業メモ (tui_editor: wasmer 実行時 OOB 根本修正)
+- 現象:
+  - `wasmer run tmp/editor.wasm` で `out of bounds memory access`。
+  - とくに空行や矢印キー入力時に再現しやすい。
+- 原因:
+  - `stdlib/platforms/wasix/tui.nepl` 内で、`str_slice(start==end)` が発生する経路が複数残っていた。
+  - 現在のランタイムでは `str_slice` 同値区間が OOB になるため、空行の描画・折り返し・差分描画でクラッシュしていた。
+- 修正:
+  - `tui.nepl` に `safe_slice` を追加し、`str_slice` 呼び出しを同値区間安全な実装へ置換。
+  - 対象: `line_clip_to_cols`、`text_wrap_lines`、`buffer_write_wrapped`、`buffer_present_diff` の関連経路。
+  - `examples/tui_editor/main.nepl` は初回フレームを入力待ちより前に描画し、矢印 CSI (`ESC [ A/B/C/D`) を安全に走査する処理へ更新。
+- 確認:
+  - `target/debug/nepl-cli -i examples/tui_editor/main.nepl --target wasix --output tmp/editor` でコンパイル成功。
+  - 非TTY環境では `stdin_tty=false` のため終了キーを読めず待機するが、`timeout` 実行でクラッシュせず継続することを確認。
+
+# 2026-02-27 作業メモ (nodesrc: TUI 回帰テストツール追加)
+- 目的:
+  - TUI の表示/キー入力/終了を CI でも回帰検証できるようにする。
+- 実装:
+  - `nodesrc/tui_regression.js` を追加。
+  - 実行内容:
+    - `nepl-cli` で `examples/tui_editor/main.nepl` を wasix 向けにビルド。
+    - `wasmer run` へキー列を投入し、終了コード・ランタイムエラー有無・出力内容を検証。
+  - シナリオ:
+    - `smoke_quit` (`q`)
+    - `keys_edit_and_nav` (`a` + 矢印 CSI + `1/2/3` + `q`)
+    - `arrow_csi` (矢印 CSI + `q`)
+- 検証:
+  - `node nodesrc/tui_regression.js --wasmer /home/bem130/.wasmer/bin/wasmer` -> `ok: true`
+  - `target/debug/nepl-cli --input examples/tui_editor/main.nepl --target wasix --output tmp/tui_editor` -> pass
+- 差分:
+  - `--run` 実行時の `out of bounds memory access` は未解消。入力処理の根本修正は、コンパイラ側の式展開制約を避ける形で再設計が必要。
+
+# 2026-02-27 作業メモ (examples/tui_editor の追加分割)
+- 目的:
+  - `examples/tui_editor` の責務分離をさらに進め、`main` の肥大化を抑える。
+- 実装:
+  - 追加: `examples/tui_editor/editor_input.nepl`
+    - CSI矢印キー判定 (`is_csi_left/right/up/down`)
+    - 編集可能文字判定 (`is_printable_edit`)
+    - 入力インデックス進行 (`next_input_index`)
+  - 追加: `examples/tui_editor/editor_state.nepl`
+    - タブに応じた `text/cursor/path` の取得関数を分離
+      - `current_text`
+      - `current_cursor`
+      - `current_path`
+  - 更新: `examples/tui_editor/main.nepl`
+    - 入力判定式を `editor_input` 呼び出しへ置換
+    - タブ状態取得を `editor_state` 呼び出しへ置換
+- 検証:
+  - `target/debug/nepl-cli --input examples/tui_editor/main.nepl --target wasix --output tmp/tui_editor` -> pass
+- 既知:
+  - `--run` 実行時の `out of bounds memory access` は継続。今回の分割で原因局所化は進んだため、次段で `main` ループ内の文字列編集処理をさらに関数分割して切り分ける。
+
+# 2026-02-27 作業メモ (examples/tui_editor の入力アクション分離)
+- 目的:
+  - `main` の入力処理をさらに分割し、編集アクションの責務を独立させる。
+- 実装:
+  - 追加: `examples/tui_editor/editor_actions.nepl`
+    - カーソル移動: `move_left/move_right/move_up/move_down`
+    - 編集操作: `apply_backspace_text/apply_backspace_cursor/apply_insert_text/apply_insert_cursor`
+    - コマンド: `save_message/run_message/jump_cursor/jump_message`
+  - 更新: `examples/tui_editor/main.nepl`
+    - 既存の入力ループ内ロジックを `editor_actions` 呼び出しへ置換
+- 検証:
+  - `target/debug/nepl-cli --input examples/tui_editor/main.nepl --target wasix --output tmp/tui_editor` -> pass
+
+# 2026-02-27 作業メモ (examples/tui_editor のランタイム責務分離)
+- 目的:
+  - `main` に残っているループ補助ロジック（リサイズ判定/再確保、タブ反映）を分離する。
+- 実装:
+  - 追加: `examples/tui_editor/editor_runtime.nepl`
+    - 端末下限サイズ: `safe_cols/safe_rows`
+    - リサイズ処理: `should_resize/resize_buffer`
+    - 編集結果のタブ反映: `apply_tab_text0/1/2`, `apply_tab_cur0/1/2`
+  - 更新: `examples/tui_editor/main.nepl`
+    - 端末サイズ処理を `editor_runtime` 経由に置換
+    - タブ別テキスト/カーソル反映を `editor_runtime` 経由に置換
+- 検証:
+  - `target/debug/nepl-cli --input examples/tui_editor/main.nepl --target wasix --output tmp/tui_editor` -> pass
+
+# 2026-02-27 作業メモ (examples/tui_editor のタブ反映分離)
+- 目的:
+  - `editor_runtime` 内のタブ反映処理を独立し、ランタイム処理と状態反映処理を分離する。
+- 実装:
+  - 追加: `examples/tui_editor/editor_tabs.nepl`
+    - `apply_tab_text0/1/2`
+    - `apply_tab_cur0/1/2`
+  - 更新:
+    - `examples/tui_editor/editor_runtime.nepl` からタブ反映関数を削除
+    - `examples/tui_editor/main.nepl` の参照先を `editor_tabs` へ変更
+- 検証:
+  - `target/debug/nepl-cli --input examples/tui_editor/main.nepl --target wasix --output tmp/tui_editor` -> pass
+
+# 2026-02-27 作業メモ (examples/tui_editor のキー/メッセージ分離)
+- 目的:
+  - `main` の入力ループを簡潔にし、キー判定・固定メッセージを独立モジュール化する。
+- 実装:
+  - 追加: `examples/tui_editor/editor_keys.nepl`
+    - `is_tab1_key/is_tab2_key/is_tab3_key`
+    - `apply_tab_key`
+  - 追加: `examples/tui_editor/editor_messages.nepl`
+    - `msg_ready/msg_saved/msg_save_failed/msg_run_hint/msg_no_word`
+  - 更新:
+    - `examples/tui_editor/main.nepl`
+      - タブ切替処理を `editor_keys` 経由へ置換
+      - 初期メッセージを `editor_messages` 経由へ置換
+    - `examples/tui_editor/editor_actions.nepl`
+      - 保存/実行/ジャンプ失敗メッセージを `editor_messages` 経由へ置換
+- 検証:
+  - `target/debug/nepl-cli --input examples/tui_editor/main.nepl --target wasix --output tmp/tui_editor` -> pass
+
+# 2026-02-27 作業メモ (`--run` OOB の原因特定と入力I/O分離)
+- 事象:
+  - `target/debug/nepl-cli -i examples/tui_editor/main.nepl --run` で `out of bounds memory access` が発生。
+- 原因:
+  - `main` ループで `read_all` を高頻度に呼び、無入力時でも都度ヒープ確保が発生してメモリを圧迫していた。
+  - さらに `--run` 環境では入力ポーリング経路の挙動差があり、TTY 状態に応じたガードが必要だった。
+- 実装:
+  - 追加: `examples/tui_editor/editor_io.nepl`
+    - 固定バッファ再利用の入力コンテキスト
+      - `input_new`
+      - `input_read`
+      - `input_buf`
+      - `input_free`
+    - `input_read` は `nread` を `0..cap` へクランプ。
+  - 更新: `examples/tui_editor/editor_input.nepl`
+    - 入力判定関数を `str` ではなく生バッファポインタ (`i32`) を受ける形へ変更。
+  - 更新: `examples/tui_editor/editor_runtime.nepl`
+    - `can_poll_input` を追加し、TTY 判定 (`stdin_tty`) を導入。
+  - 更新: `examples/tui_editor/main.nepl`
+    - `read_all` を廃止し `editor_io` へ切替。
+    - `can_poll_input` が false の場合は入力ポーリングをスキップ。
+    - `dirty` フラグで入力/リサイズ時のみ描画するイベント駆動に統一。
+- 検証:
+  - `target/debug/nepl-cli -i examples/tui_editor/main.nepl --target wasix --output tmp/tui_editor` -> pass
+  - `timeout 3s target/debug/nepl-cli -i examples/tui_editor/main.nepl --run` -> `EXIT:124`（3秒間クラッシュせず動作継続）
+
+# 2026-02-27 作業メモ (カーソル境界と `--run` 安定化の追加修正)
+- 目的:
+  - Wasmer/`--run` の双方で発生しうる OOB を防ぐため、入力境界とカーソル境界を強化する。
+- 実装:
+  - 更新: `examples/tui_editor/editor_actions.nepl`
+    - `clamp_cursor` を追加。
+    - `move_right/move_up/move_down/apply_backspace_text/apply_insert_text/jump_cursor/jump_message` でクランプを適用。
+  - 更新: `examples/tui_editor/main.nepl`
+    - 描画前カーソルと入力ループ開始カーソルを `clamp_cursor` で正規化。
+    - `n` 取得を `let mut n` + 条件代入に変更（コード生成安定化）。
+  - 更新: `examples/tui_editor/editor_runtime.nepl`
+    - `can_poll_input` で TTY 判定を追加。
+  - 更新: `examples/tui_editor/editor_io.nepl`
+    - `input_read` の戻り値を `0..cap` にクランプ。
+- 検証:
+  - `target/debug/nepl-cli -i examples/tui_editor/main.nepl --target wasix --output tmp/tui_editor` -> pass
+  - `timeout 3s target/debug/nepl-cli -i examples/tui_editor/main.nepl --run` -> `EXIT:124`（クラッシュなし）
+
+# 2026-02-27 作業メモ (TUI Editor 回帰シナリオ強化とタブ切替バグ修正)
+- 目的:
+  - 具体的なエディタ操作シナリオを回帰テスト化し、編集結果を厳密に検証する。
+  - 場当たりではなく、タブ切替時の誤編集の根本原因を修正する。
+- 根本原因:
+  - `examples/tui_editor/main.nepl` で入力処理中の作業バッファ `textm/cursorm` が、タブ切替後も旧タブ状態のまま維持されていた。
+  - その結果、タブ切替後の編集が選択中タブではなく旧バッファ内容へ適用される経路があった。
+- 実装:
+  - `examples/tui_editor/main.nepl`
+    - タブ切替直後に `textm`/`cursorm` を新タブの現在値へ再同期する処理を追加。
+  - `nodesrc/tui_regression.js`
+    - シナリオ駆動のTUI回帰を拡張（smoke, 矢印, モード遷移, タブ切替, 編集）。
+    - 実ディレクトリを毎回 `/tmp` にスナップショットし、`wasmer run --dir=<snapshot>` で隔離VFS実行する基盤を追加。
+    - 変更後ソースの検証として、操作後の表示/メッセージ内容を完全一致で比較するシナリオを追加。
+- 検証:
+  - `node nodesrc/tui_regression.js --wasmer /home/bem130/.wasmer/bin/wasmer` -> `ok: true`（全6シナリオ通過）
+  - `NO_COLOR=true trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -o /tmp/tests-current.json -j 2`
+    - 出力JSON確認: `/tmp/tests-current.json`
+    - summary: `total=691, passed=689, failed=2, errored=0`
+- 差分/課題:
+  - WASI `path_open` の preopen 解決と write 永続化の整合は、Wasmer実行条件差分の影響があるため継続調査する。
+
+# 2026-02-27 作業メモ (tui_editor: Insert中ショートカット誤発火の根本修正)
+- 事象:
+  - `insert_mode_no_shortcut_interference` 系で不安定に失敗。
+  - Insertモード中の `q` 入力で終了が発火し、後続の `ESC`/`t` が処理されない。
+- 根本原因:
+  - `examples/tui_editor/main.nepl` の終了判定 (`ch == 113`) がモード非依存で実行されていた。
+  - 入力処理の深い `if` ネストが崩れやすく、修正時に構文破綻を誘発していた。
+- 修正:
+  - Normalモード分岐内でのみ `q` を終了キーとして扱うよう変更。
+  - Normalモードのキー処理をフラットな条件列に再構成し、ネスト破綻耐性を改善。
+  - `t` 実行時のメッセージを既存仕様 (`type:`) に戻し、回帰テストと整合。
+- テスト/検証:
+  - `node nodesrc/tui_regression.js --wasmer /home/bem130/.wasmer/bin/wasmer` -> `ok: true` (16シナリオ通過)
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js --changed --changed-base HEAD --runner wasm --no-tree -o /tmp/tests-tui-changed.json -j 2`
+    - summary: `210/210 pass`
+    - output: `/tmp/tests-tui-changed.json`
