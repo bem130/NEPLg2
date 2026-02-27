@@ -71,6 +71,16 @@ pub enum DiagnosticId {
     TypeIndirectCallRequiresFunctionValue = 3018,
     /// 呼び出し不可能な変数を呼ぼうとした。
     TypeVariableNotCallable = 3019,
+    /// オーバーロード群の effect が不一致。
+    TypeOverloadEffectMismatch = 3020,
+    /// オーバーロード解決時の型引数不一致。
+    TypeOverloadTypeArgsMismatch = 3021,
+    /// 関数引数の型が一致しない。
+    TypeArgumentTypeMismatch = 3022,
+    /// `@` は callable 記号にのみ適用可能。
+    TypeAtRequiresCallable = 3023,
+    /// 変数に型引数は適用できない。
+    TypeVariableTypeArgsNotAllowed = 3024,
 }
 
 impl DiagnosticId {
@@ -113,6 +123,11 @@ impl DiagnosticId {
             3017 => Some(DiagnosticId::TypeCapturingFunctionValueUnsupported),
             3018 => Some(DiagnosticId::TypeIndirectCallRequiresFunctionValue),
             3019 => Some(DiagnosticId::TypeVariableNotCallable),
+            3020 => Some(DiagnosticId::TypeOverloadEffectMismatch),
+            3021 => Some(DiagnosticId::TypeOverloadTypeArgsMismatch),
+            3022 => Some(DiagnosticId::TypeArgumentTypeMismatch),
+            3023 => Some(DiagnosticId::TypeAtRequiresCallable),
+            3024 => Some(DiagnosticId::TypeVariableTypeArgsNotAllowed),
             _ => None,
         }
     }
@@ -157,6 +172,19 @@ impl DiagnosticId {
                 "indirect call requires a function value"
             }
             DiagnosticId::TypeVariableNotCallable => "variable is not callable",
+            DiagnosticId::TypeOverloadEffectMismatch => {
+                "overloaded functions must have the same effect"
+            }
+            DiagnosticId::TypeOverloadTypeArgsMismatch => {
+                "type arguments do not match any overload"
+            }
+            DiagnosticId::TypeArgumentTypeMismatch => "argument type mismatch",
+            DiagnosticId::TypeAtRequiresCallable => {
+                "only callable symbols can be referenced with '@'"
+            }
+            DiagnosticId::TypeVariableTypeArgsNotAllowed => {
+                "type arguments are not allowed for variables"
+            }
         }
     }
 

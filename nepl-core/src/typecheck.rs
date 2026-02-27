@@ -2561,12 +2561,21 @@ impl<'a> BlockChecker<'a> {
                                 })
                         } {
                             if *forced_value {
-                                if let BindingKind::Func { captures, .. } = &binding.kind {
-                                    if !captures.is_empty() {
+                                match &binding.kind {
+                                    BindingKind::Func { captures, .. } => {
+                                        if !captures.is_empty() {
+                                            self.diagnostics.push(Diagnostic::error(
+                                                "capturing function cannot be used as a function value yet",
+                                                id.span,
+                                            ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
+                                            return None;
+                                        }
+                                    }
+                                    _ => {
                                         self.diagnostics.push(Diagnostic::error(
-                                            "capturing function cannot be used as a function value yet",
+                                            "only callable symbols can be referenced with '@'",
                                             id.span,
-                                        ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
+                                        ).with_id(DiagnosticId::TypeAtRequiresCallable));
                                         return None;
                                     }
                                 }
@@ -2595,7 +2604,7 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             "type arguments are not allowed for variables",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeVariableTypeArgsNotAllowed));
                                     }
                                     Vec::new()
                                 }
@@ -2648,14 +2657,14 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             "only callable symbols can be referenced with '@'",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeAtRequiresCallable));
                                         return None;
                                     }
                                     if !type_args.is_empty() {
                                         self.diagnostics.push(Diagnostic::error(
                                             "type arguments are not allowed for variables",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeVariableTypeArgsNotAllowed));
                                     }
                                     let ty = binding.ty;
                                     stack.push(StackEntry {
@@ -2767,7 +2776,7 @@ impl<'a> BlockChecker<'a> {
                                                 self.diagnostics.push(Diagnostic::error(
                                                     "overloaded functions must have the same effect",
                                                     id.span,
-                                                ));
+                                                ).with_id(DiagnosticId::TypeOverloadEffectMismatch));
                                             }
                                             if arity.is_none() {
                                                 arity = Some(a);
@@ -4646,7 +4655,7 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "type arguments do not match any overload",
                                 func.expr.span,
-                            ).with_id(DiagnosticId::TypeNoMatchingOverload));
+                            ).with_id(DiagnosticId::TypeOverloadTypeArgsMismatch));
                         } else {
                             self.diagnostics.push(Diagnostic::error(
                                 "no matching overload found",
@@ -4737,7 +4746,7 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "argument type mismatch",
                                 arg.expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypeArgumentTypeMismatch));
                         }
                     }
                     if matches!(self.current_effect, Effect::Pure) && matches!(c_effect, Effect::Impure)

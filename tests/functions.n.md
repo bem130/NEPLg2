@@ -391,6 +391,22 @@ fn main <()->i32> ():
     v 1
 ```
 
+## function_at_requires_callable_reports_diag_id
+
+neplg2:test[compile_fail]
+diag_id: 3023
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn main <()->i32> ():
+    let v 42;
+    let f @v;
+    0
+```
+
+
 ## function_purity_check_pure_calls_impure
 
 neplg2:test[compile_fail]

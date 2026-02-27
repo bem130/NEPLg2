@@ -1,3 +1,29 @@
+# 2026-02-27 作業メモ (`@` 強制関数値とオーバーロード関連の診断ID拡張)
+- 目的:
+  - `@` を callable 以外へ適用したときの誤受理を根本修正する。
+  - オーバーロード/型引数/引数型不一致の診断を `diag_id` で安定検証できるようにする。
+- 原因:
+  - `typecheck` の識別子解決で、`forced_value (@name)` の分岐が「関数 binding であること」を常に検証しておらず、値 binding が通る経路が残っていた。
+  - 一部診断が既存IDへ過剰集約され、`compile_fail` の精密検証がしづらかった。
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - `@` 強制関数値の経路で `BindingKind::Func` 以外を即時拒否する分岐へ修正。
+    - `only callable symbols can be referenced with '@'` に `DiagnosticId::TypeAtRequiresCallable (3023)` を付与。
+    - 変数への型引数適用、オーバーロード effect 不一致、型引数不一致、引数型不一致にも専用IDを付与。
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `3020..3024` を追加:
+      - `TypeOverloadEffectMismatch`
+      - `TypeOverloadTypeArgsMismatch`
+      - `TypeArgumentTypeMismatch`
+      - `TypeAtRequiresCallable`
+      - `TypeVariableTypeArgsNotAllowed`
+  - `tests/functions.n.md`
+    - `function_at_requires_callable_reports_diag_id` を追加（`compile_fail`, `diag_id: 3023`）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/functions.n.md -i tests/overload.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-functions-overload-diagids-v4.json -j 2`
+    -> `111/111 pass`
+
 # 2026-02-27 作業メモ (compile_fail 用診断IDの拡張: スタック余剰値)
 - 目的:
   - `compile_fail` で「呼び出し arity 不整合により余剰値が残る」ケースを `diag_id` で固定検証できるようにする。
