@@ -8,7 +8,7 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "alloc/string" as *
-#import "alloc/vec" as *
+#import "alloc/collections/vec" as *
 
 //: wasix/tui: WASIX 端末制御と TUI 描画補助ライブラリ
 //:
