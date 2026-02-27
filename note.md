@@ -1,3 +1,20 @@
+# 2026-02-27 作業メモ (テスト実行高速化: changed モード追加)
+- 目的:
+  - 全件実行が遅いため、変更ファイルだけを対象に回せる実行経路を追加する。
+- 実装:
+  - `nodesrc/tests.js`
+    - `--changed` を追加し、`git diff` と untracked から `.n.md/.nepl` の変更ファイルを自動収集。
+    - `--changed-base <ref>` を追加（既定 `HEAD`）。
+    - `--with-stdlib` / `--with-tree` を追加。
+    - `--changed` 時は明示指定がない限り `stdlib` 自動追加と `tree` 実行を無効化。
+    - 実行結果 JSON と要約出力に `scan` 情報（実際の入力/モード）を追加。
+  - `README.md`
+    - 高速差分実行コマンドとフル実行コマンドを明記。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js --changed --changed-base HEAD -o /tmp/tests-changed.json --runner wasm --no-tree -j 2` -> changed 対象のみ走査（`total 48`）
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/overload.n.md --no-stdlib --no-tree -o /tmp/tests-overload-quick.json --runner wasm -j 2` -> `7/7 pass`
+
 # 2026-02-27 作業メモ (診断ID: lexer 生成側の明示付与を追加)
 - 目的:
   - parser/typecheck/resolve に続いて、lexer 主要診断にも `with_id(DiagnosticId::...)` を明示する。
