@@ -121,3 +121,59 @@ fn get_terminal_size <()*>.Pair> ():
             Tuple:
                 0
                 0
+
+//: --- ANSI 画面制御ヘルパー ---
+
+//: clear_screen: 画面全体をクリアしてカーソルを左上に移動する
+fn clear_screen <()*>()> ():
+    print "\x1b[2J\x1b[H";
+    ()
+
+//: move_cursor: カーソルを (col, row) に移動する (1-indexed)
+fn move_cursor <(i32,i32)*>()> (col, row):
+    print "\x1b[";
+    print_i32 row;
+    print ";";
+    print_i32 col;
+    print "H";
+    ()
+
+//: cursor_home: カーソルを左上 (1,1) に移動する
+fn cursor_home <()*>()> ():
+    print "\x1b[H";
+    ()
+
+//: hide_cursor: カーソルを非表示にする
+fn hide_cursor <()*>()> ():
+    print "\x1b[?25l";
+    ()
+
+//: show_cursor: カーソルを再表示する
+fn show_cursor <()*>()> ():
+    print "\x1b[?25h";
+    ()
+
+//: clear_line: カーソル行を消去する
+fn clear_line <()*>()> ():
+    print "\x1b[2K\r";
+    ()
+
+//: set_bg_color: 背景色を設定する (0-7: 標準色)
+//: 0=黒 1=赤 2=緑 3=黄 4=青 5=マゼンタ 6=シアン 7=白
+fn set_bg_color <(i32)*>()> (code):
+    print "\x1b[";
+    print_i32 add code 40;
+    print "m";
+    ()
+
+//: set_fg_color: 前景色を設定する (0-7: 標準色)
+fn set_fg_color <(i32)*>()> (code):
+    print "\x1b[";
+    print_i32 add code 30;
+    print "m";
+    ()
+
+//: reset_color: 前景色と背景色をリセットする
+fn reset_color <()*>()> ():
+    print "\x1b[0m";
+    ()

@@ -1,6 +1,6 @@
 #entry main
 #indent 4
-#target wasm&wasip1&wasix
+#target wasix
 
 #import "std/stdio" as *
 #import "core/field" as *

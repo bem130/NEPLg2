@@ -4270,3 +4270,36 @@
   - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
 - todo反映:
   - `todo.md` 2番（旧 LSP/API phase2）を削除し、残項目を繰り上げ。
+# 2026-02-27 作業メモ (TUI examples: wasix ターゲット整合と実行確認)
+- 背景:
+  - `examples/wasix_tui_*` がコンパイル前段で失敗しており、`wasmer run` に到達できなかった。
+  - 主因は `#target` 記法の不整合（`#target wasm&wasip1&wasix`）と、`core/math` の API 名不一致（`div` 使用）だった。
+- 修正:
+  - `examples/wasix_tui_demo.nepl`: `#target wasix` へ修正。
+  - `examples/wasix_tui_menu.nepl`: `#target wasix` へ修正。
+  - `examples/wasix_tui_fullscreen.nepl`:
+    - `#target wasix` へ修正。
+    - `div` を `div_s` へ修正（`mid_row` 計算）。
+  - `examples/wasix_tui_progress.nepl`:
+    - `#target wasix` へ修正。
+    - `div` を `div_s` へ修正（バー埋め率計算）。
+    - ネストした `if:` 構造を整理し、`all_done` 判定を bool 式で明示化。
+    - 進捗更新の `if` を `if: cond then else` 形式へ統一。
+- 生成確認:
+  - `cargo run -p nepl-cli -- --input examples/wasix_tui_demo.nepl --target wasix --output /tmp/wasix_examples/wasix_tui_demo` -> OK
+  - `cargo run -p nepl-cli -- --input examples/wasix_tui_menu.nepl --target wasix --output /tmp/wasix_examples/wasix_tui_menu` -> OK
+  - `cargo run -p nepl-cli -- --input examples/wasix_tui_fullscreen.nepl --target wasix --output /tmp/wasix_examples/wasix_tui_fullscreen` -> OK
+  - `cargo run -p nepl-cli -- --input examples/wasix_tui_progress.nepl --target wasix --output /tmp/wasix_examples/wasix_tui_progress` -> OK
+- 実行確認 (`wasmer 7.0.1`):
+  - `printf 'q' | timeout 8s wasmer run /tmp/wasix_examples/wasix_tui_demo.wasm` -> `Done.` まで到達。
+  - `printf 'q' | timeout 8s wasmer run /tmp/wasix_examples/wasix_tui_menu.wasm` -> メニュー描画後 `Goodbye!`。
+  - `printf 'q' | timeout 8s wasmer run /tmp/wasix_examples/wasix_tui_fullscreen.wasm` -> 画面描画後 `Bye!`。
+  - `printf 'q' | timeout 8s wasmer run /tmp/wasix_examples/wasix_tui_progress.wasm` -> 進捗描画後 `Done!`。
+- 付随対応:
+  - WSL 全体向けに wasmer PATH を設定（`~/.profile`, `~/.bashrc` に `export PATH="$HOME/.wasmer/bin:$PATH"` を追記）。
+- 検証:
+  - `NO_COLOR=false trunk build`:
+    - 初回失敗要因: `web/dist_ts` と `web/examples` の欠如。
+    - 対応: `mkdir -p web/dist_ts web/examples` 実施後、build 成功。
+  - `NO_COLOR=false node nodesrc/tests.js --changed --changed-base HEAD -o /tmp/tests-changed-tui.json --runner wasm --no-tree -j 2`
+    - 結果: `total=0, passed=0, failed=0, errored=0`（今回差分に該当する `.n.md/.nepl` テストケースなし）。

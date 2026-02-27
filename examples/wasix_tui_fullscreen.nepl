@@ -1,0 +1,99 @@
+// wasix_tui_fullscreen.nepl
+// フルスクリーン書き換えデモ: フレームカウンタと端末サイズをフルスクリーンで表示する
+//
+// 実行: wasmer run examples/wasix_tui_fullscreen.wasm
+// 終了: q キーを押す
+#entry main
+#indent 4
+#target wasix
+
+#import "std/stdio" as *
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/field" as *
+#import "platforms/wasix/tui" as tui
+
+// ボーダーを含む全画面フレームを描画する
+fn draw_frame <(i32,i32,i32)*>()> (cols, rows, frame):
+    tui::cursor_home;
+    // タイトルバー（1行目）
+    tui::set_bg_color 4; // 青
+    tui::set_fg_color 7; // 白
+    print " WASIX TUI Fullscreen Demo ";
+    tui::reset_color;
+    print "\r\n";
+
+    // 情報行（2行目）
+    tui::set_fg_color 2; // 緑
+    print " Terminal: ";
+    tui::reset_color;
+    print_i32 cols;
+    print "x";
+    print_i32 rows;
+    tui::set_fg_color 3; // 黄
+    print "  Frame: ";
+    tui::reset_color;
+    print_i32 frame;
+    print "\r\n";
+
+    // 区切り線（3行目）
+    tui::set_fg_color 4; // 青
+    print "─────────────────────────────\r\n";
+    tui::reset_color;
+
+    // 中央メッセージ
+    let mid_row <i32> div_s rows 2;
+    let mut r <i32> 3;
+    while lt r rows:
+        do:
+            if:
+                eq r mid_row
+                then:
+                    tui::set_bg_color 2; // 緑背景
+                    tui::set_fg_color 0; // 黒文字
+                    print " >> Press 'q' to quit << ";
+                    tui::reset_color;
+                    print "\r\n";
+                else:
+                    print "\r\n";
+            set r add r 1;
+    ()
+
+fn main <()*>()> ():
+    let old <i32> tui::enter_raw_mode;
+    if:
+        ne old 0
+        then:
+            tui::hide_cursor;
+            tui::clear_screen;
+
+            let mut quit <bool> false;
+            let mut frame <i32> 0;
+            while not quit:
+                do:
+                    let size <.Pair> tui::get_terminal_size;
+                    let cols <i32> get size 0;
+                    let rows <i32> get size 1;
+                    draw_frame cols rows frame;
+                    set frame add frame 1;
+
+                    let s <str> read_all;
+                    if:
+                        gt load_i32 s 0
+                        then:
+                            let ch <i32> load_u8 add s 4;
+                            if:
+                                eq ch 113 // 'q'
+                                then:
+                                    set quit true
+                                else:
+                                    ();
+                        else:
+                            ();
+
+            tui::show_cursor;
+            tui::clear_screen;
+            tui::restore_mode old;
+            println "Bye!";
+        else:
+            println "Failed to enter raw mode.";
