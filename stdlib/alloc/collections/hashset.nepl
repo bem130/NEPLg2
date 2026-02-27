@@ -22,7 +22,6 @@
 #import "core/field" as *
 #import "alloc/diag/error" as *
 #import "alloc/string" as *
-#import "alloc/hash/fnv1a32" as *
 #import "alloc/hash/hash32" as *
 
 struct HashSet:
@@ -463,76 +462,6 @@ struct HashSetStr:
 // 計算量:
 // - 平均 O(1)、最悪 O(n)
 
-// hash_str: str の簡易ハッシュ
-//
-// 目的:
-// - 文字列内容からハッシュ値を生成します。
-//
-// 実装(アルゴリズム):
-// - FNV-1a 32bit をバイト列に適用します。
-// - 再帰でバイト列を走査します。
-//
-// 注意(重要):
-// - 暗号用途には使えません。
-// - UTF-8 のバイト列をそのまま混合します。
-//
-// 計算量:
-// - O(n)
-//: hash_str: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hash_str の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hash_str <(str)->i32> (s):
-    let n <i32> len s;
-    let h0 <Fnv1a32> new_fnv1a32;
-    let h1 <Fnv1a32> hash_str_loop s n 0 h0;
-    fnv1a32_finalize h1
-
-// hash_str_loop: hash_str の内部ループ
-//
-// 目的:
-// - idx から末尾までのバイトを順に混合します。
-//
-// 実装(アルゴリズム):
-// - idx==n なら現在の状態を返します。
-// - それ以外は 1 バイト更新して再帰します。
-//
-// 注意(重要):
-// - 再帰の深さは文字列長に比例します。
-//
-// 計算量:
-// - O(n)
-//: hash_str_loop: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hash_str_loop の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hash_str_loop <(str,i32,i32,Fnv1a32)->Fnv1a32> (s, n, idx, h):
-    if:
-        eq idx n
-        then h
-        else:
-            let b <i32> load_u8 add s add 4 idx;
-            let h2 <Fnv1a32> fnv1a32_update h b;
-            hash_str_loop s n add idx 1 h2
-
 // hashset_str_contains_loop: 線形探索の内部ループ
 //
 // 目的:
@@ -667,7 +596,7 @@ fn hashset_str_insert <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> mod_s abs hash_str key cap
+    let idx <i32> mod_s abs hash32_str key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut full <i32> 0
@@ -733,7 +662,7 @@ fn hashset_str_contains <(HashSetStr,str)->bool> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> mod_s abs hash_str key cap
+    let idx <i32> mod_s abs hash32_str key cap
     hashset_str_contains_loop entries entry_size cap idx idx key
 
 // hashset_str_remove: 要素を削除する
@@ -767,7 +696,7 @@ fn hashset_str_remove <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> mod_s abs hash_str key cap
+    let idx <i32> mod_s abs hash32_str key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0

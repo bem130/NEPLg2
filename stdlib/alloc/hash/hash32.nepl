@@ -31,6 +31,8 @@
 #indent 4
 
 #import "core/math" as *
+#import "alloc/string" as *
+#import "alloc/hash/fnv1a32" as *
 
 //: hash32_mix_fmix: 32-bit 値を avalanche 混合する内部関数
 //:
@@ -68,3 +70,45 @@ fn hash32_mix_fmix <(i32)->i32> (x):
 fn hash32_i32 <(i32)->i32> (key):
     let seeded <i32> i32_xor key -1640531527;
     hash32_mix_fmix seeded
+
+//: hash32_str_loop: 文字列ハッシュの内部ループ
+//:
+//: [目的/もくてき]:
+//: - `str` の各バイトを順に混合して FNV-1a 状態を更新します。
+//:
+//: [実装/じっそう]:
+//: - 再帰で `idx` を進め、`fnv1a32_update` を適用します。
+//:
+//: [注意/ちゅうい]:
+//: - UTF-8 のバイト列をそのまま処理します。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(n)
+fn hash32_str_loop <(str,i32,i32,Fnv1a32)->Fnv1a32> (s, n, idx, h):
+    if:
+        ge idx n
+        then:
+            h
+        else:
+            let b <i32> load_u8 add s add 4 idx;
+            let h2 <Fnv1a32> fnv1a32_update h b;
+            hash32_str_loop s n add idx 1 h2
+
+//: hash32_str: str キーをハッシュ値へ変換する
+//:
+//: [目的/もくてき]:
+//: - map/set で `str` キーを分散させる 32-bit ハッシュを返します。
+//:
+//: [実装/じっそう]:
+//: - FNV-1a でバイト列を混合した後に `fmix32` を適用して拡散します。
+//:
+//: [注意/ちゅうい]:
+//: - 暗号用途には使えません。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(n)
+fn hash32_str <(str)->i32> (s):
+    let n <i32> len s;
+    let h0 <Fnv1a32> new_fnv1a32;
+    let h1 <Fnv1a32> hash32_str_loop s n 0 h0;
+    hash32_mix_fmix fnv1a32_finalize h1
