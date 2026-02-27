@@ -9,6 +9,7 @@ neplg2:test
 #indent 4
 #target std
 #import "alloc/hash/fnv1a32" as *
+#import "alloc/hash/hash32" as *
 #import "alloc/hash/sha256" as *
 #import "std/test" as *
 #import "alloc/collections/vec" as *
@@ -26,6 +27,8 @@ fn test_hash <()*>i32> ():
     // 0x811c9da4 * 0x01000193 = 0xe40c292c
     // 0xe40c292c = -468965076 (signed)
     assert_eq_i32 -468965076 result
+    assert_eq_i32 hash32_i32 123456 hash32_i32 123456
+    assert ne hash32_i32 123456 hash32_i32 123457
 
     test_checked "fnv1a32 basic test passed"
 

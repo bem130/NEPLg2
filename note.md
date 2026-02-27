@@ -4758,3 +4758,18 @@
   - `NO_COLOR=false trunk build` -> pass
   - `NO_COLOR=false node nodesrc/tests.js -i stdlib/tests/stack.n.md -o /tmp/tests-stack-alias-after-build.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 1`
     -> `556/556 pass`
+
+# 2026-02-27 作業メモ (collections: *_str ファイル統合 + hash32導入)
+## 修正内容
+- `stdlib/alloc/collections/hashmap_str.nepl` / `hashset_str.nepl` を廃止し、実装をそれぞれ `hashmap.nepl` / `hashset.nepl` に統合。
+- `HashMapStr` / `HashSetStr` の API (`hashmap_str_*`, `hashset_str_*`) は維持して呼び出し互換を確保。
+- `alloc/hash/hash32.nepl` を追加し、Murmur3 fmix32 系の 32bit 混合 `hash32_i32` を新設。
+- `hashmap.nepl` / `hashset.nepl` の i32 キー用ハッシュを簡易実装から `hash32_i32` 呼び出しへ置換。
+- `stdlib/tests/hash*.n.md` と `tests/selfhost_req.n.md`、`nepl-core/tests/selfhost_req.rs` の import/記法を統合後構成に合わせて更新。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- wasm 対象（`--no-stdlib --runner wasm`）:
+  - `stdlib/tests/hash.n.md` / `hashmap.n.md` / `hashset.n.md` / `hashmap_str.n.md` / `hashset_str.n.md` / `tests/selfhost_req.n.md` -> すべて pass
+- llvm 対象（`--no-stdlib --runner llvm --llvm-all`）:
+  - `stdlib/tests/hash.n.md` / `hashmap.n.md` / `hashset.n.md` / `hashmap_str.n.md` / `hashset_str.n.md` / `tests/selfhost_req.n.md` -> すべて pass
