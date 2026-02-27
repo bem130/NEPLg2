@@ -80,10 +80,32 @@ fn main <()->i32> ():
             'overload diagnostics should include ambiguous overload id=3005'
         );
 
+        const lexBad = `#entry main
+#indent xx
+#target core
+fn main <()->i32> ():
+    $
+`;
+        const lexRes = api.analyze_lex(lexBad);
+        const lexDs = Array.isArray(lexRes?.diagnostics) ? lexRes.diagnostics : [];
+        assert.ok(
+            lexDs.some((d) => d?.id === 2001),
+            'lexer diagnostics should include invalid #indent id=2001'
+        );
+        assert.ok(
+            lexDs.some((d) => d?.id === 1202),
+            'lexer diagnostics should include unknown token id=1202'
+        );
+
         return {
-            checked: 8,
+            checked: 10,
             diagnostics_count:
-                diagnostics.length + missingDs.length + parseDs.length + undefDs.length + overloadDs.length,
+                diagnostics.length +
+                missingDs.length +
+                parseDs.length +
+                undefDs.length +
+                overloadDs.length +
+                lexDs.length,
         };
     },
 };

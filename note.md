@@ -1,3 +1,20 @@
+# 2026-02-27 作業メモ (診断ID: lexer 生成側の明示付与を追加)
+- 目的:
+  - parser/typecheck/resolve に続いて、lexer 主要診断にも `with_id(DiagnosticId::...)` を明示する。
+- 実装:
+  - `nepl-core/src/lexer.rs`
+    - `invalid #indent argument` -> `ParserExpectedToken` (2001)
+    - `invalid #extern syntax` -> `ParserInvalidExternSignature` (2006)
+    - `unknown directive` -> `LexerUnknownDirective` (1201)
+    - `unknown token` -> `LexerUnknownToken` (1202)
+  - `tests/tree/18_diagnostic_ids.js`
+    - lexer 診断IDの検証ケースを追加（`#indent xx` と `$`）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node tests/tree/run.js` -> `18/18 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-after-lexer-id.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `573/573 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-lexer-id.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1657/1657 pass`
+
 # 2026-02-27 作業メモ (診断ID: parser生成側の明示付与 + 自動推測の撤去)
 - 目的:
   - 「`from_message` で推測しない。診断生成側で enum を付与する」方針へ戻す。
