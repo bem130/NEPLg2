@@ -38,7 +38,7 @@
 //:| #import "core/result" as *
 //: // Err を unwrap_ok すると unreachable で落ちることを期待
 //: fn main <()*>()> ():
-//:     let v <i32> unwrap_ok err<i32, str> "boom";
+//:     unwrap_ok err<i32, str> "boom";
 //:     ()
 //: ```
 //:
