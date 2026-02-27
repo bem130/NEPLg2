@@ -24,6 +24,28 @@
   - `NO_COLOR=false node nodesrc/tests.js -i tests/functions.n.md -i tests/overload.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-functions-overload-diagids-v4.json -j 2`
     -> `111/111 pass`
 
+# 2026-02-27 作業メモ (parser if/while レイアウト診断へID付与)
+- 目的:
+  - parser の if/while レイアウト系エラーを `diag_id` で一貫管理し、木構造テストから機械検証できるようにする。
+- 実装:
+  - `nepl-core/src/parser.rs`
+    - 次のエラーに `DiagnosticId` を付与:
+      - `invalid marker ...` / `duplicate marker ...` / `too many expressions ...` -> `ParserUnexpectedToken (2002)`
+      - `missing expression(s) ...` / `argument layout block must contain expressions` -> `ParserExpectedToken (2001)`
+      - `only expressions are allowed ...` -> `ParserUnexpectedToken (2002)`
+  - `tests/tree/18_diagnostic_ids.js`
+    - `if:` レイアウトの marker 順序誤りケースを追加し、`id=2002` を検証。
+  - `tests/if.n.md`
+    - `if_layout_invalid_marker_order_reports_diag_id` を追加（`compile_fail`）。
+    - wasm 実行系の `compile_fail diag_id` 抽出制約に合わせ、ここは `diag_id` 指定なしで失敗そのものを検証。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/if.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-if-diagid-layout-v2.json -j 2`
+    -> `166/166 pass`
+  - `node tests/tree/run.js` -> `18/18 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/functions.n.md -i tests/overload.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-functions-overload-after-parser-id.json -j 2`
+    -> `111/111 pass`
+
 # 2026-02-27 作業メモ (compile_fail 用診断IDの拡張: スタック余剰値)
 - 目的:
   - `compile_fail` で「呼び出し arity 不整合により余剰値が残る」ケースを `diag_id` で固定検証できるようにする。

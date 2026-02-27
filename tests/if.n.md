@@ -1051,6 +1051,23 @@ fn main <()->i32> ():
     v
 ```
 
+## if_layout_invalid_marker_order_reports_diag_id
+
+neplg2:test[compile_fail]
+```neplg2
+
+#entry main
+#indent 4
+#target core
+
+fn main <()->i32> ():
+    let v <i32> if:
+        then 1
+        cond true
+        else 0
+    v
+```
+
 ## if_nested_double_level_mixed_layout
 
 neplg2:test
