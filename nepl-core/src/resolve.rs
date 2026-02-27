@@ -14,6 +14,7 @@ use crate::ast::{ImportClause, ImportItem};
 use alloc::vec::Vec;
 use alloc::string::ToString;
 use crate::diagnostic::Diagnostic;
+use crate::diagnostic_ids::DiagnosticId;
 use alloc::collections::BTreeSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -258,10 +259,16 @@ pub fn build_visible_map(
             }
         }
         for name in ambiguous {
-            diags.push(Diagnostic::error(
-                alloc::format!("ambiguous import: `{}` is provided by multiple open imports", name),
-                crate::span::Span::dummy(),
-            ));
+            diags.push(
+                Diagnostic::error(
+                    alloc::format!(
+                        "ambiguous import: `{}` is provided by multiple open imports",
+                        name
+                    ),
+                    crate::span::Span::dummy(),
+                )
+                .with_id(DiagnosticId::AmbiguousImport),
+            );
         }
         for (n, info) in seen_open {
             map.entry(n.clone()).or_insert(info);

@@ -13,6 +13,7 @@ use crate::ast::*;
 use crate::builtins::BuiltinKind;
 use crate::compiler::{BuildProfile, CompileTarget};
 use crate::diagnostic::Diagnostic;
+use crate::diagnostic_ids::DiagnosticId;
 use crate::hir::*;
 use crate::span::Span;
 use crate::types::{EnumVariantInfo, TypeCtx, TypeId, TypeKind};
@@ -1353,7 +1354,7 @@ fn check_function(
                                 checker.diagnostics.push(Diagnostic::error(
                                     "return type does not match signature",
                                     f.name.span,
-                                ));
+                                ).with_id(DiagnosticId::TypeReturnTypeMismatch));
                             }
                             HirBody::Block(blk)
                         }
@@ -2612,11 +2613,17 @@ impl<'a> BlockChecker<'a> {
                                     }
                                 } else {
                                     self.diagnostics
-                                        .push(Diagnostic::error("undefined identifier", id.span));
+                                        .push(
+                                            Diagnostic::error("undefined identifier", id.span)
+                                                .with_id(DiagnosticId::TypeUndefinedIdentifier),
+                                        );
                                 }
                             } else {
                                 self.diagnostics
-                                    .push(Diagnostic::error("undefined identifier", id.span));
+                                    .push(
+                                        Diagnostic::error("undefined identifier", id.span)
+                                            .with_id(DiagnosticId::TypeUndefinedIdentifier),
+                                    );
                             }
                         }
                     }
@@ -2632,12 +2639,13 @@ impl<'a> BlockChecker<'a> {
                                 self.diagnostics.push(Diagnostic::error(
                                     format!("cannot shadow non-shadowable symbol '{}'", name.name),
                                     name.span,
-                                ));
+                                ).with_id(DiagnosticId::TypeNoShadowViolation));
                                 self.diagnostics.push(
                                     Diagnostic::error(
                                         "non-shadowable declaration is here",
                                         b.span,
                                     )
+                                    .with_id(DiagnosticId::TypeNoShadowViolation)
                                     .with_secondary_label(
                                         name.span,
                                         Some("shadow attempt".into()),
@@ -2655,12 +2663,13 @@ impl<'a> BlockChecker<'a> {
                                         name.name
                                     ),
                                     name.span,
-                                ));
+                                ).with_id(DiagnosticId::TypeNoShadowViolation));
                                 self.diagnostics.push(
                                     Diagnostic::error(
                                         "non-shadowable declaration is here",
                                         blocked.span,
                                     )
+                                    .with_id(DiagnosticId::TypeNoShadowViolation)
                                     .with_secondary_label(
                                         name.span,
                                         Some("shadow attempt".into()),
@@ -2675,7 +2684,7 @@ impl<'a> BlockChecker<'a> {
                                         name.name
                                     ),
                                     name.span,
-                                ));
+                                ).with_id(DiagnosticId::TypeNoShadowConflict));
                                 return None;
                             }
                             let t = self.ctx.fresh_var(None);
@@ -4338,12 +4347,12 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "type arguments do not match any overload",
                                 func.expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypeNoMatchingOverload));
                         } else {
                             self.diagnostics.push(Diagnostic::error(
                                 "no matching overload found",
                                 func.expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypeNoMatchingOverload));
                         }
                         return None;
                     }
@@ -4351,7 +4360,7 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             "ambiguous overload",
                             func.expr.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeAmbiguousOverload));
                         return None;
                     }
 

@@ -1,3 +1,28 @@
+# 2026-02-27 作業メモ (診断ID: parser生成側の明示付与 + 自動推測の撤去)
+- 目的:
+  - 「`from_message` で推測しない。診断生成側で enum を付与する」方針へ戻す。
+  - parser/typecheck/name-resolution/overload の代表経路で `with_id(DiagnosticId::...)` を明示化する。
+- 実装:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - 診断ID enum を拡張（parser/typecheck/resolve 系の主要カテゴリを追加）。
+    - `from_message` は削除。
+  - `nepl-core/src/diagnostic.rs`
+    - `Diagnostic::error/warning` の自動推測付与を撤去し、`id=None` を既定に戻した。
+  - `nepl-core/src/parser.rs`
+    - `DiagnosticId` を import。
+    - `expect/expect_with_span/expect_ident` と主要 parser エラーに `with_id(...)` を明示付与。
+  - `nepl-core/src/resolve.rs`
+    - `ambiguous import` に `DiagnosticId::AmbiguousImport` を付与。
+  - `nepl-core/src/typecheck.rs`
+    - 代表経路（return型不一致、未定義識別子、shadow違反、overload曖昧/未一致）に `with_id(...)` を付与。
+  - `tests/tree/18_diagnostic_ids.js`
+    - target/loader に加え parser/typecheck/overload のID検証を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node tests/tree/run.js` -> `18/18 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-diag-explicit-parser.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `573/573 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-after-explicit-diag-parser.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1657/1657 pass`
+
 # 2026-02-27 作業メモ (診断IDを `DiagnosticId` enum で型保持)
 - 目的:
   - 診断IDを `Option<u32>` の生値保持から `Option<DiagnosticId>` へ変更し、生成側・表示側の整合性を型で保証する。
