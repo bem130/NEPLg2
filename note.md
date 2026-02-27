@@ -1,3 +1,38 @@
+# 2026-02-27 作業メモ (`wasix/tui` に文字列描画・折り返しAPIを追加)
+- 目的:
+  - TUI で長文を扱う際の「表示幅での切り詰め」「折り返し」「複数行描画」を stdlib 側で共通化する。
+- 実装:
+  - `stdlib/platforms/wasix/tui.nepl`
+    - `alloc/vec` を追加 import。
+    - 追加 API:
+      - `line_clip_to_cols(s, cols)`:
+        - 表示幅ベースで行を切り詰める。
+      - `text_wrap_lines(text, cols)`:
+        - 改行文字と表示幅に基づいて行配列へ折り返す。
+      - `buffer_set_wrapped_text(b, start_row, cols, height, text)`:
+        - 折り返し結果を行バッファへ描画し、不足行は空白で埋める。
+    - 日本語ドキュメントコメント（目的/実装/注意/計算量）を付与。
+- 検証:
+  - `target/debug/nepl-cli --input examples/wasix_tui_fullscreen.nepl --target wasix --output tmp/wasix_tui_fullscreen` -> 成功
+
+# 2026-02-27 作業メモ (`--run` TUI出力の流量制御を改善してFPS低下を根本修正)
+- 背景:
+  - `--run` の `fd_write` が呼び出しごとに `stdout.flush()` しており、TUI の細かい ANSI 出力で syscall/flush が過剰になっていた。
+  - その結果、`wasmer run` 比で体感 FPS が低下していた。
+- 実装:
+  - `nepl-cli/src/main.rs`
+    - `AllocState` に `stdout_buf` と `stdout_last_flush` を追加。
+    - `flush_stdout_buffer` を追加し、バッファをまとめて書き出す経路を実装。
+    - `fd_write` を即時 flush からバッファリング方式へ変更。
+      - 改行を含む
+      - バッファが 8192 bytes 以上
+      - 前回 flush から 16ms 以上経過
+      のいずれかで flush。
+    - 実行終了時に未送信バッファを flush するように変更。
+- 期待効果:
+  - `print` 多発時の `fd_write` オーバーヘッドを削減し、`--run` の TUI 表示速度を改善。
+  - 出力タイミングは保ちつつ、不要な flush 連発を抑制。
+
 # 2026-02-27 作業メモ (テスト実行高速化: changed モード追加)
 - 目的:
   - 全件実行が遅いため、変更ファイルだけを対象に回せる実行経路を追加する。
@@ -4323,3 +4358,20 @@
 - 互換確認 (`wasmer run`):
   - 同一 `.wasm`（`/tmp/wasix_examples/*.wasm`）に対して同じ `q` 入力で実行。
   - 4件とも `--run` と同様に表示・終了することを確認。
+# 2026-02-27 作業メモ (fullscreen demo を対話操作デモへ変更)
+- 目的:
+  - 単なる表示デモではなく、TUI らしい入力操作を伴う分かりやすいフルスクリーンデモにする。
+- 変更:
+  - `examples/wasix_tui_fullscreen.nepl`
+    - 画面全体を毎フレーム描画する `box + fill` 表示へ変更。
+    - 枠内に操作可能オブジェクト（`●`）を表示。
+    - 入力操作を追加:
+      - 矢印キー（ESC [ A/B/C/D）
+      - `WASD`
+      - `HJKL`
+      - `q` で終了
+    - 端末サイズ変化時にオブジェクト座標が枠外へ出ないようクランプ。
+- 確認:
+  - `cargo run -p nepl-cli -- --input examples/wasix_tui_fullscreen.nepl --target wasix --output /tmp/wasix_examples/wasix_tui_fullscreen` -> 成功
+  - `printf 'q' | timeout 5s target/debug/nepl-cli --input examples/wasix_tui_fullscreen.nepl --run` -> `Bye!`
+  - `printf 'q' | timeout 5s wasmer run /tmp/wasix_examples/wasix_tui_fullscreen.wasm` -> `Bye!`

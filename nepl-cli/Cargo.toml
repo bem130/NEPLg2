@@ -10,6 +10,7 @@ clap.workspace = true
 nepl-core = { path = "../nepl-core" }
 wasmi.workspace = true
 wasmprinter.workspace = true
+libc = "0.2"
 
 [dev-dependencies]
 tempfile.workspace = true
