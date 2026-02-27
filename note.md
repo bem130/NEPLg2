@@ -1,3 +1,21 @@
+# 2026-02-27 作業メモ (GitHub Actions: wasm-bindgen ダウンロード失敗の安定化)
+- 背景:
+  - `trunk build` 実行時に、Trunk 内部の `wasm-bindgen` 自動ダウンロードが接続断で失敗するケースが発生。
+  - エラー例: `failed downloading release archive` / `connection closed before message completed`
+- 実装:
+  - `trunk` を使う workflow へ、事前に `wasm-bindgen-cli 0.2.108` を導入する step を追加。
+  - 追加先:
+    - `.github/workflows/gh-pages.yml`
+    - `.github/workflows/nepl-test-wasi.yml`
+    - `.github/workflows/nepl-test-llvm.yml`
+    - `.github/workflows/nmd-doctest.yml`
+  - 導入方法:
+    - `cargo install --locked wasm-bindgen-cli --version 0.2.108`
+    - 5回リトライ + backoff（5s,10s,15s,20s,25s）
+- 期待効果:
+  - Trunk の実行中ダウンロード依存を減らし、ネットワーク瞬断時の失敗率を低減。
+  - 失敗時も step 単位で再試行されるため、CI 全体の安定性が向上。
+
 # 2026-02-27 作業メモ (`@` 強制関数値とオーバーロード関連の診断ID拡張)
 - 目的:
   - `@` を callable 以外へ適用したときの誤受理を根本修正する。
@@ -4813,3 +4831,171 @@
   - `NO_COLOR=false trunk build` 通過。
   - `node nodesrc/tests.js -i stdlib/tests/hashmap.n.md -o /tmp/hashmap-focus-wasm.json --runner wasm --assert-io --no-tree -j 1` 通過（206/206）。
   - `node nodesrc/tests.js -i stdlib/tests/hashmap_str.n.md -o /tmp/hashmap-str-focus-wasm.json --runner wasm --assert-io --no-tree -j 1` 通過（206/206）。
+
+# 2026-02-27 作業メモ (kp コメント形式の統一)
+- 目的:
+  - `//` はドキュメントコメントとして扱わない方針に合わせ、`stdlib/kp` のコメント形式を `//:` に統一する。
+- 実装:
+  - `stdlib/kp/kpread.nepl`
+    - 行頭 `//` コメントを `//:` に統一。
+    - 関数内部の補助コメント行（BOM判定・進行保証・列初期化など）は削除して、通常コードのみ残す構成に整理。
+  - `stdlib/kp/kpwrite.nepl`
+    - 行頭 `//` コメントを `//:` に統一。
+    - 関数内部の行末 `//` コメントと補助コメント行を削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -o /tmp/tests-kp-io.json --runner wasm --assert-io --no-tree -j 1`
+    -> `215/215 pass`
+
+# 2026-02-27 作業メモ (map起点の名前解決/オーバーロード修正)
+## 根本原因
+- `typecheck` の識別子解決で、同名 callable の存在がローカル値（関数型パラメータ）解決に干渉していた。
+- `reduce_calls` / `apply_function` が `Var(name)` を過度に callable 名として扱い、
+  ローカル関数値呼び出し（`f a`）を過負荷解決へ誤送していた。
+- `lookup_all_callables` が全スコープ横断で候補を返しており、内側定義による lexical shadowing が効かず曖昧化していた。
+
+## 実装
+- `nepl-core/src/typecheck.rs`
+  - head位置の識別子解決を修正:
+    - 値が関数型なら値優先
+    - 値が非関数なら callable 優先
+  - `lookup_value_for_read` 候補を先に評価し、同名 callable 混在時の選択規則を安定化。
+  - `reduce_calls` / `reduce_calls_guarded` の `choose_callable_type_by_available_arity` 適用条件を
+    「同名 value が存在しない場合」に限定。
+  - `apply_function` の通常 callable 解決を
+    「同名の関数型 value が存在する場合は通らない」ように変更（関数値呼び出しは indirect 経路へ）。
+  - `lookup_all_callables` を lexical shadowing 優先（最内スコープのみ）へ変更。
+  - `let` 型注釈（`pending_ascription`）から関数値期待を拾うようにし、
+    `let u <(i32)->i32> calc` のような束縛時解決を安定化。
+
+## テスト修正
+- `tests/generics.n.md`
+  - `generics_make_pair_wrapper` を現在の前置評価で曖昧にならない構成へ整理。
+- `tests/overload.n.md`
+  - `overload_select_by_arity` を「アリティ選択そのもの」を検証する最小構成へ整理。
+  - `overload_select_by_arity_from_param_context_binary_not_supported_yet` を
+    実装反映済み仕様に合わせて通常 `neplg2:test` 化。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i tests/shadowing.n.md -o /tmp/tests-shadowing-now6.json --no-stdlib --no-tree` -> 27/27 pass
+- `node nodesrc/tests.js -i tests/generics.n.md -o /tmp/tests-generics-now7.json --no-stdlib --no-tree` -> 24/24 pass
+- `node nodesrc/tests.js -i tests/overload.n.md -o /tmp/tests-overload-now3.json --no-stdlib --no-tree` -> 18/18 pass
+- `node nodesrc/tests.js -i tests -o /tmp/tests-tests-no-stdlib-final4.json --no-stdlib --no-tree` -> 471/471 pass
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-final.json --no-tree` -> 676/676 pass
+
+# 2026-02-27 作業メモ (hash map/set 差分の再検証)
+## 実施内容
+- `stdlib/alloc/collections/hashmap.nepl`
+  - `core/field` の参照を `field::get` に統一。
+  - i32 キー位置計算を `mod_s abs ...` から `i32_rem_u` に統一。
+  - 非ドキュメントコメント (`//`) を削除し、`//:` のみ残す構成へ整理。
+- `stdlib/alloc/collections/hashset.nepl`
+  - `core/field` の参照を `field::get` に統一。
+  - i32 キー位置計算を `mod_s abs ...` から `i32_rem_u` に統一。
+  - 非ドキュメントコメント (`//`) を削除し、`//:` のみ残す構成へ整理。
+- `stdlib/alloc/hash/hash32.nepl`
+  - `alloc/string` を `string` alias で import し、`string::len` を使用する形に統一。
+- `stdlib/tests/vec.n.md`
+  - `push<u8> cast 65` の曖昧解決を回避するため、`u8_65` へ分離してから `push<u8>` に渡す形へ修正。
+- `tests/selfhost_req.n.md`
+  - 対象ケースに `#target std` を追加。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i stdlib/tests/hash.n.md -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md -o /tmp/tests-hash-related.json --no-tree`
+  - `210/210 pass`
+- `node nodesrc/tests.js -i tests/selfhost_req.n.md -i stdlib/tests/vec.n.md -o /tmp/tests-selfhost-vec.json --no-tree`
+  - `212/212 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-regression.json --no-tree`
+  - `676/676 pass`
+
+# 2026-02-27 作業メモ (sizeof / intrinsic テスト拡張)
+## 実施内容
+- `tests/sizeof.n.md` に以下のテストを追加:
+  - `sizeof_collection_structs`
+    - `Vec<i32>` / `Stack<i32>` / `HashMap<i32>` / `HashSet` の `size_of` 検証。
+  - `sizeof_diag_structs`
+    - `Span` / `Error` / `Diag` の `size_of` 検証。
+- 既存 `tests/intrinsic.n.md` と合わせて `size_of` 系の回帰検証セットを強化。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i tests/sizeof.n.md -i tests/intrinsic.n.md -o /tmp/tests-sizeof-intrinsic.json --no-tree`
+  - `219/219 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-sizeof.json --no-tree`
+  - `678/678 pass`
+
+# 2026-02-27 作業メモ (collections の Diag テスト追加)
+## 実施内容
+- `tests/collections_diag.n.md` を新規追加。
+- 追加した検証:
+  - `hashmap_remove` の未存在キーで `KeyNotFound` が返ること
+  - `hashset_remove` の未存在キーで `KeyNotFound` が返ること
+  - `hashmap_insert` の容量超過で `CapacityExceeded` が返ること
+  - `hashset_insert` の容量超過で `CapacityExceeded` が返ること
+- `diag_code_str d.code` を使ってコード一致を固定化。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i tests/collections_diag.n.md -o /tmp/tests-collections-diag.json --no-tree`
+  - `209/209 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-collections-diag.json --no-tree`
+  - `682/682 pass`
+
+# 2026-02-27 作業メモ (alloc/diag 再設計: Diag/Error 連携 + コメント形式統一)
+## 実施内容
+- `stdlib/alloc/diag/error.nepl`
+  - `DiagCode <-> ErrorKind` の相互写像 API を追加:
+    - `diag_code_to_error_kind`
+    - `error_kind_to_diag_code`
+  - `Diag <-> Error` 変換 API を追加:
+    - `diag_to_error`
+    - `error_to_diag`
+  - `Diag` 文字列化を `message` 返却へ変更し、`Diag` フィールド同時参照の move 競合を解消。
+  - ファイル内の非ドキュメントコメント `//` を `//:` に統一。
+- `stdlib/alloc/diag/diag.nepl`
+  - ファイル内の非ドキュメントコメント `//` を `//:` に統一。
+- `stdlib/tests/error.n.md`
+  - `diag_to_error` / `error_to_diag` の往復ケースを追加し、期待値を固定化。
+
+## 根本原因
+- `Diag` は値構造体で、`d.code` と `d.message` の同時参照が move 競合を起こしていた。
+- `diag_to_error` がこの経路を直接踏んでいたため compile fail が発生していた。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i stdlib/tests/error.n.md -i stdlib/tests/diag.n.md -i tests/collections_diag.n.md -o /tmp/tests-diag-redesign-focus.json --no-tree`
+  - `211/211 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-diag-redesign.json --no-tree`
+  - `682/682 pass`
+
+# 2026-02-27 作業メモ (collections 安全化テスト拡張: queue/ringbuffer 空操作)
+## 実施内容
+- `tests/collections_diag.n.md` に以下を追加:
+  - `queue_pop_empty_returns_none`
+  - `ringbuffer_pop_empty_returns_none`
+- 目的:
+  - 不正操作（空コレクションからの取り出し）が `Option::None` で安全に扱われることを固定化。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i tests/collections_diag.n.md -i stdlib/tests/error.n.md -i stdlib/tests/diag.n.md -o /tmp/tests-collections-diag-next.json --no-tree`
+  - `213/213 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-diag-and-collections.json --no-tree`
+  - `684/684 pass`
+
+# 2026-02-28 作業メモ (List ラッパ移行の moved 値不整合修正)
+## 実施内容
+- `stdlib/tests/list.n.md` の `list_get` 検証で、`l3_0` を作成している箇所が誤って `l3` を参照していた問題を修正。
+- `stdlib/alloc/collections/list.nepl` の `List<.T>` ラッパ移行と整合するよう、関連テスト (`stdlib/tests/list.n.md`, `tests/pipe_collections.n.md`) を維持したまま moved 値参照を解消。
+
+## 根本原因
+- List API を `i32` 露出から `List<.T>` ラッパへ移行した際、テスト側で再構築した値束縛 (`l3_0`, `l3_1`, ...) と旧束縛名 (`l3`) が混在したまま残り、move 後変数を参照する形になっていた。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i stdlib/tests/list.n.md -i tests/pipe_collections.n.md -i tests/list_dot_map.n.md -i tests/neplg2.n.md -o /tmp/tests-list-migration-focus.json --no-tree`
+  - `260/260 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-list-wrapper.json --no-tree`
+  - `684/684 pass`

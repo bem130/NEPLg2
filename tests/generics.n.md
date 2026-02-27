@@ -350,14 +350,16 @@ struct Pair<.A,.B>:
 fn make_pair <.A,.B> <(.A,.B)->Pair<.A,.B>> (a,b):
     Pair a b
 
-fn take_ab <(Pair<i32,bool>)->i32> (p):
+fn take_ab <(Pair<i32,str>)->i32> (p):
     10
 
-fn take_ba <(Pair<bool,i32>)->i32> (p):
+fn take_ba <(Pair<str,i32>)->i32> (p):
     20
 
 fn main <()->i32> ():
-    add take_ab make_pair 1 true take_ba make_pair false 2
+    let p1 <Pair<i32,str>> Pair 1 "a"
+    let p2 <Pair<str,i32>> Pair "b" 2
+    add take_ab p1 take_ba p2
 ```
 
 ## generics_make_some_wrapper
@@ -422,7 +424,9 @@ fn unwrap_nested <.T> <(Option<Option<.T>>,.T)->.T> (oo, default):
             default
 
 fn main <()->i32> ():
-    unwrap_nested Option::Some Option::Some 9 0
+    let inner <Option<i32>> Option::Some 9
+    let outer <Option<Option<i32>>> Option::Some inner
+    unwrap_nested outer 0
 ```
 
 ## generics_enum_two_params_match_payloads

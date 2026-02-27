@@ -189,6 +189,14 @@ impl<'a> Monomorphizer<'a> {
             }
         }
 
+        let mut local_names: BTreeSet<String> = BTreeSet::new();
+        for p in &f.params {
+            local_names.insert(p.name.clone());
+        }
+        if let HirBody::Block(b) = &f.body {
+            collect_local_names_in_block(b, &mut local_names);
+        }
+
         // Substitute body
         f.name = mangled.clone();
         f.func_ty = self.ctx.substitute(f.func_ty, &mapping);
@@ -198,7 +206,7 @@ impl<'a> Monomorphizer<'a> {
         }
 
         match &mut f.body {
-            HirBody::Block(b) => self.substitute_block(b, &mapping),
+            HirBody::Block(b) => self.substitute_block(b, &mapping, &local_names),
             HirBody::Wasm(_) => {} // Wasm blocks don't hold TypeIds usually
             HirBody::LlvmIr(_) => {} // LLVM IR blocks don't hold TypeIds usually
         }
@@ -206,14 +214,24 @@ impl<'a> Monomorphizer<'a> {
         self.specialized.insert(mangled, f);
     }
 
-    fn substitute_block(&mut self, b: &mut HirBlock, mapping: &BTreeMap<TypeId, TypeId>) {
+    fn substitute_block(
+        &mut self,
+        b: &mut HirBlock,
+        mapping: &BTreeMap<TypeId, TypeId>,
+        local_names: &BTreeSet<String>,
+    ) {
         b.ty = self.ctx.substitute(b.ty, mapping);
         for line in &mut b.lines {
-            self.substitute_expr(&mut line.expr, mapping);
+            self.substitute_expr(&mut line.expr, mapping, local_names);
         }
     }
 
-    fn substitute_expr(&mut self, expr: &mut HirExpr, mapping: &BTreeMap<TypeId, TypeId>) {
+    fn substitute_expr(
+        &mut self,
+        expr: &mut HirExpr,
+        mapping: &BTreeMap<TypeId, TypeId>,
+        local_names: &BTreeSet<String>,
+    ) {
         expr.ty = self.ctx.substitute(expr.ty, mapping);
         match &mut expr.kind {
             HirExprKind::Unit
@@ -222,6 +240,9 @@ impl<'a> Monomorphizer<'a> {
             | HirExprKind::LiteralBool(_)
             | HirExprKind::LiteralStr(_) => {}
             HirExprKind::Var(name) => {
+                if local_names.contains(name) {
+                    return;
+                }
                 if self.funcs.contains_key(name) {
                     *name = self.request_instantiation(name.clone(), Vec::new());
                 } else {
@@ -265,7 +286,7 @@ impl<'a> Monomorphizer<'a> {
             }
             HirExprKind::Call { callee, args } => {
                 for arg in args {
-                    self.substitute_expr(arg, mapping);
+                    self.substitute_expr(arg, mapping, local_names);
                 }
                 match callee {
                     FuncRef::User(name, type_args) => {
@@ -320,13 +341,13 @@ impl<'a> Monomorphizer<'a> {
                 result,
                 args,
             } => {
-                self.substitute_expr(callee, mapping);
+                self.substitute_expr(callee, mapping, local_names);
                 for param in params.iter_mut() {
                     *param = self.ctx.substitute(*param, mapping);
                 }
                 *result = self.ctx.substitute(*result, mapping);
                 for arg in args {
-                    self.substitute_expr(arg, mapping);
+                    self.substitute_expr(arg, mapping, local_names);
                 }
             }
             HirExprKind::If {
@@ -334,18 +355,18 @@ impl<'a> Monomorphizer<'a> {
                 then_branch,
                 else_branch,
             } => {
-                self.substitute_expr(cond, mapping);
-                self.substitute_expr(then_branch, mapping);
-                self.substitute_expr(else_branch, mapping);
+                self.substitute_expr(cond, mapping, local_names);
+                self.substitute_expr(then_branch, mapping, local_names);
+                self.substitute_expr(else_branch, mapping, local_names);
             }
             HirExprKind::While { cond, body } => {
-                self.substitute_expr(cond, mapping);
-                self.substitute_expr(body, mapping);
+                self.substitute_expr(cond, mapping, local_names);
+                self.substitute_expr(body, mapping, local_names);
             }
         HirExprKind::Match { scrutinee, arms } => {
-                self.substitute_expr(scrutinee, mapping);
+                self.substitute_expr(scrutinee, mapping, local_names);
                 for arm in arms {
-                    self.substitute_expr(&mut arm.body, mapping);
+                    self.substitute_expr(&mut arm.body, mapping, local_names);
                 }
             }
             HirExprKind::EnumConstruct {
@@ -358,7 +379,7 @@ impl<'a> Monomorphizer<'a> {
                     *arg = self.ctx.substitute(*arg, mapping);
                 }
                 if let Some(p) = payload {
-                    self.substitute_expr(p, mapping);
+                    self.substitute_expr(p, mapping, local_names);
                 }
             }
             HirExprKind::StructConstruct {
@@ -368,19 +389,19 @@ impl<'a> Monomorphizer<'a> {
                     *arg = self.ctx.substitute(*arg, mapping);
                 }
                 for f in fields {
-                    self.substitute_expr(f, mapping);
+                    self.substitute_expr(f, mapping, local_names);
                 }
             }
             HirExprKind::TupleConstruct { items } => {
                 for item in items {
-                    self.substitute_expr(item, mapping);
+                    self.substitute_expr(item, mapping, local_names);
                 }
             }
-            HirExprKind::Block(b) => self.substitute_block(b, mapping),
-            HirExprKind::Let { value, .. } => self.substitute_expr(value, mapping),
-            HirExprKind::Set { value, .. } => self.substitute_expr(value, mapping),
-            HirExprKind::AddrOf(inner) => self.substitute_expr(inner, mapping),
-            HirExprKind::Deref(inner) => self.substitute_expr(inner, mapping),
+            HirExprKind::Block(b) => self.substitute_block(b, mapping, local_names),
+            HirExprKind::Let { value, .. } => self.substitute_expr(value, mapping, local_names),
+            HirExprKind::Set { value, .. } => self.substitute_expr(value, mapping, local_names),
+            HirExprKind::AddrOf(inner) => self.substitute_expr(inner, mapping, local_names),
+            HirExprKind::Deref(inner) => self.substitute_expr(inner, mapping, local_names),
             HirExprKind::Drop { .. } => {}
             HirExprKind::Intrinsic {
                 type_args,
@@ -391,9 +412,94 @@ impl<'a> Monomorphizer<'a> {
                     *arg = self.ctx.substitute(*arg, mapping);
                 }
                 for arg in args {
-                    self.substitute_expr(arg, mapping);
+                    self.substitute_expr(arg, mapping, local_names);
                 }
             }
         }
+    }
+}
+
+fn collect_local_names_in_block(block: &HirBlock, out: &mut BTreeSet<String>) {
+    for line in &block.lines {
+        collect_local_names_in_expr(&line.expr, out);
+    }
+}
+
+fn collect_local_names_in_expr(expr: &HirExpr, out: &mut BTreeSet<String>) {
+    match &expr.kind {
+        HirExprKind::Let { name, value, .. } => {
+            out.insert(name.clone());
+            collect_local_names_in_expr(value, out);
+        }
+        HirExprKind::Set { value, .. } => {
+            collect_local_names_in_expr(value, out);
+        }
+        HirExprKind::Call { args, .. } => {
+            for arg in args {
+                collect_local_names_in_expr(arg, out);
+            }
+        }
+        HirExprKind::CallIndirect { callee, args, .. } => {
+            collect_local_names_in_expr(callee, out);
+            for arg in args {
+                collect_local_names_in_expr(arg, out);
+            }
+        }
+        HirExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_local_names_in_expr(cond, out);
+            collect_local_names_in_expr(then_branch, out);
+            collect_local_names_in_expr(else_branch, out);
+        }
+        HirExprKind::While { cond, body } => {
+            collect_local_names_in_expr(cond, out);
+            collect_local_names_in_expr(body, out);
+        }
+        HirExprKind::Match { scrutinee, arms } => {
+            collect_local_names_in_expr(scrutinee, out);
+            for arm in arms {
+                if let Some(bind) = &arm.bind_local {
+                    out.insert(bind.clone());
+                }
+                collect_local_names_in_expr(&arm.body, out);
+            }
+        }
+        HirExprKind::EnumConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                collect_local_names_in_expr(p, out);
+            }
+        }
+        HirExprKind::StructConstruct { fields, .. } => {
+            for field in fields {
+                collect_local_names_in_expr(field, out);
+            }
+        }
+        HirExprKind::TupleConstruct { items } => {
+            for item in items {
+                collect_local_names_in_expr(item, out);
+            }
+        }
+        HirExprKind::Block(b) => {
+            collect_local_names_in_block(b, out);
+        }
+        HirExprKind::Intrinsic { args, .. } => {
+            for arg in args {
+                collect_local_names_in_expr(arg, out);
+            }
+        }
+        HirExprKind::AddrOf(inner) | HirExprKind::Deref(inner) => {
+            collect_local_names_in_expr(inner, out);
+        }
+        HirExprKind::Unit
+        | HirExprKind::LiteralI32(_)
+        | HirExprKind::LiteralF32(_)
+        | HirExprKind::LiteralBool(_)
+        | HirExprKind::LiteralStr(_)
+        | HirExprKind::Var(_)
+        | HirExprKind::FnValue(_)
+        | HirExprKind::Drop { .. } => {}
     }
 }

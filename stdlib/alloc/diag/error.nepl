@@ -22,34 +22,34 @@
 #import "core/result" as *
 #import "alloc/string" as *
 
-// error: エラー型と簡易コンテキスト付与
-//
-// 目的:
-// - ErrorKind/Span/Error を定義し、Result と合わせて失敗情報を扱います。
-//
-// 実装(アルゴリズム):
-// - Error は kind/msg/span を持つレコードを指します。
-// - context は新しい Error を作り、元の Error を捨てます（循環を避ける）。
-//
-// 注意(重要):
-// - callsite_span は intrinsic を使用します（環境依存）。
-//
-// 計算量:
-// - すべて O(1)
+//: error: エラー型と簡易コンテキスト付与
+//:
+//: 目的:
+//: - ErrorKind/Span/Error を定義し、Result と合わせて失敗情報を扱います。
+//:
+//: 実装(アルゴリズム):
+//: - Error は kind/msg/span を持つレコードを指します。
+//: - context は新しい Error を作り、元の Error を捨てます（循環を避ける）。
+//:
+//: 注意(重要):
+//: - callsite_span は intrinsic を使用します（環境依存）。
+//:
+//: 計算量:
+//: - すべて O(1)
 
-// ErrorKind: エラー種別
-//
-// 目的:
-// - 代表的な失敗理由を列挙します。
-//
-// 実装(アルゴリズム):
-// - enum で表現します。
-//
-// 注意(重要):
-// - 追加時は diag 側の文字列化も更新が必要です。
-//
-// 計算量:
-// - O(1)
+//: ErrorKind: エラー種別
+//:
+//: 目的:
+//: - 代表的な失敗理由を列挙します。
+//:
+//: 実装(アルゴリズム):
+//: - enum で表現します。
+//:
+//: 注意(重要):
+//: - 追加時は diag 側の文字列化も更新が必要です。
+//:
+//: 計算量:
+//: - O(1)
 //: ErrorKind: 列挙型の概要
 //:
 //: [目的/もくてき]:
@@ -73,19 +73,19 @@ enum ErrorKind:
     IoError
     Other
 
-// Span: 位置情報
-//
-// 目的:
-// - エラー位置のファイルID/開始/終了を保持します。
-//
-// 実装(アルゴリズム):
-// - 3 つの i32 を持つ構造体です。
-//
-// 注意(重要):
-// - file_id の意味は呼び出し側で定義します。
-//
-// 計算量:
-// - O(1)
+//: Span: 位置情報
+//:
+//: 目的:
+//: - エラー位置のファイルID/開始/終了を保持します。
+//:
+//: 実装(アルゴリズム):
+//: - 3 つの i32 を持つ構造体です。
+//:
+//: 注意(重要):
+//: - file_id の意味は呼び出し側で定義します。
+//:
+//: 計算量:
+//: - O(1)
 //: Span: 構造体の概要
 //:
 //: [目的/もくてき]:
@@ -104,20 +104,20 @@ struct Span:
     start <i32>
     end <i32>
 
-// Error: エラー本体
-//
-// 目的:
-// - kind/msg/span をまとめて保持します。
-//
-// 実装(アルゴリズム):
-// - ヒープ上のレコードを指すポインタを保持します。
-// - レコードは [kind][msg][has_span][file][start][end] の 6 i32 です。
-//
-// 注意(重要):
-// - source を保持する設計は未実装です。
-//
-// 計算量:
-// - O(1)
+//: Error: エラー本体
+//:
+//: 目的:
+//: - kind/msg/span をまとめて保持します。
+//:
+//: 実装(アルゴリズム):
+//: - ヒープ上のレコードを指すポインタを保持します。
+//: - レコードは [kind][msg][has_span][file][start][end] の 6 i32 です。
+//:
+//: 注意(重要):
+//: - source を保持する設計は未実装です。
+//:
+//: 計算量:
+//: - O(1)
 //: Error: 構造体の概要
 //:
 //: [目的/もくてき]:
@@ -198,14 +198,12 @@ fn diag_code_str <(DiagCode)->str> (code):
 //: diag_to_string: Diag を人間向け文字列にする
 //:
 //: 目的:
-//: - `Diag` を `"Code: message"` 形式へ整形します。
+//: - `Diag` の message を人間向け表示文字列として返します。
 //:
 //: 計算量:
 //: - O(n)
 fn diag_to_string <(Diag)*>str> (d):
-    let p0 <str> diag_code_str d.code
-    let p1 <str> concat p0 ": "
-    concat p1 d.message
+    d.message
 
 //: diag_err: Diag を Result::Err に包む
 //:
@@ -265,19 +263,79 @@ fn diag_key_not_found <(str)*>Diag> (op):
     let p1 <str> concat p0 "key not found"
     diag_new DiagCode::KeyNotFound p1
 
-// kind_to_i32: ErrorKind を i32 に変換する
-//
-// 目的:
-// - ErrorKind を保存用の数値に変換します。
-//
-// 実装(アルゴリズム):
-// - match で各種別に番号を割り当てます。
-//
-// 注意(重要):
-// - kind_from_i32 と対応する番号を保ちます。
-//
-// 計算量:
-// - O(1)
+//: diag_code_to_error_kind: DiagCode を ErrorKind へ変換する
+//:
+//: 目的:
+//: - `Result<_, Diag>` を `Result<_, Error>` と統合して扱うときの対応表を提供します。
+//:
+//: 実装(アルゴリズム):
+//: - 種別ごとに最も近い `ErrorKind` を返します。
+//:
+//: 注意(重要):
+//: - `DiagCode::InvalidOperation` は汎用的に `ErrorKind::Failure` へ写像します。
+//:
+//: 計算量:
+//: - O(1)
+fn diag_code_to_error_kind <(DiagCode)->ErrorKind> (code):
+    match code:
+        DiagCode::OutOfMemory:
+            ErrorKind::OutOfMemory
+        DiagCode::EmptyCollection:
+            ErrorKind::Failure
+        DiagCode::IndexOutOfBounds:
+            ErrorKind::IndexOutOfBounds
+        DiagCode::KeyNotFound:
+            ErrorKind::KeyNotFound
+        DiagCode::CapacityExceeded:
+            ErrorKind::Failure
+        DiagCode::InvalidOperation:
+            ErrorKind::Failure
+
+//: error_kind_to_diag_code: ErrorKind を DiagCode へ変換する
+//:
+//: 目的:
+//: - `Error` から軽量な `Diag` を生成するときの対応表を提供します。
+//:
+//: 実装(アルゴリズム):
+//: - 近い意味の `DiagCode` へ写像します。
+//:
+//: 注意(重要):
+//: - `InvalidUtf8` / `ParseError` / `IoError` / `Other` は `InvalidOperation` にまとめます。
+//:
+//: 計算量:
+//: - O(1)
+fn error_kind_to_diag_code <(ErrorKind)->DiagCode> (kind):
+    match kind:
+        ErrorKind::Failure:
+            DiagCode::InvalidOperation
+        ErrorKind::OutOfMemory:
+            DiagCode::OutOfMemory
+        ErrorKind::IndexOutOfBounds:
+            DiagCode::IndexOutOfBounds
+        ErrorKind::KeyNotFound:
+            DiagCode::KeyNotFound
+        ErrorKind::InvalidUtf8:
+            DiagCode::InvalidOperation
+        ErrorKind::ParseError:
+            DiagCode::InvalidOperation
+        ErrorKind::IoError:
+            DiagCode::InvalidOperation
+        ErrorKind::Other:
+            DiagCode::InvalidOperation
+
+//: kind_to_i32: ErrorKind を i32 に変換する
+//:
+//: 目的:
+//: - ErrorKind を保存用の数値に変換します。
+//:
+//: 実装(アルゴリズム):
+//: - match で各種別に番号を割り当てます。
+//:
+//: 注意(重要):
+//: - kind_from_i32 と対応する番号を保ちます。
+//:
+//: 計算量:
+//: - O(1)
 //: kind_to_i32: 主な用途
 //:
 //: [目的/もくてき]:
@@ -310,19 +368,19 @@ fn kind_to_i32 <(ErrorKind)->i32> (k):
         ErrorKind::Other:
             7
 
-// kind_from_i32: i32 を ErrorKind に変換する
-//
-// 目的:
-// - 保存用の数値から ErrorKind を復元します。
-//
-// 実装(アルゴリズム):
-// - if を連ねて対応する種別を返します。
-//
-// 注意(重要):
-// - 未知の値は Other とみなします。
-//
-// 計算量:
-// - O(1)
+//: kind_from_i32: i32 を ErrorKind に変換する
+//:
+//: 目的:
+//: - 保存用の数値から ErrorKind を復元します。
+//:
+//: 実装(アルゴリズム):
+//: - if を連ねて対応する種別を返します。
+//:
+//: 注意(重要):
+//: - 未知の値は Other とみなします。
+//:
+//: 計算量:
+//: - O(1)
 //: kind_from_i32: 主な用途
 //:
 //: [目的/もくてき]:
@@ -381,19 +439,19 @@ fn kind_from_i32 <(i32)->ErrorKind> (v):
                                                         else:
                                                             ErrorKind::Other
 
-// callsite_span: 呼び出し位置を取得する
-//
-// 目的:
-// - 呼び出し位置の Span を返します。
-//
-// 実装(アルゴリズム):
-// - intrinsic を呼び出します。
-//
-// 注意(重要):
-// - サポートされない環境では動作しません。
-//
-// 計算量:
-// - O(1)
+//: callsite_span: 呼び出し位置を取得する
+//:
+//: 目的:
+//: - 呼び出し位置の Span を返します。
+//:
+//: 実装(アルゴリズム):
+//: - intrinsic を呼び出します。
+//:
+//: 注意(重要):
+//: - サポートされない環境では動作しません。
+//:
+//: 計算量:
+//: - O(1)
 //: callsite_span: 主な用途
 //:
 //: [目的/もくてき]:
@@ -410,20 +468,20 @@ fn kind_from_i32 <(i32)->ErrorKind> (v):
 fn callsite_span <()->Span> ():
     #intrinsic "callsite_span" <Span> ()
 
-// error_alloc: エラーレコードを確保して格納する
-//
-// 目的:
-// - kind/msg/span をヒープに保存し、Error を返します。
-//
-// 実装(アルゴリズム):
-// - 24 バイトを確保し、固定オフセットへ書き込みます。
-//
-// 注意(重要):
-// - alloc 失敗時は到達不能として扱います。
-// - レイアウトは Error コメントの説明に依存します。
-//
-// 計算量:
-// - O(1)
+//: error_alloc: エラーレコードを確保して格納する
+//:
+//: 目的:
+//: - kind/msg/span をヒープに保存し、Error を返します。
+//:
+//: 実装(アルゴリズム):
+//: - 24 バイトを確保し、固定オフセットへ書き込みます。
+//:
+//: 注意(重要):
+//: - alloc 失敗時は到達不能として扱います。
+//: - レイアウトは Error コメントの説明に依存します。
+//:
+//: 計算量:
+//: - O(1)
 //: error_alloc: 主な用途
 //:
 //: [目的/もくてき]:
@@ -464,19 +522,19 @@ fn error_alloc <(ErrorKind,str,Option<Span>)*>Error> (kind, msg, sp):
 
     Error p
 
-// error_new: Error を作る
-//
-// 目的:
-// - kind と msg から Error を作成します。
-//
-// 実装(アルゴリズム):
-// - エラーレコードを確保して保存します。
-//
-// 注意(重要):
-// - span は後で付与できます。
-//
-// 計算量:
-// - O(1)
+//: error_new: Error を作る
+//:
+//: 目的:
+//: - kind と msg から Error を作成します。
+//:
+//: 実装(アルゴリズム):
+//: - エラーレコードを確保して保存します。
+//:
+//: 注意(重要):
+//: - span は後で付与できます。
+//:
+//: 計算量:
+//: - O(1)
 //: error_new: 主な用途
 //:
 //: [目的/もくてき]:
@@ -493,19 +551,56 @@ fn error_alloc <(ErrorKind,str,Option<Span>)*>Error> (kind, msg, sp):
 fn error_new <(ErrorKind,str)*>Error> (kind, msg):
     error_alloc kind msg none<Span>
 
-// error_with_span: span を付与する
-//
-// 目的:
-// - Error に Span を付けた新しい Error を返します。
-//
-// 実装(アルゴリズム):
-// - 既存の kind/msg を読み出して再構築します。
-//
-// 注意(重要):
-// - 既存の span は上書きされます。
-//
-// 計算量:
-// - O(1)
+//: diag_to_error: Diag を Error に変換する
+//:
+//: 目的:
+//: - `Result<_, Diag>` を `Result<_, Error>` を要求する層へ橋渡しします。
+//:
+//: 実装(アルゴリズム):
+//: - `Diag` を文字列化し、`ErrorKind::Other` として `error_new` を呼びます。
+//:
+//: 注意(重要):
+//: - 文字列表現に code/message を含めるため、情報は失われません。
+//:
+//: 計算量:
+//: - O(n)
+fn diag_to_error <(Diag)*>Error> (d):
+    let msg <str> diag_to_string d;
+    error_new ErrorKind::Other msg
+
+//: error_to_diag: Error を Diag に変換する
+//:
+//: 目的:
+//: - `Error` を簡易診断形式に落として collections などで再利用できるようにします。
+//:
+//: 実装(アルゴリズム):
+//: - `Error` から `kind` と `message` を読み出して `Diag` を生成します。
+//:
+//: 注意(重要):
+//: - `span` は保持しません。
+//:
+//: 計算量:
+//: - O(1)
+fn error_to_diag <(Error)->Diag> (e):
+    let p <i32> e.ptr;
+    let kind <ErrorKind> kind_from_i32 load_i32 p;
+    let msg <str> load_i32 add p 4;
+    let code <DiagCode> error_kind_to_diag_code kind;
+    diag_new code msg
+
+//: error_with_span: span を付与する
+//:
+//: 目的:
+//: - Error に Span を付けた新しい Error を返します。
+//:
+//: 実装(アルゴリズム):
+//: - 既存の kind/msg を読み出して再構築します。
+//:
+//: 注意(重要):
+//: - 既存の span は上書きされます。
+//:
+//: 計算量:
+//: - O(1)
 //: error_with_span: 主な用途
 //:
 //: [目的/もくてき]:
@@ -525,19 +620,19 @@ fn error_with_span <(Error,Span)*>Error> (e, sp):
     let m <str> load_i32 add p 4;
     error_alloc k m some<Span> sp
 
-// error_with_source: 原因を付与する（未実装）
-//
-// 目的:
-// - 外側の Error に原因情報を付ける想定です。
-//
-// 実装(アルゴリズム):
-// - 現状は inner を捨てます。
-//
-// 注意(重要):
-// - 再帰構造はまだ保持しません。
-//
-// 計算量:
-// - O(1)
+//: error_with_source: 原因を付与する（未実装）
+//:
+//: 目的:
+//: - 外側の Error に原因情報を付ける想定です。
+//:
+//: 実装(アルゴリズム):
+//: - 現状は inner を捨てます。
+//:
+//: 注意(重要):
+//: - 再帰構造はまだ保持しません。
+//:
+//: 計算量:
+//: - O(1)
 //: error_with_source: 主な用途
 //:
 //: [目的/もくてき]:
@@ -554,19 +649,19 @@ fn error_with_span <(Error,Span)*>Error> (e, sp):
 fn error_with_source <(Error,Error)->Error> (outer, inner):
     outer
 
-// fail: 失敗エラーを作る
-//
-// 目的:
-// - Failure 種別の Error を作って返します。
-//
-// 実装(アルゴリズム):
-// - error_new で作り、callsite_span の結果を付与します。
-//
-// 注意(重要):
-// - 本来は callsite_span を使う想定です。
-//
-// 計算量:
-// - O(1)
+//: fail: 失敗エラーを作る
+//:
+//: 目的:
+//: - Failure 種別の Error を作って返します。
+//:
+//: 実装(アルゴリズム):
+//: - error_new で作り、callsite_span の結果を付与します。
+//:
+//: 注意(重要):
+//: - 本来は callsite_span を使う想定です。
+//:
+//: 計算量:
+//: - O(1)
 //: fail: 主な用途
 //:
 //: [目的/もくてき]:
@@ -584,19 +679,19 @@ fn fail <(str)*>Error> (msg):
     let s <Span> callsite_span;
     error_alloc ErrorKind::Failure msg some<Span> s
 
-// context: エラーに文脈を付与する
-//
-// 目的:
-// - cause に対して追加メッセージを持つ Error を返します。
-//
-// 実装(アルゴリズム):
-// - 新しい Error を作り、callsite_span を付与します。
-//
-// 注意(重要):
-// - 原因の保持は未実装です。
-//
-// 計算量:
-// - O(1)
+//: context: エラーに文脈を付与する
+//:
+//: 目的:
+//: - cause に対して追加メッセージを持つ Error を返します。
+//:
+//: 実装(アルゴリズム):
+//: - 新しい Error を作り、callsite_span を付与します。
+//:
+//: 注意(重要):
+//: - 原因の保持は未実装です。
+//:
+//: 計算量:
+//: - O(1)
 //: context: 主な用途
 //:
 //: [目的/もくてき]:
@@ -616,19 +711,19 @@ fn context <(Error,str)*>Error> (cause, msg):
     let outer <Error> error_with_span e s;
     error_with_source outer cause
 
-// result_context: Result の Err に文脈を付与する
-//
-// 目的:
-// - Err(e) の場合のみ context を付与して返します。
-//
-// 実装(アルゴリズム):
-// - match で Ok/Err を分岐します。
-//
-// 注意(重要):
-// - Ok はそのまま返します。
-//
-// 計算量:
-// - O(1)
+//: result_context: Result の Err に文脈を付与する
+//:
+//: 目的:
+//: - Err(e) の場合のみ context を付与して返します。
+//:
+//: 実装(アルゴリズム):
+//: - match で Ok/Err を分岐します。
+//:
+//: 注意(重要):
+//: - Ok はそのまま返します。
+//:
+//: 計算量:
+//: - O(1)
 //: result_context: 主な用途
 //:
 //: [目的/もくてき]:

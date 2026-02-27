@@ -14,7 +14,7 @@
 //: ()
 //: ```
 
-// == kpwrite.nepl ==
+//: == kpwrite.nepl ==
 
 #indent 4
 #target std
@@ -229,14 +229,13 @@ fn writer_write_i32 <(i32,i32)*>()> (w, v):
                     if:
                         lt x 0
                         then:
-                            writer_put_u8 w 45;   // '-'
+                            writer_put_u8 w 45;
                             let zero <i32> 0;
                             set x sub zero x;
                             ()
                         else:
                             ();
 
-                    // 桁数を数える
                     let mut t <i32> x;
                     let mut d <i32> 0;
                     while lt 0 t:

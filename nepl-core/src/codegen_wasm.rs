@@ -6,7 +6,7 @@ extern crate std;
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use alloc::borrow::Cow;
@@ -561,12 +561,30 @@ fn collect_reachable_wasm_functions(module: &HirModule) -> BTreeSet<String> {
     let mut reachable = BTreeSet::new();
     let mut stack: Vec<String> = roots.iter().cloned().collect();
     let mut has_indirect = false;
+    let resolve_name = |name: &str| -> String {
+        if all_names.contains(name) {
+            return name.to_string();
+        }
+        let mut prefix = String::from(name);
+        prefix.push_str("__");
+        let mut found: Option<String> = None;
+        for cand in &all_names {
+            if cand.starts_with(&prefix) {
+                if found.is_some() {
+                    return name.to_string();
+                }
+                found = Some(cand.clone());
+            }
+        }
+        found.unwrap_or_else(|| name.to_string())
+    };
 
     while let Some(name) = stack.pop() {
-        if !reachable.insert(name.clone()) {
+        let resolved_name = resolve_name(&name);
+        if !reachable.insert(resolved_name.clone()) {
             continue;
         }
-        let Some(func) = map.get(&name) else {
+        let Some(func) = map.get(&resolved_name) else {
             continue;
         };
         if let HirBody::Block(b) = &func.body {
@@ -575,8 +593,9 @@ fn collect_reachable_wasm_functions(module: &HirModule) -> BTreeSet<String> {
                 collect_called_functions_from_expr(&line.expr, &mut called, &mut has_indirect);
             }
             for callee in called {
-                if all_names.contains(&callee) && !reachable.contains(&callee) {
-                    stack.push(callee);
+                let resolved_callee = resolve_name(&callee);
+                if all_names.contains(&resolved_callee) && !reachable.contains(&resolved_callee) {
+                    stack.push(resolved_callee);
                 }
             }
         }
