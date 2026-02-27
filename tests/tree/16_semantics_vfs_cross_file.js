@@ -18,7 +18,9 @@ fn main <()->i32> ():
         assert.equal(!!result?.ok, true, 'semantics should be ok');
 
         const tokenRes = Array.isArray(result?.token_resolution) ? result.token_resolution : [];
+        const tokenHints = Array.isArray(result?.token_hints) ? result.token_hints : [];
         assert.ok(tokenRes.length > 0, 'token_resolution should exist');
+        assert.ok(tokenHints.length > 0, 'token_hints should exist');
 
         const addRef = tokenRes.find(
             (t) =>
@@ -47,7 +49,18 @@ fn main <()->i32> ():
             ),
             'candidate_definitions should include stdlib/core/math.nepl entry'
         );
+        const addHint = tokenHints.find(
+            (t) =>
+                t?.name === 'add' &&
+                t?.resolved_definition &&
+                t.resolved_definition?.span &&
+                typeof t.resolved_definition.span?.file_path === 'string' &&
+                t.resolved_definition.span.file_path.includes('/stdlib/core/math.nepl') &&
+                typeof t?.inferred_type === 'string' &&
+                t.inferred_type.length > 0
+        );
+        assert.ok(addHint, 'token_hints should include type and cross-file resolved definition');
 
-        return { checked: 7, token_resolution_count: tokenRes.length };
+        return { checked: 9, token_resolution_count: tokenRes.length };
     },
 };

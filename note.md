@@ -4144,3 +4144,22 @@
   - `NO_COLOR=false trunk build` -> pass
   - `node tests/tree/run.js` -> `17/17 pass`
   - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
+# 2026-02-27 作業メモ (LSP/API phase2 完了: Hover/Inlay 向け `token_hints` 追加)
+- 目的:
+  - `todo.md` 2番の残件（Hover/Inlay 向け統合API）を、既存 `analyze_semantics*` に追加して利用側の結合コストを下げる。
+- 実装:
+  - `nepl-web/src/lib.rs`
+    - `build_token_hints_to_js(...)` を追加。
+    - `token_semantics`（型・式範囲・引数範囲）と `resolve_trace`（定義ジャンプ・候補・doc）を token 単位で統合し、`token_hints` 配列を生成。
+    - `analyze_semantics` / `analyze_semantics_with_vfs` の返却値へ `token_hints` を追加。
+    - 失敗系分岐でも `token_hints: []` を返すよう統一。
+  - `tests/tree/04_semantics_tree.js`
+    - `token_hints` が存在し、`inferred_type` と `resolved_def_id` を同時に持つ要素があることを追加検証。
+  - `tests/tree/16_semantics_vfs_cross_file.js`
+    - `token_hints` に cross-file `resolved_definition.span.file_path` と `inferred_type` が同時に入ることを追加検証。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node tests/tree/run.js` -> `17/17 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `1655/1655 pass`
+- todo反映:
+  - `todo.md` 2番（旧 LSP/API phase2）を削除し、残項目を繰り上げ。

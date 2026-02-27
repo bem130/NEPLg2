@@ -9,28 +9,25 @@
 1. 高階関数・call_indirect
 - capture あり関数値は closure conversion の設計を確定して段階導入する。
 
-2. LSP/API 拡張（phase 2）
-- Hover/Inlay Hint 向けに式範囲・引数範囲・推論型・関連 doc comment を返す API を追加する。
-
-3. 診断体系の再整理
+2. 診断体系の再整理
 - エラーをテーブルで一元管理する（短い数値ID + 詳細メッセージ）。
 - 診断生成側は `ErrorId` を返し、表示層で `id -> 本文` を解決する構造に整理する。
 - LSP/API から `id` と展開済み本文の両方を取得できるようにする。
 
-4. Web Playground / tests.html 強化
+3. Web Playground / tests.html 強化
 - VSCode 拡張予定の情報（名前解決/型情報/式範囲/定義ジャンプ候補）を Playground で表示する。
 - `web/tests.html` の詳細展開時にソースと解析結果（AST/resolve/semantics）を併記する。
 
-5. `examples/js_interpreter` 実装（言語仕様固定後）
+4. `examples/js_interpreter` 実装（言語仕様固定後）
 - `examples/js_interpreter` に JavaScript インタプリタを実装する。
 - 言語仕様は変更せず、stdlib の再設計・改良のみで不足を埋める。
 - Node.js 実行結果との同値性回帰テストを追加する。
 
-6. stdlib の段階的リファクタリング（言語仕様安定後）
+5. stdlib の段階的リファクタリング（言語仕様安定後）
 - `stdlib/kp` のドキュメントコメント/ドキュメントテスト形式を基準に、他 stdlib へ統一展開する。
 - 複雑データ処理の箇所を中心に改行 `|>` パイプを活用し、可読性とメモリ安全性を両立する。
 
-7. LLVM IR target 追加（nepl-cli 限定）
+6. LLVM IR target 追加（nepl-cli 限定）
 
 ---
 ### 以下編集禁止

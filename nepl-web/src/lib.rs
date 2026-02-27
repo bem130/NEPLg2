@@ -1451,6 +1451,224 @@ fn semantic_token_to_js(source: &str, st: &SemanticTokenTrace) -> JsValue {
     obj.into()
 }
 
+fn build_token_hints_to_js(
+    source: &str,
+    source_map: Option<&SourceMap>,
+    tokens: &[Token],
+    token_semantics: &[SemanticTokenTrace],
+    resolve_trace: &NameResolutionTrace,
+) -> js_sys::Array {
+    let hints = js_sys::Array::new();
+    for (tok_idx, token) in tokens.iter().enumerate() {
+        let item = js_sys::Object::new();
+        let _ = Reflect::set(
+            &item,
+            &JsValue::from_str("token_index"),
+            &JsValue::from_f64(tok_idx as f64),
+        );
+
+        if let Some(ts) = token_semantics.get(tok_idx) {
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("inferred_expr_id"),
+                &ts.inferred_expr_id
+                    .map(|v| JsValue::from_f64(v as f64))
+                    .unwrap_or(JsValue::NULL),
+            );
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("inferred_type"),
+                &ts.inferred_type
+                    .as_ref()
+                    .map(|s| JsValue::from_str(s))
+                    .unwrap_or(JsValue::NULL),
+            );
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("expression_range"),
+                &ts.expr_span
+                    .map(|s| span_to_js_with_map(source, s, source_map))
+                    .unwrap_or(JsValue::NULL),
+            );
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("arg_index"),
+                &ts.arg_index
+                    .map(|v| JsValue::from_f64(v as f64))
+                    .unwrap_or(JsValue::NULL),
+            );
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("arg_range"),
+                &ts.arg_span
+                    .map(|s| span_to_js_with_map(source, s, source_map))
+                    .unwrap_or(JsValue::NULL),
+            );
+        } else {
+            let _ = Reflect::set(&item, &JsValue::from_str("inferred_expr_id"), &JsValue::NULL);
+            let _ = Reflect::set(&item, &JsValue::from_str("inferred_type"), &JsValue::NULL);
+            let _ = Reflect::set(&item, &JsValue::from_str("expression_range"), &JsValue::NULL);
+            let _ = Reflect::set(&item, &JsValue::from_str("arg_index"), &JsValue::NULL);
+            let _ = Reflect::set(&item, &JsValue::from_str("arg_range"), &JsValue::NULL);
+        }
+
+        let mut best_ref: Option<&NameRefTrace> = None;
+        for rf in &resolve_trace.refs {
+            if span_contains(rf.span, token.span) {
+                if let Some(prev) = best_ref {
+                    if span_width(rf.span) < span_width(prev.span) {
+                        best_ref = Some(rf);
+                    }
+                } else {
+                    best_ref = Some(rf);
+                }
+            }
+        }
+
+        if let Some(rf) = best_ref {
+            let _ = Reflect::set(&item, &JsValue::from_str("name"), &JsValue::from_str(&rf.name));
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("ref_span"),
+                &span_to_js_with_map(source, rf.span, source_map),
+            );
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("resolved_def_id"),
+                &rf.resolved_def_id
+                    .map(|v| JsValue::from_f64(v as f64))
+                    .unwrap_or(JsValue::NULL),
+            );
+            let cand = js_sys::Array::new();
+            for id in &rf.candidate_def_ids {
+                cand.push(&JsValue::from_f64(*id as f64));
+            }
+            let _ = Reflect::set(&item, &JsValue::from_str("candidate_def_ids"), &cand);
+            if let Some(id) = rf.resolved_def_id {
+                if let Some(def) = resolve_trace.defs.get(id) {
+                    let resolved = js_sys::Object::new();
+                    let _ = Reflect::set(
+                        &resolved,
+                        &JsValue::from_str("id"),
+                        &JsValue::from_f64(def.id as f64),
+                    );
+                    let _ = Reflect::set(
+                        &resolved,
+                        &JsValue::from_str("name"),
+                        &JsValue::from_str(&def.name),
+                    );
+                    let _ = Reflect::set(
+                        &resolved,
+                        &JsValue::from_str("kind"),
+                        &JsValue::from_str(def.kind),
+                    );
+                    let _ = Reflect::set(
+                        &resolved,
+                        &JsValue::from_str("scope_depth"),
+                        &JsValue::from_f64(def.scope_depth as f64),
+                    );
+                    let _ = Reflect::set(
+                        &resolved,
+                        &JsValue::from_str("span"),
+                        &span_to_js_with_map(source, def.span, source_map),
+                    );
+                    if let Some(doc) = &def.doc {
+                        let _ = Reflect::set(
+                            &resolved,
+                            &JsValue::from_str("doc"),
+                            &JsValue::from_str(doc),
+                        );
+                    }
+                    let _ = Reflect::set(
+                        &item,
+                        &JsValue::from_str("resolved_definition"),
+                        &resolved,
+                    );
+                } else {
+                    let _ = Reflect::set(
+                        &item,
+                        &JsValue::from_str("resolved_definition"),
+                        &JsValue::NULL,
+                    );
+                }
+            } else {
+                let _ = Reflect::set(
+                    &item,
+                    &JsValue::from_str("resolved_definition"),
+                    &JsValue::NULL,
+                );
+            }
+
+            let cand_defs = js_sys::Array::new();
+            for id in &rf.candidate_def_ids {
+                if let Some(def) = resolve_trace.defs.get(*id) {
+                    let cand_def = js_sys::Object::new();
+                    let _ = Reflect::set(
+                        &cand_def,
+                        &JsValue::from_str("id"),
+                        &JsValue::from_f64(def.id as f64),
+                    );
+                    let _ = Reflect::set(
+                        &cand_def,
+                        &JsValue::from_str("name"),
+                        &JsValue::from_str(&def.name),
+                    );
+                    let _ = Reflect::set(
+                        &cand_def,
+                        &JsValue::from_str("kind"),
+                        &JsValue::from_str(def.kind),
+                    );
+                    let _ = Reflect::set(
+                        &cand_def,
+                        &JsValue::from_str("scope_depth"),
+                        &JsValue::from_f64(def.scope_depth as f64),
+                    );
+                    let _ = Reflect::set(
+                        &cand_def,
+                        &JsValue::from_str("span"),
+                        &span_to_js_with_map(source, def.span, source_map),
+                    );
+                    if let Some(doc) = &def.doc {
+                        let _ = Reflect::set(
+                            &cand_def,
+                            &JsValue::from_str("doc"),
+                            &JsValue::from_str(doc),
+                        );
+                    }
+                    cand_defs.push(&cand_def);
+                }
+            }
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("candidate_definitions"),
+                &cand_defs,
+            );
+        } else {
+            let _ = Reflect::set(&item, &JsValue::from_str("name"), &JsValue::NULL);
+            let _ = Reflect::set(&item, &JsValue::from_str("ref_span"), &JsValue::NULL);
+            let _ = Reflect::set(&item, &JsValue::from_str("resolved_def_id"), &JsValue::NULL);
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("candidate_def_ids"),
+                &js_sys::Array::new(),
+            );
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("resolved_definition"),
+                &JsValue::NULL,
+            );
+            let _ = Reflect::set(
+                &item,
+                &JsValue::from_str("candidate_definitions"),
+                &js_sys::Array::new(),
+            );
+        }
+
+        hints.push(&item);
+    }
+    hints
+}
+
 fn span_contains(outer: Span, inner: Span) -> bool {
     outer.file_id == inner.file_id && outer.start <= inner.start && inner.end <= outer.end
 }
@@ -2217,10 +2435,13 @@ pub fn analyze_semantics(source: &str) -> JsValue {
             for ts in &token_semantics {
                 token_sem_arr.push(&semantic_token_to_js(source, ts));
             }
+            let token_hint_arr =
+                build_token_hints_to_js(source, None, &tokens, &token_semantics, &resolve_trace);
 
             let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(!has_error));
             let _ = Reflect::set(&out, &JsValue::from_str("expressions"), &expr_arr);
             let _ = Reflect::set(&out, &JsValue::from_str("token_semantics"), &token_sem_arr);
+            let _ = Reflect::set(&out, &JsValue::from_str("token_hints"), &token_hint_arr);
             let _ = Reflect::set(&out, &JsValue::from_str("functions"), &function_arr);
             let _ = Reflect::set(&out, &JsValue::from_str("name_resolution"), &resolve_payload);
             let _ = Reflect::set(&out, &JsValue::from_str("token_resolution"), &token_res_arr);
@@ -2232,6 +2453,7 @@ pub fn analyze_semantics(source: &str) -> JsValue {
                 &JsValue::from_str("token_semantics"),
                 &js_sys::Array::new(),
             );
+            let _ = Reflect::set(&out, &JsValue::from_str("token_hints"), &js_sys::Array::new());
             let _ = Reflect::set(&out, &JsValue::from_str("functions"), &js_sys::Array::new());
             let _ = Reflect::set(&out, &JsValue::from_str("name_resolution"), &resolve_payload);
             let _ = Reflect::set(&out, &JsValue::from_str("token_resolution"), &js_sys::Array::new());
@@ -2246,6 +2468,7 @@ pub fn analyze_semantics(source: &str) -> JsValue {
             &JsValue::from_str("token_semantics"),
             &js_sys::Array::new(),
         );
+        let _ = Reflect::set(&out, &JsValue::from_str("token_hints"), &js_sys::Array::new());
         let _ = Reflect::set(&out, &JsValue::from_str("functions"), &js_sys::Array::new());
         let _ = Reflect::set(&out, &JsValue::from_str("name_resolution"), &JsValue::NULL);
         let _ = Reflect::set(&out, &JsValue::from_str("token_resolution"), &js_sys::Array::new());
@@ -2312,6 +2535,7 @@ pub fn analyze_semantics_with_vfs(entry_path: &str, source: &str, vfs: JsValue) 
                 &JsValue::from_str("token_semantics"),
                 &js_sys::Array::new(),
             );
+            let _ = Reflect::set(&out, &JsValue::from_str("token_hints"), &js_sys::Array::new());
             let _ = Reflect::set(&out, &JsValue::from_str("functions"), &js_sys::Array::new());
             let _ = Reflect::set(&out, &JsValue::from_str("name_resolution"), &JsValue::NULL);
             let _ = Reflect::set(&out, &JsValue::from_str("token_resolution"), &js_sys::Array::new());
@@ -2572,10 +2796,18 @@ pub fn analyze_semantics_with_vfs(entry_path: &str, source: &str, vfs: JsValue) 
         for ts in &token_semantics {
             token_sem_arr.push(&semantic_token_to_js(source, ts));
         }
+        let token_hint_arr = build_token_hints_to_js(
+            source,
+            Some(&source_map),
+            &tokens,
+            &token_semantics,
+            &resolve_trace,
+        );
 
         let _ = Reflect::set(&out, &JsValue::from_str("ok"), &JsValue::from_bool(!has_error));
         let _ = Reflect::set(&out, &JsValue::from_str("expressions"), &expr_arr);
         let _ = Reflect::set(&out, &JsValue::from_str("token_semantics"), &token_sem_arr);
+        let _ = Reflect::set(&out, &JsValue::from_str("token_hints"), &token_hint_arr);
         let _ = Reflect::set(&out, &JsValue::from_str("functions"), &function_arr);
         let _ = Reflect::set(&out, &JsValue::from_str("name_resolution"), &resolve_payload);
         let _ = Reflect::set(&out, &JsValue::from_str("token_resolution"), &token_res_arr);
@@ -2587,6 +2819,7 @@ pub fn analyze_semantics_with_vfs(entry_path: &str, source: &str, vfs: JsValue) 
             &JsValue::from_str("token_semantics"),
             &js_sys::Array::new(),
         );
+        let _ = Reflect::set(&out, &JsValue::from_str("token_hints"), &js_sys::Array::new());
         let _ = Reflect::set(&out, &JsValue::from_str("functions"), &js_sys::Array::new());
         let _ = Reflect::set(&out, &JsValue::from_str("name_resolution"), &resolve_payload);
         let _ = Reflect::set(&out, &JsValue::from_str("token_resolution"), &js_sys::Array::new());
