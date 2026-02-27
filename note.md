@@ -4984,3 +4984,18 @@
   - `213/213 pass`
 - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-diag-and-collections.json --no-tree`
   - `684/684 pass`
+
+# 2026-02-28 作業メモ (List ラッパ移行の moved 値不整合修正)
+## 実施内容
+- `stdlib/tests/list.n.md` の `list_get` 検証で、`l3_0` を作成している箇所が誤って `l3` を参照していた問題を修正。
+- `stdlib/alloc/collections/list.nepl` の `List<.T>` ラッパ移行と整合するよう、関連テスト (`stdlib/tests/list.n.md`, `tests/pipe_collections.n.md`) を維持したまま moved 値参照を解消。
+
+## 根本原因
+- List API を `i32` 露出から `List<.T>` ラッパへ移行した際、テスト側で再構築した値束縛 (`l3_0`, `l3_1`, ...) と旧束縛名 (`l3`) が混在したまま残り、move 後変数を参照する形になっていた。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i stdlib/tests/list.n.md -i tests/pipe_collections.n.md -i tests/list_dot_map.n.md -i tests/neplg2.n.md -o /tmp/tests-list-migration-focus.json --no-tree`
+  - `260/260 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-list-wrapper.json --no-tree`
+  - `684/684 pass`

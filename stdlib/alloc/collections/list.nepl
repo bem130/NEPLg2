@@ -27,22 +27,34 @@
 //:| #import "alloc/string" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():
-//:     let l0 list_nil<i32>;
-//:     let l1 list_cons<i32> 3 l0;
-//:     let l2 list_cons<i32> 2 l1;
-//:     let l3 list_cons<i32> 1 l2;
-//:     let ok0 if eq list_len<i32> l3 3 1 0;
-//:     let ok1 match list_head<i32> l3:
+//:     let l0a list_nil<i32>;
+//:     let l1a list_cons<i32> 3 l0a;
+//:     let l2a list_cons<i32> 2 l1a;
+//:     let l3a list_cons<i32> 1 l2a;
+//:     let ok0 if eq list_len<i32> l3a 3 1 0;
+//:     let l0b list_nil<i32>;
+//:     let l1b list_cons<i32> 3 l0b;
+//:     let l2b list_cons<i32> 2 l1b;
+//:     let l3b list_cons<i32> 1 l2b;
+//:     let ok1 match list_head<i32> l3b:
 //:         Option::Some x:
 //:             if eq x 1 1 0
 //:         Option::None:
 //:             0
-//:     let ok2 match list_get<i32> l3 1:
+//:     let l0c list_nil<i32>;
+//:     let l1c list_cons<i32> 3 l0c;
+//:     let l2c list_cons<i32> 2 l1c;
+//:     let l3c list_cons<i32> 1 l2c;
+//:     let ok2 match list_get<i32> l3c 1:
 //:         Option::Some x:
 //:             if eq x 2 1 0
 //:         Option::None:
 //:             0
-//:     let ok3 match list_tail<i32> l3:
+//:     let l0d list_nil<i32>;
+//:     let l1d list_cons<i32> 3 l0d;
+//:     let l2d list_cons<i32> 2 l1d;
+//:     let l3d list_cons<i32> 1 l2d;
+//:     let ok3 match list_tail<i32> l3d:
 //:         Option::Some t:
 //:             if eq list_len<i32> t 2 1 0
 //:         Option::None:
@@ -60,22 +72,32 @@
 //:| #import "alloc/string" as *
 //:| #import "core/option" as *
 //: fn main <()->i32> ():
-//:     let l0 list_nil<str>;
-//:     let l1 list_cons<str> "c" l0;
-//:     let l2 list_cons<str> "b" l1;
-//:     let l3 list_cons<str> "a" l2;
-//:     let r list_reverse<str> l3;
-//:     let ok0 match list_head<str> r:
+//:     let l0a list_nil<str>;
+//:     let l1a list_cons<str> "c" l0a;
+//:     let l2a list_cons<str> "b" l1a;
+//:     let l3a list_cons<str> "a" l2a;
+//:     let ra list_reverse<str> l3a;
+//:     let ok0 match list_head<str> ra:
 //:         Option::Some x:
 //:             if str_eq x "c" 1 0
 //:         Option::None:
 //:             0
-//:     let ok1 match list_get<str> r 2:
+//:     let l0b list_nil<str>;
+//:     let l1b list_cons<str> "c" l0b;
+//:     let l2b list_cons<str> "b" l1b;
+//:     let l3b list_cons<str> "a" l2b;
+//:     let rb list_reverse<str> l3b;
+//:     let ok1 match list_get<str> rb 2:
 //:         Option::Some x:
 //:             if str_eq x "a" 1 0
 //:         Option::None:
 //:             0
-//:     let ok2 if is_none<str> list_get<str> r 3 1 0;
+//:     let l0c list_nil<str>;
+//:     let l1c list_cons<str> "c" l0c;
+//:     let l2c list_cons<str> "b" l1c;
+//:     let l3c list_cons<str> "a" l2c;
+//:     let rc list_reverse<str> l3c;
+//:     let ok2 if is_none<str> list_get<str> rc 3 1 0;
 //:     add ok0 add ok1 ok2
 //: ```
 
@@ -84,6 +106,23 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/option" as *
+#import "core/field" as field
+
+//: List: 単方向連結リストの先頭ポインタを隠蔽する構造体
+//:
+//: 目的:
+//: - ノード先頭ポインタ (`i32`) を公開 API から隠蔽します。
+//:
+//: 実装(アルゴリズム):
+//: - `ptr` フィールドに先頭ノードアドレスを保持します。
+//:
+//: 注意(重要):
+//: - `ptr == 0` は空リストを表します。
+//:
+//: 計算量:
+//: - O(1)
+struct List<.T>:
+    ptr <i32>
 
 //: list_nil: 空リストを表す値を返す
 //:
@@ -109,8 +148,8 @@
 //: fn main <()->i32> ():
 //:     if list_is_empty<i32> list_nil<i32> 0 1
 //: ```
-fn list_nil <.T> <()->i32> ():
-    0
+fn list_nil <.T> <()->List<.T>> ():
+    List 0
 
 //: list_cons: 先頭に要素を追加して新しいリストを作る
 //:
@@ -137,12 +176,13 @@ fn list_nil <.T> <()->i32> ():
 //:     let l list_cons<i32> 5 list_nil<i32>;
 //:     if list_is_empty<i32> l 1 0
 //: ```
-fn list_cons <.T> <(.T,i32)*>i32> (head, tail):
+fn list_cons <.T> <(.T,List<.T>)*>List<.T>> (head, tail):
+    let tail_ptr <i32> field::get tail "ptr"
     let node_size <i32> add size_of<.T> 4
     let node <i32> alloc node_size
     store<.T> node head
-    store_i32 add node size_of<.T> tail
-    node
+    store_i32 add node size_of<.T> tail_ptr
+    List node
 
 //: list_push_front: 既存リストの先頭に要素を追加する（pipe向け）
 //:
@@ -157,7 +197,7 @@ fn list_cons <.T> <(.T,i32)*>i32> (head, tail):
 //:
 //: 計算量:
 //: - O(1)
-fn list_push_front <.T> <(i32,.T)*>i32> (lst, head):
+fn list_push_front <.T> <(List<.T>,.T)*>List<.T>> (lst, head):
     list_cons<.T> head lst
 
 //: list_head: 先頭要素を取得する
@@ -190,14 +230,15 @@ fn list_push_front <.T> <(i32,.T)*>i32> (lst, head):
 //:         Option::None:
 //:             1
 //: ```
-fn list_head <.T> <(i32)->Option<.T>> (lst):
+fn list_head <.T> <(List<.T>)->Option<.T>> (lst):
+    let lst_ptr <i32> field::get lst "ptr"
     if:
         cond:
-            eq lst 0
+            eq lst_ptr 0
         then:
             none<.T>
         else:
-            some<.T> load<.T> lst
+            some<.T> load<.T> lst_ptr
 
 //: list_tail: 末尾以外の部分（次のノード）を取得する
 //:
@@ -231,14 +272,15 @@ fn list_head <.T> <(i32)->Option<.T>> (lst):
 //:         Option::None:
 //:             1
 //: ```
-fn list_tail <.T> <(i32)->Option<i32>> (lst):
+fn list_tail <.T> <(List<.T>)->Option<List<.T>>> (lst):
+    let lst_ptr <i32> field::get lst "ptr"
     if:
         cond:
-            eq lst 0
+            eq lst_ptr 0
         then:
-            none<i32>
+            none<List<.T>>
         else:
-            some<i32> load_i32 add lst size_of<.T>
+            some<List<.T>> List load_i32 add lst_ptr size_of<.T>
 
 //: list_is_empty: 空リストか判定する
 //:
@@ -264,8 +306,8 @@ fn list_tail <.T> <(i32)->Option<i32>> (lst):
 //: fn main <()->i32> ():
 //:     if list_is_empty<i32> list_nil<i32> 0 1
 //: ```
-fn list_is_empty <.T> <(i32)->bool> (lst):
-    eq lst 0
+fn list_is_empty <.T> <(List<.T>)->bool> (lst):
+    eq field::get lst "ptr" 0
 
 //: list_len: 長さを数える
 //:
@@ -295,14 +337,16 @@ fn list_is_empty <.T> <(i32)->bool> (lst):
 //:     let l3 list_cons<i32> 1 l2;
 //:     if eq list_len<i32> l3 3 0 1
 //: ```
-fn list_len <.T> <(i32)->i32> (lst):
+fn list_len <.T> <(List<.T>)->i32> (lst):
+    let lst_ptr <i32> field::get lst "ptr"
     if:
         cond:
-            eq lst 0
+            eq lst_ptr 0
         then:
             0
         else:
-            add 1 list_len<.T> load_i32 add lst size_of<.T>
+            let next_ptr <i32> load_i32 add lst_ptr size_of<.T>
+            add 1 list_len<.T> List next_ptr
 
 //: list_get: 指定位置の要素を取得する
 //:
@@ -338,7 +382,8 @@ fn list_len <.T> <(i32)->i32> (lst):
 //:         Option::None:
 //:             1
 //: ```
-fn list_get <.T> <(i32,i32)->Option<.T>> (lst, idx):
+fn list_get <.T> <(List<.T>,i32)->Option<.T>> (lst, idx):
+    let lst_ptr <i32> field::get lst "ptr"
     if:
         cond:
             lt idx 0
@@ -347,7 +392,7 @@ fn list_get <.T> <(i32,i32)->Option<.T>> (lst, idx):
         else:
             if:
                 cond:
-                    eq lst 0
+                    eq lst_ptr 0
                 then:
                     none<.T>
                 else:
@@ -355,9 +400,10 @@ fn list_get <.T> <(i32,i32)->Option<.T>> (lst, idx):
                         cond:
                             eq idx 0
                         then:
-                            some<.T> load<.T> lst
+                            some<.T> load<.T> lst_ptr
                         else:
-                            list_get<.T> load_i32 add lst size_of<.T> sub idx 1
+                            let next_ptr <i32> load_i32 add lst_ptr size_of<.T>
+                            list_get<.T> List next_ptr sub idx 1
 
 //: list_free: リスト全体を解放する
 //:
@@ -386,9 +432,9 @@ fn list_get <.T> <(i32,i32)->Option<.T>> (lst, idx):
 //:     list_free<i32> l1;
 //:     0
 //: ```
-fn list_free <.T> <(i32)*>()> (lst):
+fn list_free <.T> <(List<.T>)*>()> (lst):
     let node_size <i32> add size_of<.T> 4
-    let mut cur <i32> lst
+    let mut cur <i32> field::get lst "ptr"
     while ne cur 0:
         do:
             let next <i32> load_i32 add cur size_of<.T>
@@ -429,9 +475,9 @@ fn list_free <.T> <(i32)*>()> (lst):
 //:         Option::None:
 //:             1
 //: ```
-fn list_reverse <.T> <(i32)*>i32> (lst):
-    let mut new_list <i32> 0;
-    let mut cur <i32> lst;
+fn list_reverse <.T> <(List<.T>)*>List<.T>> (lst):
+    let mut new_list <List<.T>> list_nil<.T>;
+    let mut cur <i32> field::get lst "ptr";
     while ne cur 0:
         do:
             let val <.T> load<.T> cur;
