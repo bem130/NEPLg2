@@ -1,18 +1,17 @@
-2026-02-22 今後の実装計画（未完了のみ）
+2026-02-27 今後の実装計画（未完了のみ）
 
 方針
 - plan.md の仕様を唯一の基準として、上流（lexer/parser）から順に修正する。
 - 間に合わせ修正を避け、原因が同一の失敗はまとめて解消する。
 - 実装進捗・結果・失敗分析は `note.md` に記録し、`todo.md` は未完了のみを保持する。
-- stdlib のドキュメントコメント/ドキュメントテストは `stdlib/kp` の記述スタイルを参照して統一する。
 
-1. 高階関数・call_indirect
+1. オーバーロード解決の arity 完全対応
+- `calc 5` / `calc 3 4` のような同名・異 arity オーバーロードを、直接呼び出しでも確実に解決する。
+- 関数値文脈（`let f <(i32)->i32> calc`、高階関数引数）での arity 解決を安定化する。
+- `tests/overload.n.md` の `overload_select_by_arity` を compile_fail から成功ケースへ戻す。
+
+2. 高階関数・call_indirect
 - capture あり関数値は closure conversion の設計を確定して段階導入する。
-
-2. 診断IDの明示付与（nepl-core全域）
-- `parser.rs` で開始した `with_id(DiagnosticId::...)` 明示付与を、`lexer.rs` / `typecheck.rs` / `resolve.rs` / `codegen_*.rs` の主要診断へ拡張する。
-- `Diagnostic::error` 側の推測付与は使わず、診断生成側で enum を直接指定する。
-- parser/typecheck/name-resolution/overload 系の compile_fail テストに `diag_id` を追加し、ID一致を固定化する。
 
 3. Web Playground / tests.html 強化
 - VSCode 拡張予定の情報（名前解決/型情報/式範囲/定義ジャンプ候補）を Playground で表示する。

@@ -1348,7 +1348,7 @@ fn check_function(
                 if let Some(raw) = checker.select_target_raw_body(b) {
                     raw
                 } else {
-                    match checker.check_block(b, 0, true) {
+                    match checker.check_block(b, 0, true, Some(result_ty)) {
                         Some((blk, _val)) => {
                             if checker.ctx.unify(blk.ty, result_ty).is_err() {
                                 checker.diagnostics.push(Diagnostic::error(
@@ -1705,6 +1705,46 @@ impl<'a> BlockChecker<'a> {
         None
     }
 
+    fn choose_callable_type_by_available_arity(
+        &mut self,
+        name: &str,
+        available_args: usize,
+    ) -> Option<TypeId> {
+        let callables = self.env.lookup_all_callables(name);
+        if callables.len() <= 1 {
+            return None;
+        }
+        let mut has_mixed_arity = false;
+        let mut first_arity: Option<usize> = None;
+        for b in &callables {
+            if let BindingKind::Func { arity, .. } = b.kind {
+                if first_arity.is_none() {
+                    first_arity = Some(arity);
+                } else if first_arity != Some(arity) {
+                    has_mixed_arity = true;
+                }
+            }
+        }
+        if !has_mixed_arity {
+            return None;
+        }
+
+        let mut best: Option<(usize, TypeId)> = None;
+        for b in callables {
+            if let BindingKind::Func { arity, .. } = b.kind {
+                if arity > available_args {
+                    continue;
+                }
+                match best {
+                    None => best = Some((arity, b.ty)),
+                    Some((best_arity, _)) if arity > best_arity => best = Some((arity, b.ty)),
+                    _ => {}
+                }
+            }
+        }
+        best.map(|(_, ty)| ty)
+    }
+
     fn is_concrete_type(&self, ty: TypeId) -> bool {
         let resolved = self.ctx.resolve_id(ty);
         !matches!(self.ctx.get(resolved), TypeKind::Var(v) if v.binding.is_none())
@@ -1891,6 +1931,7 @@ impl<'a> BlockChecker<'a> {
         block: &Block,
         base_depth: usize,
         new_scope: bool,
+        expected_last_ty: Option<TypeId>,
     ) -> Option<(HirBlock, Option<TypeId>)> {
         let old_effect = self.current_effect;
 
@@ -2115,7 +2156,12 @@ impl<'a> BlockChecker<'a> {
 
             match stmt {
                 Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => {
-                    match self.check_prefix(expr, base_depth, &mut stack) {
+                    let expected_stmt_ty = if Some(idx) == last_expr_idx {
+                        expected_last_ty
+                    } else {
+                        None
+                    };
+                    match self.check_prefix(expr, base_depth, &mut stack, expected_stmt_ty) {
                         Some((typed, dropped_from_prefix)) => {
                             let is_last_expr = Some(idx) == last_expr_idx;
                             let mut drop_result = !is_last_expr;
@@ -2345,6 +2391,7 @@ impl<'a> BlockChecker<'a> {
         expr: &PrefixExpr,
         base_depth: usize,
         stack: &mut Vec<StackEntry>,
+        expected_last_ty: Option<TypeId>,
     ) -> Option<(HirExpr, bool)> {
         // Track indices of functions on the stack to avoid linear scanning in reduce_calls.
         // This makes reduction O(1) amortized instead of O(N^2).
@@ -2361,7 +2408,8 @@ impl<'a> BlockChecker<'a> {
         let mut last_expr: Option<HirExpr> = None;
         let mut pipe_pending: Option<StackEntry> = None;
         // (target_type, stack_depth_when_annotation_appeared)
-        let mut pending_ascription: Option<(TypeId, usize)> = None;
+        let mut pending_ascription: Option<(TypeId, usize)> =
+            expected_last_ty.map(|t| (t, base_depth));
 
         // Try to apply a pending ascription when the next expression is complete.
         fn try_apply_pending_ascription(
@@ -2551,6 +2599,82 @@ impl<'a> BlockChecker<'a> {
                                     });
                                     last_expr = Some(stack.last().unwrap().expr.clone());
                                 } else {
+                                    let expected_callable_arity = pending_ascription
+                                        .and_then(|(target_ty, base_len)| {
+                                            if stack.len() == base_len {
+                                                let resolved_target = self.ctx.resolve(target_ty);
+                                                match self.ctx.get(resolved_target) {
+                                                    TypeKind::Function { params, .. } => {
+                                                        Some(params.len())
+                                                    }
+                                                    _ => None,
+                                                }
+                                            } else {
+                                                None
+                                            }
+                                        });
+                                    if let Some(exp_arity) = expected_callable_arity {
+                                        let mut arity_candidates: Vec<&Binding> = bindings
+                                            .iter()
+                                            .copied()
+                                            .filter(|b| {
+                                                matches!(
+                                                    b.kind,
+                                                    BindingKind::Func { arity, .. } if arity == exp_arity
+                                                )
+                                            })
+                                            .collect();
+                                        if arity_candidates.len() == 1 {
+                                            let binding = arity_candidates.remove(0);
+                                            if *forced_value {
+                                                if let BindingKind::Func { captures, .. } =
+                                                    &binding.kind
+                                                {
+                                                    if !captures.is_empty() {
+                                                        self.diagnostics.push(Diagnostic::error(
+                                                            "capturing function cannot be used as a function value yet",
+                                                            id.span,
+                                                        ));
+                                                        return None;
+                                                    }
+                                                }
+                                            }
+                                            let mut explicit_args = Vec::new();
+                                            if !type_args.is_empty() {
+                                                for arg_expr in type_args {
+                                                    explicit_args.push(type_from_expr(
+                                                        self.ctx,
+                                                        self.labels,
+                                                        arg_expr,
+                                                    ));
+                                                }
+                                            }
+                                            let ty = binding.ty;
+                                            stack.push(StackEntry {
+                                                ty,
+                                                expr: HirExpr {
+                                                    ty,
+                                                    kind: if *forced_value {
+                                                        HirExprKind::FnValue(lookup_name.clone())
+                                                    } else {
+                                                        HirExprKind::Var(lookup_name.clone())
+                                                    },
+                                                    span: id.span,
+                                                },
+                                                type_args: explicit_args,
+                                                assign: None,
+                                                auto_call: !*forced_value,
+                                            });
+                                            last_expr = Some(stack.last().unwrap().expr.clone());
+                                            continue;
+                                        } else if arity_candidates.len() > 1 {
+                                            self.diagnostics.push(
+                                                Diagnostic::error("ambiguous overload", id.span)
+                                                    .with_id(DiagnosticId::TypeAmbiguousOverload),
+                                            );
+                                            return None;
+                                        }
+                                    }
                                     let mut effect = None;
                                     let mut arity = None;
                                     for b in &bindings {
@@ -2908,7 +3032,9 @@ impl<'a> BlockChecker<'a> {
                     let mut args = Vec::new();
                     for arg in &intrin.args {
                         let mut arg_stack = Vec::new();
-                        if let Some((hexpr, _)) = self.check_prefix(arg, 0, &mut arg_stack) {
+                        if let Some((hexpr, _)) =
+                            self.check_prefix(arg, 0, &mut arg_stack, None)
+                        {
                             args.push(hexpr);
                         } else {
                              return None;
@@ -3164,7 +3290,9 @@ impl<'a> BlockChecker<'a> {
                     let mut elem_tys = Vec::new();
                     for elem in items {
                         let mut elem_stack = Vec::new();
-                        if let Some((hexpr, _)) = self.check_prefix(elem, 0, &mut elem_stack) {
+                        if let Some((hexpr, _)) =
+                            self.check_prefix(elem, 0, &mut elem_stack, None)
+                        {
                             elem_tys.push(hexpr.ty);
                             elems.push(hexpr);
                         } else {
@@ -3187,7 +3315,9 @@ impl<'a> BlockChecker<'a> {
                 }
                 PrefixItem::Group(inner, _sp) => {
                     let mut group_stack = Vec::new();
-                    if let Some((hexpr, _)) = self.check_prefix(inner, 0, &mut group_stack) {
+                    if let Some((hexpr, _)) =
+                        self.check_prefix(inner, 0, &mut group_stack, None)
+                    {
                         stack.push(StackEntry {
                             ty: hexpr.ty,
                             expr: hexpr,
@@ -3204,7 +3334,7 @@ impl<'a> BlockChecker<'a> {
                     // Treat blocks uniformly; parser now desugars `if:`/`if <cond>:`
                     // layout forms into ordinary prefix items, so the checker
                     // should not special-case `if` here.
-                    let (blk, val_ty) = self.check_block(b, 0, true)?;
+                    let (blk, val_ty) = self.check_block(b, 0, true, None)?;
                     if let Some(ty) = val_ty {
                         stack.push(StackEntry {
                             ty,
@@ -3482,10 +3612,17 @@ impl<'a> BlockChecker<'a> {
                 func_pos = outer;
             }
 
+            let available_args = stack.len().saturating_sub(func_pos + 1);
+            let ty_for_infer = match &stack[func_pos].expr.kind {
+                HirExprKind::Var(name) => self
+                    .choose_callable_type_by_available_arity(name, available_args)
+                    .unwrap_or(stack[func_pos].ty),
+                _ => stack[func_pos].ty,
+            };
             let (inst_ty, fresh_args) = if !stack[func_pos].type_args.is_empty() {
-                (stack[func_pos].ty, stack[func_pos].type_args.clone())
+                (ty_for_infer, stack[func_pos].type_args.clone())
             } else {
-                self.ctx.instantiate(stack[func_pos].ty)
+                self.ctx.instantiate(ty_for_infer)
             };
             let func_ty = self.ctx.get(inst_ty);
             let (params, result, effect) = match func_ty {
@@ -3649,10 +3786,17 @@ impl<'a> BlockChecker<'a> {
                 func_pos = outer;
             }
 
+            let available_args = stack.len().saturating_sub(func_pos + 1);
+            let ty_for_infer = match &stack[func_pos].expr.kind {
+                HirExprKind::Var(name) => self
+                    .choose_callable_type_by_available_arity(name, available_args)
+                    .unwrap_or(stack[func_pos].ty),
+                _ => stack[func_pos].ty,
+            };
             let (inst_ty, fresh_args) = if !stack[func_pos].type_args.is_empty() {
-                (stack[func_pos].ty, stack[func_pos].type_args.clone())
+                (ty_for_infer, stack[func_pos].type_args.clone())
             } else {
-                self.ctx.instantiate(stack[func_pos].ty)
+                self.ctx.instantiate(ty_for_infer)
             };
             let func_ty = self.ctx.get(inst_ty);
             let (params, result, effect) = match func_ty {
@@ -3719,7 +3863,7 @@ impl<'a> BlockChecker<'a> {
     fn check_match_expr(&mut self, m: &MatchExpr) -> Option<(HirExpr, TypeId)> {
         // evaluate scrutinee
         let mut tmp_stack = Vec::new();
-        if let Some((scrut_expr, _)) = self.check_prefix(&m.scrutinee, 0, &mut tmp_stack) {
+        if let Some((scrut_expr, _)) = self.check_prefix(&m.scrutinee, 0, &mut tmp_stack, None) {
             let scrut_ty = scrut_expr.ty;
             let resolved_ty = self.ctx.resolve(scrut_ty);
             let variants = match self.ctx.get(resolved_ty) {
@@ -3816,7 +3960,7 @@ impl<'a> BlockChecker<'a> {
                         ));
                     }
                 }
-                let (blk, val_ty) = self.check_block(&arm.body, 0, false)?;
+                let (blk, val_ty) = self.check_block(&arm.body, 0, false, None)?;
                 self.env.pop_scope();
                 let body_ty = val_ty.unwrap_or(self.ctx.unit());
                 if let Some(t) = result_ty {

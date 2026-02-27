@@ -1,3 +1,25 @@
+# 2026-02-27 作業メモ (compile_fail の diag_id 検証強化 + overload arity 調査)
+- 目的:
+  - `compile_fail` テストで `diag_id` 一致を WASM/LLVM の両方で検証可能にする。
+  - オーバーロードの arity 解決 (`overload_select_by_arity`) を成功ケース化する。
+- 実装:
+  - `nepl-core/src/codegen_llvm.rs`
+    - LLVM 側の診断要約に `[Dxxxx]` を残すよう修正（`summarize_diagnostics_for_message`）。
+  - `nepl-core/src/typecheck.rs`
+    - `check_block`/`check_prefix` に最終式の期待型を渡す経路を追加。
+    - 異 arity オーバーロードで、利用可能引数数に基づく候補選択の下地を追加（`choose_callable_type_by_available_arity`）。
+    - 型注釈文脈の arity 候補選択を `Symbol::Ident` 処理に追加。
+  - `tests/overload.n.md`
+    - compile_fail に `diag_id` を明示付与したケースを整理。
+    - `overload_select_by_arity` は現状の実装修正だけでは安定成功化できず、いったん `compile_fail[D3006]` に戻し、代わりに `overload_select_by_arity_unary_simple` を追加して回帰点を固定。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/overload.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-overload-expanded-diag.json -j 2` -> `38/38 pass`
+  - `node nodesrc/tests.js -i tests/functions.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-functions.json -j 2` -> `60/60 pass`
+- 差分/課題:
+  - `overload_select_by_arity` を成功ケースへ戻すには、`calc 3 4` の二項選択で residual stack が出る根因（reduce順序/arity選択タイミング）を追加で解消する必要がある。
+  - 現在の修正は「diag_id 検証の安定化」と「arity 解決の一部改善（単項側）」まで。
+
 # 2026-02-27 作業メモ (オーバーロード再開発: 外側引数文脈の期待型伝播)
 - 目的:
   - `assert cast 1` や `push<u8> cast 65` のような式で、外側関数の引数文脈から戻り値オーバーロードを解決できるようにする。

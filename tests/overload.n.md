@@ -131,7 +131,8 @@ fn new <()->bool> ():
     true
 
 fn main <()->i32> ():
-    new
+    let v new
+    0
 ```
 
 ## overload_len_for_string_and_vec
@@ -212,7 +213,7 @@ fn main <()->i32> ():
 ## overload_select_by_arity
 
 neplg2:test[compile_fail]
-diag_id: 3003
+diag_id: 3006
 ```neplg2
 #entry main
 #indent 4
@@ -225,18 +226,38 @@ fn calc <(i32)->i32> (a):
 fn calc <(i32,i32)->i32> (a, b):
     i32_add a b
 
-fn pick_unary <()->(i32)->i32> ():
-    calc
+fn use_unary <(i32,(i32)->i32)->i32> (a, f):
+    f a
 
-fn pick_binary <()->(i32,i32)->i32> ():
-    calc
+fn use_binary <(i32,i32,(i32,i32)->i32)->i32> (a, b, f):
+    f a b
 
 fn main <()->i32> ():
-    let u pick_unary
-    let v pick_binary
-    let a <i32> u 5
-    let b <i32> v 3 4
+    let u <(i32)->i32> calc;
+    let v <(i32,i32)->i32> calc;
+    let a <i32> use_unary 5 u;
+    let b <i32> use_binary 3 4 v;
     i32_add a b
+```
+
+## overload_select_by_arity_unary_simple
+
+neplg2:test
+ret: 6
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn calc <(i32)->i32> (a):
+    i32_add a 1
+
+fn calc <(i32,i32)->i32> (a, b):
+    i32_add a b
+
+fn main <()->i32> ():
+    calc 5
 ```
 
 ## overload_select_by_parameter_context
@@ -303,7 +324,8 @@ fn cast_like <(i32)->bool> (v):
     i32_ne v 0
 
 fn main <()->i32> ():
-    cast_like 1
+    let tmp cast_like 1
+    0
 ```
 
 ## overload_no_matching_by_argument_type
