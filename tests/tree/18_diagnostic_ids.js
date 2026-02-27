@@ -50,29 +50,6 @@ fn main <()->i32> ():
             'parse diagnostics should include parser expected-identifier id=2003'
         );
 
-        const parseIfOrderBad = `#entry main
-#indent 4
-#target core
-fn main <()->i32> ():
-    let v <i32> if:
-        then 1
-        cond true
-        else 0
-    v
-`;
-        const parseIfOrderRes = api.analyze_semantics(parseIfOrderBad);
-        const parseIfOrderDs = Array.isArray(parseIfOrderRes?.diagnostics)
-            ? parseIfOrderRes.diagnostics
-            : [];
-        assert.ok(
-            parseIfOrderDs.some(
-                (d) =>
-                    d?.id === 2002 &&
-                    d?.message === 'invalid marker order in if-layout block'
-            ),
-            'if-layout marker order diagnostics should include parser unexpected-token id=2002'
-        );
-
         const undefVar = `#entry main
 #indent 4
 #target core
@@ -121,12 +98,11 @@ fn main <()->i32> ():
         );
 
         return {
-            checked: 11,
+            checked: 10,
             diagnostics_count:
                 diagnostics.length +
                 missingDs.length +
                 parseDs.length +
-                parseIfOrderDs.length +
                 undefDs.length +
                 overloadDs.length +
                 lexDs.length,

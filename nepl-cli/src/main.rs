@@ -2,6 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
 
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -17,7 +20,6 @@ use wasmprinter::print_bytes;
 
 mod codegen_llvm;
 
-#[derive(Default)]
 struct AllocState {
     // head of free list (address in linear memory), 0 == null
     free_head: u32,
@@ -27,11 +29,116 @@ struct AllocState {
     args: Vec<Vec<u8>>,
     files: BTreeMap<i32, FileState>,
     next_fd: i32,
+    tty_cols: u32,
+    tty_rows: u32,
+    tty_width: u32,
+    tty_height: u32,
+    tty_stdin_tty: bool,
+    tty_stdout_tty: bool,
+    tty_stderr_tty: bool,
+    tty_echo: bool,
+    tty_line_buffered: bool,
+    stdout_buf: Vec<u8>,
+    stdout_last_flush: Instant,
+    #[cfg(unix)]
+    tty_saved: bool,
+    #[cfg(unix)]
+    tty_original: libc::termios,
 }
 
 struct FileState {
     data: Vec<u8>,
     pos: usize,
+}
+
+#[cfg(unix)]
+fn current_terminal_size() -> Option<(u32, u32)> {
+    let fd = io::stdout().as_raw_fd();
+    let mut ws = libc::winsize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    // SAFETY: ioctl writes into provided winsize buffer when fd is valid.
+    let rc = unsafe { libc::ioctl(fd, libc::TIOCGWINSZ, &mut ws) };
+    if rc == 0 && ws.ws_col > 0 && ws.ws_row > 0 {
+        Some((ws.ws_col as u32, ws.ws_row as u32))
+    } else {
+        None
+    }
+}
+
+#[cfg(not(unix))]
+fn current_terminal_size() -> Option<(u32, u32)> {
+    None
+}
+
+#[cfg(unix)]
+fn apply_host_tty_mode(state: &mut AllocState) -> i32 {
+    let fd = io::stdin().as_raw_fd();
+    // SAFETY: isatty is pure for fd validity check.
+    if unsafe { libc::isatty(fd) } != 1 {
+        return 0;
+    }
+    if !state.tty_saved {
+        // SAFETY: zeroed is immediately filled by tcgetattr before use.
+        let mut term: libc::termios = unsafe { std::mem::zeroed() };
+        // SAFETY: tcgetattr writes current terminal settings to `term`.
+        if unsafe { libc::tcgetattr(fd, &mut term) } != 0 {
+            return 5;
+        }
+        state.tty_original = term;
+        state.tty_saved = true;
+    }
+
+    let target_raw = !state.tty_echo || !state.tty_line_buffered;
+    if target_raw {
+        let mut term = state.tty_original;
+        term.c_lflag &= !(libc::ECHO | libc::ICANON);
+        term.c_cc[libc::VMIN] = 1;
+        term.c_cc[libc::VTIME] = 0;
+        // SAFETY: tcsetattr applies a valid termios struct to terminal fd.
+        if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &term) } != 0 {
+            return 5;
+        }
+    } else if state.tty_saved {
+        // SAFETY: restoring previously captured termios is valid.
+        if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &state.tty_original) } != 0 {
+            return 5;
+        }
+    }
+    0
+}
+
+#[cfg(not(unix))]
+fn apply_host_tty_mode(_state: &mut AllocState) -> i32 {
+    0
+}
+
+#[cfg(unix)]
+fn restore_host_tty(state: &AllocState) {
+    if !state.tty_saved {
+        return;
+    }
+    let fd = io::stdin().as_raw_fd();
+    // SAFETY: best-effort restore of previously saved terminal settings.
+    let _ = unsafe { libc::tcsetattr(fd, libc::TCSANOW, &state.tty_original) };
+}
+
+#[cfg(not(unix))]
+fn restore_host_tty(_state: &AllocState) {}
+
+fn flush_stdout_buffer(state: &mut AllocState) -> io::Result<()> {
+    if state.stdout_buf.is_empty() {
+        return Ok(());
+    }
+    let mut out = io::stdout().lock();
+    out.write_all(&state.stdout_buf)?;
+    out.flush()?;
+    state.stdout_buf.clear();
+    state.stdout_last_flush = Instant::now();
+    Ok(())
 }
 
 /// コマンドライン引数を定義するための構造体
@@ -75,7 +182,7 @@ struct Cli {
     )]
     lib: bool,
 
-    #[arg(long, value_name = "TARGET", value_parser = ["wasm", "wasi", "llvm", "core", "std"], help = "Compilation target: wasm, wasi, llvm, core(alias wasm), std(alias wasi)")]
+    #[arg(long, value_name = "TARGET", value_parser = ["wasm", "wasi", "wasix", "llvm", "core", "std"], help = "Compilation target: wasm, wasi, wasix, llvm, core(alias wasm), std(alias wasi)")]
     target: Option<String>,
 
     #[arg(short, long, global = true, help = "Enable verbose compiler logging")]
@@ -178,6 +285,7 @@ fn execute(cli: Cli) -> Result<()> {
 
     let cli_target = cli.target.as_deref().map(|t| match t {
         "wasi" | "std" => CompileTarget::Wasi,
+        "wasix" => CompileTarget::Wasix,
         "llvm" => CompileTarget::Llvm,
         "wasm" | "core" => CompileTarget::Wasm,
         _ => CompileTarget::Wasm,
@@ -666,11 +774,11 @@ fn run_wasm(
 
     let mut linker: Linker<AllocState> = Linker::new(&engine);
     match target {
-        CompileTarget::Wasi => {
+        CompileTarget::Wasi | CompileTarget::Wasix => {
             for import in module.imports() {
-                if import.module() != "wasi_snapshot_preview1" {
+                if import.module() != "wasi_snapshot_preview1" && import.module() != "wasix_32v1" {
                     return Err(anyhow::anyhow!(
-                        "unsupported non-WASI import {}::{} (only wasi_snapshot_preview1 is allowed)",
+                        "unsupported import {}::{} (only wasi_snapshot_preview1 or wasix_32v1 are allowed for wasi/wasix targets)",
                         import.module(),
                         import.name()
                     ));
@@ -692,7 +800,7 @@ fn run_wasm(
             ));
         }
     }
-    if matches!(target, CompileTarget::Wasi) {
+    if matches!(target, CompileTarget::Wasi | CompileTarget::Wasix) {
         linker.func_wrap(
             "wasi_snapshot_preview1",
             "args_sizes_get",
@@ -816,6 +924,105 @@ fn run_wasm(
                     return 21;
                 }
                 0
+            },
+        )?;
+        linker.func_wrap(
+            "wasix_32v1",
+            "tty_get",
+            |mut caller: Caller<'_, AllocState>, tty_ptr: i32| -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if tty_ptr < 0 {
+                    return 21;
+                }
+                let base = tty_ptr as usize;
+                if base + 21 > memory.data(&caller).len() {
+                    return 21;
+                }
+                if let Some((cols, rows)) = current_terminal_size() {
+                    let state = caller.data_mut();
+                    state.tty_cols = cols;
+                    state.tty_rows = rows;
+                    state.tty_width = cols;
+                    state.tty_height = rows;
+                }
+                let cols = caller.data().tty_cols.to_le_bytes();
+                let rows = caller.data().tty_rows.to_le_bytes();
+                let width = caller.data().tty_width.to_le_bytes();
+                let height = caller.data().tty_height.to_le_bytes();
+                if memory.write(&mut caller, base, &cols).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 4, &rows).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 8, &width).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 12, &height).is_err() {
+                    return 21;
+                }
+                let stdin_tty = [if caller.data().tty_stdin_tty { 1 } else { 0 }];
+                let stdout_tty = [if caller.data().tty_stdout_tty { 1 } else { 0 }];
+                let stderr_tty = [if caller.data().tty_stderr_tty { 1 } else { 0 }];
+                let echo = [if caller.data().tty_echo { 1 } else { 0 }];
+                let line_buffered = [if caller.data().tty_line_buffered { 1 } else { 0 }];
+                if memory.write(&mut caller, base + 16, &stdin_tty).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 17, &stdout_tty).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 18, &stderr_tty).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 19, &echo).is_err() {
+                    return 21;
+                }
+                if memory.write(&mut caller, base + 20, &line_buffered).is_err() {
+                    return 21;
+                }
+                0
+            },
+        )?;
+        linker.func_wrap(
+            "wasix_32v1",
+            "tty_set",
+            |mut caller: Caller<'_, AllocState>, tty_ptr: i32| -> i32 {
+                let memory = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                    Some(m) => m,
+                    None => return 21,
+                };
+                if tty_ptr < 0 {
+                    return 21;
+                }
+                let base = tty_ptr as usize;
+                let data = memory.data(&caller);
+                if base + 21 > data.len() {
+                    return 21;
+                }
+                let cols = u32::from_le_bytes(data[base..base + 4].try_into().unwrap());
+                let rows = u32::from_le_bytes(data[base + 4..base + 8].try_into().unwrap());
+                let width = u32::from_le_bytes(data[base + 8..base + 12].try_into().unwrap());
+                let height = u32::from_le_bytes(data[base + 12..base + 16].try_into().unwrap());
+                let stdin_tty = data[base + 16] != 0;
+                let stdout_tty = data[base + 17] != 0;
+                let stderr_tty = data[base + 18] != 0;
+                let echo = data[base + 19] != 0;
+                let line_buffered = data[base + 20] != 0;
+                let state = caller.data_mut();
+                state.tty_cols = cols;
+                state.tty_rows = rows;
+                state.tty_width = width;
+                state.tty_height = height;
+                state.tty_stdin_tty = stdin_tty;
+                state.tty_stdout_tty = stdout_tty;
+                state.tty_stderr_tty = stderr_tty;
+                state.tty_echo = echo;
+                state.tty_line_buffered = line_buffered;
+                apply_host_tty_mode(state)
             },
         )?;
         linker.func_wrap(
@@ -963,7 +1170,7 @@ fn run_wasm(
                 let data_snapshot = memory.data(&caller).to_vec(); // snapshot to avoid alias issues
                 let mut total = 0usize;
                 let mut offset = iovs as usize;
-                let mut stdout = io::stdout().lock();
+                let mut saw_newline = false;
                 for _ in 0..iovs_len {
                     if offset + 8 > data_snapshot.len() {
                         return 21;
@@ -979,12 +1186,21 @@ fn run_wasm(
                         return 21;
                     }
                     let slice = &data_snapshot[base..base + len];
-                    if stdout.write_all(slice).is_err() {
-                        return 21;
+                    if slice.contains(&b'\n') {
+                        saw_newline = true;
                     }
+                    caller.data_mut().stdout_buf.extend_from_slice(slice);
                     total += len;
                 }
-                let _ = stdout.flush();
+                let should_flush = {
+                    let state = caller.data();
+                    saw_newline
+                        || state.stdout_buf.len() >= 8192
+                        || state.stdout_last_flush.elapsed() >= Duration::from_millis(16)
+                };
+                if should_flush && flush_stdout_buffer(caller.data_mut()).is_err() {
+                    return 21;
+                }
                 // write nwritten
                 if let Some(mem) = caller.get_export("memory").and_then(|e| e.into_memory()) {
                     let bytes = (total as u32).to_le_bytes();
@@ -996,6 +1212,19 @@ fn run_wasm(
             },
         )?;
     }
+    let (tty_cols, tty_rows) = current_terminal_size().unwrap_or_else(|| {
+        let cols = std::env::var("COLUMNS")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(80);
+        let rows = std::env::var("LINES")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(25);
+        (cols, rows)
+    });
     let mut store = Store::new(
         &engine,
         AllocState {
@@ -1006,6 +1235,21 @@ fn run_wasm(
             args: args_bytes,
             files: BTreeMap::new(),
             next_fd: 4,
+            tty_cols,
+            tty_rows,
+            tty_width: tty_cols,
+            tty_height: tty_rows,
+            tty_stdin_tty: true,
+            tty_stdout_tty: true,
+            tty_stderr_tty: true,
+            tty_echo: true,
+            tty_line_buffered: true,
+            stdout_buf: Vec::new(),
+            stdout_last_flush: Instant::now(),
+            #[cfg(unix)]
+            tty_saved: false,
+            #[cfg(unix)]
+            tty_original: unsafe { std::mem::zeroed() },
         },
     );
     let instance_pre = linker
@@ -1014,7 +1258,7 @@ fn run_wasm(
     let instance = instance_pre
         .start(&mut store)
         .context("failed to start module")?;
-    if let Ok(main) = instance.get_typed_func::<(), i32>(&store, "main") {
+    let result = if let Ok(main) = instance.get_typed_func::<(), i32>(&store, "main") {
         main.call(&mut store, ()).context("failed to execute main")
     } else if let Ok(main_unit) = instance.get_typed_func::<(), ()>(&store, "main") {
         main_unit
@@ -1025,7 +1269,10 @@ fn run_wasm(
         Err(anyhow::anyhow!(
             "exported main function missing or has wrong type"
         ))
-    }
+    };
+    let _ = flush_stdout_buffer(store.data_mut());
+    restore_host_tty(store.data());
+    result
 }
 
 fn detect_module_target(module: &nepl_core::ast::Module) -> Option<CompileTarget> {
@@ -1033,6 +1280,7 @@ fn detect_module_target(module: &nepl_core::ast::Module) -> Option<CompileTarget
         if let nepl_core::ast::Directive::Target { target, .. } = d {
             match target.as_str() {
                 "wasi" | "std" => Some(CompileTarget::Wasi),
+                "wasix" => Some(CompileTarget::Wasix),
                 "wasm" | "core" => Some(CompileTarget::Wasm),
                 "llvm" => Some(CompileTarget::Llvm),
                 _ => None,
@@ -1050,6 +1298,7 @@ fn detect_module_target(module: &nepl_core::ast::Module) -> Option<CompileTarget
         {
             match target.as_str() {
                 "wasi" | "std" => Some(CompileTarget::Wasi),
+                "wasix" => Some(CompileTarget::Wasix),
                 "wasm" | "core" => Some(CompileTarget::Wasm),
                 "llvm" => Some(CompileTarget::Llvm),
                 _ => None,

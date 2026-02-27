@@ -263,24 +263,6 @@ fn sb_append_i32 <(StringBuilder,i32)*>StringBuilder> (sb, v):
     sb
     |> sb_append from_i32 v
 
-//: sb_append_line: 文字列と改行を連結して追加する
-//:
-//: 目的:
-//: - ログやテキスト生成で、1行単位の追加を簡潔に書けるようにします。
-//:
-//: 実装(アルゴリズム):
-//: - sb_append を 2 回呼び、`s` と `"\n"` を順に追加します。
-//:
-//: 注意(重要):
-//: - 改行コードは `\n` 固定です。
-//:
-//: 計算量:
-//: - O(len(s))
-fn sb_append_line <(StringBuilder,str)*>StringBuilder> (sb, s):
-    sb
-    |> sb_append s
-    |> sb_append "\n"
-
 // sb_build: 文字列を生成する
 //
 // 目的:

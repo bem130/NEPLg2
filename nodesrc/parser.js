@@ -76,14 +76,13 @@ function scanForDoctests(lines, opts) {
             stdout: null,
             stderr: null,
             diag_ids: [],
-            argv: null,
         };
 
         // 次の ```neplg2 を探す
         let j = i + 1;
         while (j < lines.length) {
             const l2 = opts.lineTransform(lines[j]);
-            const mm = l2.match(/^\s*(stdin|stdout|stderr|diag_id|diag_ids|argv)\s*:\s*(.*?)\s*$/);
+            const mm = l2.match(/^\s*(stdin|stdout|stderr|diag_id|diag_ids)\s*:\s*(.*?)\s*$/);
             if (mm) {
                 const k = mm[1];
                 if (k === 'diag_id') {
@@ -101,15 +100,6 @@ function scanForDoctests(lines, opts) {
                         const v = parseInt(String(x).trim(), 10);
                         if (Number.isFinite(v)) meta.diag_ids.push(v);
                     }
-                } else if (k === 'argv') {
-                    const rawVals = parseMetaValue(mm[2] ?? '');
-                    const vals = Array.isArray(rawVals)
-                        ? rawVals.map((v) => String(v))
-                        : String(rawVals)
-                            .split(',')
-                            .map((x) => x.trim())
-                            .filter(Boolean);
-                    meta.argv = vals;
                 } else {
                     meta[k] = parseMetaValue(mm[2]);
                 }
@@ -143,7 +133,6 @@ function scanForDoctests(lines, opts) {
             stdout: meta.stdout,
             stderr: meta.stderr,
             diag_ids: meta.diag_ids,
-            argv: meta.argv,
         });
 
         i = j;

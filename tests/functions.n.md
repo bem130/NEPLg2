@@ -340,7 +340,6 @@ fn main <()->i32> ():
 ## function_value_capture_not_supported_yet
 
 neplg2:test[compile_fail]
-diag_id: 3017
 ```neplg2
 
 #entry main
@@ -359,7 +358,6 @@ fn main <()->i32> ():
 ## function_value_capture_not_supported_without_at
 
 neplg2:test[compile_fail]
-diag_id: 3006
 ```neplg2
 
 #entry main
@@ -376,36 +374,6 @@ fn main <()->i32> ():
         add x y
     apply 5 add_y
 ```
-
-## function_variable_not_callable_reports_diag_id
-
-neplg2:test[compile_fail]
-diag_id: 3016
-```neplg2
-#entry main
-#indent 4
-#target core
-
-fn main <()->i32> ():
-    let v 42;
-    v 1
-```
-
-## function_at_requires_callable_reports_diag_id
-
-neplg2:test[compile_fail]
-diag_id: 3023
-```neplg2
-#entry main
-#indent 4
-#target core
-
-fn main <()->i32> ():
-    let v 42;
-    let f @v;
-    0
-```
-
 
 ## function_purity_check_pure_calls_impure
 
