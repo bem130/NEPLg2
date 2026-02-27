@@ -237,6 +237,7 @@ async function runSingle(req, preloaded) {
                 id,
                 status: ok ? 'pass' : 'fail',
                 phase: 'compile',
+                compile_error: compileError,
                 error: ok ? null : 'expected compile_fail, but compiled successfully',
                 compiler: { distDir: meta.distDir, js: meta.jsFile, wasm: meta.wasmFile },
                 duration_ms: Date.now() - t0,

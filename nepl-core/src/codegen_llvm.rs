@@ -13,6 +13,7 @@ use alloc::vec::Vec;
 use crate::ast::{Block, FnBody, Ident, Literal, Module, PrefixExpr, PrefixItem, Stmt, TypeExpr};
 use crate::compiler::{BuildProfile, CompileTarget};
 use crate::ast::Directive;
+use crate::diagnostic_ids::DiagnosticId;
 use crate::hir::{FuncRef, HirBlock, HirBody, HirExpr, HirExprKind, HirFunction, HirModule};
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
@@ -240,12 +241,19 @@ fn validate_target_directive_for_llvm(module: &Module) -> Result<(), LlvmCodegen
         if let Directive::Target { target, .. } = d {
             if !is_known_target_name(target.as_str()) {
                 return Err(LlvmCodegenError::TypecheckFailed {
-                    reason: format!("unknown target in #target: {}", target),
+                    reason: format!(
+                        "[D{}] unknown target in #target: {}",
+                        DiagnosticId::UnknownTargetDirective.as_u32(),
+                        target
+                    ),
                 });
             }
             if found {
                 return Err(LlvmCodegenError::TypecheckFailed {
-                    reason: String::from("multiple #target directives are not allowed"),
+                    reason: format!(
+                        "[D{}] multiple #target directives are not allowed",
+                        DiagnosticId::MultipleTargetDirective.as_u32()
+                    ),
                 });
             }
             found = true;
@@ -256,12 +264,19 @@ fn validate_target_directive_for_llvm(module: &Module) -> Result<(), LlvmCodegen
             if let Stmt::Directive(Directive::Target { target, .. }) = stmt {
                 if !is_known_target_name(target.as_str()) {
                     return Err(LlvmCodegenError::TypecheckFailed {
-                        reason: format!("unknown target in #target: {}", target),
+                        reason: format!(
+                            "[D{}] unknown target in #target: {}",
+                            DiagnosticId::UnknownTargetDirective.as_u32(),
+                            target
+                        ),
                     });
                 }
                 if found {
                     return Err(LlvmCodegenError::TypecheckFailed {
-                        reason: String::from("multiple #target directives are not allowed"),
+                        reason: format!(
+                            "[D{}] multiple #target directives are not allowed",
+                            DiagnosticId::MultipleTargetDirective.as_u32()
+                        ),
                     });
                 }
                 found = true;

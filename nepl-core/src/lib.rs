@@ -14,6 +14,7 @@ extern crate alloc;
 extern crate std;
 
 pub mod diagnostic;
+pub mod diagnostic_ids;
 pub mod error;
 pub mod span;
 

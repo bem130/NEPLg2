@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 use crate::ast;
 use crate::codegen_wasm;
 use crate::diagnostic::Diagnostic;
+use crate::diagnostic_ids::DiagnosticId;
 use crate::error::CoreError;
 use crate::lexer;
 use crate::monomorphize;
@@ -576,13 +577,17 @@ fn resolve_target(
                 if let Some((_, prev_span)) = found {
                     diags.push(
                         Diagnostic::error("multiple #target directives are not allowed", *span)
+                            .with_id(DiagnosticId::MultipleTargetDirective.as_u32())
                             .with_secondary_label(prev_span, Some("previous #target here".into())),
                     );
                 } else {
                     found = Some((t, *span));
                 }
             } else {
-                diags.push(Diagnostic::error("unknown target in #target", *span));
+                diags.push(
+                    Diagnostic::error("unknown target in #target", *span)
+                        .with_id(DiagnosticId::UnknownTargetDirective.as_u32()),
+                );
             }
         }
     }
@@ -599,12 +604,16 @@ fn resolve_target(
                             "multiple #target directives are not allowed",
                             *span,
                         )
+                        .with_id(DiagnosticId::MultipleTargetDirective.as_u32())
                         .with_secondary_label(prev_span, Some("previous #target here".into())));
                     } else {
                         found = Some((t, *span));
                     }
                 } else {
-                    diags.push(Diagnostic::error("unknown target in #target", *span));
+                    diags.push(
+                        Diagnostic::error("unknown target in #target", *span)
+                            .with_id(DiagnosticId::UnknownTargetDirective.as_u32()),
+                    );
                 }
             }
         }

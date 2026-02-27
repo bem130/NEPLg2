@@ -75,16 +75,34 @@ function scanForDoctests(lines, opts) {
             stdin: null,
             stdout: null,
             stderr: null,
+            diag_ids: [],
         };
 
         // 次の ```neplg2 を探す
         let j = i + 1;
         while (j < lines.length) {
             const l2 = opts.lineTransform(lines[j]);
-            const mm = l2.match(/^\s*(stdin|stdout|stderr)\s*:\s*(.*?)\s*$/);
+            const mm = l2.match(/^\s*(stdin|stdout|stderr|diag_id|diag_ids)\s*:\s*(.*?)\s*$/);
             if (mm) {
                 const k = mm[1];
-                meta[k] = parseMetaValue(mm[2]);
+                if (k === 'diag_id') {
+                    const v = parseInt(String(parseMetaValue(mm[2] ?? '')).trim(), 10);
+                    if (Number.isFinite(v)) meta.diag_ids.push(v);
+                } else if (k === 'diag_ids') {
+                    const rawVals = parseMetaValue(mm[2] ?? '');
+                    const vals = Array.isArray(rawVals)
+                        ? rawVals
+                        : String(rawVals)
+                            .split(',')
+                            .map((x) => x.trim())
+                            .filter(Boolean);
+                    for (const x of vals) {
+                        const v = parseInt(String(x).trim(), 10);
+                        if (Number.isFinite(v)) meta.diag_ids.push(v);
+                    }
+                } else {
+                    meta[k] = parseMetaValue(mm[2]);
+                }
             }
             if (/^\s*```\s*neplg2\s*$/.test(l2)) break;
             j++;
@@ -114,6 +132,7 @@ function scanForDoctests(lines, opts) {
             stdin: meta.stdin,
             stdout: meta.stdout,
             stderr: meta.stderr,
+            diag_ids: meta.diag_ids,
         });
 
         i = j;

@@ -1075,6 +1075,7 @@ fn render_diagnostics(diags: &[Diagnostic], sm: &SourceMap) {
             Severity::Warning => "warning",
         };
         let code = d.code.unwrap_or("");
+        let id_display = d.id.map(|v| format!("[D{}]", v)).unwrap_or_default();
         let primary = &d.primary;
         let (line, col) = sm
             .line_col(primary.span.file_id, primary.span.start)
@@ -1084,9 +1085,11 @@ fn render_diagnostics(diags: &[Diagnostic], sm: &SourceMap) {
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "<unknown>".into());
         let code_display = if code.is_empty() {
-            String::new()
-        } else {
+            id_display
+        } else if id_display.is_empty() {
             format!("[{code}]")
+        } else {
+            format!("{id_display}[{code}]")
         };
         eprintln!("{severity}{code_display}: {message}", message = d.message);
         eprintln!(" --> {path}:{line}:{col}", line = line + 1, col = col + 1);

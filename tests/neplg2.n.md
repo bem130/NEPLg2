@@ -603,9 +603,21 @@ fn main <()* >()> ():
 テスト名どおり「#target ディレクティブの重複はエラー」を確認したいので `compile_fail` に変更します。
 
 neplg2:test[compile_fail]
+diag_id: 1001
 ```neplg2
 #target core
 #target std
+#entry main
+fn main <()->i32> ():
+    0
+```
+
+## unknown_target_directive_is_error
+
+neplg2:test[compile_fail]
+diag_id: 1002
+```neplg2
+#target wasi2
 #entry main
 fn main <()->i32> ():
     0

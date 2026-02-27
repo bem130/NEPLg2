@@ -33,6 +33,7 @@ pub struct Label {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub severity: Severity,
+    pub id: Option<u32>,
     pub code: Option<&'static str>,
     pub message: String,
     pub primary: Label,
@@ -44,6 +45,7 @@ impl Diagnostic {
     pub fn error(message: impl Into<String>, primary_span: Span) -> Diagnostic {
         Diagnostic {
             severity: Severity::Error,
+            id: None,
             code: None,
             message: message.into(),
             primary: Label {
@@ -58,6 +60,7 @@ impl Diagnostic {
     pub fn warning(message: impl Into<String>, primary_span: Span) -> Diagnostic {
         Diagnostic {
             severity: Severity::Warning,
+            id: None,
             code: None,
             message: message.into(),
             primary: Label {
@@ -71,6 +74,12 @@ impl Diagnostic {
     /// Attach an error code (for example, "E0001") to this diagnostic.
     pub fn with_code(mut self, code: &'static str) -> Diagnostic {
         self.code = Some(code);
+        self
+    }
+
+    /// 短い数値IDを付与します（表示層での参照用）。
+    pub fn with_id(mut self, id: u32) -> Diagnostic {
+        self.id = Some(id);
         self
     }
 

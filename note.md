@@ -1,3 +1,31 @@
+# 2026-02-27 作業メモ (診断IDの enum 化と compile_fail ID検証の統合)
+- 目的:
+  - 診断IDを `const` 群ではなく `enum` で一元管理し、WASM/LLVM/CLI/Web/テストが同じID体系を参照するようにする。
+  - `compile_fail` doctest で診断ID一致を機械検証できるようにする。
+- 実装:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `DiagnosticId` enum (`#[repr(u32)]`) を導入。
+    - `as_u32` / `from_u32` / `message` を実装。
+  - `nepl-core/src/diagnostic.rs`
+    - `Diagnostic` に `id: Option<u32>` を追加。
+    - `with_id` を追加。
+  - `nepl-core/src/codegen_llvm.rs`
+    - `#target` 検証エラーに `[D1001]` / `[D1002]` を付与（WASM系と整合）。
+  - `nodesrc/parser.js`
+    - doctestメタ `diag_id:` / `diag_ids:` を解析可能に拡張。
+  - `nodesrc/tests.js`
+    - `compile_fail` 時に `[Dxxxx]` を照合する検証を追加。
+  - `nodesrc/run_test.js`
+    - `compile_fail` 用に `compile_error` を結果へ保持。
+  - `tests/neplg2.n.md`
+    - target診断ケースに `diag_id: 1001/1002` を付与。
+  - `tests/tree/18_diagnostic_ids.js`
+    - `id` / `id_message` の公開API検証を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node tests/tree/run.js` -> `18/18 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/neplg2.n.md -o /tmp/tests-neplg2-diagid.json --runner all --llvm-all --assert-io --strict-dual --no-tree -j 2` -> `573/573 pass`
+
 # 2026-02-27 作業メモ (`sort` 回帰テスト拡張: 重複値/負数)
 - 目的:
   - `todo.md` 3番（`sort/generics`）の切り分け精度を上げるため、`sort_i32(ptr,n)` の境界ケースを追加する。

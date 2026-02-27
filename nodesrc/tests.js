@@ -172,6 +172,7 @@ function collectTestsFromPath(inputPath) {
                 stdin: dt.stdin ?? '',
                 expected_stdout: dt.stdout ?? null,
                 expected_stderr: dt.stderr ?? null,
+                expected_diag_ids: Array.isArray(dt.diag_ids) ? dt.diag_ids : [],
             });
         }
     }
@@ -265,6 +266,9 @@ function normalizeOutputByTags(text, tags) {
 function applyDoctestExpectations(result, testCase, options = {}) {
     const r = { ...result };
     const tags = testCase?.tags || r.tags || [];
+    const expectedDiagIds = Array.isArray(testCase?.expected_diag_ids)
+        ? testCase.expected_diag_ids.filter((v) => Number.isFinite(v)).map((v) => Number(v))
+        : [];
     const strictIo = !!options.assertIo || process.env.NEPL_ASSERT_IO === '1' || hasTag(tags, 'assert_io');
     if (!strictIo) return r;
     const wantsStdout = testCase?.expected_stdout !== null && testCase?.expected_stdout !== undefined;
@@ -272,7 +276,24 @@ function applyDoctestExpectations(result, testCase, options = {}) {
 
     if (r.status !== 'pass') return r;
     if (r.phase === 'skip') return r;
-    if (hasTag(tags, 'compile_fail') || hasTag(tags, 'should_panic')) return r;
+    if (hasTag(tags, 'compile_fail')) {
+        if (expectedDiagIds.length === 0) return r;
+        const compileError = String(r.compile_error || '');
+        const missing = expectedDiagIds.filter((id) => !compileError.includes(`[D${id}]`));
+        if (missing.length > 0) {
+            r.ok = false;
+            r.status = 'fail';
+            r.phase = r.phase || 'compile';
+            r.error = [
+                'compile_fail diagnostic id mismatch',
+                `expected ids: ${JSON.stringify(expectedDiagIds)}`,
+                `missing ids: ${JSON.stringify(missing)}`,
+                `compile_error: ${JSON.stringify(compileError)}`,
+            ].join('\n');
+        }
+        return r;
+    }
+    if (hasTag(tags, 'should_panic')) return r;
     if (!wantsStdout && !wantsStderr) return r;
 
     if (wantsStdout) {
@@ -513,6 +534,7 @@ async function runSingleLlvmCli(c, workerId, cliPath, options = {}) {
             tags: c.tags,
             status: ok ? 'pass' : 'fail',
             phase: 'compile_llvm_cli',
+            compile_error: compileError,
             error: ok ? null : 'expected compile_fail, but llvm compilation succeeded',
             worker: workerId,
             compiler: { runner: 'nepl-cli-llvm' },
