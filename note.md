@@ -4499,3 +4499,24 @@
   - `node nodesrc/tests.js -i tests/neplg2.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-neplg2-current.json -j 1` -> `112/112 pass`
   - `node nodesrc/tests.js -i stdlib/tests/stack.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i stdlib/tests/cliarg.n.md -i stdlib/tests/fs.n.md -i stdlib/tests/string.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/stdlib-tests-six-no-stdlib.json -j 1` -> `42/42 pass`
   - `node nodesrc/tests.js -i tests -i stdlib --runner all --llvm-all --assert-io --strict-dual --no-tree -o /tmp/tests-dual-full-current.json -j 2` -> `1739/1739 pass`
+
+# 2026-02-27 作業メモ (collections pipe回帰の根本修正)
+- 目的:
+  - `tests/pipe_collections.n.md` の実行失敗（`memory access out of bounds`）と、`stdlib/nm/*.nepl` の `ambiguous overload` 回帰を同時に根本解消する。
+- 原因:
+  - `list` で pipe 用エイリアスとして `cons` を `list_cons` に直接束縛していたため、`xs |> cons 3` が `cons xs 3`（引数順逆）として解釈され、不正ポインタを next に格納して OOB を誘発していた。
+  - `new/len/...` の汎用短名エイリアス導入により、`as *` 取り込み時の候補集合が過剰化し、`nm` 側でオーバーロード曖昧化を発生させていた。
+- 実装:
+  - `stdlib/alloc/collections/list.nepl`
+    - `list_push_front <(i32,.T)*>i32>` を追加（pipeの第一引数規約に合わせた安全な先頭追加）。
+    - `list_len` / `list_get` を pure 署名で再帰実装に統一（副作用文脈依存を除去）。
+    - 汎用短名エイリアス群を除去し、曖昧化源を遮断。
+  - `tests/pipe_collections.n.md`
+    - すべて明示 API 呼び出しへ更新。
+    - list ケースは `list_push_front` を用いた pipe 検証に変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/pipe_collections.n.md -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i stdlib/tests/list.n.md -i stdlib/tests/stack.n.md -i stdlib/nm/parser.nepl -i stdlib/nm/html_gen.nepl --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-pipe-tree-collections-after-fix.json -j 2` -> `566/566 pass`
+  - `NO_COLOR=false node nodesrc/tests.js --changed --changed-base HEAD --runner all --llvm-all --assert-io --strict-dual --no-tree -o /tmp/tests-changed-after-pipe-fix.json -j 2` -> `49/49 pass`
+- 差分/課題:
+  - 汎用短名 alias をグローバル導入する方式は、現行のオーバーロード解決では回帰リスクが高い。今後はモジュール接頭辞APIを基本とし、必要なら resolver/typecheck 側の候補絞り込み拡張を先行してから再導入する。

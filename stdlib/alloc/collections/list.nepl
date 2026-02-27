@@ -144,6 +144,22 @@ fn list_cons <.T> <(.T,i32)*>i32> (head, tail):
     store_i32 add node size_of<.T> tail
     node
 
+//: list_push_front: 既存リストの先頭に要素を追加する（pipe向け）
+//:
+//: 目的:
+//: - `xs |> list_push_front v` の形で先頭追加を自然に書けるようにします。
+//:
+//: 実装(アルゴリズム):
+//: - 引数順だけを pipe 向けに並べ替えて `list_cons` を呼びます。
+//:
+//: 注意(重要):
+//: - 返り値は新しい先頭ノードのポインタです。
+//:
+//: 計算量:
+//: - O(1)
+fn list_push_front <.T> <(i32,.T)*>i32> (lst, head):
+    list_cons<.T> head lst
+
 //: list_head: 先頭要素を取得する
 //:
 //: 目的:
@@ -279,14 +295,14 @@ fn list_is_empty <.T> <(i32)->bool> (lst):
 //:     let l3 list_cons<i32> 1 l2;
 //:     if eq list_len<i32> l3 3 0 1
 //: ```
-fn list_len <.T> <(i32)*>i32> (lst):
-    let mut count <i32> 0
-    let mut cur <i32> lst
-    while ne cur 0:
-        do:
-            set count add count 1
-            set cur load_i32 add cur size_of<.T>
-    count
+fn list_len <.T> <(i32)->i32> (lst):
+    if:
+        cond:
+            eq lst 0
+        then:
+            0
+        else:
+            add 1 list_len<.T> load_i32 add lst size_of<.T>
 
 //: list_get: 指定位置の要素を取得する
 //:
@@ -322,34 +338,26 @@ fn list_len <.T> <(i32)*>i32> (lst):
 //:         Option::None:
 //:             1
 //: ```
-fn list_get <.T> <(i32,i32)*>Option<.T>> (lst, idx):
+fn list_get <.T> <(i32,i32)->Option<.T>> (lst, idx):
     if:
         cond:
             lt idx 0
         then:
             none<.T>
         else:
-            let mut cur <i32> lst
-            let mut i <i32> 0
-            let mut done <i32> 0
-            let mut out <Option<.T>> none<.T>
-            while eq done 0:
-                if:
-                    cond:
-                        eq cur 0
-                    then:
-                        set done 1
-                    else:
-                        if:
-                            cond:
-                                eq i idx
-                            then:
-                                set out some<.T> load<.T> cur
-                                set done 1
-                            else:
-                                set cur load_i32 add cur size_of<.T>
-                                set i add i 1
-            out
+            if:
+                cond:
+                    eq lst 0
+                then:
+                    none<.T>
+                else:
+                    if:
+                        cond:
+                            eq idx 0
+                        then:
+                            some<.T> load<.T> lst
+                        else:
+                            list_get<.T> load_i32 add lst size_of<.T> sub idx 1
 
 //: list_free: リスト全体を解放する
 //:
