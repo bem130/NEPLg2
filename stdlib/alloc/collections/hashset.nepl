@@ -19,7 +19,7 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/result" as *
-#import "core/field" as *
+#import "core/field" as field
 #import "alloc/diag/error" as *
 #import "alloc/string" as *
 #import "alloc/hash/hash32" as *
@@ -27,35 +27,7 @@
 struct HashSet:
     hdr <i32>
 
-// hashset: i32 キーの簡易集合
-//
-// 目的:
-// - i32 の重複なし集合を提供します。
-//
-// 実装(アルゴリズム):
-// - オープンアドレス法で線形探索します。
-//
-// 注意(重要):
-// - リサイズは未実装です。
-//
-// 計算量:
-// - 平均 O(1)、最悪 O(n)
 
-// hashset_contains_loop: 線形探索の内部ループ
-//
-// 目的:
-// - cur から開始して key を探索します。
-//
-// 実装(アルゴリズム):
-// - occupied==0 なら false。
-// - key 一致なら true。
-// - 次スロットへ進み、idx に戻ったら false。
-//
-// 注意(重要):
-// - entries は [occupied][key] の配列です。
-//
-// 計算量:
-// - 平均 O(1)、最悪 O(n)
 //: hashset_contains_loop: 主な用途
 //:
 //: [目的/もくてき]:
@@ -91,19 +63,6 @@ fn hashset_contains_loop <(i32,i32,i32,i32,i32,i32)->bool> (entries, entry_size,
                         else:
                             hashset_contains_loop entries entry_size cap idx next key
 
-// hashset_new: 新しい集合を作る
-//
-// 目的:
-// - 既定容量で空の集合を作成します。
-//
-// 実装(アルゴリズム):
-// - occupied を 0 に初期化したエントリ領域を確保します。
-//
-// 注意(重要):
-// - 返り値はヘッダのポインタです。
-//
-// 計算量:
-// - O(cap)
 //: hashset_new: 主な用途
 //:
 //: [目的/もくてき]:
@@ -144,19 +103,6 @@ fn hashset_new <()*>Result<HashSet, Diag>> ():
                     let hs2 <HashSet> HashSet header
                     ok<HashSet, Diag> hs2
 
-// hashset_insert: 要素を追加する
-//
-// 目的:
-// - key を集合に追加します。
-//
-// 実装(アルゴリズム):
-// - 空きスロットか同一キーを線形探索します。
-//
-// 注意(重要):
-// - 追加に成功した場合のみ true を返します。
-//
-// 計算量:
-// - 平均 O(1)、最悪 O(n)
 //: hashset_insert: 主な用途
 //:
 //: [目的/もくてき]:
@@ -171,11 +117,11 @@ fn hashset_new <()*>Result<HashSet, Diag>> ():
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_insert <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
-    let hdr <i32> get hs "hdr"
+    let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> mod_s abs hash32_i32 key cap
+    let idx <i32> i32_rem_u hash32_i32 key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut full <i32> 0
@@ -210,19 +156,6 @@ fn hashset_insert <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
         else:
             ok<HashSet, Diag> hs
 
-// hashset_contains: 要素の存在確認
-//
-// 目的:
-// - key が含まれるかを返します。
-//
-// 実装(アルゴリズム):
-// - 位置から線形探索し、一致すれば true を返します。
-//
-// 注意(重要):
-// - 見つからなければ false です。
-//
-// 計算量:
-// - 平均 O(1)、最悪 O(n)
 //: hashset_contains: 主な用途
 //:
 //: [目的/もくてき]:
@@ -237,26 +170,13 @@ fn hashset_insert <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_contains <(HashSet,i32)->bool> (hs, key):
-    let hdr <i32> get hs "hdr"
+    let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> mod_s abs hash32_i32 key cap
+    let idx <i32> i32_rem_u hash32_i32 key cap
     hashset_contains_loop entries entry_size cap idx idx key
 
-// hashset_remove: 要素を削除する
-//
-// 目的:
-// - key を削除し、削除できたら true を返します。
-//
-// 実装(アルゴリズム):
-// - 見つけたら occupied を 0 にして削除します。
-//
-// 注意(重要):
-// - クラスタ再配置は未実装です。
-//
-// 計算量:
-// - 平均 O(1)、最悪 O(n)
 //: hashset_remove: 主な用途
 //:
 //: [目的/もくてき]:
@@ -271,11 +191,11 @@ fn hashset_contains <(HashSet,i32)->bool> (hs, key):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_remove <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
-    let hdr <i32> get hs "hdr"
+    let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> mod_s abs hash32_i32 key cap
+    let idx <i32> i32_rem_u hash32_i32 key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0
@@ -308,19 +228,6 @@ fn hashset_remove <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
         else:
             diag_err<HashSet> diag_key_not_found "hashset_remove"
 
-// hashset_len: 要素数を返す
-//
-// 目的:
-// - 登録済み要素数を返します。
-//
-// 実装(アルゴリズム):
-// - ヘッダの count を返します。
-//
-// 注意(重要):
-// - 削除の扱いにより正確性が低下する可能性があります。
-//
-// 計算量:
-// - O(1)
 //: hashset_len: 主な用途
 //:
 //: [目的/もくてき]:
@@ -335,22 +242,9 @@ fn hashset_remove <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_len <(HashSet)->i32> (hs):
-    let hdr <i32> get hs "hdr"
+    let hdr <i32> field::get hs "hdr"
     load_i32 hdr
 
-// hashset_free: メモリを解放する
-//
-// 目的:
-// - エントリ領域とヘッダを解放します。
-//
-// 実装(アルゴリズム):
-// - cap を基に領域を dealloc します。
-//
-// 注意(重要):
-// - この後 hs を使うと未定義です。
-//
-// 計算量:
-// - O(1)
 //: hashset_free: 主な用途
 //:
 //: [目的/もくてき]:
@@ -365,7 +259,7 @@ fn hashset_len <(HashSet)->i32> (hs):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_free <(HashSet)*>()> (hs):
-    let hdr <i32> get hs "hdr"
+    let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     dealloc entries mul cap 8
@@ -413,70 +307,10 @@ fn len <(HashSet)->i32> (hs):
 fn free <(HashSet)*>()> (hs):
     hashset_free hs
 
-// abs: 絶対値を返す
-//
-// 目的:
-// - x の絶対値を返します。
-//
-// 実装(アルゴリズム):
-// - 0 と比較して符号を反転します。
-//
-// 注意(重要):
-// - 最小値の取り扱いは未検討です。
-//
-// 計算量:
-// - O(1)
-//: abs: 主な用途
-//:
-//: [目的/もくてき]:
-//: - abs の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn abs <(i32)->i32> (x):
-    if:
-        lt x 0
-        then sub 0 x
-        else x
 struct HashSetStr:
     hdr <i32>
 
-// hashset_str: str キーの簡易集合
-//
-// 目的:
-// - str の重複なし集合を提供します。
-//
-// 実装(アルゴリズム):
-// - オープンアドレス法で線形探索します。
-//
-// 注意(重要):
-// - リサイズは未実装です。
-// - 要素比較は str_eq で内容比較します。
-//
-// 計算量:
-// - 平均 O(1)、最悪 O(n)
 
-// hashset_str_contains_loop: 線形探索の内部ループ
-//
-// 目的:
-// - cur から開始して key を探索します。
-//
-// 実装(アルゴリズム):
-// - occupied==0 なら false。
-// - key 一致なら true。
-// - 次スロットへ進み、idx に戻ったら false。
-//
-// 注意(重要):
-// - entries は [occupied][key] の配列です。
-//
-// 計算量:
-// - 平均 O(1)、最悪 O(n)
 //: hashset_str_contains_loop: 主な用途
 //:
 //: [目的/もくてき]:
@@ -512,19 +346,6 @@ fn hashset_str_contains_loop <(i32,i32,i32,i32,i32,str)->bool> (entries, entry_s
                         else:
                             hashset_str_contains_loop entries entry_size cap idx next key
 
-// hashset_str_new: 新しい集合を作る
-//
-// 目的:
-// - 既定容量で空の集合を作成します。
-//
-// 実装(アルゴリズム):
-// - occupied を 0 に初期化したエントリ領域を確保します。
-//
-// 注意(重要):
-// - 返り値はヘッダのポインタです。
-//
-// 計算量:
-// - O(cap)
 //: hashset_str_new: 主な用途
 //:
 //: [目的/もくてき]:
@@ -565,19 +386,6 @@ fn hashset_str_new <()*>Result<HashSetStr, Diag>> ():
                     let hs2 <HashSetStr> HashSetStr header
                     ok<HashSetStr, Diag> hs2
 
-// hashset_str_insert: 要素を追加する
-//
-// 目的:
-// - key を集合に追加します。
-//
-// 実装(アルゴリズム):
-// - 空きスロットか同一キーを線形探索します。
-//
-// 注意(重要):
-// - 更新後の集合を返します。
-//
-// 計算量:
-// - 平均 O(1)、最悪 O(n)
 //: hashset_str_insert: 主な用途
 //:
 //: [目的/もくてき]:
@@ -592,11 +400,11 @@ fn hashset_str_new <()*>Result<HashSetStr, Diag>> ():
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_str_insert <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
-    let hdr <i32> get hs "hdr"
+    let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> mod_s abs hash32_str key cap
+    let idx <i32> i32_rem_u hash32_str key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut full <i32> 0
@@ -631,19 +439,6 @@ fn hashset_str_insert <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
         else:
             ok<HashSetStr, Diag> hs
 
-// hashset_str_contains: 要素の存在確認
-//
-// 目的:
-// - key が含まれるかを返します。
-//
-// 実装(アルゴリズム):
-// - 位置から線形探索し、一致すれば true を返します。
-//
-// 注意(重要):
-// - 見つからなければ false です。
-//
-// 計算量:
-// - 平均 O(1)、最悪 O(n)
 //: hashset_str_contains: 主な用途
 //:
 //: [目的/もくてき]:
@@ -658,26 +453,13 @@ fn hashset_str_insert <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_str_contains <(HashSetStr,str)->bool> (hs, key):
-    let hdr <i32> get hs "hdr"
+    let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> mod_s abs hash32_str key cap
+    let idx <i32> i32_rem_u hash32_str key cap
     hashset_str_contains_loop entries entry_size cap idx idx key
 
-// hashset_str_remove: 要素を削除する
-//
-// 目的:
-// - key を削除し、更新後の集合を返します。
-//
-// 実装(アルゴリズム):
-// - 見つけたら occupied を 0 にして削除します。
-//
-// 注意(重要):
-// - クラスタ再配置は未実装です。
-//
-// 計算量:
-// - 平均 O(1)、最悪 O(n)
 //: hashset_str_remove: 主な用途
 //:
 //: [目的/もくてき]:
@@ -692,11 +474,11 @@ fn hashset_str_contains <(HashSetStr,str)->bool> (hs, key):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_str_remove <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
-    let hdr <i32> get hs "hdr"
+    let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> mod_s abs hash32_str key cap
+    let idx <i32> i32_rem_u hash32_str key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0
@@ -729,19 +511,6 @@ fn hashset_str_remove <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
         else:
             diag_err<HashSetStr> diag_key_not_found "hashset_str_remove"
 
-// hashset_str_len: 要素数を返す
-//
-// 目的:
-// - 登録済み要素数を返します。
-//
-// 実装(アルゴリズム):
-// - ヘッダの count を返します。
-//
-// 注意(重要):
-// - 削除の扱いにより正確性が低下する可能性があります。
-//
-// 計算量:
-// - O(1)
 //: hashset_str_len: 主な用途
 //:
 //: [目的/もくてき]:
@@ -756,22 +525,9 @@ fn hashset_str_remove <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_str_len <(HashSetStr)->i32> (hs):
-    let hdr <i32> get hs "hdr"
+    let hdr <i32> field::get hs "hdr"
     load_i32 hdr
 
-// hashset_str_free: メモリを解放する
-//
-// 目的:
-// - エントリ領域とヘッダを解放します。
-//
-// 実装(アルゴリズム):
-// - cap を基に領域を dealloc します。
-//
-// 注意(重要):
-// - この後 hs を使うと未定義です。
-//
-// 計算量:
-// - O(1)
 //: hashset_str_free: 主な用途
 //:
 //: [目的/もくてき]:
@@ -786,7 +542,7 @@ fn hashset_str_len <(HashSetStr)->i32> (hs):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_str_free <(HashSetStr)*>()> (hs):
-    let hdr <i32> get hs "hdr"
+    let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     dealloc entries mul cap 8

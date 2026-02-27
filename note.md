@@ -4883,3 +4883,29 @@
 - `node nodesrc/tests.js -i tests/overload.n.md -o /tmp/tests-overload-now3.json --no-stdlib --no-tree` -> 18/18 pass
 - `node nodesrc/tests.js -i tests -o /tmp/tests-tests-no-stdlib-final4.json --no-stdlib --no-tree` -> 471/471 pass
 - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-final.json --no-tree` -> 676/676 pass
+
+# 2026-02-27 作業メモ (hash map/set 差分の再検証)
+## 実施内容
+- `stdlib/alloc/collections/hashmap.nepl`
+  - `core/field` の参照を `field::get` に統一。
+  - i32 キー位置計算を `mod_s abs ...` から `i32_rem_u` に統一。
+  - 非ドキュメントコメント (`//`) を削除し、`//:` のみ残す構成へ整理。
+- `stdlib/alloc/collections/hashset.nepl`
+  - `core/field` の参照を `field::get` に統一。
+  - i32 キー位置計算を `mod_s abs ...` から `i32_rem_u` に統一。
+  - 非ドキュメントコメント (`//`) を削除し、`//:` のみ残す構成へ整理。
+- `stdlib/alloc/hash/hash32.nepl`
+  - `alloc/string` を `string` alias で import し、`string::len` を使用する形に統一。
+- `stdlib/tests/vec.n.md`
+  - `push<u8> cast 65` の曖昧解決を回避するため、`u8_65` へ分離してから `push<u8>` に渡す形へ修正。
+- `tests/selfhost_req.n.md`
+  - 対象ケースに `#target std` を追加。
+
+## 検証
+- `NO_COLOR=false trunk build` -> pass
+- `node nodesrc/tests.js -i stdlib/tests/hash.n.md -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md -o /tmp/tests-hash-related.json --no-tree`
+  - `210/210 pass`
+- `node nodesrc/tests.js -i tests/selfhost_req.n.md -i stdlib/tests/vec.n.md -o /tmp/tests-selfhost-vec.json --no-tree`
+  - `212/212 pass`
+- `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-regression.json --no-tree`
+  - `676/676 pass`

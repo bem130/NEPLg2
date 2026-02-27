@@ -111,6 +111,7 @@ ret: 10
 
 #entry main
 #indent 4
+#target std
 #import "alloc/collections/hashmap" as *
 #import "alloc/diag/error" as *
 #import "alloc/string" as *

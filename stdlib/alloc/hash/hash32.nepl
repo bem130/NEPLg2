@@ -31,7 +31,7 @@
 #indent 4
 
 #import "core/math" as *
-#import "alloc/string" as *
+#import "alloc/string" as string
 #import "alloc/hash/fnv1a32" as *
 
 //: hash32_mix_fmix: 32-bit 値を avalanche 混合する内部関数
@@ -108,7 +108,7 @@ fn hash32_str_loop <(str,i32,i32,Fnv1a32)->Fnv1a32> (s, n, idx, h):
 //: [計算量/けいさんりょう]:
 //: - O(n)
 fn hash32_str <(str)->i32> (s):
-    let n <i32> len s;
+    let n <i32> string::len s;
     let h0 <Fnv1a32> new_fnv1a32;
     let h1 <Fnv1a32> hash32_str_loop s n 0 h0;
     hash32_mix_fmix fnv1a32_finalize h1

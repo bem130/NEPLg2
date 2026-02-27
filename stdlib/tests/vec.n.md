@@ -58,9 +58,10 @@ fn main <()*> ()> ():
         |> push<i32> 10;
     assert is_none<i32> vec_get<i32> p1 -1;
 
+    let u8_65 <u8> cast 65;
     let b1:
         vec_new<u8>
-        |> push<u8> cast 65;
+        |> push<u8> u8_65;
     match vec_get<u8> b1 0:
         Option::Some x:
             assert_eq_i32 65 cast x
