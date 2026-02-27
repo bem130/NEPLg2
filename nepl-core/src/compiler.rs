@@ -29,6 +29,7 @@ use wasmparser::{Imports, Parser, Payload, TypeRef, Validator};
 pub enum CompileTarget {
     Wasm,
     Wasi,
+    Wasix,
     Llvm,
 }
 
@@ -146,8 +147,9 @@ impl<'a> TargetGateParser<'a> {
 
 fn target_gate_atom_allows(gate: &str, active: CompileTarget) -> bool {
     match gate {
-        "wasm" => matches!(active, CompileTarget::Wasm | CompileTarget::Wasi),
-        "wasi" => matches!(active, CompileTarget::Wasi),
+        "wasm" => matches!(active, CompileTarget::Wasm | CompileTarget::Wasi | CompileTarget::Wasix),
+        "wasi" => matches!(active, CompileTarget::Wasi | CompileTarget::Wasix),
+        "wasix" => matches!(active, CompileTarget::Wasix),
         "llvm" => matches!(active, CompileTarget::Llvm),
         // Alias target gates:
         // - core: minimal runtime layer (wasm/wasi/llvm すべてで共有可能)
@@ -156,7 +158,10 @@ fn target_gate_atom_allows(gate: &str, active: CompileTarget) -> bool {
             active,
             CompileTarget::Wasm | CompileTarget::Wasi | CompileTarget::Llvm
         ),
-        "std" => matches!(active, CompileTarget::Wasi | CompileTarget::Llvm),
+        "std" => matches!(
+            active,
+            CompileTarget::Wasi | CompileTarget::Wasix | CompileTarget::Llvm
+        ),
         // OS axis は「コンパイル対象 target」に対して判定する。
         // 現段階では llvm は linux native を前提としているため、
         // linux=true, win/mac=false として扱う。
@@ -628,6 +633,7 @@ fn parse_target_name(name: &str) -> Option<CompileTarget> {
     match name {
         "wasm" | "core" => Some(CompileTarget::Wasm),
         "wasi" | "std" => Some(CompileTarget::Wasi),
+        "wasix" => Some(CompileTarget::Wasix),
         "llvm" => Some(CompileTarget::Llvm),
         _ => None,
     }

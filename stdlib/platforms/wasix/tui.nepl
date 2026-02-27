@@ -1,0 +1,123 @@
+#indent 4
+
+#if[target=wasm&wasix]
+#extern "wasix_32v1" "tty_get" fn wasix_tty_get <(i32)*>i32>
+#if[target=wasm&wasix]
+#extern "wasix_32v1" "tty_set" fn wasix_tty_set <(i32)*>i32>
+
+#import "core/mem" as *
+#import "core/math" as *
+
+//: TtyState: WASIX TTY 構造体のメモリレイアウト
+//: 
+//: 目的:
+//: - WASIX ABI の `Tty` 構造体を扱います。
+//:
+//: レイアウト:
+//: - offset 0: cols (u32)
+//: - offset 4: rows (u32)
+//: - offset 8: width (u32)
+//: - offset 12: height (u32)
+//: - offset 16: stdin_tty (u8/bool)
+//: - offset 17: stdout_tty (u8/bool)
+//: - offset 18: stderr_tty (u8/bool)
+//: - offset 19: echo (u8/bool)
+//: - offset 20: line_buffered (u8/bool)
+//: - (24 bytes allocated for safety)
+
+fn get_tty_state <()*>i32> ():
+    let ptr <i32> alloc 24;
+    let errno <i32> wasix_tty_get ptr;
+    if:
+        eq errno 0
+        then:
+            ptr
+        else:
+            dealloc ptr 24;
+            0
+
+fn set_tty_state <(i32)*>i32> (ptr):
+    wasix_tty_set ptr
+
+fn get_cols <(i32)*>i32> (ptr):
+    load_i32 ptr
+
+fn get_rows <(i32)*>i32> (ptr):
+    load_i32 add ptr 4
+
+fn set_echo <(i32,bool)*>()> (ptr, enable):
+    let v <i32> if enable 1 0;
+    store_u8 add ptr 19 v
+
+fn set_line_buffered <(i32,bool)*>()> (ptr, enable):
+    let v <i32> if enable 1 0;
+    store_u8 add ptr 20 v
+
+//: enter_raw_mode: ターミナルを RAW モードにする
+//:
+//: 目的:
+//: - echo と line_buffered を無効化します。
+//: - 成功時は以前の TtyState ポインタを返します。
+//:
+//: 注意(重要):
+//: - 返されたポインタは restore_mode に渡して解放する必要があります。
+fn enter_raw_mode <()*>i32> ():
+    let state <i32> get_tty_state;
+    if:
+        ne state 0
+        then:
+            let old_state <i32> alloc 24;
+            // Copy state to old_state
+            let mut i <i32> 0;
+            while lt i 24:
+                do:
+                    store_u8 add old_state i load_u8 add state i;
+                    set i add i 1;
+
+            set_echo state false;
+            set_line_buffered state false;
+            let errno <i32> set_tty_state state;
+            dealloc state 24;
+            if:
+                eq errno 0
+                then:
+                    old_state
+                else:
+                    dealloc old_state 24;
+                    0
+        else:
+            0
+
+//: restore_mode: ターミナルの状態を元に戻す
+//:
+//: 目的:
+//: - enter_raw_mode で保存した状態を復元します。
+fn restore_mode <(i32)*>i32> (old_state):
+    if:
+        ne old_state 0
+        then:
+            let errno <i32> set_tty_state old_state;
+            dealloc old_state 24;
+            errno
+        else:
+            -1
+
+//: get_terminal_size: ターミナルのサイズ (cols, rows) を取得する
+//:
+//: 目的:
+//: - 現在のターミナルの列数と行数を取得します。
+fn get_terminal_size <()*>.Pair> ():
+    let state <i32> get_tty_state;
+    if:
+        ne state 0
+        then:
+            let c <i32> get_cols state;
+            let r <i32> get_rows state;
+            dealloc state 24;
+            Tuple:
+                c
+                r
+        else:
+            Tuple:
+                0
+                0

@@ -75,7 +75,7 @@ struct Cli {
     )]
     lib: bool,
 
-    #[arg(long, value_name = "TARGET", value_parser = ["wasm", "wasi", "llvm", "core", "std"], help = "Compilation target: wasm, wasi, llvm, core(alias wasm), std(alias wasi)")]
+    #[arg(long, value_name = "TARGET", value_parser = ["wasm", "wasi", "wasix", "llvm", "core", "std"], help = "Compilation target: wasm, wasi, wasix, llvm, core(alias wasm), std(alias wasi)")]
     target: Option<String>,
 
     #[arg(short, long, global = true, help = "Enable verbose compiler logging")]
@@ -178,6 +178,7 @@ fn execute(cli: Cli) -> Result<()> {
 
     let cli_target = cli.target.as_deref().map(|t| match t {
         "wasi" | "std" => CompileTarget::Wasi,
+        "wasix" => CompileTarget::Wasix,
         "llvm" => CompileTarget::Llvm,
         "wasm" | "core" => CompileTarget::Wasm,
         _ => CompileTarget::Wasm,
@@ -666,11 +667,11 @@ fn run_wasm(
 
     let mut linker: Linker<AllocState> = Linker::new(&engine);
     match target {
-        CompileTarget::Wasi => {
+        CompileTarget::Wasi | CompileTarget::Wasix => {
             for import in module.imports() {
-                if import.module() != "wasi_snapshot_preview1" {
+                if import.module() != "wasi_snapshot_preview1" && import.module() != "wasix_32v1" {
                     return Err(anyhow::anyhow!(
-                        "unsupported non-WASI import {}::{} (only wasi_snapshot_preview1 is allowed)",
+                        "unsupported import {}::{} (only wasi_snapshot_preview1 or wasix_32v1 are allowed for wasi/wasix targets)",
                         import.module(),
                         import.name()
                     ));
@@ -692,7 +693,7 @@ fn run_wasm(
             ));
         }
     }
-    if matches!(target, CompileTarget::Wasi) {
+    if matches!(target, CompileTarget::Wasi | CompileTarget::Wasix) {
         linker.func_wrap(
             "wasi_snapshot_preview1",
             "args_sizes_get",
