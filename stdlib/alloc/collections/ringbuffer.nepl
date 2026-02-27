@@ -1,0 +1,165 @@
+//: ringbuffer: 固定長循環バッファ（自動拡張）を扱うライブラリ
+//:
+//: [目的/もくてき]:
+//: - `push_back` / `pop_front` / `peek_front` を O(1) で扱えるキュー基盤を提供します。
+//:
+//: [実装/じっそう]:
+//: - ヘッダ `[len, cap, head, data_ptr]` を持つ構造で管理します。
+//: - 容量不足時は 2 倍拡張し、論理順序を保つように再配置します。
+//:
+//: [注意/ちゅうい]:
+//: - `push_back` は `Result<RingBuffer<.T>, Diag>` を返します。
+//: - `pop_front` / `peek_front` は `Option<.T>` を返します。
+//:
+//: [計算量/けいさんりょう]:
+//: - `len/is_empty/peek_front/pop_front` は O(1)。
+//: - `push_back` はならし O(1)、拡張時 O(n)。
+
+#indent 4
+
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/option" as *
+#import "core/result" as *
+#import "core/field" as *
+#import "alloc/diag/error" as *
+
+struct RingBuffer<.T>:
+    hdr <i32>
+
+fn ringbuffer_new <.T> <()*>Result<RingBuffer<.T>, Diag>> ():
+    ringbuffer_with_capacity<.T> 8
+
+fn ringbuffer_with_capacity <.T> <(i32)*>Result<RingBuffer<.T>, Diag>> (initial_cap):
+    let cap <i32> if lt initial_cap 1 1 initial_cap
+    let data_size <i32> mul cap size_of<.T>
+    let data <i32> alloc data_size
+    if:
+        eq data 0
+        then:
+            diag_err<RingBuffer<.T>> diag_out_of_memory "ringbuffer_with_capacity(data)"
+        else:
+            let hdr <i32> alloc 16
+            if:
+                eq hdr 0
+                then:
+                    dealloc data data_size
+                    diag_err<RingBuffer<.T>> diag_out_of_memory "ringbuffer_with_capacity(header)"
+                else:
+                    store_i32 hdr 0
+                    store_i32 add hdr 4 cap
+                    store_i32 add hdr 8 0
+                    store_i32 add hdr 12 data
+                    ok<RingBuffer<.T>, Diag> RingBuffer hdr
+
+fn ringbuffer_len <.T> <(RingBuffer<.T>)->i32> (rb):
+    load_i32 get rb "hdr"
+
+fn ringbuffer_cap <.T> <(RingBuffer<.T>)->i32> (rb):
+    load_i32 add get rb "hdr" 4
+
+fn ringbuffer_is_empty <.T> <(RingBuffer<.T>)->bool> (rb):
+    eq ringbuffer_len<.T> rb 0
+
+fn ringbuffer_push_back <.T> <(RingBuffer<.T>, .T)*>Result<RingBuffer<.T>, Diag>> (rb, item):
+    let hdr <i32> get rb "hdr"
+    let len <i32> load_i32 hdr
+    let cap <i32> load_i32 add hdr 4
+    let head <i32> load_i32 add hdr 8
+    let data <i32> load_i32 add hdr 12
+
+    if:
+        eq len cap
+        then:
+            let new_cap <i32> mul cap 2
+            let new_size <i32> mul new_cap size_of<.T>
+            let new_data <i32> alloc new_size
+            if:
+                eq new_data 0
+                then:
+                    diag_err<RingBuffer<.T>> diag_out_of_memory "ringbuffer_push_back(grow)"
+                else:
+                    let mut i <i32> 0
+                    while lt i len:
+                        do:
+                            let src_idx <i32> mod_s add head i cap
+                            let src_off <i32> mul src_idx size_of<.T>
+                            let dst_off <i32> mul i size_of<.T>
+                            store<.T> add new_data dst_off load<.T> add data src_off
+                            set i add i 1
+                    dealloc data mul cap size_of<.T>
+                    store_i32 add hdr 4 new_cap
+                    store_i32 add hdr 8 0
+                    store_i32 add hdr 12 new_data
+                    let tail_idx <i32> len
+                    let tail_off <i32> mul tail_idx size_of<.T>
+                    store<.T> add new_data tail_off item
+                    store_i32 hdr add len 1
+                    ok<RingBuffer<.T>, Diag> rb
+        else:
+            let tail_idx <i32> mod_s add head len cap
+            let tail_off <i32> mul tail_idx size_of<.T>
+            store<.T> add data tail_off item
+            store_i32 hdr add len 1
+            ok<RingBuffer<.T>, Diag> rb
+
+fn ringbuffer_pop_front <.T> <(RingBuffer<.T>)*>Option<.T>> (rb):
+    let hdr <i32> get rb "hdr"
+    let len <i32> load_i32 hdr
+    if:
+        eq len 0
+        then:
+            none<.T>
+        else:
+            let cap <i32> load_i32 add hdr 4
+            let head <i32> load_i32 add hdr 8
+            let data <i32> load_i32 add hdr 12
+            let off <i32> mul head size_of<.T>
+            let item <.T> load<.T> add data off
+            store_i32 add hdr 8 mod_s add head 1 cap
+            store_i32 hdr sub len 1
+            some<.T> item
+
+fn ringbuffer_peek_front <.T> <(RingBuffer<.T>)->Option<.T>> (rb):
+    let hdr <i32> get rb "hdr"
+    let len <i32> load_i32 hdr
+    if:
+        eq len 0
+        then:
+            none<.T>
+        else:
+            let head <i32> load_i32 add hdr 8
+            let data <i32> load_i32 add hdr 12
+            let off <i32> mul head size_of<.T>
+            some<.T> load<.T> add data off
+
+fn ringbuffer_clear <.T> <(RingBuffer<.T>)*>RingBuffer<.T>> (rb):
+    let hdr <i32> get rb "hdr"
+    store_i32 hdr 0
+    store_i32 add hdr 8 0
+    rb
+
+fn ringbuffer_free <.T> <(RingBuffer<.T>)*>()> (rb):
+    let hdr <i32> get rb "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let data <i32> load_i32 add hdr 12
+    dealloc data mul cap size_of<.T>
+    dealloc hdr 16
+
+fn push_back <.T> <(RingBuffer<.T>, .T)*>Result<RingBuffer<.T>, Diag>> (rb, item):
+    ringbuffer_push_back<.T> rb item
+
+fn pop_front <.T> <(RingBuffer<.T>)*>Option<.T>> (rb):
+    ringbuffer_pop_front<.T> rb
+
+fn peek_front <.T> <(RingBuffer<.T>)->Option<.T>> (rb):
+    ringbuffer_peek_front<.T> rb
+
+fn len <.T> <(RingBuffer<.T>)->i32> (rb):
+    ringbuffer_len<.T> rb
+
+fn clear <.T> <(RingBuffer<.T>)*>RingBuffer<.T>> (rb):
+    ringbuffer_clear<.T> rb
+
+fn free <.T> <(RingBuffer<.T>)*>()> (rb):
+    ringbuffer_free<.T> rb
