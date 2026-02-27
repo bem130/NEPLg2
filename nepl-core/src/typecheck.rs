@@ -774,11 +774,7 @@ pub fn typecheck(
                     continue;
                 }
                 env.remove_duplicate_func(&f.name.name, ty, &ctx);
-                let symbol = if type_contains_unbound_var(&ctx, ty) {
-                    f.name.name.clone()
-                } else {
-                    mangle_function_symbol(&f.name.name, ty, &ctx)
-                };
+                let symbol = mangle_function_symbol(&f.name.name, ty, &ctx);
                 env.insert_global(Binding {
                     name: f.name.name.clone(),
                     ty,
@@ -1846,6 +1842,16 @@ impl<'a> BlockChecker<'a> {
         idx: FieldIdx,
         span: Span,
     ) -> Option<(TypeId, usize)> {
+        self.resolve_field_access_with_mode(base_ty, idx, span, true)
+    }
+
+    fn resolve_field_access_with_mode(
+        &mut self,
+        base_ty: TypeId,
+        idx: FieldIdx,
+        span: Span,
+        emit_diagnostics: bool,
+    ) -> Option<(TypeId, usize)> {
         let resolved_ty = self.ctx.resolve(base_ty);
         match self.ctx.get(resolved_ty) {
             TypeKind::Struct {
@@ -1857,10 +1863,12 @@ impl<'a> BlockChecker<'a> {
                     if i < fields.len() {
                         Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                     } else {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!("struct index out of bounds: {}", i),
-                            span,
-                        ));
+                        if emit_diagnostics {
+                            self.diagnostics.push(Diagnostic::error(
+                                format!("struct index out of bounds: {}", i),
+                                span,
+                            ));
+                        }
                         None
                     }
                 }
@@ -1868,10 +1876,12 @@ impl<'a> BlockChecker<'a> {
                     if let Some(i) = field_names.iter().position(|n| *n == name) {
                         Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                     } else {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!("struct has no field {}", name),
-                            span,
-                        ));
+                        if emit_diagnostics {
+                            self.diagnostics.push(Diagnostic::error(
+                                format!("struct has no field {}", name),
+                                span,
+                            ));
+                        }
                         None
                     }
                 }
@@ -1881,10 +1891,12 @@ impl<'a> BlockChecker<'a> {
                     if i < items.len() {
                         Some((items[i], composite_field_offset_bytes(self.ctx, &items, i)))
                     } else {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!("tuple index out of bounds: {}", i),
-                            span,
-                        ));
+                        if emit_diagnostics {
+                            self.diagnostics.push(Diagnostic::error(
+                                format!("tuple index out of bounds: {}", i),
+                                span,
+                            ));
+                        }
                         None
                     }
                 }
@@ -1893,17 +1905,21 @@ impl<'a> BlockChecker<'a> {
                         if i < items.len() {
                             Some((items[i], composite_field_offset_bytes(self.ctx, &items, i)))
                         } else {
-                            self.diagnostics.push(Diagnostic::error(
-                                format!("tuple index out of bounds: {}", i),
-                                span,
-                            ));
+                            if emit_diagnostics {
+                                self.diagnostics.push(Diagnostic::error(
+                                    format!("tuple index out of bounds: {}", i),
+                                    span,
+                                ));
+                            }
                             None
                         }
                     } else {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!("invalid tuple field access: {}", name),
-                            span,
-                        ));
+                        if emit_diagnostics {
+                            self.diagnostics.push(Diagnostic::error(
+                                format!("invalid tuple field access: {}", name),
+                                span,
+                            ));
+                        }
                         None
                     }
                 }
@@ -1933,10 +1949,12 @@ impl<'a> BlockChecker<'a> {
                                         composite_field_offset_bytes(self.ctx, &substituted_fields, i),
                                     ))
                                 } else {
-                                    self.diagnostics.push(Diagnostic::error(
-                                        format!("generic struct index out of bounds: {}", i),
-                                        span,
-                                    ));
+                                    if emit_diagnostics {
+                                        self.diagnostics.push(Diagnostic::error(
+                                            format!("generic struct index out of bounds: {}", i),
+                                            span,
+                                        ));
+                                    }
                                     None
                                 }
                             }
@@ -1947,27 +1965,130 @@ impl<'a> BlockChecker<'a> {
                                         composite_field_offset_bytes(self.ctx, &substituted_fields, i),
                                     ))
                                 } else {
-                                    self.diagnostics.push(Diagnostic::error(
-                                        format!("generic struct has no field {}", name),
-                                        span,
-                                    ));
+                                    if emit_diagnostics {
+                                        self.diagnostics.push(Diagnostic::error(
+                                            format!("generic struct has no field {}", name),
+                                            span,
+                                        ));
+                                    }
                                     None
                                 }
                             }
                         }
                     }
+                    TypeKind::Named(type_name) => {
+                        if let Some(info) = self.structs.get(&type_name) {
+                            let type_params = info.type_params.clone();
+                            let fields = info.fields.clone();
+                            let field_names = info.field_names.clone();
+                            let mut mapping = BTreeMap::new();
+                            for (tp, arg) in type_params.iter().zip(args.iter()) {
+                                mapping.insert(*tp, *arg);
+                            }
+                            let substituted_fields = fields
+                                .iter()
+                                .map(|f| self.ctx.substitute(*f, &mapping))
+                                .collect::<Vec<_>>();
+                            match idx {
+                                FieldIdx::Index(i) => {
+                                    if i < substituted_fields.len() {
+                                        Some((
+                                            substituted_fields[i],
+                                            composite_field_offset_bytes(self.ctx, &substituted_fields, i),
+                                        ))
+                                    } else {
+                                        if emit_diagnostics {
+                                            self.diagnostics.push(Diagnostic::error(
+                                                format!("generic struct index out of bounds: {}", i),
+                                                span,
+                                            ));
+                                        }
+                                        None
+                                    }
+                                }
+                                FieldIdx::Name(name) => {
+                                    if let Some(i) = field_names.iter().position(|n| *n == name) {
+                                        Some((
+                                            substituted_fields[i],
+                                            composite_field_offset_bytes(self.ctx, &substituted_fields, i),
+                                        ))
+                                    } else {
+                                        if emit_diagnostics {
+                                            self.diagnostics.push(Diagnostic::error(
+                                                format!("generic struct has no field {}", name),
+                                                span,
+                                            ));
+                                        }
+                                        None
+                                    }
+                                }
+                            }
+                        } else {
+                            if emit_diagnostics {
+                                self.diagnostics
+                                    .push(Diagnostic::error("cannot access field on this type", span));
+                            }
+                            None
+                        }
+                    }
                     _ => {
-                        self.diagnostics
-                            .push(Diagnostic::error("cannot access field on this type", span));
+                        if emit_diagnostics {
+                            self.diagnostics
+                                .push(Diagnostic::error("cannot access field on this type", span));
+                        }
                         None
                     }
                 }
             }
+            TypeKind::Named(type_name) => {
+                if let Some(info) = self.structs.get(&type_name) {
+                    let fields = info.fields.clone();
+                    let field_names = info.field_names.clone();
+                    match idx {
+                        FieldIdx::Index(i) => {
+                            if i < fields.len() {
+                                Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
+                            } else {
+                                if emit_diagnostics {
+                                    self.diagnostics.push(Diagnostic::error(
+                                        format!("struct index out of bounds: {}", i),
+                                        span,
+                                    ));
+                                }
+                                None
+                            }
+                        }
+                        FieldIdx::Name(name) => {
+                            if let Some(i) = field_names.iter().position(|n| *n == name) {
+                                Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
+                            } else {
+                                if emit_diagnostics {
+                                    self.diagnostics.push(Diagnostic::error(
+                                        format!("struct has no field {}", name),
+                                        span,
+                                    ));
+                                }
+                                None
+                            }
+                        }
+                    }
+                } else {
+                    if emit_diagnostics {
+                        self.diagnostics.push(Diagnostic::error(
+                            "cannot access field on this type",
+                            span,
+                        ));
+                    }
+                    None
+                }
+            }
             _ => {
-                self.diagnostics.push(Diagnostic::error(
-                    "cannot access field on non-composite type",
-                    span,
-                ));
+                if emit_diagnostics {
+                    self.diagnostics.push(Diagnostic::error(
+                        "cannot access field on non-composite type",
+                        span,
+                    ));
+                }
                 None
             }
         }
@@ -2696,6 +2817,9 @@ impl<'a> BlockChecker<'a> {
                                         })
                                         .or(outer_expected_callable_arity);
                                     if let Some(exp_arity) = expected_callable_arity {
+                                        let allow_fnvalue_selection =
+                                            *forced_value || idx + 1 >= expr.items.len();
+                                        if allow_fnvalue_selection {
                                         let mut arity_candidates: Vec<&Binding> = bindings
                                             .iter()
                                             .copied()
@@ -2759,6 +2883,7 @@ impl<'a> BlockChecker<'a> {
                                                     .with_id(DiagnosticId::TypeAmbiguousOverload),
                                             );
                                             return None;
+                                        }
                                         }
                                     }
                                     let mut effect = None;
@@ -3766,6 +3891,7 @@ impl<'a> BlockChecker<'a> {
             let mut func_entry = stack.remove(func_pos);
             func_entry.ty = inst_ty;
             func_entry.expr.ty = inst_ty;
+            let explicit_type_args = func_entry.type_args.clone();
                 if crate::log::is_verbose() {
                     std::eprintln!("    Reducing: {} at pos {} with {} args, assign={:?}", self.ctx.type_to_string(inst_ty), func_pos, params.len(), func_entry.assign);
                 }
@@ -3775,7 +3901,7 @@ impl<'a> BlockChecker<'a> {
                 result,
                 effect,
                 args,
-                fresh_args,
+                explicit_type_args,
                 expected_ret,
             );
 
@@ -3941,6 +4067,7 @@ impl<'a> BlockChecker<'a> {
             let mut func_entry = stack.remove(func_pos);
             func_entry.ty = inst_ty;
             func_entry.expr.ty = inst_ty;
+            let explicit_type_args = func_entry.type_args.clone();
                 if crate::log::is_verbose() {
                     std::eprintln!("    Reducing (guarded): {} at pos {} with {} args, assign={:?}", self.ctx.type_to_string(inst_ty), func_pos, params.len(), func_entry.assign);
                 }
@@ -3950,7 +4077,7 @@ impl<'a> BlockChecker<'a> {
                 result,
                 effect,
                 args,
-                fresh_args,
+                explicit_type_args,
                 expected_ret,
             );
 
@@ -4491,7 +4618,8 @@ impl<'a> BlockChecker<'a> {
             _ => {}
         }
         
-        // Specialized inlining for get/put
+        // Specialized inlining for core/field get/put.
+        // If user-defined overloads exist, fall back to normal overload resolution.
         if let HirExprKind::Var(name) = &func.expr.kind {
             if (name == "get" || name == "put") && args.len() >= 2 {
                 let obj = args[0].expr.clone();
@@ -4505,7 +4633,9 @@ impl<'a> BlockChecker<'a> {
                     _ => None,
                 };
                 if let Some(f_idx) = field_idx {
-                    if let Some((f_ty, offset)) = self.resolve_field_access(obj.ty, f_idx, func.expr.span) {
+                    if let Some((f_ty, offset)) =
+                        self.resolve_field_access_with_mode(obj.ty, f_idx.clone(), func.expr.span, false)
+                    {
                         if name == "get" && args.len() == 2 {
                             let addr_expr = if offset == 0 {
                                 obj
@@ -5296,10 +5426,16 @@ impl Env {
     }
 
     fn lookup_all_callables(&self, name: &str) -> Vec<&Binding> {
-        self.lookup_all_any_defined(name)
-            .into_iter()
-            .filter(|b| matches!(b.kind, BindingKind::Func { .. }))
-            .collect()
+        let mut items = Vec::new();
+        for scope in self.scopes.iter().rev() {
+            items.extend(
+                scope
+                    .callables
+                    .iter()
+                    .filter(|b| b.name == name && b.defined),
+            );
+        }
+        items
     }
 
     fn lookup_callable_any(&self, name: &str) -> Option<&Binding> {

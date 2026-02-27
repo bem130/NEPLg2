@@ -9,9 +9,10 @@ neplg2:test
 #indent 4
 #target std
 
-#import "alloc/collections/hashset_str" as *
+#import "alloc/collections/hashset" as *
 #import "alloc/diag/error" as *
 #import "alloc/string" as *
+#import "core/math" as *
 #import "core/result" as *
 #import "std/test" as *
 
@@ -27,7 +28,7 @@ fn main <()*> ()> ():
     assert_eq_i32 0 hashset_str_len hs0;
 
     let hs1 <HashSetStr> must_hss hashset_str_new;
-    assert_ne true hashset_str_contains hs1 "foo";
+    assert not hashset_str_contains hs1 "foo";
     test_checked "new";
 
     let hs2 <HashSetStr> must_hss hashset_str_new;
@@ -55,15 +56,30 @@ fn main <()*> ()> ():
     let hs4 <HashSetStr> must_hss hashset_str_new;
     let hs4 <HashSetStr> must_hss hashset_str_insert hs4 "foo";
     let hs4 <HashSetStr> must_hss hashset_str_remove hs4 "foo";
-    assert_ne true hashset_str_contains hs4 "foo";
+    assert not hashset_str_contains hs4 "foo";
 
     let hs5 <HashSetStr> must_hss hashset_str_new;
     let hs5 <HashSetStr> must_hss hashset_str_insert hs5 "foo";
     assert is_err<HashSetStr, Diag> hashset_str_remove hs5 "zzz";
     test_checked "remove";
 
+    let a0 <HashSetStr> must_hss hashset_str_new;
+    let a1 <HashSetStr> must_hss hashset_str_insert a0 "k";
+    assert hashset_str_contains a1 "k";
+    let b0 <HashSetStr> must_hss hashset_str_new;
+    let b1 <HashSetStr> must_hss hashset_str_insert b0 "k";
+    assert_eq_i32 1 hashset_str_len b1;
+    let c0 <HashSetStr> must_hss hashset_str_new;
+    let c1 <HashSetStr> must_hss hashset_str_insert c0 "k";
+    let b2 <HashSetStr> must_hss hashset_str_remove c1 "k";
+    assert_eq_i32 0 hashset_str_len b2;
+    test_checked "alias";
+
     let hsf <HashSetStr> must_hss hashset_str_new;
     let hsf <HashSetStr> must_hss hashset_str_insert hsf "x";
     hashset_str_free hsf;
+    let af0 <HashSetStr> must_hss hashset_str_new;
+    let af1 <HashSetStr> must_hss hashset_str_insert af0 "x";
+    hashset_str_free af1;
     ()
 ```

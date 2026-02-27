@@ -9,9 +9,10 @@ neplg2:test
 #indent 4
 #target std
 
-#import "alloc/collections/hashmap_str" as *
+#import "alloc/collections/hashmap" as *
 #import "alloc/diag/error" as *
 #import "alloc/string" as *
+#import "core/math" as *
 #import "core/option" as *
 #import "core/result" as *
 #import "std/test" as *
@@ -28,7 +29,7 @@ fn main <()*> ()> ():
     assert_eq_i32 0 hashmap_str_len<i32> hm0;
 
     let hm1 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    assert_ne true hashmap_str_contains<i32> hm1 "foo";
+    assert not hashmap_str_contains<i32> hm1 "foo";
 
     let hm2 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
     assert is_none<i32> hashmap_str_get<i32> hm2 "foo";
@@ -49,7 +50,7 @@ fn main <()*> ()> ():
     let hm50 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
     let hm51 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm50 "foo" 10;
     let hm52 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm51 "bar" 20;
-    assert_ne true hashmap_str_contains<i32> hm52 "baz";
+    assert not hashmap_str_contains<i32> hm52 "baz";
     test_checked "insert";
 
     let s1 <str> concat "a" "b";
@@ -76,15 +77,37 @@ fn main <()*> ()> ():
     let hm6 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm6 "foo" 10;
     let hm6 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm6 "bar" 20;
     let hm6 <HashMapStr<i32>> must_hms hashmap_str_remove<i32> hm6 "bar";
-    assert_ne true hashmap_str_contains<i32> hm6 "bar";
+    assert not hashmap_str_contains<i32> hm6 "bar";
 
     let hm7 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
     let hm7 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm7 "foo" 10;
     assert is_err<HashMapStr<i32>, Diag> hashmap_str_remove<i32> hm7 "zzz";
     test_checked "remove";
 
+    let a0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
+    let a1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> a0 "k" 9;
+    assert hashmap_str_contains<i32> a1 "k";
+    let b0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
+    let b1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> b0 "k" 9;
+    match get<i32> b1 "k":
+        Option::Some v:
+            assert_eq_i32 9 v
+        Option::None:
+            test_fail "alias get failed";
+    let c0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
+    let c1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> c0 "k" 9;
+    assert_eq_i32 1 hashmap_str_len<i32> c1;
+    let d0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
+    let d1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> d0 "k" 9;
+    let a2 <HashMapStr<i32>> must_hms hashmap_str_remove<i32> d1 "k";
+    assert_eq_i32 0 hashmap_str_len<i32> a2;
+    test_checked "alias";
+
     let hmf <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
     let hmf <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hmf "x" 1;
     hashmap_str_free<i32> hmf;
+    let af0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
+    let af1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> af0 "x" 1;
+    hashmap_str_free<i32> af1;
     ()
 ```

@@ -569,9 +569,6 @@ fn resolve_target(
     module: &ast::Module,
     options: CompileOptions,
 ) -> Result<CompileTarget, CoreError> {
-    if let Some(t) = options.target {
-        return Ok(t);
-    }
     let mut found: Option<(CompileTarget, Span)> = None;
     let mut diags = Vec::new();
     // First, check explicit module-level directives parsed into module.directives
@@ -625,6 +622,9 @@ fn resolve_target(
     }
     if !diags.is_empty() {
         return Err(CoreError::from_diagnostics(diags));
+    }
+    if let Some(t) = options.target {
+        return Ok(t);
     }
     Ok(found.map(|(t, _)| t).unwrap_or(CompileTarget::Wasm))
 }

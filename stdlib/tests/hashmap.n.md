@@ -12,6 +12,7 @@ neplg2:test
 #import "alloc/collections/hashmap" as *
 #import "alloc/diag/error" as *
 #import "core/option" as *
+#import "core/math" as *
 #import "core/result" as *
 #import "std/test" as *
 
@@ -29,7 +30,7 @@ fn main <()*> ()> ():
 
     let r1 <Result<HashMap<i32>, Diag>> hashmap_new<i32>;
     let hm1 <HashMap<i32>> must_hm r1;
-    assert_ne true hashmap_contains<i32> hm1 1;
+    assert not hashmap_contains<i32> hm1 1;
 
     let r2 <Result<HashMap<i32>, Diag>> hashmap_new<i32>;
     let hm2 <HashMap<i32>> must_hm r2;
@@ -55,7 +56,7 @@ fn main <()*> ()> ():
     let a31 <HashMap<i32>> must_hm hashmap_insert<i32> a30 10 100;
     let a32 <HashMap<i32>> must_hm hashmap_insert<i32> a31 5 50;
     let a33 <HashMap<i32>> must_hm hashmap_insert<i32> a32 20 200;
-    assert_ne true hashmap_contains<i32> a33 2;
+    assert not hashmap_contains<i32> a33 2;
     test_checked "insert";
 
     let b0 <HashMap<i32>> must_hm hashmap_new<i32>;
@@ -89,7 +90,7 @@ fn main <()*> ()> ():
     let d11 <HashMap<i32>> must_hm hashmap_insert<i32> d10 10 100;
     let d12 <HashMap<i32>> must_hm hashmap_insert<i32> d11 20 200;
     let d13 <HashMap<i32>> must_hm hashmap_remove<i32> d12 10;
-    assert_ne true hashmap_contains<i32> d13 10;
+    assert not hashmap_contains<i32> d13 10;
 
     let e0 <HashMap<i32>> must_hm hashmap_new<i32>;
     let e1 <HashMap<i32>> must_hm hashmap_insert<i32> e0 10 100;
@@ -97,8 +98,30 @@ fn main <()*> ()> ():
     assert is_err<HashMap<i32>, Diag> er;
     test_checked "remove";
 
+    let g0 <HashMap<i32>> must_hm new<i32>;
+    let g1 <HashMap<i32>> must_hm insert<i32> g0 7 70;
+    assert contains<i32> g1 7;
+    let h0 <HashMap<i32>> must_hm new<i32>;
+    let h1 <HashMap<i32>> must_hm insert<i32> h0 7 70;
+    match get<i32> h1 7:
+        Option::Some v:
+            assert_eq_i32 70 v
+        Option::None:
+            test_fail "alias get failed";
+    let i0 <HashMap<i32>> must_hm new<i32>;
+    let i1 <HashMap<i32>> must_hm insert<i32> i0 7 70;
+    assert_eq_i32 1 len<i32> i1;
+    let j0 <HashMap<i32>> must_hm new<i32>;
+    let j1 <HashMap<i32>> must_hm insert<i32> j0 7 70;
+    let g2 <HashMap<i32>> must_hm remove<i32> j1 7;
+    assert_eq_i32 0 len<i32> g2;
+    test_checked "alias";
+
     let f0 <HashMap<i32>> must_hm hashmap_new<i32>;
     let f1 <HashMap<i32>> must_hm hashmap_insert<i32> f0 1 1;
     hashmap_free<i32> f1;
+    let gf0 <HashMap<i32>> must_hm new<i32>;
+    let gf1 <HashMap<i32>> must_hm insert<i32> gf0 1 1;
+    free<i32> gf1;
     ()
 ```

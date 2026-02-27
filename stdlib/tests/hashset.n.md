@@ -10,6 +10,7 @@ neplg2:test
 
 #import "alloc/collections/hashset" as *
 #import "alloc/diag/error" as *
+#import "core/math" as *
 #import "core/result" as *
 #import "std/test" as *
 
@@ -25,7 +26,7 @@ fn main <()*> ()> ():
     assert_eq_i32 0 hashset_len hs0;
 
     let hs1 <HashSet> must_hs hashset_new;
-    assert_ne true hashset_contains hs1 5;
+    assert not hashset_contains hs1 5;
     test_checked "new";
 
     let hs2 <HashSet> must_hs hashset_new;
@@ -56,7 +57,7 @@ fn main <()*> ()> ():
     let hs3 <HashSet> must_hs hashset_insert hs3 1;
     let hs3 <HashSet> must_hs hashset_insert hs3 9;
     let hs3 <HashSet> must_hs hashset_remove hs3 5;
-    assert_ne true hashset_contains hs3 5;
+    assert not hashset_contains hs3 5;
 
     let hs4 <HashSet> must_hs hashset_new;
     let hs4 <HashSet> must_hs hashset_insert hs4 5;
@@ -64,8 +65,23 @@ fn main <()*> ()> ():
     assert is_err<HashSet, Diag> er;
     test_checked "remove";
 
+    let a0 <HashSet> must_hs new;
+    let a1 <HashSet> must_hs insert a0 8;
+    assert contains a1 8;
+    let b0 <HashSet> must_hs new;
+    let b1 <HashSet> must_hs insert b0 8;
+    assert_eq_i32 1 len b1;
+    let c0 <HashSet> must_hs new;
+    let c1 <HashSet> must_hs insert c0 8;
+    let b2 <HashSet> must_hs remove c1 8;
+    assert_eq_i32 0 len b2;
+    test_checked "alias";
+
     let hsf <HashSet> must_hs hashset_new;
     let hsf <HashSet> must_hs hashset_insert hsf 5;
     hashset_free hsf;
+    let af0 <HashSet> must_hs new;
+    let af1 <HashSet> must_hs insert af0 5;
+    free af1;
     ()
 ```

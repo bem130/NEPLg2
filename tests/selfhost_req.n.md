@@ -111,7 +111,7 @@ ret: 10
 
 #entry main
 #indent 4
-#import "alloc/collections/hashmap_str" as *
+#import "alloc/collections/hashmap" as *
 #import "alloc/diag/error" as *
 #import "alloc/string" as *
 #import "core/option" as *

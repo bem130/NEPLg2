@@ -127,7 +127,7 @@ fn test_req_string_map() {
     let src = r#"
 #entry main
 #indent 4
-#import "alloc/collections/hashmap_str" as *
+#import "alloc/collections/hashmap" as *
 #import "alloc/string" as *
 #import "core/option" as *
 
