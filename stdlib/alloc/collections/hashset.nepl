@@ -42,14 +42,16 @@ struct HashSet:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_contains_loop <(i32,i32,i32,i32,i32,i32)->bool> (entries, entry_size, cap, idx, cur, key):
-    let entry <i32> add entries mul cur entry_size
+    let entry_off <i32> mul cur entry_size
+    let entry <i32> add entries entry_off
     let occupied <i32> load_i32 entry
     if:
         eq occupied 0
         then:
             false
         else:
-            let ekey <i32> load_i32 add entry 4
+            let entry_key <i32> add entry 4
+            let ekey <i32> load_i32 entry_key
             if:
                 eq ekey key
                 then:
@@ -88,7 +90,9 @@ fn hashset_new <()*>Result<HashSet, Diag>> ():
             let mut i <i32> 0
             while lt i cap:
                 do:
-                    store_i32 add entries mul i entry_size 0
+                    let off <i32> mul i entry_size
+                    let ptr <i32> add entries off
+                    store_i32 ptr 0
                     set i add i 1
             let header <i32> alloc 12
             if:
@@ -121,23 +125,26 @@ fn hashset_insert <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> i32_rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_i32 key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut full <i32> 0
     while eq done 0:
         do:
-            let entry <i32> add entries mul cur entry_size
+            let entry_off <i32> mul cur entry_size
+            let entry <i32> add entries entry_off
             let occupied <i32> load_i32 entry
             if:
                 eq occupied 0
                 then:
+                    let entry_key <i32> add entry 4
                     store_i32 entry 1
-                    store_i32 add entry 4 key
+                    store_i32 entry_key key
                     store_i32 hdr add load_i32 hdr 1
                     set done 1
                 else:
-                    let ekey <i32> load_i32 add entry 4
+                    let entry_key <i32> add entry 4
+                    let ekey <i32> load_i32 entry_key
                     if:
                         eq ekey key
                         then set done 1
@@ -174,7 +181,7 @@ fn hashset_contains <(HashSet,i32)->bool> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> i32_rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_i32 key cap
     hashset_contains_loop entries entry_size cap idx idx key
 
 //: hashset_remove: 主な用途
@@ -195,19 +202,21 @@ fn hashset_remove <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> i32_rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_i32 key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0
     while eq done 0:
         do:
-            let entry <i32> add entries mul cur entry_size
+            let entry_off <i32> mul cur entry_size
+            let entry <i32> add entries entry_off
             let occupied <i32> load_i32 entry
             if:
                 eq occupied 0
                 then set done 1
                 else:
-                    let ekey <i32> load_i32 add entry 4
+                    let entry_key <i32> add entry 4
+                    let ekey <i32> load_i32 entry_key
                     if:
                         eq ekey key
                         then:
@@ -325,14 +334,16 @@ struct HashSetStr:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashset_str_contains_loop <(i32,i32,i32,i32,i32,str)->bool> (entries, entry_size, cap, idx, cur, key):
-    let entry <i32> add entries mul cur entry_size
+    let entry_off <i32> mul cur entry_size
+    let entry <i32> add entries entry_off
     let occupied <i32> load_i32 entry
     if:
         eq occupied 0
         then:
             false
         else:
-            let ekey <str> load<str> add entry 4
+            let entry_key <i32> add entry 4
+            let ekey <str> load<str> entry_key
             if:
                 str_eq ekey key
                 then:
@@ -371,7 +382,9 @@ fn hashset_str_new <()*>Result<HashSetStr, Diag>> ():
             let mut i <i32> 0
             while lt i cap:
                 do:
-                    store_i32 add entries mul i entry_size 0
+                    let entry_off <i32> mul i entry_size
+                    let entry <i32> add entries entry_off
+                    store_i32 entry 0
                     set i add i 1
             let header <i32> alloc 12
             if:
@@ -404,23 +417,26 @@ fn hashset_str_insert <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> i32_rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_str key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut full <i32> 0
     while eq done 0:
         do:
-            let entry <i32> add entries mul cur entry_size
+            let entry_off <i32> mul cur entry_size
+            let entry <i32> add entries entry_off
             let occupied <i32> load_i32 entry
             if:
                 eq occupied 0
                 then:
+                    let entry_key <i32> add entry 4
                     store_i32 entry 1
-                    store<str> add entry 4 key
+                    store<str> entry_key key
                     store_i32 hdr add load_i32 hdr 1
                     set done 1
                 else:
-                    let ekey <str> load<str> add entry 4
+                    let entry_key <i32> add entry 4
+                    let ekey <str> load<str> entry_key
                     if:
                         str_eq ekey key
                         then set done 1
@@ -457,7 +473,7 @@ fn hashset_str_contains <(HashSetStr,str)->bool> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> i32_rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_str key cap
     hashset_str_contains_loop entries entry_size cap idx idx key
 
 //: hashset_str_remove: 主な用途
@@ -478,19 +494,21 @@ fn hashset_str_remove <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> i32_rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_str key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0
     while eq done 0:
         do:
-            let entry <i32> add entries mul cur entry_size
+            let entry_off <i32> mul cur entry_size
+            let entry <i32> add entries entry_off
             let occupied <i32> load_i32 entry
             if:
                 eq occupied 0
                 then set done 1
                 else:
-                    let ekey <str> load<str> add entry 4
+                    let entry_key <i32> add entry 4
+                    let ekey <str> load<str> entry_key
                     if:
                         str_eq ekey key
                         then:

@@ -265,7 +265,9 @@ fn fs_bytes_to_string <(Vec<u8>)*>str> (buf):
     while lt i len:
         do:
             let b <i32> load_u8 add data i;
-            store_u8 add out add 4 i b;
+            let out_data <i32> add out 4;
+            let dst <i32> add out_data i;
+            store_u8 dst b;
             set i add i 1;
     out
 

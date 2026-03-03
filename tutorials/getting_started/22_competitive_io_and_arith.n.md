@@ -51,7 +51,7 @@ fn main <()*> ()> ():
     let a <i64> scanner_read_i64 sc;
     let b <i64> scanner_read_i64 sc;
     let w <i32> writer_new;
-    writer_write_i64 w i64_add a b;
+    writer_write_i64 w add a b;
     writer_writeln w;
     writer_flush w;
     writer_free w

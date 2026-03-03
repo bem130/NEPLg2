@@ -41,7 +41,9 @@ fn fenwick_new <(i32)*>i32> (n):
     let mut i <i32> 0;
     while lt i bit_len:
         do:
-            store_i32 add bit mul i 4 0;
+            let off <i32> mul i 4;
+            let ptr <i32> add bit off;
+            store_i32 ptr 0;
             set i add i 1;
     let f <i32> alloc 8;
     store_i32 f n;
@@ -52,7 +54,9 @@ fn fenwick_new <(i32)*>i32> (n):
 fn fenwick_free <(i32)*>()> (f):
     let n <i32> load_i32 f;
     let bit <i32> load_i32 add f 4;
-    dealloc bit mul add n 1 4;
+    let bit_len <i32> add n 1;
+    let bytes <i32> mul bit_len 4;
+    dealloc bit bytes;
     dealloc f 8
 
 //: fenwick_add: `idx` に `delta` を加算する
@@ -62,9 +66,11 @@ fn fenwick_add <(i32,i32,i32)*>()> (f, idx, delta):
     let mut i <i32> add idx 1;
     while le i n:
         do:
-            let ptr <i32> add bit mul i 4;
+            let off <i32> mul i 4;
+            let ptr <i32> add bit off;
             store_i32 ptr add load_i32 ptr delta;
-            let lb <i32> i32_and i sub 0 i;
+            let neg_i <i32> sub 0 i;
+            let lb <i32> and i neg_i;
             set i add i lb;
 
 //: fenwick_sum_prefix: 区間 `[0, r)` の和を返す
@@ -74,8 +80,12 @@ fn fenwick_sum_prefix <(i32,i32)*>i32> (f, r):
     let mut acc <i32> 0;
     while lt 0 i:
         do:
-            set acc add acc load_i32 add bit mul i 4;
-            let lb <i32> i32_and i sub 0 i;
+            let off <i32> mul i 4;
+            let ptr <i32> add bit off;
+            let v <i32> load_i32 ptr;
+            set acc add acc v;
+            let neg_i <i32> sub 0 i;
+            let lb <i32> and i neg_i;
             set i sub i lb;
     acc
 

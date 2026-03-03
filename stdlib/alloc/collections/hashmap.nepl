@@ -54,7 +54,9 @@ fn hashmap_new <.V> <()*>Result<HashMap<.V>, Diag>> ():
             let mut i <i32> 0
             while lt i cap:
                 do:
-                    store_i32 add entries mul i entry_size 0
+                    let off <i32> mul i entry_size
+                    let ptr <i32> add entries off
+                    store_i32 ptr 0
                     set i add i 1
             let header <i32> alloc 12
             if:
@@ -87,28 +89,33 @@ fn hashmap_insert <.V> <(HashMap<.V>,i32,.V)*>Result<HashMap<.V>, Diag>> (hm, ke
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> i32_rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_i32 key cap
     let mut cur <i32> idx
     let mut found <i32> 0
     let mut full <i32> 0
     while eq found 0:
         do:
-            let entry <i32> add entries mul cur entry_size
+            let entry_off <i32> mul cur entry_size
+            let entry <i32> add entries entry_off
             let occupied <i32> load_i32 entry
             if:
                 eq occupied 0
                 then:
+                    let entry_key <i32> add entry 4
+                    let entry_val <i32> add entry 8
                     store_i32 entry 1
-                    store_i32 add entry 4 key
-                    store<.V> add entry 8 val
+                    store_i32 entry_key key
+                    store<.V> entry_val val
                     store_i32 hdr add load_i32 hdr 1
                     set found 1
                 else:
-                    let ekey <i32> load_i32 add entry 4
+                    let entry_key <i32> add entry 4
+                    let ekey <i32> load_i32 entry_key
                     if:
                         eq ekey key
                         then:
-                            store<.V> add entry 8 val
+                            let entry_val <i32> add entry 8
+                            store<.V> entry_val val
                             set found 1
                         else:
                             set cur mod_s add cur 1 cap
@@ -139,18 +146,21 @@ fn hashmap_insert <.V> <(HashMap<.V>,i32,.V)*>Result<HashMap<.V>, Diag>> (hm, ke
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashmap_get_loop <.V> <(i32,i32,i32,i32,i32,i32)->Option<.V>> (entries, entry_size, cap, idx, cur, key):
-    let entry <i32> add entries mul cur entry_size
+    let entry_off <i32> mul cur entry_size
+    let entry <i32> add entries entry_off
     let occupied <i32> load_i32 entry
     if:
         eq occupied 0
         then:
             none<.V>
         else:
-            let ekey <i32> load_i32 add entry 4
+            let entry_key <i32> add entry 4
+            let ekey <i32> load_i32 entry_key
             if:
                 eq ekey key
                 then:
-                    some<.V> load<.V> add entry 8
+                    let entry_val <i32> add entry 8
+                    some<.V> load<.V> entry_val
                 else:
                     let next <i32> mod_s add cur 1 cap
                     if:
@@ -178,7 +188,7 @@ fn hashmap_get <.V> <(HashMap<.V>,i32)->Option<.V>> (hm, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> i32_rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_i32 key cap
     hashmap_get_loop<.V> entries entry_size cap idx idx key
 
 //: hashmap_contains: 主な用途
@@ -215,19 +225,21 @@ fn hashmap_remove <.V> <(HashMap<.V>,i32)*>Result<HashMap<.V>, Diag>> (hm, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> i32_rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_i32 key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0
     while eq done 0:
         do:
-            let entry <i32> add entries mul cur entry_size
+            let entry_off <i32> mul cur entry_size
+            let entry <i32> add entries entry_off
             let occupied <i32> load_i32 entry
             if:
                 eq occupied 0
                 then set done 1
                 else:
-                    let ekey <i32> load_i32 add entry 4
+                    let entry_key <i32> add entry 4
+                    let ekey <i32> load_i32 entry_key
                     if:
                         eq ekey key
                         then:
@@ -364,7 +376,9 @@ fn hashmap_str_new <.V> <()*>Result<HashMapStr<.V>, Diag>> ():
             let mut i <i32> 0
             while lt i cap:
                 do:
-                    store_i32 add entries mul i entry_size 0
+                    let entry_off <i32> mul i entry_size
+                    let entry <i32> add entries entry_off
+                    store_i32 entry 0
                     set i add i 1
             let header <i32> alloc 12
             if:
@@ -397,28 +411,33 @@ fn hashmap_str_insert <.V> <(HashMapStr<.V>,str,.V)*>Result<HashMapStr<.V>, Diag
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> i32_rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_str key cap
     let mut cur <i32> idx
     let mut found <i32> 0
     let mut full <i32> 0
     while eq found 0:
         do:
-            let entry <i32> add entries mul cur entry_size
+            let entry_off <i32> mul cur entry_size
+            let entry <i32> add entries entry_off
             let occupied <i32> load_i32 entry
             if:
                 eq occupied 0
                 then:
+                    let entry_key <i32> add entry 4
+                    let entry_val <i32> add entry 8
                     store_i32 entry 1
-                    store<str> add entry 4 key
-                    store<.V> add entry 8 val
+                    store<str> entry_key key
+                    store<.V> entry_val val
                     store_i32 hdr add load_i32 hdr 1
                     set found 1
                 else:
-                    let ekey <str> load<str> add entry 4
+                    let entry_key <i32> add entry 4
+                    let ekey <str> load<str> entry_key
                     if:
                         str_eq ekey key
                         then:
-                            store<.V> add entry 8 val
+                            let entry_val <i32> add entry 8
+                            store<.V> entry_val val
                             set found 1
                         else:
                             set cur mod_s add cur 1 cap
@@ -449,18 +468,21 @@ fn hashmap_str_insert <.V> <(HashMapStr<.V>,str,.V)*>Result<HashMapStr<.V>, Diag
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn hashmap_str_get_loop <.V> <(i32,i32,i32,i32,i32,str)->Option<.V>> (entries, entry_size, cap, idx, cur, key):
-    let entry <i32> add entries mul cur entry_size
+    let entry_off <i32> mul cur entry_size
+    let entry <i32> add entries entry_off
     let occupied <i32> load_i32 entry
     if:
         eq occupied 0
         then:
             none<.V>
         else:
-            let ekey <str> load<str> add entry 4
+            let entry_key <i32> add entry 4
+            let ekey <str> load<str> entry_key
             if:
                 str_eq ekey key
                 then:
-                    some<.V> load<.V> add entry 8
+                    let entry_val <i32> add entry 8
+                    some<.V> load<.V> entry_val
                 else:
                     let next <i32> mod_s add cur 1 cap
                     if:
@@ -488,7 +510,7 @@ fn hashmap_str_get <.V> <(HashMapStr<.V>,str)->Option<.V>> (hm, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> i32_rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_str key cap
     hashmap_str_get_loop<.V> entries entry_size cap idx idx key
 
 //: hashmap_str_contains: 主な用途
@@ -525,19 +547,21 @@ fn hashmap_str_remove <.V> <(HashMapStr<.V>,str)*>Result<HashMapStr<.V>, Diag>> 
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> i32_rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_str key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0
     while eq done 0:
         do:
-            let entry <i32> add entries mul cur entry_size
+            let entry_off <i32> mul cur entry_size
+            let entry <i32> add entries entry_off
             let occupied <i32> load_i32 entry
             if:
                 eq occupied 0
                 then set done 1
                 else:
-                    let ekey <str> load<str> add entry 4
+                    let entry_key <i32> add entry 4
+                    let ekey <str> load<str> entry_key
                     if:
                         str_eq ekey key
                         then:

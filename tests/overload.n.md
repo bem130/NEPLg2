@@ -82,10 +82,10 @@ fn main <()*>i32> ():
     // This is useful when type cannot be inferred from context
     
     // Force selection of (i32)->i32
-    let v1 <i32> <i32> magic 10
+    let v1 <i32> magic 10
     
     // Force selection of (i32)->bool
-    let v2 <bool> <bool> magic 10
+    let v2 <bool> magic 10
     
     if:
         v2

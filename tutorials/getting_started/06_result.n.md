@@ -49,7 +49,7 @@ neplg2:test
 #import "std/test" as *
 
 fn safe_div2 <(i32)->Result<i32,str>> (x):
-    if eq x 0 then Result::Err "division by zero" else Result::Ok i32_div_s 10 x
+    if eq x 0 then Result::Err "division by zero" else Result::Ok div_s 10 x
 
 fn main <()*> ()> ():
     match safe_div2 2:
