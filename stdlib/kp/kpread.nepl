@@ -337,7 +337,7 @@ fn scanner_read_token <(i32)*>str> (sc):
         then:
             ""
         else:
-            let s <i32> alloc add 4 tlen;
+            let s <i32> alloc_raw add 4 tlen;
             store_i32 s tlen;
             let mut i <i32> 0;
             while lt i tlen:

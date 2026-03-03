@@ -44,12 +44,12 @@ fn writer_wrap <(i32)->Writer> (raw):
 //: - O(1)
 fn writer_new_i32 <()*>i32> ():
     let mut cap <i32> 4096;
-    let mut buf <i32> alloc cap;
+    let mut buf <i32> alloc_raw cap;
     if:
         eq buf 0
         then:
             set cap 1024;
-            set buf alloc cap;
+            set buf alloc_raw cap;
             ()
         else:
             ();
@@ -57,7 +57,7 @@ fn writer_new_i32 <()*>i32> ():
         eq buf 0
         then:
             set cap 256;
-            set buf alloc cap;
+            set buf alloc_raw cap;
             ()
         else:
             ();
@@ -66,28 +66,28 @@ fn writer_new_i32 <()*>i32> ():
         then:
             0
         else:
-            let iov <i32> alloc 8;
+            let iov <i32> alloc_raw 8;
             if:
                 eq iov 0
                 then:
-                    dealloc buf cap;
+                    dealloc_raw buf cap;
                     0
                 else:
-                    let nw  <i32> alloc 4;
+                    let nw  <i32> alloc_raw 4;
                     if:
                         eq nw 0
                         then:
-                            dealloc iov 8;
-                            dealloc buf cap;
+                            dealloc_raw iov 8;
+                            dealloc_raw buf cap;
                             0
                         else:
-                            let w <i32> alloc 20;
+                            let w <i32> alloc_raw 20;
                             if:
                                 eq w 0
                                 then:
-                                    dealloc nw 4;
-                                    dealloc iov 8;
-                                    dealloc buf cap;
+                                    dealloc_raw nw 4;
+                                    dealloc_raw iov 8;
+                                    dealloc_raw buf cap;
                                     0
                                 else:
                                     store_i32 w buf;
@@ -119,10 +119,10 @@ fn writer_free <(i32)*>()> (w):
     let iov <i32> load_i32 add w 12;
     let nw  <i32> load_i32 add w 16;
 
-    dealloc buf cap;
-    dealloc iov 8;
-    dealloc nw 4;
-    dealloc w 20;
+    dealloc_raw buf cap;
+    dealloc_raw iov 8;
+    dealloc_raw nw 4;
+    dealloc_raw w 20;
     ()
 
 //: writer_flush: バッファ内容を stdout に書き出す
@@ -252,7 +252,7 @@ fn writer_write_str <(i32,str)*>()> (w, s):
             store_i32 w_len_ptr new_len;
             ()
 
-//: writer_write_i32: i32 を 10 進で出力する（alloc なし）
+//: writer_write_i32: i32 を 10 進で出力する（ヒープ確保なし）
 //:
 //: 実装:
 //: - INT_MIN は abs overflow するので定数文字列で処理します。

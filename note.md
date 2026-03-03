@@ -1,3 +1,20 @@
+# 2026-03-04 作業メモ (フェーズD進行: `kpread/kpwrite` の生メモリ呼び出しを `*_raw` へ移行)
+
+- 目的:
+  - `core/mem` の `*_raw` 分離に合わせ、`kpread/kpwrite` 側の生アロケータ呼び出しを明示化する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - 文字列トークン生成時の確保を `alloc` から `alloc_raw` へ変更。
+  - `stdlib/kp/kpwrite.nepl`
+    - writer 初期化/解放の `alloc`/`dealloc` 呼び出しを `alloc_raw`/`dealloc_raw` へ変更。
+    - ドキュメントコメントの文言を実装に合わせて調整（「ヒープ確保なし」）。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-mem-raw-callsite-migration.json -j 15` -> `229/229 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-after-kp-memraw-migration-full.json -j 15` -> `725/725 pass`
+- 状況:
+  - `mem` の生アロケータ利用箇所は `kpread/kpwrite` で `*_raw` へ追従済み。
+  - 次段は `alloc/realloc/dealloc` 公開名を Result/Option 安全APIへ切り替える準備として、残り呼び出し箇所を段階移行する。
+
 # 2026-03-04 作業メモ (フェーズD進行: `core/mem` に `*_raw` 隔離を導入)
 
 - 目的:
