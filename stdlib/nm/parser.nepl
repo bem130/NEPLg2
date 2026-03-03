@@ -116,7 +116,7 @@ struct ParaRes:
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn is_empty_line <(str)*>bool> (s):
+fn is_empty_line <(str)->bool> (s):
     let t <str> str_trim s;
     eq len t 0
 
@@ -133,7 +133,7 @@ fn is_empty_line <(str)*>bool> (s):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn is_hr_line <(str)*>bool> (s):
+fn is_hr_line <(str)->bool> (s):
     let t <str> str_trim s;
     str_eq t "---"
 
@@ -150,7 +150,7 @@ fn is_hr_line <(str)*>bool> (s):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn is_nest_break_line <(str)*>bool> (s):
+fn is_nest_break_line <(str)->bool> (s):
     let t <str> str_trim s;
     str_eq t ";;;"
 
@@ -167,7 +167,7 @@ fn is_nest_break_line <(str)*>bool> (s):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn is_fence_start <(str)*>bool> (s):
+fn is_fence_start <(str)->bool> (s):
     let t <str> str_trim s;
     str_starts_with t "```"
 
@@ -184,7 +184,7 @@ fn is_fence_start <(str)*>bool> (s):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn is_heading_start <(str)*>bool> (s):
+fn is_heading_start <(str)->bool> (s):
     let t <str> str_trim s;
     or str_starts_with t "# " or str_starts_with t "## " or str_starts_with t "### " or str_starts_with t "#### " or str_starts_with t "##### " str_starts_with t "###### "
 
@@ -201,7 +201,7 @@ fn is_heading_start <(str)*>bool> (s):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn trim_cr <(str)*>str> (s):
+fn trim_cr <(str)->str> (s):
     let n <i32> len s;
     if:
         le n 0
@@ -226,7 +226,7 @@ fn trim_cr <(str)*>str> (s):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn safe_line <(i32, i32)*>str> (lines_mem, i):
+fn safe_line <(i32, i32)->str> (lines_mem, i):
     let lines <Vec<str>> load<Vec<str>> lines_mem;
     match vec_get<str> lines i:
         Option::Some s:
@@ -247,7 +247,7 @@ fn safe_line <(i32, i32)*>str> (lines_mem, i):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn close_one_section <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
+fn close_one_section <(Stack<NestSection>, Vec<Node>)->Vec<Node>> (stk, root):
     match stack_pop_keep<NestSection> stk:
         Option::Some sec:
             let node <Node> Node::Section sec;
@@ -281,7 +281,7 @@ fn close_one_section <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn close_to_level <(Stack<NestSection>, Vec<Node>, i32)*>Vec<Node>> (stk, root, new_level):
+fn close_to_level <(Stack<NestSection>, Vec<Node>, i32)->Vec<Node>> (stk, root, new_level):
     // Close while top.level >= new_level
     let mut r <Vec<Node>> root;
     let mut done <bool> false;
@@ -315,7 +315,7 @@ fn close_to_level <(Stack<NestSection>, Vec<Node>, i32)*>Vec<Node>> (stk, root, 
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn close_all_sections <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
+fn close_all_sections <(Stack<NestSection>, Vec<Node>)->Vec<Node>> (stk, root):
     let mut r <Vec<Node>> root;
     let mut done <bool> false;
     while not done:
@@ -342,7 +342,7 @@ fn close_all_sections <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn parse_heading <(str)*>Option<Heading>> (line):
+fn parse_heading <(str)->Option<Heading>> (line):
     let t <str> str_trim line;
 
     if:
@@ -396,7 +396,7 @@ fn parse_heading <(str)*>Option<Heading>> (line):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn parse_fence <(i32, i32, i32)*>FenceRes> (lines_mem, nlines, i0):
+fn parse_fence <(i32, i32, i32)->FenceRes> (lines_mem, nlines, i0):
     let t0 <str> str_trim safe_line lines_mem i0;
     let info0 <str> str_slice t0 3 len t0;
     let info <str> str_trim info0;
@@ -442,7 +442,7 @@ fn parse_fence <(i32, i32, i32)*>FenceRes> (lines_mem, nlines, i0):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn parse_paragraph <(i32, i32, i32)*>ParaRes> (lines_mem, nlines, i0):
+fn parse_paragraph <(i32, i32, i32)->ParaRes> (lines_mem, nlines, i0):
     let mut sb <StringBuilder> string_builder_new;
     let mut i <i32> i0;
 
@@ -495,7 +495,7 @@ fn parse_paragraph <(i32, i32, i32)*>ParaRes> (lines_mem, nlines, i0):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn parse_inlines <(str)*>Vec<Inline>> (s):
+fn parse_inlines <(str)->Vec<Inline>> (s):
     let mut out <Vec<Inline>> vec_new<Inline>;
     let n <i32> len s;
     let mut i <i32> 0;
@@ -745,7 +745,7 @@ fn parse_inlines <(str)*>Vec<Inline>> (s):
 //:     let j <str> document_to_json d;
 //:     if and str_starts_with j "{\"t\":\"doc\"" gt len j 0 0 1
 //: ```
-pub fn parse_markdown <(str)*>Document> (input):
+pub fn parse_markdown <(str)->Document> (input):
     let lines <Vec<str>> str_split input "\n";
     let lines_mem <i32> alloc size_of<Vec<str>>;
     store<Vec<str>> lines_mem lines;
@@ -857,7 +857,7 @@ pub fn parse_markdown <(str)*>Document> (input):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn json_escape <(str)*>str> (s):
+fn json_escape <(str)->str> (s):
     // Minimal escape: backslash and double-quote and newline
     let mut sb <StringBuilder> string_builder_new;
     let n <i32> len s;
@@ -894,7 +894,7 @@ fn json_escape <(str)*>str> (s):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn inlines_to_json <(Vec<Inline>)*>str> (v):
+fn inlines_to_json <(Vec<Inline>)->str> (v):
     let mut sb <StringBuilder> string_builder_new;
     set sb sb_append sb "[";
     let n <i32> get v "len";
@@ -959,7 +959,7 @@ fn inlines_to_json <(Vec<Inline>)*>str> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn node_to_json <(Node)*>str> (node):
+fn node_to_json <(Node)->str> (node):
     let mut sb <StringBuilder> string_builder_new;
     match node:
         Node::Hr:
@@ -1014,7 +1014,7 @@ fn node_to_json <(Node)*>str> (node):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn nodes_to_json <(Vec<Node>)*>str> (nodes):
+fn nodes_to_json <(Vec<Node>)->str> (nodes):
     let mut sb <StringBuilder> string_builder_new;
     set sb sb_append sb "[";
     let n <i32> get nodes "len";
@@ -1058,7 +1058,7 @@ fn nodes_to_json <(Vec<Node>)*>str> (nodes):
 //:     let j <str> document_to_json d;
 //:     if str_starts_with j "{\"t\":\"doc\"" 0 1
 //: ```
-pub fn document_to_json <(Document)*>str> (doc):
+pub fn document_to_json <(Document)->str> (doc):
     let mut sb <StringBuilder> string_builder_new;
     set sb sb_append sb "{\"t\":\"doc\",\"nodes\":";
     set sb sb_append sb nodes_to_json get doc "nodes";

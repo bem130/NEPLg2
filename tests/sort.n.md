@@ -12,7 +12,7 @@ ret: 1234
 #import "alloc/collections/vec/sort" as *
 #import "core/math" as *
 
-fn make_vec4 <()*>Vec<i32>> ():
+fn make_vec4 <()->Vec<i32>> ():
     let mut v vec_new<i32>;
     set v vec_push<i32> v 4;
     set v vec_push<i32> v 1;
@@ -37,7 +37,7 @@ ret: 1234
 #import "alloc/collections/vec/sort" as *
 #import "core/math" as *
 
-fn make_vec4 <()*>Vec<i32>> ():
+fn make_vec4 <()->Vec<i32>> ():
     let mut v vec_new<i32>;
     set v vec_push<i32> v 4;
     set v vec_push<i32> v 1;
@@ -65,7 +65,7 @@ ret: 1334
 #import "core/math" as *
 #import "core/option" as *
 
-fn make_vec4 <()*>Vec<i32>> ():
+fn make_vec4 <()->Vec<i32>> ():
     let mut v vec_new<i32>;
     set v vec_push<i32> v 4;
     set v vec_push<i32> v 1;
@@ -159,7 +159,7 @@ ret: 1234
 #import "alloc/collections/vec/sort" as *
 #import "core/math" as *
 
-fn make_vec4 <()*>Vec<i32>> ():
+fn make_vec4 <()->Vec<i32>> ():
     let mut v vec_new<i32>;
     set v vec_push<i32> v 4;
     set v vec_push<i32> v 1;
@@ -187,7 +187,7 @@ ret: 1434
 #import "core/math" as *
 #import "core/option" as *
 
-fn make_vec4 <()*>Vec<i32>> ():
+fn make_vec4 <()->Vec<i32>> ():
     let mut v vec_new<i32>;
     set v vec_push<i32> v 4;
     set v vec_push<i32> v 1;
@@ -284,7 +284,7 @@ ret: 1534
 #import "core/math" as *
 #import "core/option" as *
 
-fn make_vec4 <()*>Vec<i32>> ():
+fn make_vec4 <()->Vec<i32>> ():
     let mut v vec_new<i32>;
     set v vec_push<i32> v 4;
     set v vec_push<i32> v 1;
@@ -378,7 +378,7 @@ ret: 1234
 #import "alloc/collections/vec/sort" as *
 #import "core/math" as *
 
-fn make_vec4 <()*>Vec<i32>> ():
+fn make_vec4 <()->Vec<i32>> ():
     let mut v vec_new<i32>;
     set v vec_push<i32> v 4;
     set v vec_push<i32> v 1;
@@ -403,7 +403,7 @@ ret: 10
 #import "alloc/collections/vec/sort" as *
 #import "core/math" as *
 
-fn make_vec4 <()*>Vec<i32>> ():
+fn make_vec4 <()->Vec<i32>> ():
     let mut v vec_new<i32>;
     set v vec_push<i32> v 4;
     set v vec_push<i32> v 1;

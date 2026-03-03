@@ -29,12 +29,12 @@ pub fn builtins(ctx: &mut TypeCtx) -> alloc::vec::Vec<Builtin> {
         alloc::vec![],
         alloc::vec![ctx.i32()],
         ctx.i32(),
-        Effect::Impure,
+        Effect::Pure,
     );
     v.push(Builtin {
         name: "alloc",
         ty: alloc_ty,
-        effect: Effect::Impure,
+        effect: Effect::Pure,
         kind: BuiltinKind::MemAlloc,
     });
 
@@ -43,12 +43,12 @@ pub fn builtins(ctx: &mut TypeCtx) -> alloc::vec::Vec<Builtin> {
         alloc::vec![],
         alloc::vec![ctx.i32(), ctx.i32()],
         ctx.unit(),
-        Effect::Impure,
+        Effect::Pure,
     );
     v.push(Builtin {
         name: "dealloc",
         ty: dealloc_ty,
-        effect: Effect::Impure,
+        effect: Effect::Pure,
         kind: BuiltinKind::MemDealloc,
     });
 
@@ -57,12 +57,12 @@ pub fn builtins(ctx: &mut TypeCtx) -> alloc::vec::Vec<Builtin> {
         alloc::vec![],
         alloc::vec![ctx.i32(), ctx.i32(), ctx.i32()],
         ctx.i32(),
-        Effect::Impure,
+        Effect::Pure,
     );
     v.push(Builtin {
         name: "realloc",
         ty: realloc_ty,
-        effect: Effect::Impure,
+        effect: Effect::Pure,
         kind: BuiltinKind::MemRealloc,
     });
 

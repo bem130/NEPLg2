@@ -202,7 +202,7 @@ fn diag_code_str <(DiagCode)->str> (code):
 //:
 //: 計算量:
 //: - O(n)
-fn diag_to_string <(Diag)*>str> (d):
+fn diag_to_string <(Diag)->str> (d):
     d.message
 
 //: diag_err: Diag を Result::Err に包む
@@ -222,7 +222,7 @@ fn diag_err <.T> <(Diag)->Result<.T, Diag>> (d):
 //:
 //: 計算量:
 //: - O(n)
-fn diag_out_of_memory <(str)*>Diag> (op):
+fn diag_out_of_memory <(str)->Diag> (op):
     let p0 <str> concat op ": "
     let p1 <str> concat p0 "allocation failed"
     diag_new DiagCode::OutOfMemory p1
@@ -234,7 +234,7 @@ fn diag_out_of_memory <(str)*>Diag> (op):
 //:
 //: 計算量:
 //: - O(n)
-fn diag_empty_collection <(str)*>Diag> (op):
+fn diag_empty_collection <(str)->Diag> (op):
     let p0 <str> concat op ": "
     let p1 <str> concat p0 "collection is empty"
     diag_new DiagCode::EmptyCollection p1
@@ -246,7 +246,7 @@ fn diag_empty_collection <(str)*>Diag> (op):
 //:
 //: 計算量:
 //: - O(n)
-fn diag_capacity_exceeded <(str)*>Diag> (op):
+fn diag_capacity_exceeded <(str)->Diag> (op):
     let p0 <str> concat op ": "
     let p1 <str> concat p0 "capacity exceeded"
     diag_new DiagCode::CapacityExceeded p1
@@ -258,7 +258,7 @@ fn diag_capacity_exceeded <(str)*>Diag> (op):
 //:
 //: 計算量:
 //: - O(n)
-fn diag_key_not_found <(str)*>Diag> (op):
+fn diag_key_not_found <(str)->Diag> (op):
     let p0 <str> concat op ": "
     let p1 <str> concat p0 "key not found"
     diag_new DiagCode::KeyNotFound p1
@@ -495,7 +495,7 @@ fn callsite_span <()->Span> ():
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn error_alloc <(ErrorKind,str,Option<Span>)*>Error> (kind, msg, sp):
+fn error_alloc <(ErrorKind,str,Option<Span>)->Error> (kind, msg, sp):
     let p <i32> alloc 24;
     if:
         cond:
@@ -548,7 +548,7 @@ fn error_alloc <(ErrorKind,str,Option<Span>)*>Error> (kind, msg, sp):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn error_new <(ErrorKind,str)*>Error> (kind, msg):
+fn error_new <(ErrorKind,str)->Error> (kind, msg):
     error_alloc kind msg none<Span>
 
 //: diag_to_error: Diag を Error に変換する
@@ -564,7 +564,7 @@ fn error_new <(ErrorKind,str)*>Error> (kind, msg):
 //:
 //: 計算量:
 //: - O(n)
-fn diag_to_error <(Diag)*>Error> (d):
+fn diag_to_error <(Diag)->Error> (d):
     let msg <str> diag_to_string d;
     error_new ErrorKind::Other msg
 
@@ -614,7 +614,7 @@ fn error_to_diag <(Error)->Diag> (e):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn error_with_span <(Error,Span)*>Error> (e, sp):
+fn error_with_span <(Error,Span)->Error> (e, sp):
     let p <i32> e.ptr;
     let k <ErrorKind> kind_from_i32 load_i32 p;
     let m <str> load_i32 add p 4;
@@ -675,7 +675,7 @@ fn error_with_source <(Error,Error)->Error> (outer, inner):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn fail <(str)*>Error> (msg):
+fn fail <(str)->Error> (msg):
     let s <Span> callsite_span;
     error_alloc ErrorKind::Failure msg some<Span> s
 
@@ -705,7 +705,7 @@ fn fail <(str)*>Error> (msg):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn context <(Error,str)*>Error> (cause, msg):
+fn context <(Error,str)->Error> (cause, msg):
     let e <Error> error_new ErrorKind::Other msg;
     let s <Span> callsite_span;
     let outer <Error> error_with_span e s;
@@ -737,7 +737,7 @@ fn context <(Error,str)*>Error> (cause, msg):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn result_context <.T> <(Result<.T, Error>, str)*>Result<.T, Error>> (r, msg):
+fn result_context <.T> <(Result<.T, Error>, str)->Result<.T, Error>> (r, msg):
     match r:
         Result::Ok v:
             ok<.T, Error> v

@@ -210,7 +210,7 @@ fn sort_get_unchecked <.T> <(Vec<.T>,i32)->.T> (v, idx):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_set_unchecked <.T> <(Vec<.T>,i32,.T)*>()> (v, idx, val):
+fn sort_set_unchecked <.T> <(Vec<.T>,i32,.T)->()> (v, idx, val):
     let data <i32> vec_data_ptr<.T> v
     let off <i32> mul idx size_of<.T>
     store<.T> add data off val;
@@ -222,13 +222,13 @@ fn sort_get_unchecked_data <.T> <(i32,i32)->.T> (data_ptr, idx):
     load<.T> add data_ptr off
 
 // sort_set_unchecked_data: data ポインタ版の設定
-fn sort_set_unchecked_data <.T> <(i32,i32,.T)*>()> (data_ptr, idx, val):
+fn sort_set_unchecked_data <.T> <(i32,i32,.T)->()> (data_ptr, idx, val):
     let off <i32> mul idx size_of<.T>
     store<.T> add data_ptr off val;
     ()
 
 // sort_swap_data: data ポインタ版の交換
-fn sort_swap_data <.T> <(i32,i32,i32)*>()> (data_ptr, i, j):
+fn sort_swap_data <.T> <(i32,i32,i32)->()> (data_ptr, i, j):
     if:
         eq i j
         then ()
@@ -254,7 +254,7 @@ fn sort_swap_data <.T> <(i32,i32,i32)*>()> (data_ptr, i, j):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_swap <.T> <(Vec<.T>,i32,i32)*>()> (v, i, j):
+fn sort_swap <.T> <(Vec<.T>,i32,i32)->()> (v, i, j):
     if:
         eq i j
         then ()
@@ -282,7 +282,7 @@ fn sort_swap <.T> <(Vec<.T>,i32,i32)*>()> (v, i, j):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_is_sorted <.T: Ord> <(Vec<.T>)*>bool> (v):
+fn sort_is_sorted <.T: Ord> <(Vec<.T>)->bool> (v):
     let n <i32> get v "len"
     let data_ptr <i32> get v "data"
     if:
@@ -319,7 +319,7 @@ fn sort_is_sorted <.T: Ord> <(Vec<.T>)*>bool> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_insertion <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort_insertion <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> vec_len<.T> v
     if:
         le n 1
@@ -362,7 +362,7 @@ fn sort_insertion <.T: Ord> <(Vec<.T>)*>()> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_selection <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort_selection <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> vec_len<.T> v
     if:
         le n 1
@@ -403,7 +403,7 @@ fn sort_selection <.T: Ord> <(Vec<.T>)*>()> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_bubble <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort_bubble <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> vec_len<.T> v
     if:
         le n 1
@@ -442,7 +442,7 @@ fn sort_bubble <.T: Ord> <(Vec<.T>)*>()> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_cocktail <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort_cocktail <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> vec_len<.T> v
     if:
         le n 1
@@ -514,7 +514,7 @@ fn sort_cocktail <.T: Ord> <(Vec<.T>)*>()> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_gnome <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort_gnome <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> vec_len<.T> v
     if:
         le n 1
@@ -549,7 +549,7 @@ fn sort_gnome <.T: Ord> <(Vec<.T>)*>()> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_shell <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort_shell <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> vec_len<.T> v
     if:
         le n 1
@@ -598,7 +598,7 @@ fn sort_shell <.T: Ord> <(Vec<.T>)*>()> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_comb <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort_comb <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> vec_len<.T> v
     if:
         le n 1
@@ -662,7 +662,7 @@ fn sort_comb <.T: Ord> <(Vec<.T>)*>()> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_quick_partition_data <.T: Ord> <(i32,i32,i32)*>i32> (data_ptr, lo, hi):
+fn sort_quick_partition_data <.T: Ord> <(i32,i32,i32)->i32> (data_ptr, lo, hi):
     let pivot <.T> sort_get_unchecked_data<.T> data_ptr hi
     let mut i <i32> lo;
     let mut j <i32> lo;
@@ -695,7 +695,7 @@ fn sort_quick_partition_data <.T: Ord> <(i32,i32,i32)*>i32> (data_ptr, lo, hi):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_quick_range_data <.T: Ord> <(i32,i32,i32)*>()> (data_ptr, lo, hi):
+fn sort_quick_range_data <.T: Ord> <(i32,i32,i32)->()> (data_ptr, lo, hi):
     if:
         lt lo hi
         then:
@@ -718,7 +718,7 @@ fn sort_quick_range_data <.T: Ord> <(i32,i32,i32)*>()> (data_ptr, lo, hi):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_quick <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort_quick <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> get v "len"
     let data_ptr <i32> get v "data"
     if:
@@ -745,7 +745,7 @@ fn sort_quick <.T: Ord> <(Vec<.T>)*>()> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_heap_sift_down_data <.T: Ord> <(i32,i32,i32)*>()> (data_ptr, start, end):
+fn sort_heap_sift_down_data <.T: Ord> <(i32,i32,i32)->()> (data_ptr, start, end):
     let mut root <i32> start;
     let mut done <i32> 0;
 
@@ -803,7 +803,7 @@ fn sort_heap_sift_down_data <.T: Ord> <(i32,i32,i32)*>()> (data_ptr, start, end)
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_heap <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort_heap <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> get v "len"
     let data_ptr <i32> get v "data"
     if:
@@ -864,7 +864,7 @@ fn sort_buf_get <.T> <(i32,i32)->.T> (buf, idx):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_buf_set <.T> <(i32,i32,.T)*>()> (buf, idx, val):
+fn sort_buf_set <.T> <(i32,i32,.T)->()> (buf, idx, val):
     let off <i32> mul idx size_of<.T>
     store<.T> add buf off val;
     ()
@@ -882,7 +882,7 @@ fn sort_buf_set <.T> <(i32,i32,.T)*>()> (buf, idx, val):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_merge_range_data <.T: Ord> <(i32,i32,i32,i32)*>()> (data_ptr, buf, l, r):
+fn sort_merge_range_data <.T: Ord> <(i32,i32,i32,i32)->()> (data_ptr, buf, l, r):
     let width <i32> sub r l;
     if:
         le width 1
@@ -957,7 +957,7 @@ fn sort_merge_range_data <.T: Ord> <(i32,i32,i32,i32)*>()> (data_ptr, buf, l, r)
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort_merge <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort_merge <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> get v "len"
     let data_ptr <i32> get v "data"
     if:
@@ -984,7 +984,7 @@ fn sort_merge <.T: Ord> <(Vec<.T>)*>()> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 平均 O(n log n), 最悪 O(n^2)
-fn sort_slice_quick <.T: Ord> <(i32,i32)*>()> (data_ptr, len):
+fn sort_slice_quick <.T: Ord> <(i32,i32)->()> (data_ptr, len):
     if:
         le len 1
         then ()
@@ -1005,7 +1005,7 @@ fn sort_slice_quick <.T: Ord> <(i32,i32)*>()> (data_ptr, len):
 //:
 //: [計算量/けいさんりょう]:
 //: - 平均 O(n log n), 最悪 O(n^2)
-fn sort_i32 <(i32,i32)*>()> (data_ptr, n):
+fn sort_i32 <(i32,i32)->()> (data_ptr, n):
     sort_slice_quick<i32> data_ptr n
 
 //: sort_quick_ret: quick sort 後の Vec を返す
@@ -1021,7 +1021,7 @@ fn sort_i32 <(i32,i32)*>()> (data_ptr, n):
 //:
 //: [計算量/けいさんりょう]:
 //: - `sort_quick` と同じです。
-fn sort_quick_ret <.T: Ord> <(Vec<.T>)*>Vec<.T>> (v):
+fn sort_quick_ret <.T: Ord> <(Vec<.T>)->Vec<.T>> (v):
     let n <i32> get v "len"
     let cap <i32> get v "cap"
     let data_ptr <i32> get v "data"
@@ -1046,7 +1046,7 @@ fn sort_quick_ret <.T: Ord> <(Vec<.T>)*>Vec<.T>> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - `sort_heap` と同じです。
-fn sort_heap_ret <.T: Ord> <(Vec<.T>)*>Vec<.T>> (v):
+fn sort_heap_ret <.T: Ord> <(Vec<.T>)->Vec<.T>> (v):
     let n <i32> get v "len"
     let cap <i32> get v "cap"
     let data_ptr <i32> get v "data"
@@ -1083,7 +1083,7 @@ fn sort_heap_ret <.T: Ord> <(Vec<.T>)*>Vec<.T>> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - `sort_merge` と同じです。
-fn sort_merge_ret <.T: Ord> <(Vec<.T>)*>Vec<.T>> (v):
+fn sort_merge_ret <.T: Ord> <(Vec<.T>)->Vec<.T>> (v):
     let n <i32> get v "len"
     let cap <i32> get v "cap"
     let data_ptr <i32> get v "data"
@@ -1113,5 +1113,5 @@ fn sort_merge_ret <.T: Ord> <(Vec<.T>)*>Vec<.T>> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn sort <.T: Ord> <(Vec<.T>)*>()> (v):
+fn sort <.T: Ord> <(Vec<.T>)->()> (v):
     sort_quick<.T> v

@@ -107,7 +107,7 @@ fn mem_size <()->i32> ():
 //:
 //: 計算量:
 //: - O(1)
-fn mem_grow <(i32)*>i32> (pages):
+fn mem_grow <(i32)->i32> (pages):
     #if[target=wasm]
     #wasm:
         local.get $pages
@@ -162,7 +162,7 @@ fn align8 <(i32)->i32> (n):
 //:
 //: 計算量:
 //: - 平均 O(1) / 最悪 O(n)
-fn alloc <(i32)*>i32> (size):
+fn alloc <(i32)->i32> (size):
     if:
         cond:
             le size 0
@@ -258,7 +258,7 @@ fn alloc <(i32)*>i32> (size):
 //:
 //: 計算量:
 //: - O(1)
-fn dealloc <(i32,i32)*>()> (ptr, size):
+fn dealloc <(i32,i32)->()> (ptr, size):
     if:
         cond:
             le ptr 0
@@ -287,7 +287,7 @@ fn dealloc <(i32,i32)*>()> (ptr, size):
 //:
 //: 計算量:
 //: - O(n)
-fn realloc <(i32,i32,i32)*>i32> (ptr, old_size, new_size):
+fn realloc <(i32,i32,i32)->i32> (ptr, old_size, new_size):
     if:
         cond:
             le ptr 0
@@ -332,7 +332,7 @@ fn realloc <(i32,i32,i32)*>i32> (ptr, old_size, new_size):
 //:
 //: 計算量:
 //: - O(1)（`alloc` 本体を除く）
-fn alloc_safe <(i32)*>Result<i32,str>> (size):
+fn alloc_safe <(i32)->Result<i32,str>> (size):
     let ptr <i32> alloc size
     if:
         lt 0 ptr
@@ -355,7 +355,7 @@ fn alloc_safe <(i32)*>Result<i32,str>> (size):
 //:
 //: 計算量:
 //: - O(1)（`realloc` 本体を除く）
-fn realloc_safe <(i32,i32,i32)*>Result<i32,str>> (ptr, old_size, new_size):
+fn realloc_safe <(i32,i32,i32)->Result<i32,str>> (ptr, old_size, new_size):
     if:
         le new_size 0
         then:
@@ -379,7 +379,7 @@ fn realloc_safe <(i32,i32,i32)*>Result<i32,str>> (ptr, old_size, new_size):
 //:
 //: 計算量:
 //: - O(1)
-fn dealloc_safe <(i32,i32)*>Result<(),str>> (ptr, size):
+fn dealloc_safe <(i32,i32)->Result<(),str>> (ptr, size):
     if:
         or le ptr 0 lt size 0
         then:
@@ -434,7 +434,7 @@ fn load_i32 <(i32)->i32> (p):
 //:
 //: 計算量:
 //: - O(1)
-fn store_i32 <(i32,i32)*>()> (p, v):
+fn store_i32 <(i32,i32)->()> (p, v):
     #if[target=wasm]
     #wasm:
         local.get $p
@@ -502,7 +502,7 @@ fn load_u8 <(i32)->i32> (p):
 //:
 //: 計算量:
 //: - O(1)
-fn store_u8 <(i32,i32)*>()> (p, v):
+fn store_u8 <(i32,i32)->()> (p, v):
     #if[target=wasm]
     #wasm:
         local.get $p
@@ -551,7 +551,7 @@ fn store_u8 <(i32,i32)*>()> (p, v):
 //:     assert_eq_i32 65 load_u8 add p 7;
 //:     dealloc p 8;
 //: ```
-fn memset_u8 <(i32,i32,i32)*>()> (ptr, len, value):
+fn memset_u8 <(i32,i32,i32)->()> (ptr, len, value):
     let mut i <i32> 0;
     while lt i len:
         do:
@@ -571,7 +571,7 @@ fn memset_u8 <(i32,i32,i32)*>()> (ptr, len, value):
 //:
 //: 計算量:
 //: - O(len)
-fn fill_u8 <(i32,i32,i32)*>()> (ptr, len, value):
+fn fill_u8 <(i32,i32,i32)->()> (ptr, len, value):
     memset_u8 ptr len value
 
 //: fill_i32: `i32` 配列を同じ値で埋める
@@ -601,21 +601,21 @@ fn fill_u8 <(i32,i32,i32)*>()> (ptr, len, value):
 //:     assert_eq_i32 42 load_i32 add p 12;
 //:     dealloc p 16;
 //: ```
-fn fill_i32 <(i32,i32,i32)*>()> (ptr, count, value):
+fn fill_i32 <(i32,i32,i32)->()> (ptr, count, value):
     let mut i <i32> 0;
     while lt i count:
         do:
             store_i32 <i32> add ptr <i32> mul i 4 value;
             set i add i 1;
 
-fn alloc_ptr <(i32)*>Result<MemPtr,str>> (size):
+fn alloc_ptr <(i32)->Result<MemPtr,str>> (size):
     match alloc_safe size:
         Result::Ok raw:
             Result<MemPtr,str>::Ok mem_ptr_wrap raw
         Result::Err e:
             Result<MemPtr,str>::Err e
 
-fn realloc_ptr <(MemPtr,i32,i32)*>Result<MemPtr,str>> (ptr, old_size, new_size):
+fn realloc_ptr <(MemPtr,i32,i32)->Result<MemPtr,str>> (ptr, old_size, new_size):
     let raw <i32> mem_ptr_addr ptr;
     match realloc_safe raw old_size new_size:
         Result::Ok next_ptr:
@@ -623,7 +623,7 @@ fn realloc_ptr <(MemPtr,i32,i32)*>Result<MemPtr,str>> (ptr, old_size, new_size):
         Result::Err e:
             Result<MemPtr,str>::Err e
 
-fn dealloc_ptr <(MemPtr,i32)*>Result<(),str>> (ptr, size):
+fn dealloc_ptr <(MemPtr,i32)->Result<(),str>> (ptr, size):
     dealloc_safe mem_ptr_addr ptr size
 
 fn mem_ptr_add <(MemPtr,i32)->MemPtr> (ptr, off):
@@ -639,7 +639,7 @@ fn load_i32_ptr <(MemPtr)->Option<i32>> (p):
         else:
             Option<i32>::Some load_i32 raw
 
-fn store_i32_ptr <(MemPtr,i32)*>Result<(),str>> (p, v):
+fn store_i32_ptr <(MemPtr,i32)->Result<(),str>> (p, v):
     let raw <i32> mem_ptr_addr p;
     if:
         lt raw 1
@@ -658,7 +658,7 @@ fn load_u8_ptr <(MemPtr)->Option<i32>> (p):
         else:
             Option<i32>::Some load_u8 raw
 
-fn store_u8_ptr <(MemPtr,i32)*>Result<(),str>> (p, v):
+fn store_u8_ptr <(MemPtr,i32)->Result<(),str>> (p, v):
     let raw <i32> mem_ptr_addr p;
     if:
         lt raw 1
@@ -729,5 +729,5 @@ fn load <.T> <(i32)->.T> (ptr):
 //:
 //: 計算量:
 //: - O(1)
-fn store <.T> <(i32,.T)*>()> (ptr, val):
+fn store <.T> <(i32,.T)->()> (ptr, val):
     #intrinsic "store" <.T> (ptr, val)

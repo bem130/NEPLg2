@@ -179,7 +179,7 @@ fn list_nil <.T> <()->List<.T>> ():
 //:     let l list_cons<i32> 5 list_nil<i32>;
 //:     if list_is_empty<i32> l 1 0
 //: ```
-fn list_cons <.T> <(.T,List<.T>)*>List<.T>> (head, tail):
+fn list_cons <.T> <(.T,List<.T>)->List<.T>> (head, tail):
     let tail_ptr <i32> field::get tail "ptr"
     let node_size <i32> add size_of<.T> 4
     let node <i32> alloc node_size
@@ -200,7 +200,7 @@ fn list_cons <.T> <(.T,List<.T>)*>List<.T>> (head, tail):
 //:
 //: 計算量:
 //: - O(1)
-fn list_push_front <.T> <(List<.T>,.T)*>List<.T>> (lst, head):
+fn list_push_front <.T> <(List<.T>,.T)->List<.T>> (lst, head):
     list_cons<.T> head lst
 
 //: list_head: 先頭要素を取得する
@@ -435,7 +435,7 @@ fn list_get <.T> <(List<.T>,i32)->Option<.T>> (lst, idx):
 //:     list_free<i32> l1;
 //:     0
 //: ```
-fn list_free <.T> <(List<.T>)*>()> (lst):
+fn list_free <.T> <(List<.T>)->()> (lst):
     let node_size <i32> add size_of<.T> 4
     let mut cur <i32> field::get lst "ptr"
     while ne cur 0:
@@ -478,7 +478,7 @@ fn list_free <.T> <(List<.T>)*>()> (lst):
 //:         Option::None:
 //:             1
 //: ```
-fn list_reverse <.T> <(List<.T>)*>List<.T>> (lst):
+fn list_reverse <.T> <(List<.T>)->List<.T>> (lst):
     let mut new_list <List<.T>> list_nil<.T>;
     let mut cur <i32> field::get lst "ptr";
     while ne cur 0:

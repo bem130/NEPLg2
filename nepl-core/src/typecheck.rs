@@ -1252,7 +1252,7 @@ pub fn typecheck(
 fn check_function(
     f: &FnDef,
     func_ty: TypeId,
-    is_entry: bool,
+    _is_entry: bool,
     target: CompileTarget,
     profile: BuildProfile,
     captured_params: &[(String, TypeId)],
@@ -1327,7 +1327,7 @@ fn check_function(
             labels,
             string_table: strings,
             diagnostics: Vec::new(),
-            current_effect: if is_entry { Effect::Impure } else { effect },
+            current_effect: effect,
             enums,
             structs,
             instantiations,
@@ -3245,10 +3245,8 @@ impl<'a> BlockChecker<'a> {
                         last_expr = Some(stack.last().unwrap().expr.clone());
                     }
                     Symbol::Set { name } => {
-                        if let Some(binding) = self
-                            .env
-                            .lookup_current_value(&name.name)
-                            .or_else(|| self.env.lookup_value(&name.name))
+                        if let Some((binding, scope_index)) =
+                            self.env.lookup_value_with_scope(&name.name)
                         {
                             if !binding.mutable {
                                 self.diagnostics.push(Diagnostic::error(
@@ -3256,11 +3254,16 @@ impl<'a> BlockChecker<'a> {
                                     name.span,
                                 ).with_id(DiagnosticId::TypeImmutableMutation));
                             }
+                            let effect = if scope_index == 0 {
+                                Effect::Impure
+                            } else {
+                                Effect::Pure
+                            };
                             let func_ty = self.ctx.function(
                                 Vec::new(),
                                 vec![binding.ty],
                                 self.ctx.unit(),
-                                Effect::Impure,
+                                effect,
                             );
                             stack.push(StackEntry {
                                 ty: func_ty,
@@ -3271,17 +3274,17 @@ impl<'a> BlockChecker<'a> {
                                 },
                                 type_args: Vec::new(),
                                 assign: Some(AssignKind::Set),
-                            auto_call: true,
+                                auto_call: true,
                             });
                             // defer applying ascription until the expression is complete
                             last_expr = Some(stack.last().unwrap().expr.clone());
-                            } else {
-                                self.diagnostics
-                                    .push(
-                                        Diagnostic::error("undefined variable", name.span)
-                                            .with_id(DiagnosticId::TypeUndefinedVariable),
-                                    );
-                            }
+                        } else {
+                            self.diagnostics
+                                .push(
+                                    Diagnostic::error("undefined variable", name.span)
+                                        .with_id(DiagnosticId::TypeUndefinedVariable),
+                                );
+                        }
                     }
                     Symbol::AddrOf(span) => {
                         if crate::log::is_verbose() {
@@ -5752,6 +5755,21 @@ impl Env {
         self.lookup_all_any_defined(name)
             .into_iter()
             .find(|b| matches!(b.kind, BindingKind::Var))
+    }
+
+    fn lookup_value_with_scope(&self, name: &str) -> Option<(&Binding, usize)> {
+        for idx in (0..self.scopes.len()).rev() {
+            let scope = &self.scopes[idx];
+            if let Some(b) = scope
+                .values
+                .iter()
+                .rev()
+                .find(|b| b.name == name && b.defined)
+            {
+                return Some((b, idx));
+            }
+        }
+        None
     }
 
     fn lookup_value_any(&self, name: &str) -> Option<&Binding> {

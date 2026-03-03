@@ -420,7 +420,7 @@ fn impure_caller <(i32)*>i32> (x):
     println_i32 res;
     res
 
-fn main <()->i32> ():
+fn main <()*>i32> ():
     impure_caller 5
 ```
 

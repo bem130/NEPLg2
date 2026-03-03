@@ -204,7 +204,7 @@ enum Option<.T>:
     None
     Some <.T>
 
-fn is_none <(Option<i32>)->bool> (o):
+fn is_none_i32 <(Option<i32>)->bool> (o):
     match o:
         None:
             true
@@ -213,7 +213,7 @@ fn is_none <(Option<i32>)->bool> (o):
 
 fn main <()->i32> ():
     let n <Option<i32>> Option::None
-    if is_none n 1 0
+    if is_none_i32 n 1 0
 ```
 
 ## generics_make_none_from_context
