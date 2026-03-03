@@ -1,3 +1,34 @@
+# 2026-03-03 作業メモ (mem/kp の `_raw` 段階廃止と安全API寄せ)
+- 目的:
+  - `mem/kpread/kpwrite` の `_raw` 接尾辞を段階廃止し、安全API（`Result/Option`）中心へ寄せる。
+  - `Scanner` / `Writer` ラッパ導入後の move 破綻を根本修正する。
+- 実装:
+  - `stdlib/core/mem.nepl`
+    - `mem_ptr_raw` を `mem_ptr_addr` へ変更。
+    - `alloc_ptr_raw / realloc_ptr_raw / dealloc_ptr_raw / load_*_ptr_raw / store_*_ptr_raw` を削除。
+    - 公開APIは `alloc_ptr/realloc_ptr/dealloc_ptr/load_*_ptr/store_*_ptr`（`Result/Option`）に統一。
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_raw` -> `scanner_handle`、`scanner_new_raw` -> `scanner_new_handle` に改名。
+    - `Scanner` 利用側は `scanner_handle` を一度取り出して i32 系 read API を使う形に統一（move 破綻回避）。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_raw` -> `writer_handle`、`writer_new_raw` -> `writer_new_handle` に改名。
+    - `Writer` オーバーロード群の move バグを修正:
+      - `writer_handle` で i32 を取り出し
+      - 低レベル関数を呼び
+      - `writer_wrap raw` を返す
+    - i32 低レベル関数での `set w ...`（immutable 代入）を除去。
+    - doctest の `Writer` 使用例を再束縛（`set w ...`）に修正。
+  - `tests/kp.n.md`, `tests/kp_i64.n.md`, `tests/stdin.n.md`
+    - `Scanner` から `scanner_handle` を取得して読み取りを行う形へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md --no-tree --no-stdlib -o /tmp/tests-kp-safe-now6.json -j 16`
+    - `15/15 pass`
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i examples/kp_fizzbuzz.nepl --no-tree --no-stdlib -o /tmp/tests-kp-safe-broader2.json -j 16`
+    - `20/20 pass`
+- 残課題:
+  - `scanner_handle` / `writer_handle` / `mem_ptr_addr` は依然としてハンドル露出点であり、最終的には公開APIから隠蔽する必要がある。
+  - `Result` ベース一本化（`_safe` から suffix なし統一）は `mem` 以外の stdlib へ横展開が必要。
+
 # 2026-03-03 作業メモ (オーバーロード根本修正: 関数値引数の arity/型文脈解決)
 - 目的:
   - `use_binary 3 4 calc` や `5 |> use_unary calc` のように、オーバーロード関数名を「関数値引数」として渡すケースを安定解決する。

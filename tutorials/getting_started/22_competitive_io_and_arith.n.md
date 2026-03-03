@@ -17,17 +17,19 @@ stdout: "7\n"
 | #target wasi
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "kp/kpread" as *
 #import "kp/kpwrite" as *
 
 fn main <()*> ()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     let a <i32> scanner_read_i32 sc;
     let b <i32> scanner_read_i32 sc;
-    let w <i32> writer_new;
-    writer_write_i32 w add a b;
-    writer_writeln w;
-    writer_flush w;
+    let mut w <Writer> unwrap_ok writer_new;
+    set w writer_write_i32 w add a b;
+    set w writer_writeln w;
+    set w writer_flush w;
     writer_free w
 ```
 
@@ -47,13 +49,14 @@ stdout: "1000000000007\n"
 #import "kp/kpwrite" as *
 
 fn main <()*> ()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     let a <i64> scanner_read_i64 sc;
     let b <i64> scanner_read_i64 sc;
-    let w <i32> writer_new;
-    writer_write_i64 w add a b;
-    writer_writeln w;
-    writer_flush w;
+    let mut w <Writer> unwrap_ok writer_new;
+    set w writer_write_i64 w add a b;
+    set w writer_writeln w;
+    set w writer_flush w;
     writer_free w
 ```
 
@@ -73,18 +76,19 @@ stdout: "5 8 13\n"
 #import "kp/kpwrite" as *
 
 fn main <()*> ()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     let a <i32> scanner_read_i32 sc;
     let b <i32> scanner_read_i32 sc;
     let c <i32> scanner_read_i32 sc;
 
-    let w <i32> writer_new;
-    writer_write_i32 w a;
-    writer_write_space w;
-    writer_write_i32 w b;
-    writer_write_space w;
-    writer_write_i32 w c;
-    writer_writeln w;
-    writer_flush w;
+    let mut w <Writer> unwrap_ok writer_new;
+    set w writer_write_i32 w a;
+    set w writer_write_space w;
+    set w writer_write_i32 w b;
+    set w writer_write_space w;
+    set w writer_write_i32 w c;
+    set w writer_writeln w;
+    set w writer_flush w;
     writer_free w
 ```

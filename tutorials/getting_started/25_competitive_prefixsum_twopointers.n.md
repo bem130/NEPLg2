@@ -16,12 +16,14 @@ stdout: "6\n14\n15\n"
 | #target wasi
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "core/mem" as *
 #import "kp/kpread" as *
 #import "kp/kpwrite" as *
 
 fn main <()*> ()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     let n <i32> scanner_read_i32 sc;
     let q <i32> scanner_read_i32 sc;
 
@@ -43,7 +45,7 @@ fn main <()*> ()> ():
             store_i32 cur_ptr cur;
             set i add i 1;
 
-    let w <i32> writer_new;
+    let mut w <Writer> unwrap_ok writer_new;
     let mut k <i32> 0;
     while lt k q:
         do:
@@ -54,11 +56,11 @@ fn main <()*> ()> ():
             let right_off <i32> mul r1 4;
             let left <i32> load_i32 add pref left_off;
             let right <i32> load_i32 add pref right_off;
-            writer_write_i32 w sub right left;
-            writer_writeln w;
+            set w writer_write_i32 w sub right left;
+            set w writer_writeln w;
             set k add k 1;
 
-    writer_flush w;
+    set w writer_flush w;
     writer_free w;
     dealloc pref mul pref_len 4
 ```

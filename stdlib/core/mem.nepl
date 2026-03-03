@@ -51,6 +51,7 @@
 
 #import "core/math" as *
 #import "core/result" as *
+#import "core/option" as *
 
 struct MemPtr:
     raw <i32>
@@ -58,7 +59,7 @@ struct MemPtr:
 fn mem_ptr_wrap <(i32)->MemPtr> (raw):
     MemPtr raw
 
-fn mem_ptr_raw <(MemPtr)->i32> (p):
+fn mem_ptr_addr <(MemPtr)->i32> (p):
     get p "raw"
 
 #if[target=llvm]
@@ -331,14 +332,14 @@ fn realloc <(i32,i32,i32)*>i32> (ptr, old_size, new_size):
 //:
 //: 計算量:
 //: - O(1)（`alloc` 本体を除く）
-fn alloc_safe <(i32)*>Result<i32, str>> (size):
+fn alloc_safe <(i32)*>Result<i32,str>> (size):
     let ptr <i32> alloc size
     if:
         lt 0 ptr
         then:
-            Result<i32, str>::Ok ptr
+            Result<i32,str>::Ok ptr
         else:
-            Result<i32, str>::Err "mem.alloc failed"
+            Result<i32,str>::Err "mem.alloc failed"
 
 //: realloc_safe: realloc の結果を Result で返す安全ラッパ
 //:
@@ -354,19 +355,19 @@ fn alloc_safe <(i32)*>Result<i32, str>> (size):
 //:
 //: 計算量:
 //: - O(1)（`realloc` 本体を除く）
-fn realloc_safe <(i32,i32,i32)*>Result<i32, str>> (ptr, old_size, new_size):
+fn realloc_safe <(i32,i32,i32)*>Result<i32,str>> (ptr, old_size, new_size):
     if:
         le new_size 0
         then:
-            Result<i32, str>::Ok (realloc ptr old_size new_size)
+            Result<i32,str>::Ok (realloc ptr old_size new_size)
         else:
             let new_ptr <i32> realloc ptr old_size new_size
             if:
                 lt 0 new_ptr
                 then:
-                    Result<i32, str>::Ok new_ptr
+                    Result<i32,str>::Ok new_ptr
                 else:
-                    Result<i32, str>::Err "mem.realloc failed"
+                    Result<i32,str>::Err "mem.realloc failed"
 
 //: dealloc_safe: dealloc の前提を検査する安全ラッパ
 //:
@@ -378,14 +379,14 @@ fn realloc_safe <(i32,i32,i32)*>Result<i32, str>> (ptr, old_size, new_size):
 //:
 //: 計算量:
 //: - O(1)
-fn dealloc_safe <(i32,i32)*>Result<(), str>> (ptr, size):
+fn dealloc_safe <(i32,i32)*>Result<(),str>> (ptr, size):
     if:
         or le ptr 0 lt size 0
         then:
-            Result<(), str>::Err "mem.dealloc invalid argument"
+            Result<(),str>::Err "mem.dealloc invalid argument"
         else:
             dealloc ptr size
-            Result<(), str>::Ok ()
+            Result<(),str>::Ok ()
 
 //: load_i32: i32 を読み出す
 //:
@@ -607,31 +608,65 @@ fn fill_i32 <(i32,i32,i32)*>()> (ptr, count, value):
             store_i32 <i32> add ptr <i32> mul i 4 value;
             set i add i 1;
 
-fn alloc_ptr <(i32)*>MemPtr> (size):
-    mem_ptr_wrap alloc size
+fn alloc_ptr <(i32)*>Result<MemPtr,str>> (size):
+    match alloc_safe size:
+        Result::Ok raw:
+            Result<MemPtr,str>::Ok mem_ptr_wrap raw
+        Result::Err e:
+            Result<MemPtr,str>::Err e
 
-fn realloc_ptr <(MemPtr,i32,i32)*>MemPtr> (ptr, old_size, new_size):
-    let raw <i32> mem_ptr_raw ptr;
-    mem_ptr_wrap realloc raw old_size new_size
+fn realloc_ptr <(MemPtr,i32,i32)*>Result<MemPtr,str>> (ptr, old_size, new_size):
+    let raw <i32> mem_ptr_addr ptr;
+    match realloc_safe raw old_size new_size:
+        Result::Ok next_ptr:
+            Result<MemPtr,str>::Ok mem_ptr_wrap next_ptr
+        Result::Err e:
+            Result<MemPtr,str>::Err e
 
-fn dealloc_ptr <(MemPtr,i32)*>()> (ptr, size):
-    dealloc mem_ptr_raw ptr size
+fn dealloc_ptr <(MemPtr,i32)*>Result<(),str>> (ptr, size):
+    dealloc_safe mem_ptr_addr ptr size
 
 fn mem_ptr_add <(MemPtr,i32)->MemPtr> (ptr, off):
-    let raw <i32> mem_ptr_raw ptr;
+    let raw <i32> mem_ptr_addr ptr;
     mem_ptr_wrap add raw off
 
-fn load_i32_ptr <(MemPtr)->i32> (p):
-    load_i32 mem_ptr_raw p
+fn load_i32_ptr <(MemPtr)->Option<i32>> (p):
+    let raw <i32> mem_ptr_addr p;
+    if:
+        lt raw 1
+        then:
+            Option<i32>::None
+        else:
+            Option<i32>::Some load_i32 raw
 
-fn store_i32_ptr <(MemPtr,i32)*>()> (p, v):
-    store_i32 mem_ptr_raw p v
+fn store_i32_ptr <(MemPtr,i32)*>Result<(),str>> (p, v):
+    let raw <i32> mem_ptr_addr p;
+    if:
+        lt raw 1
+        then:
+            Result<(),str>::Err "mem.store_i32 invalid pointer"
+        else:
+            store_i32 raw v
+            Result<(),str>::Ok ()
 
-fn load_u8_ptr <(MemPtr)->i32> (p):
-    load_u8 mem_ptr_raw p
+fn load_u8_ptr <(MemPtr)->Option<i32>> (p):
+    let raw <i32> mem_ptr_addr p;
+    if:
+        lt raw 1
+        then:
+            Option<i32>::None
+        else:
+            Option<i32>::Some load_u8 raw
 
-fn store_u8_ptr <(MemPtr,i32)*>()> (p, v):
-    store_u8 mem_ptr_raw p v
+fn store_u8_ptr <(MemPtr,i32)*>Result<(),str>> (p, v):
+    let raw <i32> mem_ptr_addr p;
+    if:
+        lt raw 1
+        then:
+            Result<(),str>::Err "mem.store_u8 invalid pointer"
+        else:
+            store_u8 raw v
+            Result<(),str>::Ok ()
 
 //: size_of: 型のサイズを取得する
 //:

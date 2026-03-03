@@ -5,6 +5,7 @@
 #target wasi
 
 #import "kp/kpread" as *
+#import "core/result" as *
 #import "kp/kpwrite" as *
 #import "core/math" as *
 
@@ -17,8 +18,9 @@
 //: 計算量:
 //: - O(n)
 fn main <()*> ()> ():
-    let sc <i32> scanner_new;
-    let w  <i32> writer_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
+    let mut w <Writer> unwrap_ok writer_new;
 
     let n <i32> scanner_read_i32 sc;
 
@@ -32,26 +34,26 @@ fn main <()*> ()> ():
             if:
                 and eq rem3 0 eq rem5 0
                 then:
-                    writer_write_str w "FizzBuzz";
-                    writer_writeln w;
+                    set w writer_write_str w "FizzBuzz";
+                    set w writer_writeln w;
                 else:
                     if:
                         eq rem3 0
                         then:
-                            writer_write_str w "Fizz";
-                            writer_writeln w;
+                            set w writer_write_str w "Fizz";
+                            set w writer_writeln w;
                         else:
                             if:
                                 eq rem5 0
                                 then:
-                                    writer_write_str w "Buzz";
-                                    writer_writeln w;
+                                    set w writer_write_str w "Buzz";
+                                    set w writer_writeln w;
                                 else:
-                                    writer_write_i32 w i;
-                                    writer_writeln w;
+                                    set w writer_write_i32 w i;
+                                    set w writer_writeln w;
 
             set i add i 1;
 
-    writer_flush w;
+    set w writer_flush w;
     // ここでプロセス自体が終了するのでべつにfreeしなくても一緒
     // writer_free w;

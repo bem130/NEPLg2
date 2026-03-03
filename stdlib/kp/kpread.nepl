@@ -20,27 +20,31 @@
 #import "core/math" as *
 #import "core/cast" as *
 #import "core/option" as *
+#import "core/result" as *
 #import "kp/kpread_core" as *
 #import "alloc/collections/vec" as *
 #import "core/field" as *
 
 struct Scanner:
-    raw <i32>
+    raw <MemPtr>
 
 fn scanner_wrap <(i32)->Scanner> (raw):
-    Scanner raw
+    Scanner mem_ptr_wrap raw
 
-fn scanner_raw <(Scanner)*>i32> (sc):
-    get sc "raw"
+fn scanner_handle <(Scanner)*>i32> (sc):
+    mem_ptr_addr get sc "raw"
 
-fn scanner_new_raw <()*>i32> ():
+fn scanner_new_handle <()*>i32> ():
     scanner_new_impl_i 0
 
-fn scanner_new <()*>i32> ():
-    scanner_new_raw
-
-fn scanner_new_typed <()*>Scanner> ():
-    scanner_wrap scanner_new_raw
+fn scanner_new <()*>Result<Scanner,str>> ():
+    let raw <i32> scanner_new_handle;
+    if:
+        lt 0 raw
+        then:
+            Result<Scanner,str>::Ok scanner_wrap raw
+        else:
+            Result<Scanner,str>::Err "kpread.scanner_new failed"
 
 //: kpread: 競技プログラミング用高速スキャナ
 //: 
@@ -1179,52 +1183,52 @@ fn scanner_read_ndrh_i32 <(i32)*>NDRHInput> (sc):
     NDRHInput n d r h
 
 fn scanner_skip_ws <(Scanner)*>()> (sc):
-    scanner_skip_ws scanner_raw sc
+    scanner_skip_ws scanner_handle sc
 
 fn scanner_is_eof <(Scanner)*>bool> (sc):
-    scanner_is_eof scanner_raw sc
+    scanner_is_eof scanner_handle sc
 
 fn scanner_skip_token <(Scanner)*>()> (sc):
-    scanner_skip_token scanner_raw sc
+    scanner_skip_token scanner_handle sc
 
 fn scanner_read_token <(Scanner)*>str> (sc):
-    scanner_read_token scanner_raw sc
+    scanner_read_token scanner_handle sc
 
 fn scanner_read_i32 <(Scanner)*>i32> (sc):
-    scanner_read_i32 scanner_raw sc
+    scanner_read_i32 scanner_handle sc
 
 fn scanner_read_u64 <(Scanner)*>i64> (sc):
-    scanner_read_u64 scanner_raw sc
+    scanner_read_u64 scanner_handle sc
 
 fn scanner_read_i64 <(Scanner)*>i64> (sc):
-    scanner_read_i64 scanner_raw sc
+    scanner_read_i64 scanner_handle sc
 
 fn scanner_read_f64 <(Scanner)*>f64> (sc):
-    scanner_read_f64 scanner_raw sc
+    scanner_read_f64 scanner_handle sc
 
 fn scanner_read_f32 <(Scanner)*>f32> (sc):
-    scanner_read_f32 scanner_raw sc
+    scanner_read_f32 scanner_handle sc
 
 fn scanner_read_vec_i64 <(Scanner, i32)*>Vec<i64>> (sc, n):
-    scanner_read_vec_i64 scanner_raw sc n
+    scanner_read_vec_i64 scanner_handle sc n
 
 fn scanner_read_vec_i32 <(Scanner, i32)*>Vec<i32>> (sc, n):
-    scanner_read_vec_i32 scanner_raw sc n
+    scanner_read_vec_i32 scanner_handle sc n
 
 fn scanner_read_matrix_i32 <(Scanner, i32, i32)*>Vec<Vec<i32>>> (sc, h, w):
-    scanner_read_matrix_i32 scanner_raw sc h w
+    scanner_read_matrix_i32 scanner_handle sc h w
 
 fn scanner_read_all_i32 <(Scanner)*>Vec<i32>> (sc):
-    scanner_read_all_i32 scanner_raw sc
+    scanner_read_all_i32 scanner_handle sc
 
 fn scanner_read_na_i32 <(Scanner)*>NAInput> (sc):
-    scanner_read_na_i32 scanner_raw sc
+    scanner_read_na_i32 scanner_handle sc
 
 fn scanner_read_interval_queries_i32 <(Scanner)*>IntervalQueriesInput> (sc):
-    scanner_read_interval_queries_i32 scanner_raw sc
+    scanner_read_interval_queries_i32 scanner_handle sc
 
 fn scanner_read_query_tuples_i32 <(Scanner, i32)*>QueryTuplesInput> (sc, k):
-    scanner_read_query_tuples_i32 scanner_raw sc k
+    scanner_read_query_tuples_i32 scanner_handle sc k
 
 fn scanner_read_ndrh_i32 <(Scanner)*>NDRHInput> (sc):
-    scanner_read_ndrh_i32 scanner_raw sc
+    scanner_read_ndrh_i32 scanner_handle sc

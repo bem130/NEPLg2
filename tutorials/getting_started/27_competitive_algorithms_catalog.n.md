@@ -16,21 +16,23 @@
 
 ```neplg2
 #import "kp/kpread" as *
-let sc <i32> scanner_new;
-let a <i32> scanner_read_i32 sc;
-let b <i32> scanner_read_i32 sc;
+#import "core/result" as *
+let sc <Scanner> unwrap_ok scanner_new;
+let sc_handle <i32> scanner_handle sc;
+let a <i32> scanner_read_i32 sc_handle;
+let b <i32> scanner_read_i32 sc_handle;
 ```
 
 ## 2. 高速出力（空白区切り）
 
 ```neplg2
 #import "kp/kpwrite" as *
-let w <i32> writer_new;
-writer_write_i32 w 10;
-writer_write_space w;
-writer_write_i32 w 20;
-writer_writeln w;
-writer_flush w;
+let mut w <Writer> unwrap_ok writer_new;
+set w writer_write_i32 w 10;
+set w writer_write_space w;
+set w writer_write_i32 w 20;
+set w writer_writeln w;
+set w writer_flush w;
 writer_free w;
 ```
 

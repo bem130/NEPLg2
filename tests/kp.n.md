@@ -14,7 +14,8 @@ stdout: "10\n20\n30\n"
 #import "std/stdio" as *
 
 fn main <()*>()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     println_i32 scanner_read_i32 sc;
     println_i32 scanner_read_i32 sc;
     println_i32 scanner_read_i32 sc;
@@ -35,9 +36,9 @@ stdout: "hello world"
 
 fn main <()*>()> ():
     let line <str> read_line;
-    let w <i32> writer_new;
-    writer_write_str w line;
-    writer_flush w;
+    let mut w <Writer> unwrap_ok writer_new;
+    set w writer_write_str w line;
+    set w writer_flush w;
     writer_free w;
 ```
 
@@ -57,7 +58,8 @@ stdout: "6\n14\n15\n"
 #import "kp/kpwrite" as *
 
 fn main <()*>()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     let n <i32> scanner_read_i32 sc;
     let q <i32> scanner_read_i32 sc;
 
@@ -79,7 +81,7 @@ fn main <()*>()> ():
             store_i32 cur_ptr cur;
             set i add i 1;
 
-    let w <i32> writer_new;
+    let mut w <Writer> unwrap_ok writer_new;
     let mut k <i32> 0;
     while lt k q:
         do:
@@ -93,11 +95,11 @@ fn main <()*>()> ():
             let left <i32> load_i32 left_ptr;
             let right <i32> load_i32 right_ptr;
             let diff <i32> sub right left;
-            writer_write_i32 w diff;
-            writer_writeln w;
+            set w writer_write_i32 w diff;
+            set w writer_writeln w;
             set k add k 1;
 
-    writer_flush w;
+    set w writer_flush w;
     writer_free w;
     dealloc pref mul pref_len 4;
 ```
@@ -113,6 +115,7 @@ stdout: "13\n"
 #target std
 
 #import "core/math" as *
+#import "core/result" as *
 #import "core/cast" as *
 #import "kp/kpread" as *
 #import "kp/kpwrite" as *
@@ -133,13 +136,14 @@ fn ways <(i32)*>i64> (n):
             b
 
 fn main <()*>()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     let n <i32> scanner_read_i32 sc;
     let ans <i64> ways n;
-    let w <i32> writer_new;
-    writer_write_i64 w ans;
-    writer_writeln w;
-    writer_flush w;
+    let mut w <Writer> unwrap_ok writer_new;
+    set w writer_write_i64 w ans;
+    set w writer_writeln w;
+    set w writer_flush w;
     writer_free w;
 ```
 
@@ -157,15 +161,16 @@ stdout: "3.500000\n-2.250000\n100.000000\n"
 #import "kp/kpwrite" as *
 
 fn main <()*>()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     let a <f64> scanner_read_f64 sc;
     let b <f64> scanner_read_f64 sc;
     let c <f64> scanner_read_f64 sc;
-    let w <i32> writer_new;
-    writer_write_f64_ln w a;
-    writer_write_f64_ln w b;
-    writer_write_f64_ln w c;
-    writer_flush w;
+    let mut w <Writer> unwrap_ok writer_new;
+    set w writer_write_f64_ln w a;
+    set w writer_write_f64_ln w b;
+    set w writer_write_f64_ln w c;
+    set w writer_flush w;
     writer_free w;
 ```
 
@@ -183,11 +188,12 @@ stdout: "1.250000\n"
 #import "kp/kpwrite" as *
 
 fn main <()*>()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     let v <f32> scanner_read_f32 sc;
-    let w <i32> writer_new;
-    writer_write_f32_ln w v;
-    writer_flush w;
+    let mut w <Writer> unwrap_ok writer_new;
+    set w writer_write_f32_ln w v;
+    set w writer_flush w;
     writer_free w;
 ```
 

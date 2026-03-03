@@ -18,6 +18,7 @@ stdout: "13\n"
 | #target wasi
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "core/cast" as *
 #import "kp/kpread" as *
 #import "kp/kpwrite" as *
@@ -38,13 +39,14 @@ fn ways <(i32)*>i64> (n):
             b
 |
 fn main <()*> ()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     let n <i32> scanner_read_i32 sc;
     let ans <i64> ways n;
-    let w <i32> writer_new;
-    writer_write_i64 w ans;
-    writer_writeln w;
-    writer_flush w;
+    let mut w <Writer> unwrap_ok writer_new;
+    set w writer_write_i64 w ans;
+    set w writer_writeln w;
+    set w writer_flush w;
     writer_free w
 ```
 

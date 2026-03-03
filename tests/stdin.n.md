@@ -11,6 +11,7 @@ stdout: "1 2 +\n"
 #indent 4
 #target std
 #import "std/stdio" as *
+#import "core/result" as *
 
 fn main <()*>()> ():
     let s <str> read_all;
@@ -83,7 +84,8 @@ stdout: "1\n3\n"
 #import "std/stdio" as *
 
 fn main <()*> ()> ():
-    let sc <i32> scanner_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
     let a <i32> scanner_read_i32 sc;
     let b <i32> scanner_read_i32 sc;
     println_i32 a;

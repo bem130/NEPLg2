@@ -11,26 +11,28 @@ stdout: "-9223372036854775808\n0\n9223372036854775807\n18446744073709551615\n"
 #target std
 
 #import "kp/kpread" as *
+#import "core/result" as *
 #import "kp/kpwrite" as *
 
 fn main <()*>()> ():
-    let sc <i32> scanner_new;
-    let w <i32> writer_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
+    let mut w <Writer> unwrap_ok writer_new;
 
     let a <i64> scanner_read_i64 sc;
     let b <i64> scanner_read_i64 sc;
     let c <i64> scanner_read_i64 sc;
     let d <i64> scanner_read_u64 sc;
 
-    writer_write_i64 w a;
-    writer_writeln w;
-    writer_write_i64 w b;
-    writer_writeln w;
-    writer_write_i64 w c;
-    writer_writeln w;
-    writer_write_u64 w d;
-    writer_writeln w;
-    writer_flush w;
+    set w writer_write_i64 w a;
+    set w writer_writeln w;
+    set w writer_write_i64 w b;
+    set w writer_writeln w;
+    set w writer_write_i64 w c;
+    set w writer_writeln w;
+    set w writer_write_u64 w d;
+    set w writer_writeln w;
+    set w writer_flush w;
     writer_free w;
 ```
 
@@ -48,16 +50,17 @@ stdout: "42\n-17\n0\n"
 #import "kp/kpwrite" as *
 
 fn main <()*>()> ():
-    let sc <i32> scanner_new;
-    let w <i32> writer_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
+    let mut w <Writer> unwrap_ok writer_new;
 
-    writer_write_i64 w scanner_read_i64 sc;
-    writer_writeln w;
-    writer_write_i64 w scanner_read_i64 sc;
-    writer_writeln w;
-    writer_write_u64 w scanner_read_u64 sc;
-    writer_writeln w;
-    writer_flush w;
+    set w writer_write_i64 w scanner_read_i64 sc;
+    set w writer_writeln w;
+    set w writer_write_i64 w scanner_read_i64 sc;
+    set w writer_writeln w;
+    set w writer_write_u64 w scanner_read_u64 sc;
+    set w writer_writeln w;
+    set w writer_flush w;
     writer_free w;
 ```
 
@@ -75,17 +78,18 @@ stdout: "-9223372036854775807\n9223372036854775806\n1000000000000000000\n1844674
 #import "kp/kpwrite" as *
 
 fn main <()*>()> ():
-    let sc <i32> scanner_new;
-    let w <i32> writer_new;
+    let sc_obj <Scanner> unwrap_ok scanner_new;
+    let sc <i32> scanner_handle sc_obj;
+    let mut w <Writer> unwrap_ok writer_new;
 
-    writer_write_i64 w scanner_read_i64 sc;
-    writer_writeln w;
-    writer_write_i64 w scanner_read_i64 sc;
-    writer_writeln w;
-    writer_write_i64 w scanner_read_i64 sc;
-    writer_writeln w;
-    writer_write_u64 w scanner_read_u64 sc;
-    writer_writeln w;
-    writer_flush w;
+    set w writer_write_i64 w scanner_read_i64 sc;
+    set w writer_writeln w;
+    set w writer_write_i64 w scanner_read_i64 sc;
+    set w writer_writeln w;
+    set w writer_write_i64 w scanner_read_i64 sc;
+    set w writer_writeln w;
+    set w writer_write_u64 w scanner_read_u64 sc;
+    set w writer_writeln w;
+    set w writer_flush w;
     writer_free w;
 ```
