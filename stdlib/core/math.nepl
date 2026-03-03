@@ -483,7 +483,7 @@ fn shr_u <(i32,i32)->i32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_rotl <(i32,i32)->i32> (a,b):
+fn rotl_i32 <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -492,7 +492,7 @@ fn i32_rotl <(i32,i32)->i32> (a,b):
     #if[target=llvm]
     #llvmir:
         declare i32 @llvm.fshl.i32(i32, i32, i32)
-        define i32 @i32_rotl(i32 %a, i32 %b) {
+        define i32 @rotl_i32(i32 %a, i32 %b) {
         entry:
             %0 = call i32 @llvm.fshl.i32(i32 %a, i32 %a, i32 %b)
             ret i32 %0
@@ -511,7 +511,7 @@ fn i32_rotl <(i32,i32)->i32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_rotr <(i32,i32)->i32> (a,b):
+fn rotr_i32 <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -520,7 +520,7 @@ fn i32_rotr <(i32,i32)->i32> (a,b):
     #if[target=llvm]
     #llvmir:
         declare i32 @llvm.fshr.i32(i32, i32, i32)
-        define i32 @i32_rotr(i32 %a, i32 %b) {
+        define i32 @rotr_i32(i32 %a, i32 %b) {
         entry:
             %0 = call i32 @llvm.fshr.i32(i32 %a, i32 %a, i32 %b)
             ret i32 %0
@@ -551,7 +551,7 @@ fn i32_rotr <(i32,i32)->i32> (a,b):
 //:     assert_eq_i32 3 ctz 8;
 //:     assert_eq_i32 4 popcnt 15;
 //: ```
-fn i32_clz <(i32)->i32> (a):
+fn clz_i32 <(i32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -559,7 +559,7 @@ fn i32_clz <(i32)->i32> (a):
     #if[target=llvm]
     #llvmir:
         declare i32 @llvm.ctlz.i32(i32, i1)
-        define i32 @i32_clz(i32 %a) {
+        define i32 @clz_i32(i32 %a) {
         entry:
             %0 = call i32 @llvm.ctlz.i32(i32 %a, i1 0)
             ret i32 %0
@@ -578,7 +578,7 @@ fn i32_clz <(i32)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_ctz <(i32)->i32> (a):
+fn ctz_i32 <(i32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -586,7 +586,7 @@ fn i32_ctz <(i32)->i32> (a):
     #if[target=llvm]
     #llvmir:
         declare i32 @llvm.cttz.i32(i32, i1)
-        define i32 @i32_ctz(i32 %a) {
+        define i32 @ctz_i32(i32 %a) {
         entry:
             %0 = call i32 @llvm.cttz.i32(i32 %a, i1 0)
             ret i32 %0
@@ -605,7 +605,7 @@ fn i32_ctz <(i32)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_popcnt <(i32)->i32> (a):
+fn popcnt_i32 <(i32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -613,7 +613,7 @@ fn i32_popcnt <(i32)->i32> (a):
     #if[target=llvm]
     #llvmir:
         declare i32 @llvm.ctpop.i32(i32)
-        define i32 @i32_popcnt(i32 %a) {
+        define i32 @popcnt_i32(i32 %a) {
         entry:
             %0 = call i32 @llvm.ctpop.i32(i32 %a)
             ret i32 %0
@@ -624,35 +624,35 @@ fn i32_popcnt <(i32)->i32> (a):
 //: [目的/もくてき]:
 //: - i32 の循環左シフトを、型名 prefix なしで呼び出せるようにします。
 fn rotl <(i32,i32)->i32> (a,b):
-    i32_rotl a b
+    rotl_i32 a b
 
 //: rotr: ビット列の右ローテート（i32）
 //:
 //: [目的/もくてき]:
 //: - i32 の循環右シフトを、型名 prefix なしで呼び出せるようにします。
 fn rotr <(i32,i32)->i32> (a,b):
-    i32_rotr a b
+    rotr_i32 a b
 
 //: clz: 先頭ゼロビット数の計算（i32）
 //:
 //: [目的/もくてき]:
 //: - i32 の `clz` を、型名 prefix なしで呼び出せるようにします。
 fn clz <(i32)->i32> (a):
-    i32_clz a
+    clz_i32 a
 
 //: ctz: 末尾ゼロビット数の計算（i32）
 //:
 //: [目的/もくてき]:
 //: - i32 の `ctz` を、型名 prefix なしで呼び出せるようにします。
 fn ctz <(i32)->i32> (a):
-    i32_ctz a
+    ctz_i32 a
 
 //: popcnt: 1ビット数の計算（i32）
 //:
 //: [目的/もくてき]:
 //: - i32 の `popcnt` を、型名 prefix なしで呼び出せるようにします。
 fn popcnt <(i32)->i32> (a):
-    i32_popcnt a
+    popcnt_i32 a
 
 //: eq: i32 の等値比較
 //:
@@ -1797,7 +1797,7 @@ fn shr_u <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_rotl <(i64,i64)->i64> (a,b):
+fn rotl_i64 <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1806,7 +1806,7 @@ fn i64_rotl <(i64,i64)->i64> (a,b):
     #if[target=llvm]
     #llvmir:
         declare i64 @llvm.fshl.i64(i64, i64, i64)
-        define i64 @i64_rotl(i64 %a, i64 %b) {
+        define i64 @rotl_i64(i64 %a, i64 %b) {
         entry:
             %0 = call i64 @llvm.fshl.i64(i64 %a, i64 %a, i64 %b)
             ret i64 %0
@@ -1825,7 +1825,7 @@ fn i64_rotl <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_rotr <(i64,i64)->i64> (a,b):
+fn rotr_i64 <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1834,7 +1834,7 @@ fn i64_rotr <(i64,i64)->i64> (a,b):
     #if[target=llvm]
     #llvmir:
         declare i64 @llvm.fshr.i64(i64, i64, i64)
-        define i64 @i64_rotr(i64 %a, i64 %b) {
+        define i64 @rotr_i64(i64 %a, i64 %b) {
         entry:
             %0 = call i64 @llvm.fshr.i64(i64 %a, i64 %a, i64 %b)
             ret i64 %0
@@ -1853,7 +1853,7 @@ fn i64_rotr <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_clz <(i64)->i64> (a):
+fn clz_i64 <(i64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1861,7 +1861,7 @@ fn i64_clz <(i64)->i64> (a):
     #if[target=llvm]
     #llvmir:
         declare i64 @llvm.ctlz.i64(i64, i1)
-        define i64 @i64_clz(i64 %a) {
+        define i64 @clz_i64(i64 %a) {
         entry:
             %0 = call i64 @llvm.ctlz.i64(i64 %a, i1 false)
             ret i64 %0
@@ -1880,7 +1880,7 @@ fn i64_clz <(i64)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_ctz <(i64)->i64> (a):
+fn ctz_i64 <(i64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1888,7 +1888,7 @@ fn i64_ctz <(i64)->i64> (a):
     #if[target=llvm]
     #llvmir:
         declare i64 @llvm.cttz.i64(i64, i1)
-        define i64 @i64_ctz(i64 %a) {
+        define i64 @ctz_i64(i64 %a) {
         entry:
             %0 = call i64 @llvm.cttz.i64(i64 %a, i1 false)
             ret i64 %0
@@ -1907,7 +1907,7 @@ fn i64_ctz <(i64)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_popcnt <(i64)->i64> (a):
+fn popcnt_i64 <(i64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1915,7 +1915,7 @@ fn i64_popcnt <(i64)->i64> (a):
     #if[target=llvm]
     #llvmir:
         declare i64 @llvm.ctpop.i64(i64)
-        define i64 @i64_popcnt(i64 %a) {
+        define i64 @popcnt_i64(i64 %a) {
         entry:
             %0 = call i64 @llvm.ctpop.i64(i64 %a)
             ret i64 %0
@@ -1926,35 +1926,35 @@ fn i64_popcnt <(i64)->i64> (a):
 //: [目的/もくてき]:
 //: - i64 の循環左シフトを、型名 prefix なしで呼び出せるようにします。
 fn rotl <(i64,i64)->i64> (a,b):
-    i64_rotl a b
+    rotl_i64 a b
 
 //: rotr: ビット列の右ローテート（i64）
 //:
 //: [目的/もくてき]:
 //: - i64 の循環右シフトを、型名 prefix なしで呼び出せるようにします。
 fn rotr <(i64,i64)->i64> (a,b):
-    i64_rotr a b
+    rotr_i64 a b
 
 //: clz: 先頭ゼロビット数の計算（i64）
 //:
 //: [目的/もくてき]:
 //: - i64 の `clz` を、型名 prefix なしで呼び出せるようにします。
 fn clz <(i64)->i64> (a):
-    i64_clz a
+    clz_i64 a
 
 //: ctz: 末尾ゼロビット数の計算（i64）
 //:
 //: [目的/もくてき]:
 //: - i64 の `ctz` を、型名 prefix なしで呼び出せるようにします。
 fn ctz <(i64)->i64> (a):
-    i64_ctz a
+    ctz_i64 a
 
 //: popcnt: 1ビット数の計算（i64）
 //:
 //: [目的/もくてき]:
 //: - i64 の `popcnt` を、型名 prefix なしで呼び出せるようにします。
 fn popcnt <(i64)->i64> (a):
-    i64_popcnt a
+    popcnt_i64 a
 
 //: eq: i64 の等値比較
 //:
@@ -3372,7 +3372,7 @@ fn ge <(f64,f64)->bool> (a,b):
         }
 
 
-//: i32_extend_i8_s: i8 相当値の符号拡張
+//: extend8_s_i32: i8 相当値の符号拡張
 //:
 //: [目的/もくてき]:
 //: - i32 下位 8 bit を符号付き値として i32 へ拡張します。
@@ -3386,21 +3386,21 @@ fn ge <(f64,f64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_extend_i8_s <(i32)->i32> (a):
+fn extend8_s_i32 <(i32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.extend8_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_extend_i8_s(i32 %a) {
+        define i32 @extend8_s_i32(i32 %a) {
         entry:
             %shl = shl i32 %a, 24
             %0 = ashr i32 %shl, 24
             ret i32 %0
         }
 
-//: i32_extend_i16_s: i16 相当値の符号拡張
+//: extend16_s_i32: i16 相当値の符号拡張
 //:
 //: [目的/もくてき]:
 //: - i32 下位 16 bit を符号付き値として i32 へ拡張します。
@@ -3414,14 +3414,14 @@ fn i32_extend_i8_s <(i32)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_extend_i16_s <(i32)->i32> (a):
+fn extend16_s_i32 <(i32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.extend16_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_extend_i16_s(i32 %a) {
+        define i32 @extend16_s_i32(i32 %a) {
         entry:
             %shl = shl i32 %a, 16
             %0 = ashr i32 %shl, 16
@@ -3454,14 +3454,14 @@ fn i32_extend_i16_s <(i32)->i32> (a):
 //:     let v <i64> <i64> cast 123;
 //:     assert eq v <i64> cast 123;
 //: ```
-fn i64_extend_i32_s <(i32)->i64> (a):
+fn extend_s_i32_to_i64 <(i32)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.extend_i32_s
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_extend_i32_s(i32 %a) {
+        define i64 @extend_s_i32_to_i64(i32 %a) {
         entry:
             %0 = sext i32 %a to i64
             ret i64 %0
@@ -3493,20 +3493,20 @@ fn i64_extend_i32_s <(i32)->i64> (a):
 //:     let v <i64> <i64> cast 1;
 //:     assert eq v <i64> cast 1;
 //: ```
-fn i64_extend_i32_u <(i32)->i64> (a):
+fn extend_u_i32_to_i64 <(i32)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.extend_i32_u
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_extend_i32_u(i32 %a) {
+        define i64 @extend_u_i32_to_i64(i32 %a) {
         entry:
             %0 = zext i32 %a to i64
             ret i64 %0
         }
 
-//: i32_wrap_i64: i64 を i32 へ切り詰める
+//: wrap_i64_to_i32: i64 を i32 へ切り詰める
 //:
 //: [目的/もくてき]:
 //: - i64 の下位 32 bit を取り出して i32 として返します。
@@ -3519,20 +3519,20 @@ fn i64_extend_i32_u <(i32)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_wrap_i64 <(i64)->i32> (a):
+fn wrap_i64_to_i32 <(i64)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.wrap_i64
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_wrap_i64(i64 %a) {
+        define i32 @wrap_i64_to_i32(i64 %a) {
         entry:
             %0 = trunc i64 %a to i32
             ret i32 %0
         }
 
-//: f32_convert_i32_s: i32(符号付き) を f32 へ変換
+//: convert_s_i32_to_f32: i32(符号付き) を f32 へ変換
 //:
 //: [目的/もくてき]:
 //: - 符号付き i32 を f32 に変換します。
@@ -3545,20 +3545,20 @@ fn i32_wrap_i64 <(i64)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_convert_i32_s <(i32)->f32> (a):
+fn convert_s_i32_to_f32 <(i32)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f32.convert_i32_s
     #if[target=llvm]
     #llvmir:
-        define float @f32_convert_i32_s(i32 %a) {
+        define float @convert_s_i32_to_f32(i32 %a) {
         entry:
             %0 = sitofp i32 %a to float
             ret float %0
         }
 
-//: f32_convert_i32_u: i32(符号なし) を f32 へ変換
+//: convert_u_i32_to_f32: i32(符号なし) を f32 へ変換
 //:
 //: [目的/もくてき]:
 //: - 符号なし i32 を f32 に変換します。
@@ -3571,20 +3571,20 @@ fn f32_convert_i32_s <(i32)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_convert_i32_u <(i32)->f32> (a):
+fn convert_u_i32_to_f32 <(i32)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f32.convert_i32_u
     #if[target=llvm]
     #llvmir:
-        define float @f32_convert_i32_u(i32 %a) {
+        define float @convert_u_i32_to_f32(i32 %a) {
         entry:
             %0 = uitofp i32 %a to float
             ret float %0
         }
 
-//: f32_convert_i64_s: i64(符号付き) を f32 へ変換
+//: convert_s_i64_to_f32: i64(符号付き) を f32 へ変換
 //:
 //: [目的/もくてき]:
 //: - 符号付き i64 を f32 に変換します。
@@ -3597,20 +3597,20 @@ fn f32_convert_i32_u <(i32)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_convert_i64_s <(i64)->f32> (a):
+fn convert_s_i64_to_f32 <(i64)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f32.convert_i64_s
     #if[target=llvm]
     #llvmir:
-        define float @f32_convert_i64_s(i64 %a) {
+        define float @convert_s_i64_to_f32(i64 %a) {
         entry:
             %0 = sitofp i64 %a to float
             ret float %0
         }
 
-//: f32_convert_i64_u: i64(符号なし) を f32 へ変換
+//: convert_u_i64_to_f32: i64(符号なし) を f32 へ変換
 //:
 //: [目的/もくてき]:
 //: - 符号なし i64 を f32 に変換します。
@@ -3623,20 +3623,20 @@ fn f32_convert_i64_s <(i64)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_convert_i64_u <(i64)->f32> (a):
+fn convert_u_i64_to_f32 <(i64)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f32.convert_i64_u
     #if[target=llvm]
     #llvmir:
-        define float @f32_convert_i64_u(i64 %a) {
+        define float @convert_u_i64_to_f32(i64 %a) {
         entry:
             %0 = uitofp i64 %a to float
             ret float %0
         }
 
-//: i32_trunc_f32_s: f32 を i32(符号付き)へ切り捨て変換
+//: trunc_s_f32_to_i32: f32 を i32(符号付き)へ切り捨て変換
 //:
 //: [目的/もくてき]:
 //: - f32 を 0 方向へ切り捨てて符号付き i32 に変換します。
@@ -3649,20 +3649,20 @@ fn f32_convert_i64_u <(i64)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_trunc_f32_s <(f32)->i32> (a):
+fn trunc_s_f32_to_i32 <(f32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_f32_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_trunc_f32_s(float %a) {
+        define i32 @trunc_s_f32_to_i32(float %a) {
         entry:
             %0 = fptosi float %a to i32
             ret i32 %0
         }
 
-//: i32_trunc_f32_u: f32 を i32(符号なし)へ切り捨て変換
+//: trunc_u_f32_to_i32: f32 を i32(符号なし)へ切り捨て変換
 //:
 //: [目的/もくてき]:
 //: - f32 を 0 方向へ切り捨てて符号なし i32 に変換します。
@@ -3675,20 +3675,20 @@ fn i32_trunc_f32_s <(f32)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_trunc_f32_u <(f32)->i32> (a):
+fn trunc_u_f32_to_i32 <(f32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_f32_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_trunc_f32_u(float %a) {
+        define i32 @trunc_u_f32_to_i32(float %a) {
         entry:
             %0 = fptoui float %a to i32
             ret i32 %0
         }
 
-//: i32_trunc_sat_f32_s: f32 を i32(符号付き)へ飽和変換
+//: trunc_sat_s_f32_to_i32: f32 を i32(符号付き)へ飽和変換
 //:
 //: [目的/もくてき]:
 //: - f32 を i32 に変換し、範囲外は最小値/最大値に丸めます。
@@ -3702,20 +3702,20 @@ fn i32_trunc_f32_u <(f32)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_trunc_sat_f32_s <(f32)->i32> (a):
+fn trunc_sat_s_f32_to_i32 <(f32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_sat_f32_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_trunc_sat_f32_s(float %a) {
+        define i32 @trunc_sat_s_f32_to_i32(float %a) {
         entry:
             %0 = call i32 @llvm.fptosi.sat.i32.f32(float %a)
             ret i32 %0
         }
 
-//: i32_trunc_sat_f32_u: f32 を i32(符号なし)へ飽和変換
+//: trunc_sat_u_f32_to_i32: f32 を i32(符号なし)へ飽和変換
 //:
 //: [目的/もくてき]:
 //: - f32 を i32 に変換し、範囲外は 0 か最大値に丸めます。
@@ -3729,20 +3729,20 @@ fn i32_trunc_sat_f32_s <(f32)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_trunc_sat_f32_u <(f32)->i32> (a):
+fn trunc_sat_u_f32_to_i32 <(f32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_sat_f32_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_trunc_sat_f32_u(float %a) {
+        define i32 @trunc_sat_u_f32_to_i32(float %a) {
         entry:
             %0 = call i32 @llvm.fptoui.sat.i32.f32(float %a)
             ret i32 %0
         }
 
-//: i64_trunc_f32_s: f32 を i64(符号付き)へ切り捨て変換
+//: trunc_s_f32_to_i64: f32 を i64(符号付き)へ切り捨て変換
 //:
 //: [目的/もくてき]:
 //: - f32 を 0 方向へ切り捨てて i64 に変換します。
@@ -3755,20 +3755,20 @@ fn i32_trunc_sat_f32_u <(f32)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_trunc_f32_s <(f32)->i64> (a):
+fn trunc_s_f32_to_i64 <(f32)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_f32_s
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_trunc_f32_s(float %a) {
+        define i64 @trunc_s_f32_to_i64(float %a) {
         entry:
             %0 = fptosi float %a to i64
             ret i64 %0
         }
 
-//: i64_trunc_f32_u: f32 を i64(符号なし)へ切り捨て変換
+//: trunc_u_f32_to_i64: f32 を i64(符号なし)へ切り捨て変換
 //:
 //: [目的/もくてき]:
 //: - f32 を 0 方向へ切り捨てて i64 に変換します。
@@ -3781,20 +3781,20 @@ fn i64_trunc_f32_s <(f32)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_trunc_f32_u <(f32)->i64> (a):
+fn trunc_u_f32_to_i64 <(f32)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_f32_u
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_trunc_f32_u(float %a) {
+        define i64 @trunc_u_f32_to_i64(float %a) {
         entry:
             %0 = fptoui float %a to i64
             ret i64 %0
         }
 
-//: i64_trunc_sat_f32_s: f32 を i64(符号付き)へ飽和変換
+//: trunc_sat_s_f32_to_i64: f32 を i64(符号付き)へ飽和変換
 //:
 //: [目的/もくてき]:
 //: - f32 を i64 に変換し、範囲外は最小値/最大値へ丸めます。
@@ -3808,20 +3808,20 @@ fn i64_trunc_f32_u <(f32)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_trunc_sat_f32_s <(f32)->i64> (a):
+fn trunc_sat_s_f32_to_i64 <(f32)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_sat_f32_s
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_trunc_sat_f32_s(float %a) {
+        define i64 @trunc_sat_s_f32_to_i64(float %a) {
         entry:
             %0 = call i64 @llvm.fptosi.sat.i64.f32(float %a)
             ret i64 %0
         }
 
-//: i64_trunc_sat_f32_u: f32 を i64(符号なし)へ飽和変換
+//: trunc_sat_u_f32_to_i64: f32 を i64(符号なし)へ飽和変換
 //:
 //: [目的/もくてき]:
 //: - f32 を i64 に変換し、範囲外は 0 か最大値へ丸めます。
@@ -3835,14 +3835,14 @@ fn i64_trunc_sat_f32_s <(f32)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_trunc_sat_f32_u <(f32)->i64> (a):
+fn trunc_sat_u_f32_to_i64 <(f32)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_sat_f32_u
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_trunc_sat_f32_u(float %a) {
+        define i64 @trunc_sat_u_f32_to_i64(float %a) {
         entry:
             %0 = call i64 @llvm.fptoui.sat.i64.f32(float %a)
             ret i64 %0
@@ -3861,20 +3861,20 @@ fn i64_trunc_sat_f32_u <(f32)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_convert_i32_s <(i32)->f64> (a):
+fn convert_s_i32_to_f64 <(i32)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f64.convert_i32_s
     #if[target=llvm]
     #llvmir:
-        define double @f64_convert_i32_s(i32 %a) {
+        define double @convert_s_i32_to_f64(i32 %a) {
         entry:
             %0 = sitofp i32 %a to double
             ret double %0
         }
 
-//: f64_convert_i32_u: i32(符号なし) を f64 へ変換
+//: convert_u_i32_to_f64: i32(符号なし) を f64 へ変換
 //:
 //: [目的/もくてき]:
 //: - 符号なし i32 を f64 に変換します。
@@ -3887,20 +3887,20 @@ fn f64_convert_i32_s <(i32)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_convert_i32_u <(i32)->f64> (a):
+fn convert_u_i32_to_f64 <(i32)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f64.convert_i32_u
     #if[target=llvm]
     #llvmir:
-        define double @f64_convert_i32_u(i32 %a) {
+        define double @convert_u_i32_to_f64(i32 %a) {
         entry:
             %0 = uitofp i32 %a to double
             ret double %0
         }
 
-//: f64_convert_i64_s: i64(符号付き) を f64 へ変換
+//: convert_s_i64_to_f64: i64(符号付き) を f64 へ変換
 //:
 //: [目的/もくてき]:
 //: - 符号付き i64 を f64 に変換します。
@@ -3913,20 +3913,20 @@ fn f64_convert_i32_u <(i32)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_convert_i64_s <(i64)->f64> (a):
+fn convert_s_i64_to_f64 <(i64)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f64.convert_i64_s
     #if[target=llvm]
     #llvmir:
-        define double @f64_convert_i64_s(i64 %a) {
+        define double @convert_s_i64_to_f64(i64 %a) {
         entry:
             %0 = sitofp i64 %a to double
             ret double %0
         }
 
-//: f64_convert_i64_u: i64(符号なし) を f64 へ変換
+//: convert_u_i64_to_f64: i64(符号なし) を f64 へ変換
 //:
 //: [目的/もくてき]:
 //: - 符号なし i64 を f64 に変換します。
@@ -3939,20 +3939,20 @@ fn f64_convert_i64_s <(i64)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_convert_i64_u <(i64)->f64> (a):
+fn convert_u_i64_to_f64 <(i64)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f64.convert_i64_u
     #if[target=llvm]
     #llvmir:
-        define double @f64_convert_i64_u(i64 %a) {
+        define double @convert_u_i64_to_f64(i64 %a) {
         entry:
             %0 = uitofp i64 %a to double
             ret double %0
         }
 
-//: i32_trunc_f64_s: f64 を i32(符号付き)へ切り捨て変換
+//: trunc_s_f64_to_i32: f64 を i32(符号付き)へ切り捨て変換
 //:
 //: [目的/もくてき]:
 //: - f64 を 0 方向へ切り捨てて i32 に変換します。
@@ -3965,20 +3965,20 @@ fn f64_convert_i64_u <(i64)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_trunc_f64_s <(f64)->i32> (a):
+fn trunc_s_f64_to_i32 <(f64)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_f64_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_trunc_f64_s(double %a) {
+        define i32 @trunc_s_f64_to_i32(double %a) {
         entry:
             %0 = fptosi double %a to i32
             ret i32 %0
         }
 
-//: i32_trunc_f64_u: f64 を i32(符号なし)へ切り捨て変換
+//: trunc_u_f64_to_i32: f64 を i32(符号なし)へ切り捨て変換
 //:
 //: [目的/もくてき]:
 //: - f64 を 0 方向へ切り捨てて i32 に変換します。
@@ -3991,20 +3991,20 @@ fn i32_trunc_f64_s <(f64)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_trunc_f64_u <(f64)->i32> (a):
+fn trunc_u_f64_to_i32 <(f64)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_f64_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_trunc_f64_u(double %a) {
+        define i32 @trunc_u_f64_to_i32(double %a) {
         entry:
             %0 = fptoui double %a to i32
             ret i32 %0
         }
 
-//: i32_trunc_sat_f64_s: f64 を i32(符号付き)へ飽和変換
+//: trunc_sat_s_f64_to_i32: f64 を i32(符号付き)へ飽和変換
 //:
 //: [目的/もくてき]:
 //: - f64 を i32 に変換し、範囲外は最小値/最大値へ丸めます。
@@ -4018,20 +4018,20 @@ fn i32_trunc_f64_u <(f64)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_trunc_sat_f64_s <(f64)->i32> (a):
+fn trunc_sat_s_f64_to_i32 <(f64)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_sat_f64_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_trunc_sat_f64_s(double %a) {
+        define i32 @trunc_sat_s_f64_to_i32(double %a) {
         entry:
             %0 = call i32 @llvm.fptosi.sat.i32.f64(double %a)
             ret i32 %0
         }
 
-//: i32_trunc_sat_f64_u: f64 を i32(符号なし)へ飽和変換
+//: trunc_sat_u_f64_to_i32: f64 を i32(符号なし)へ飽和変換
 //:
 //: [目的/もくてき]:
 //: - f64 を i32 に変換し、範囲外は 0 か最大値へ丸めます。
@@ -4045,20 +4045,20 @@ fn i32_trunc_sat_f64_s <(f64)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_trunc_sat_f64_u <(f64)->i32> (a):
+fn trunc_sat_u_f64_to_i32 <(f64)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.trunc_sat_f64_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_trunc_sat_f64_u(double %a) {
+        define i32 @trunc_sat_u_f64_to_i32(double %a) {
         entry:
             %0 = call i32 @llvm.fptoui.sat.i32.f64(double %a)
             ret i32 %0
         }
 
-//: i64_trunc_f64_s: f64 を i64(符号付き)へ切り捨て変換
+//: trunc_s_f64_to_i64: f64 を i64(符号付き)へ切り捨て変換
 //:
 //: [目的/もくてき]:
 //: - f64 を 0 方向へ切り捨てて i64 に変換します。
@@ -4071,20 +4071,20 @@ fn i32_trunc_sat_f64_u <(f64)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_trunc_f64_s <(f64)->i64> (a):
+fn trunc_s_f64_to_i64 <(f64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_f64_s
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_trunc_f64_s(double %a) {
+        define i64 @trunc_s_f64_to_i64(double %a) {
         entry:
             %0 = fptosi double %a to i64
             ret i64 %0
         }
 
-//: i64_trunc_f64_u: f64 を i64(符号なし)へ切り捨て変換
+//: trunc_u_f64_to_i64: f64 を i64(符号なし)へ切り捨て変換
 //:
 //: [目的/もくてき]:
 //: - f64 を 0 方向へ切り捨てて i64 に変換します。
@@ -4097,20 +4097,20 @@ fn i64_trunc_f64_s <(f64)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_trunc_f64_u <(f64)->i64> (a):
+fn trunc_u_f64_to_i64 <(f64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_f64_u
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_trunc_f64_u(double %a) {
+        define i64 @trunc_u_f64_to_i64(double %a) {
         entry:
             %0 = fptoui double %a to i64
             ret i64 %0
         }
 
-//: i64_trunc_sat_f64_s: f64 を i64(符号付き)へ飽和変換
+//: trunc_sat_s_f64_to_i64: f64 を i64(符号付き)へ飽和変換
 //:
 //: [目的/もくてき]:
 //: - f64 を i64 に変換し、範囲外は最小値/最大値へ丸めます。
@@ -4124,20 +4124,20 @@ fn i64_trunc_f64_u <(f64)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_trunc_sat_f64_s <(f64)->i64> (a):
+fn trunc_sat_s_f64_to_i64 <(f64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_sat_f64_s
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_trunc_sat_f64_s(double %a) {
+        define i64 @trunc_sat_s_f64_to_i64(double %a) {
         entry:
             %0 = call i64 @llvm.fptosi.sat.i64.f64(double %a)
             ret i64 %0
         }
 
-//: i64_trunc_sat_f64_u: f64 を i64(符号なし)へ飽和変換
+//: trunc_sat_u_f64_to_i64: f64 を i64(符号なし)へ飽和変換
 //:
 //: [目的/もくてき]:
 //: - f64 を i64 に変換し、範囲外は 0 か最大値へ丸めます。
@@ -4151,20 +4151,20 @@ fn i64_trunc_sat_f64_s <(f64)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_trunc_sat_f64_u <(f64)->i64> (a):
+fn trunc_sat_u_f64_to_i64 <(f64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.trunc_sat_f64_u
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_trunc_sat_f64_u(double %a) {
+        define i64 @trunc_sat_u_f64_to_i64(double %a) {
         entry:
             %0 = call i64 @llvm.fptoui.sat.i64.f64(double %a)
             ret i64 %0
         }
 
-//: f64_promote_f32: f32 を f64 へ拡張変換
+//: promote_f32_to_f64: f32 を f64 へ拡張変換
 //:
 //: [目的/もくてき]:
 //: - f32 値を精度の高い f64 へ拡張します。
@@ -4177,20 +4177,20 @@ fn i64_trunc_sat_f64_u <(f64)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_promote_f32 <(f32)->f64> (a):
+fn promote_f32_to_f64 <(f32)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f64.promote_f32
     #if[target=llvm]
     #llvmir:
-        define double @f64_promote_f32(float %a) {
+        define double @promote_f32_to_f64(float %a) {
         entry:
             %0 = fpext float %a to double
             ret double %0
         }
 
-//: f32_demote_f64: f64 を f32 へ縮小変換
+//: demote_f64_to_f32: f64 を f32 へ縮小変換
 //:
 //: [目的/もくてき]:
 //: - f64 値を f32 へ縮小します。
@@ -4203,20 +4203,20 @@ fn f64_promote_f32 <(f32)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_demote_f64 <(f64)->f32> (a):
+fn demote_f64_to_f32 <(f64)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f32.demote_f64
     #if[target=llvm]
     #llvmir:
-        define float @f32_demote_f64(double %a) {
+        define float @demote_f64_to_f32(double %a) {
         entry:
             %0 = fptrunc double %a to float
             ret float %0
         }
 
-//: f32_reinterpret_i32: i32 のビット列を f32 として再解釈
+//: reinterpret_i32_to_f32: i32 のビット列を f32 として再解釈
 //:
 //: [目的/もくてき]:
 //: - 32-bit のビット列を変更せずに f32 として扱います。
@@ -4229,20 +4229,20 @@ fn f32_demote_f64 <(f64)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_reinterpret_i32 <(i32)->f32> (a):
+fn reinterpret_i32_to_f32 <(i32)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f32.reinterpret_i32
     #if[target=llvm]
     #llvmir:
-        define float @f32_reinterpret_i32(i32 %a) {
+        define float @reinterpret_i32_to_f32(i32 %a) {
         entry:
             %0 = bitcast i32 %a to float
             ret float %0
         }
 
-//: i32_reinterpret_f32: f32 のビット列を i32 として再解釈
+//: reinterpret_f32_to_i32: f32 のビット列を i32 として再解釈
 //:
 //: [目的/もくてき]:
 //: - f32 のビット表現をそのまま i32 として読み取ります。
@@ -4255,20 +4255,20 @@ fn f32_reinterpret_i32 <(i32)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_reinterpret_f32 <(f32)->i32> (a):
+fn reinterpret_f32_to_i32 <(f32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i32.reinterpret_f32
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_reinterpret_f32(float %a) {
+        define i32 @reinterpret_f32_to_i32(float %a) {
         entry:
             %0 = bitcast float %a to i32
             ret i32 %0
         }
 
-//: f64_reinterpret_i64: i64 のビット列を f64 として再解釈
+//: reinterpret_i64_to_f64: i64 のビット列を f64 として再解釈
 //:
 //: [目的/もくてき]:
 //: - 64-bit のビット列を変更せずに f64 として扱います。
@@ -4281,20 +4281,20 @@ fn i32_reinterpret_f32 <(f32)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_reinterpret_i64 <(i64)->f64> (a):
+fn reinterpret_i64_to_f64 <(i64)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f64.reinterpret_i64
     #if[target=llvm]
     #llvmir:
-        define double @f64_reinterpret_i64(i64 %a) {
+        define double @reinterpret_i64_to_f64(i64 %a) {
         entry:
             %0 = bitcast i64 %a to double
             ret double %0
         }
 
-//: i64_reinterpret_f64: f64 のビット列を i64 として再解釈
+//: reinterpret_f64_to_i64: f64 のビット列を i64 として再解釈
 //:
 //: [目的/もくてき]:
 //: - f64 のビット表現をそのまま i64 として読み取ります。
@@ -4307,14 +4307,14 @@ fn f64_reinterpret_i64 <(i64)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_reinterpret_f64 <(f64)->i64> (a):
+fn reinterpret_f64_to_i64 <(f64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         i64.reinterpret_f64
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_reinterpret_f64(double %a) {
+        define i64 @reinterpret_f64_to_i64(double %a) {
         entry:
             %0 = bitcast double %a to i64
             ret i64 %0
@@ -4325,44 +4325,44 @@ fn i64_reinterpret_f64 <(f64)->i64> (a):
 //: [目的/もくてき]:
 //: - 型名 prefix を使わずに符号拡張を呼び出せるようにします。
 fn extend_s <(i32)->i64> (a):
-    i64_extend_i32_s a
+    extend_s_i32_to_i64 a
 
 //: wrap: i64 を i32 へ切り詰める
 //:
 //: [目的/もくてき]:
 //: - 型名 prefix を使わずに切り詰め変換を呼び出せるようにします。
 fn wrap <(i64)->i32> (a):
-    i32_wrap_i64 a
+    wrap_i64_to_i32 a
 
 //: convert_s: 符号付き整数を浮動小数へ変換する
 //:
 //: [目的/もくてき]:
 //: - 変換関数を型オーバーロードで統一します。
 fn convert_s <(i32)->f64> (a):
-    f64_convert_i32_s a
+    convert_s_i32_to_f64 a
 fn convert_s <(i64)->f64> (a):
-    f64_convert_i64_s a
+    convert_s_i64_to_f64 a
 fn convert_s <(i64)->f32> (a):
-    f32_convert_i64_s a
+    convert_s_i64_to_f32 a
 
 //: trunc_s: 浮動小数を符号付き整数へ切り捨て変換する
 //:
 //: [目的/もくてき]:
 //: - 切り捨て変換を型オーバーロードで統一します。
 fn trunc_s <(f64)->i32> (a):
-    i32_trunc_f64_s a
+    trunc_s_f64_to_i32 a
 fn trunc_s <(f64)->i64> (a):
-    i64_trunc_f64_s a
+    trunc_s_f64_to_i64 a
 fn trunc_s <(f32)->i64> (a):
-    i64_trunc_f32_s a
+    trunc_s_f32_to_i64 a
 
 //: promote: f32 を f64 に拡張する
 fn promote <(f32)->f64> (a):
-    f64_promote_f32 a
+    promote_f32_to_f64 a
 
 //: demote: f64 を f32 に縮小する
 fn demote <(f64)->f32> (a):
-    f32_demote_f64 a
+    demote_f64_to_f32 a
 
 //: and: bool の論理積
 //:
@@ -4481,7 +4481,7 @@ fn new <(i64,i64)->u128> (hi, lo):
 
 //: to_u128: u64 値から u128 値を作る
 fn to_u128 <(i64)->u128> (v):
-    u128 <i64> cast 0 v
+    u128 extend_s_i32_to_i64 0 v
 
 //: add: u128 の加算（mod 2^128）
 fn add <(u128,u128)->u128> (a, b):
@@ -4491,8 +4491,8 @@ fn add <(u128,u128)->u128> (a, b):
     let b_lo <i64> get b "lo";
     let lo <i64> add a_lo b_lo;
     let carry <i64> if lt_u lo a_lo:
-        then <i64> cast 1
-        else <i64> cast 0;
+        then extend_s_i32_to_i64 1
+        else extend_s_i32_to_i64 0;
     let hi0 <i64> add a_hi b_hi;
     let hi <i64> add hi0 carry;
     u128 hi lo
@@ -4505,8 +4505,8 @@ fn sub <(u128,u128)->u128> (a, b):
     let b_lo <i64> get b "lo";
     let lo <i64> sub a_lo b_lo;
     let borrow <i64> if lt_u a_lo b_lo:
-        then <i64> cast 1
-        else <i64> cast 0;
+        then extend_s_i32_to_i64 1
+        else extend_s_i32_to_i64 0;
     let hi0 <i64> sub a_hi b_hi;
     let hi <i64> sub hi0 borrow;
     u128 hi lo
@@ -4536,9 +4536,9 @@ fn new <(i64,i64)->i128> (hi, lo):
 
 //: to_i128: i64 値を符号拡張して i128 に変換する
 fn to_i128 <(i64)->i128> (v):
-    let hi <i64> if lt v <i64> cast 0:
-        then <i64> cast -1
-        else <i64> cast 0;
+    let hi <i64> if lt v extend_s_i32_to_i64 0:
+        then extend_s_i32_to_i64 -1
+        else extend_s_i32_to_i64 0;
     i128 hi v
 
 //: add: i128 の加算（mod 2^128）
@@ -4549,8 +4549,8 @@ fn add <(i128,i128)->i128> (a, b):
     let b_lo <i64> get b "lo";
     let lo <i64> add a_lo b_lo;
     let carry <i64> if lt_u lo a_lo:
-        then <i64> cast 1
-        else <i64> cast 0;
+        then extend_s_i32_to_i64 1
+        else extend_s_i32_to_i64 0;
     let hi0 <i64> add a_hi b_hi;
     let hi <i64> add hi0 carry;
     i128 hi lo
@@ -4563,8 +4563,8 @@ fn sub <(i128,i128)->i128> (a, b):
     let b_lo <i64> get b "lo";
     let lo <i64> sub a_lo b_lo;
     let borrow <i64> if lt_u a_lo b_lo:
-        then <i64> cast 1
-        else <i64> cast 0;
+        then extend_s_i32_to_i64 1
+        else extend_s_i32_to_i64 0;
     let hi0 <i64> sub a_hi b_hi;
     let hi <i64> sub hi0 borrow;
     i128 hi lo
@@ -4584,8 +4584,8 @@ fn sub <(i128,i128)->i128> (a, b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn mul_wide <(i64,i64)->u128> (a, b):
-    let mask32 <i64> cast -1;
-    let sh32 <i64> cast 32;
+    let mask32 <i64> extend_s_i32_to_i64 -1;
+    let sh32 <i64> extend_s_i32_to_i64 32;
 
     let a0 <i64> and a mask32;
     let a1 <i64> shr_u a sh32;
@@ -4599,14 +4599,14 @@ fn mul_wide <(i64,i64)->u128> (a, b):
 
     let mid <i64> add p1 p2;
     let carry_mid <i64> if lt_u mid p1:
-        then <i64> cast 1
-        else <i64> cast 0;
+        then extend_s_i32_to_i64 1
+        else extend_s_i32_to_i64 0;
 
     let lo_add <i64> shl mid sh32;
     let lo <i64> add p0 lo_add;
     let carry_lo <i64> if lt_u lo p0:
-        then <i64> cast 1
-        else <i64> cast 0;
+        then extend_s_i32_to_i64 1
+        else extend_s_i32_to_i64 0;
 
     let mid_hi <i64> shr_u mid sh32;
     let hi0 <i64> add p3 mid_hi;

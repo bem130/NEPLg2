@@ -5137,3 +5137,16 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-cast-prefixless-v4.json -j 1`
     - `2/2 pass`
+
+# 2026-03-03 作業メモ (math.nepl: i64定数の根本修正)
+- 目的:
+  - `型名_` prefix 廃止移行中に発生した `core/math` の大量型崩れを根本解消する。
+- 根本原因:
+  - `math.nepl` 後半（u128/i128実装）で `cast` を直接使っていたが、`core/math` では `core/cast` を import していないため `cast` が未定義。
+  - さらに `<i64> 0` の型注釈は「型一致チェック」であり暗黙変換ではないため、i32 リテラルを i64 にできず `D3004` が連鎖した。
+- 修正:
+  - `u128/i128/mul_wide` の全 i64 定数生成を `extend_s_i32_to_i64` に統一。
+  - `cast` 依存を `math.nepl` 実コードから除去し、`core/math` 単体で自己完結する状態へ戻した。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i tests/math.n.md -i tests/typeannot.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-scope-no-stdlib.json -j 1`
+  - 結果: `19/19 pass`
