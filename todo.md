@@ -29,11 +29,6 @@
   - 既存 examples/tests/tutorials が新APIへ更新済み。
 
 フェーズE: テスト・診断の固定化
-- 追加:
-  - `tests/move_effect.n.md`
-- 更新:
-  - `tests/overload.n.md`（型注釈/オーバーロード/effect混在）
-  - `tests/kp*.n.md`（Scanner/Writer 新API）
 - `compile_fail` は `diag_id` を必須化する。
 - 完了条件:
   - 仕様に対応する回帰テストが揃い、失敗理由が診断IDで固定される。
@@ -86,7 +81,6 @@
 - `load/store` での境界チェック挿入と、証明可能ケースのチェック削除を実装する。
 - move_check に token 消費検査（解放後アクセス/二重解放検出）を導入する。
 - `MemReadable<T>`, `MemWritable<T>`, `RegionOwned` の trait 境界でメモリ能力を型検査する。
-- `tests/memory_safety.n.md` を追加し、diag_id を含めて検証する。
 
 ---
 ### 以下編集禁止

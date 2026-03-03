@@ -1,3 +1,26 @@
+# 2026-03-04 作業メモ (フェーズD進行: `*_new_raw` 名統一と todo 未完了整理)
+
+- 目的:
+  - `kpread/kpwrite` の内部初期化関数名を `*_raw` に統一し、公開入口を `scanner_new` / `writer_new` に寄せる。
+  - `todo.md` から完了済みのテスト追加項目を削除し、未完了のみを保持する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_i32` -> `scanner_new_raw`。
+    - `scanner_new` からの呼び出し先を更新。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_i32` -> `writer_new_raw`。
+    - `writer_new` からの呼び出し先を更新。
+  - `todo.md`
+    - フェーズEの完了済み小項目（`tests/move_effect.n.md` 追加、`tests/overload.n.md`/`tests/kp*.n.md` 更新）を削除。
+    - 項目8の完了済み小項目（`tests/memory_safety.n.md` 追加）を削除。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kp-newraw-rename.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-newraw-rename.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-newraw-rename.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread/kpwrite` の内部初期化関数名が `*_raw` で揃った。
+  - 次段はフェーズD残件として、`mem` 公開面の安全API標準名化（`Result/Option` 前提）を進める。
+
 # 2026-03-04 作業メモ (フェーズD進行: kpread の raw 実装名分離)
 
 - 目的:

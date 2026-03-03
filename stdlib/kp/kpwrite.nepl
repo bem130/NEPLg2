@@ -42,7 +42,7 @@ fn writer_wrap <(i32)->Writer> (raw):
 //:
 //: 計算量:
 //: - O(1)
-fn writer_new_i32 <()*>i32> ():
+fn writer_new_raw <()*>i32> ():
     let mut cap <i32> 4096;
     let mut buf <i32> alloc_raw cap;
     if:
@@ -98,7 +98,7 @@ fn writer_new_i32 <()*>i32> ():
                                     w
 
 fn writer_new <()*>Result<Writer,str>> ():
-    let raw <i32> writer_new_i32;
+    let raw <i32> writer_new_raw;
     if:
         lt 0 raw
         then:
