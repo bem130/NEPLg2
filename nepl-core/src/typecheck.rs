@@ -761,18 +761,22 @@ pub fn typecheck(
                         if let Some(conflict) =
                             find_nonshadow_same_signature_func(&env, &f.name.name, ty, &ctx)
                         {
-                            diagnostics.push(Diagnostic::error(
-                                format!(
-                                    "cannot shadow non-shadowable function '{}' with same signature",
-                                    f.name.name
-                                ),
-                                f.name.span,
-                            ));
+                            diagnostics.push(
+                                Diagnostic::error(
+                                    format!(
+                                        "cannot shadow non-shadowable function '{}' with same signature",
+                                        f.name.name
+                                    ),
+                                    f.name.span,
+                                )
+                                .with_id(DiagnosticId::TypeNoShadowViolation),
+                            );
                             diagnostics.push(
                                 Diagnostic::error(
                                     "non-shadowable function declaration is here",
                                     conflict.span,
                                 )
+                                .with_id(DiagnosticId::TypeNoShadowViolation)
                                 .with_secondary_label(
                                     f.name.span,
                                     Some("shadow attempt".into()),
@@ -782,15 +786,19 @@ pub fn typecheck(
                         }
                         // 関数同名はオーバーロードとして扱う（異なるシグネチャは許可）。
                     } else {
-                    diagnostics.push(Diagnostic::error(
-                        format!(
-                            "cannot shadow non-shadowable symbol '{}'",
-                            f.name.name
-                        ),
-                        f.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(
+                            format!(
+                                "cannot shadow non-shadowable symbol '{}'",
+                                f.name.name
+                            ),
+                            f.name.span,
+                        )
+                        .with_id(DiagnosticId::TypeNoShadowViolation),
+                    );
                     diagnostics.push(
                         Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                            .with_id(DiagnosticId::TypeNoShadowViolation)
                             .with_secondary_label(f.name.span, Some("shadow attempt".into())),
                     );
                     continue;
@@ -803,13 +811,16 @@ pub fn typecheck(
                         .any(|b| !is_callable_binding(b))
                         || find_same_signature_func(&env, &f.name.name, ty, &ctx).is_some())
                 {
-                    diagnostics.push(Diagnostic::error(
-                        format!(
-                            "noshadow declaration '{}' conflicts with existing symbol",
-                            f.name.name
-                        ),
-                        f.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(
+                            format!(
+                                "noshadow declaration '{}' conflicts with existing symbol",
+                                f.name.name
+                            ),
+                            f.name.span,
+                        )
+                        .with_id(DiagnosticId::TypeNoShadowConflict),
+                    );
                     continue;
                 }
                 env.remove_duplicate_func(&f.name.name, ty, &ctx);
@@ -906,18 +917,22 @@ pub fn typecheck(
                     if let Some(conflict) =
                         find_nonshadow_same_signature_func(&env, &alias.name.name, ty, &ctx)
                     {
-                        diagnostics.push(Diagnostic::error(
-                            format!(
-                                "cannot shadow non-shadowable function alias '{}' with same signature",
-                                alias.name.name
-                            ),
-                            alias.name.span,
-                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                format!(
+                                    "cannot shadow non-shadowable function alias '{}' with same signature",
+                                    alias.name.name
+                                ),
+                                alias.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeNoShadowViolation),
+                        );
                         diagnostics.push(
                             Diagnostic::error(
                                 "non-shadowable function declaration is here",
                                 conflict.span,
                             )
+                            .with_id(DiagnosticId::TypeNoShadowViolation)
                             .with_secondary_label(
                                 alias.name.span,
                                 Some("shadow attempt".into()),
@@ -927,15 +942,19 @@ pub fn typecheck(
                     }
                     // 関数同名はオーバーロードとして扱う（異なるシグネチャは許可）。
                 } else {
-                diagnostics.push(Diagnostic::error(
-                    format!(
-                        "cannot shadow non-shadowable symbol '{}'",
-                        alias.name.name
-                    ),
-                    alias.name.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error(
+                        format!(
+                            "cannot shadow non-shadowable symbol '{}'",
+                            alias.name.name
+                        ),
+                        alias.name.span,
+                    )
+                    .with_id(DiagnosticId::TypeNoShadowViolation),
+                );
                 diagnostics.push(
                     Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                        .with_id(DiagnosticId::TypeNoShadowViolation)
                         .with_secondary_label(alias.name.span, Some("shadow attempt".into())),
                 );
                 break;
@@ -948,13 +967,16 @@ pub fn typecheck(
                     .any(|b| !is_callable_binding(b))
                     || find_same_signature_func(&env, &alias.name.name, ty, &ctx).is_some())
             {
-                diagnostics.push(Diagnostic::error(
-                    format!(
-                        "noshadow declaration '{}' conflicts with existing symbol",
-                        alias.name.name
-                    ),
-                    alias.name.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error(
+                        format!(
+                            "noshadow declaration '{}' conflicts with existing symbol",
+                            alias.name.name
+                        ),
+                        alias.name.span,
+                    )
+                    .with_id(DiagnosticId::TypeNoShadowConflict),
+                );
                 break;
             }
             env.remove_duplicate_func(&alias.name.name, ty, &ctx);
@@ -2363,24 +2385,31 @@ impl<'a> BlockChecker<'a> {
                 })) = items.first()
                 {
                     if let Some(blocked) = shadow_blocked_by_nonshadow(self.env, &name.name) {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!("cannot shadow non-shadowable symbol '{}'", name.name),
-                            name.span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                format!("cannot shadow non-shadowable symbol '{}'", name.name),
+                                name.span,
+                            )
+                            .with_id(DiagnosticId::TypeNoShadowViolation),
+                        );
                         self.diagnostics.push(
                             Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                                .with_id(DiagnosticId::TypeNoShadowViolation)
                                 .with_secondary_label(name.span, Some("shadow attempt".into())),
                         );
                         continue;
                     }
                     if *no_shadow && self.env.lookup_any(&name.name).is_some() {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!(
-                                "noshadow declaration '{}' conflicts with existing symbol",
-                                name.name
-                            ),
-                            name.span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                format!(
+                                    "noshadow declaration '{}' conflicts with existing symbol",
+                                    name.name
+                                ),
+                                name.span,
+                            )
+                            .with_id(DiagnosticId::TypeNoShadowConflict),
+                        );
                         continue;
                     }
                     let ty = self.ctx.fresh_var(None);
@@ -2431,18 +2460,22 @@ impl<'a> BlockChecker<'a> {
                                 ty,
                                 self.ctx,
                             ) {
-                                self.diagnostics.push(Diagnostic::error(
-                                    format!(
-                                        "cannot shadow non-shadowable function '{}' with same signature",
-                                        f.name.name
-                                    ),
-                                    f.name.span,
-                                ));
+                                self.diagnostics.push(
+                                    Diagnostic::error(
+                                        format!(
+                                            "cannot shadow non-shadowable function '{}' with same signature",
+                                            f.name.name
+                                        ),
+                                        f.name.span,
+                                    )
+                                    .with_id(DiagnosticId::TypeNoShadowViolation),
+                                );
                                 self.diagnostics.push(
                                     Diagnostic::error(
                                         "non-shadowable function declaration is here",
                                         conflict.span,
                                     )
+                                    .with_id(DiagnosticId::TypeNoShadowViolation)
                                     .with_secondary_label(
                                         f.name.span,
                                         Some("shadow attempt".into()),
@@ -2452,12 +2485,16 @@ impl<'a> BlockChecker<'a> {
                             }
                             // 関数同名はオーバーロードとして扱う（異なるシグネチャは許可）。
                         } else {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!("cannot shadow non-shadowable symbol '{}'", f.name.name),
-                            f.name.span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                format!("cannot shadow non-shadowable symbol '{}'", f.name.name),
+                                f.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeNoShadowViolation),
+                        );
                         self.diagnostics.push(
                             Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                                .with_id(DiagnosticId::TypeNoShadowViolation)
                                 .with_secondary_label(f.name.span, Some("shadow attempt".into())),
                         );
                         continue;
@@ -2472,13 +2509,16 @@ impl<'a> BlockChecker<'a> {
                             || find_same_signature_func(self.env, &f.name.name, ty, self.ctx)
                                 .is_some())
                     {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!(
-                                "noshadow declaration '{}' conflicts with existing symbol",
-                                f.name.name
-                            ),
-                            f.name.span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                format!(
+                                    "noshadow declaration '{}' conflicts with existing symbol",
+                                    f.name.name
+                                ),
+                                f.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeNoShadowConflict),
+                        );
                         continue;
                     }
                     if !captures.is_empty() {

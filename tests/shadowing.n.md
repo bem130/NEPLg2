@@ -312,6 +312,7 @@ fn main <()->i32> ():
 ## let_noshadow_rejects_shadowing
 
 neplg2:test[compile_fail]
+diag_id: 3014
 ```neplg2
 #entry main
 #indent 4
@@ -347,6 +348,7 @@ fn main <()->i32> ():
 ## fn_noshadow_same_signature_redefinition_is_error
 
 neplg2:test[compile_fail]
+diag_id: 3014
 ```neplg2
 #entry main
 #indent 4
@@ -386,6 +388,7 @@ fn main <()->i32> ():
 ## std_test_noshadow_same_signature_redefinition_is_error
 
 neplg2:test[compile_fail]
+diag_id: 3014
 ```neplg2
 #entry main
 #indent 4
@@ -419,6 +422,7 @@ fn main <()->i32> ():
 ## std_stdio_noshadow_same_signature_redefinition_is_error
 
 neplg2:test[compile_fail]
+diag_id: 3014
 ```neplg2
 #entry main
 #indent 4

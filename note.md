@@ -1,3 +1,23 @@
+# 2026-03-04 作業メモ (上流修正: typecheck の noshadow/shadow 診断IDを明示化)
+
+- 目的:
+  - `typecheck` の `noshadow` / `non-shadowable` 系エラーを診断生成点で固定し、回帰を `diag_id` で検証可能にする。
+- 根本原因:
+  - 同一カテゴリの shadow 関連エラーに `with_id` 未付与経路が残り、文言依存の判定になっていた。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `cannot shadow non-shadowable ...` 系を `TypeNoShadowViolation (D3014)` へ統一。
+    - `noshadow declaration ... conflicts ...` 系を `TypeNoShadowConflict (D3015)` へ統一。
+    - 関数/関数alias/ローカル let の各経路で secondary label 付き診断にも同IDを付与。
+  - `tests/shadowing.n.md`
+    - `compile_fail` 4ケースに `diag_id: 3014` を追加して固定化。
+- 検証:
+  - `node nodesrc/tests.js -i tests/shadowing.n.md -i tests/move_effect.n.md --no-tree -o /tmp/tests-shadowing-moveeffect-diagid.json -j 15` -> `248/248 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-shadow-diagid.json -j 15` -> `790/790 pass`
+- 状況:
+  - shadow/noshadow の主要経路は `diag_id` 固定化済み。
+  - 次段は `typecheck` の残未付与カテゴリ（undefined/overload/pipe/pure-impure）へ拡張する。
+
 # 2026-03-04 作業メモ (上流修正: typecheck field-access 診断IDの明示化)
 
 - 目的:
