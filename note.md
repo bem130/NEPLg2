@@ -1,3 +1,23 @@
+# 2026-03-04 作業メモ (フェーズB着手: `TypeCtx::is_copy` 構造型判定)
+- 目的:
+  - フェーズBの最初の実装として、`TypeCtx::is_copy` を tuple/struct/enum と generic apply へ拡張する。
+  - 再帰検出ロジックの誤判定（同一型の再訪で常に false）を解消する。
+- 実装:
+  - `nepl-core/src/types.rs`
+    - `is_copy_inner` を `visiting + mapping` 方式に変更。
+    - `TypeKind::Struct` / `TypeKind::Enum` を構造的再帰判定へ変更。
+    - `TypeKind::Apply` で base の type parameter を実引数へ束縛して copy 判定できるよう対応。
+    - 判定終了時に `visiting.remove` を行い、兄弟ノード再訪での偽陰性を解消。
+  - `tests/move_effect.n.md`
+    - Copy フィールドのみの struct 再利用ケース（成功）
+    - `Apply` された generic struct 再利用ケース（成功）
+    - payload が Copy の enum 再利用ケース（成功）
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/generics.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-moveeffect-generics-overload.json -j 15` -> `269/269 pass`
+- 次:
+  - move_check 側の状態遷移（`PossiblyMoved` 合流、borrow 状態）を `is_copy` 拡張に合わせて精査する。
+
 # 2026-03-04 作業メモ (2026-03-03 フェーズA完了: raw/intrinsic effect 一元化)
 - 目的:
   - フェーズA残件だった「intrinsic / raw target body の effect 判定一元化」を実装し、pure 文脈からの I/O を型検査段階で拒否する。

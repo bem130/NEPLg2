@@ -2,7 +2,7 @@
 extern crate alloc;
 extern crate std;
 
-use alloc::collections::BTreeSet;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -220,16 +220,25 @@ impl TypeCtx {
     }
 
     pub fn is_copy(&self, id: TypeId) -> bool {
-        let mut seen = BTreeSet::new();
-        self.is_copy_inner(id, &mut seen)
+        let mut visiting = BTreeSet::new();
+        let mapping = BTreeMap::new();
+        self.is_copy_inner(id, &mut visiting, &mapping)
     }
 
-    fn is_copy_inner(&self, id: TypeId, seen: &mut BTreeSet<TypeId>) -> bool {
-        let resolved = self.resolve_id(id);
-        if !seen.insert(resolved) {
+    fn is_copy_inner(
+        &self,
+        id: TypeId,
+        visiting: &mut BTreeSet<TypeId>,
+        mapping: &BTreeMap<TypeId, TypeId>,
+    ) -> bool {
+        let resolved = mapping
+            .get(&self.resolve_id(id))
+            .copied()
+            .unwrap_or_else(|| self.resolve_id(id));
+        if !visiting.insert(resolved) {
             return false;
         }
-        match self.get_ref(resolved) {
+        let result = match self.get_ref(resolved) {
             TypeKind::Unit
             | TypeKind::I32
             | TypeKind::U8
@@ -239,20 +248,78 @@ impl TypeCtx {
             | TypeKind::Never => true,
             TypeKind::Reference(_, _) => true,
             TypeKind::Box(_) => false,
-            TypeKind::Enum { .. } => false,
-            TypeKind::Struct { .. } => false,
-            TypeKind::Tuple { items } => items.iter().all(|t| self.is_copy_inner(*t, seen)),
-            TypeKind::Apply { .. } => false,
+            TypeKind::Enum { variants, .. } => variants
+                .iter()
+                .all(|v| v.payload.map(|p| self.is_copy_inner(p, visiting, mapping)).unwrap_or(true)),
+            TypeKind::Struct { fields, .. } => fields
+                .iter()
+                .all(|f| self.is_copy_inner(*f, visiting, mapping)),
+            TypeKind::Tuple { items } => items
+                .iter()
+                .all(|t| self.is_copy_inner(*t, visiting, mapping)),
+            TypeKind::Apply { base, args } => {
+                let resolved_base = mapping
+                    .get(&self.resolve_id(*base))
+                    .copied()
+                    .unwrap_or_else(|| self.resolve_id(*base));
+                match self.get_ref(resolved_base) {
+                    TypeKind::Struct {
+                        type_params, fields, ..
+                    } => {
+                        if type_params.len() != args.len() {
+                            false
+                        } else {
+                            let mut nested = mapping.clone();
+                            for (tp, arg) in type_params.iter().zip(args.iter()) {
+                                let rhs = mapping
+                                    .get(&self.resolve_id(*arg))
+                                    .copied()
+                                    .unwrap_or_else(|| self.resolve_id(*arg));
+                                nested.insert(self.resolve_id(*tp), rhs);
+                            }
+                            fields
+                                .iter()
+                                .all(|f| self.is_copy_inner(*f, visiting, &nested))
+                        }
+                    }
+                    TypeKind::Enum {
+                        type_params,
+                        variants,
+                        ..
+                    } => {
+                        if type_params.len() != args.len() {
+                            false
+                        } else {
+                            let mut nested = mapping.clone();
+                            for (tp, arg) in type_params.iter().zip(args.iter()) {
+                                let rhs = mapping
+                                    .get(&self.resolve_id(*arg))
+                                    .copied()
+                                    .unwrap_or_else(|| self.resolve_id(*arg));
+                                nested.insert(self.resolve_id(*tp), rhs);
+                            }
+                            variants.iter().all(|v| {
+                                v.payload
+                                    .map(|p| self.is_copy_inner(p, visiting, &nested))
+                                    .unwrap_or(true)
+                            })
+                        }
+                    }
+                    _ => false,
+                }
+            }
             TypeKind::Function { .. } => false,
             TypeKind::Var(v) => {
                 if let Some(b) = v.binding {
-                    self.is_copy_inner(b, seen)
+                    self.is_copy_inner(b, visiting, mapping)
                 } else {
                     false
                 }
             }
             TypeKind::Named(name) => matches!(name.as_str(), "i64" | "f64"),
-        }
+        };
+        visiting.remove(&resolved);
+        result
     }
 
     pub fn get_ref(&self, id: TypeId) -> &TypeKind {

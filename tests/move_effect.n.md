@@ -92,6 +92,84 @@ fn main <()->i32> ():
     bump_local 40
 ```
 
+## 全フィールドが Copy の struct は再利用できる
+
+neplg2:test
+ret: 60
+```neplg2
+#entry main
+#indent 4
+#target core
+
+#import "core/math" as *
+#import "core/field" as *
+
+struct Point:
+    x <i32>
+    y <i32>
+
+fn sum_point <(Point)->i32> (p):
+    add get p "x" get p "y"
+
+fn main <()->i32> ():
+    let p1 <Point> Point 10 20
+    let p2 <Point> p1
+    add sum_point p1 sum_point p2
+```
+
+## `Apply` された generic struct も Copy 判定される
+
+neplg2:test
+ret: 6
+```neplg2
+#entry main
+#indent 4
+#target core
+
+#import "core/math" as *
+#import "core/field" as *
+
+struct Pair<.T>:
+    a <.T>
+    b <.T>
+
+fn sum_pair <(Pair<i32>)->i32> (p):
+    add get p "a" get p "b"
+
+fn main <()->i32> ():
+    let q1 <Pair<i32>> Pair 1 2
+    let q2 <Pair<i32>> q1
+    add sum_pair q1 sum_pair q2
+```
+
+## payload が Copy の enum は再利用できる
+
+neplg2:test
+ret: 14
+```neplg2
+#entry main
+#indent 4
+#target core
+
+#import "core/math" as *
+
+enum Score:
+    Single <i32>
+    Zero
+
+fn as_i32 <(Score)->i32> (s):
+    match s:
+        Score::Single v:
+            v
+        Score::Zero:
+            0
+
+fn main <()->i32> ():
+    let s1 <Score> Score::Single 7
+    let s2 <Score> s1
+    add as_i32 s1 as_i32 s2
+```
+
 ## グローバル変数の set は impure になる
 
 neplg2:test[compile_fail]
