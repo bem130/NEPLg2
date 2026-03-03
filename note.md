@@ -1,3 +1,23 @@
+# 2026-03-04 作業メモ (フェーズD進行: `kpwrite` の `_raw` 依存を同名オーバーロードへ整理)
+
+- 目的:
+  - `kpwrite` 内部で分離していた `*_raw` 群を、`i32` ハンドル版と `Writer` 版の同名オーバーロードで統一し、公開面の命名を簡潔化する。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_raw` を除き、`writer_*_raw` を `writer_*` へ改名。
+    - `i32` 受け取り実装と `Writer` 受け取り実装を同名で共存させる形に変更。
+    - 既存の `Writer` 版からは同名の `i32` 版を呼ぶように整理。
+- 根本原因:
+  - `_raw` 接尾辞を前提にラッパ層が増え、API 仕様の読み取りコストが上がっていた。
+  - 既存のオーバーロード機構で十分に区別可能な箇所まで命名分岐していた。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpwrite-overload-unify.json -j 15` -> `226/226 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-kpwrite-overload-unify.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-kpwrite-overload-unify.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpwrite` は `writer_new_raw` を除いて `_raw` 接尾辞なしで運用可能な状態になった。
+  - 次段で `kpread` 側も同方針で段階整理する。
+
 # 2026-03-04 作業メモ (フェーズD進行: `alloc` 安全API標準名化の回帰復旧)
 
 - 目的:
