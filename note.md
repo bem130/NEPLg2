@@ -1,3 +1,25 @@
+# 2026-03-04 作業メモ (フェーズD進行: kpread_core の初期化を Result ベース化)
+
+- 目的:
+  - `kpread` 初期化経路の失敗表現を `0` センチネル依存から `Result` へ寄せる。
+  - メモリ確保失敗時の分岐を型で扱えるようにし、段階的な安全API標準化を進める。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `scanner_new_impl_i` を `scanner_new_impl` へ改名。
+    - 戻り値を `i32` から `Result<i32,str>` へ変更。
+    - `alloc_result/realloc_result` を使って確保失敗を `Err` 化。
+    - 後始末（解放）は既存レイアウト維持のため `dealloc_raw` を継続使用。
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_raw` を `Result<i32,str>` 返却へ変更。
+    - `scanner_new` は `scanner_new_raw` の `Result` をそのまま `Scanner` へ持ち上げる形に変更。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md --no-tree -o /tmp/tests-kpread-result-init.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kpreadcore-result.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kpreadcore-result.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread` の初期化経路は `Result` ベースに移行済み。
+  - 次段で `kpwrite` 初期化経路も同じ方針に揃える。
+
 # 2026-03-04 作業メモ (フェーズD進行: `*_new_raw` 名統一と todo 未完了整理)
 
 - 目的:

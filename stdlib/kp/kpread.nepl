@@ -31,17 +31,16 @@ struct Scanner:
 fn scanner_wrap <(i32)->Scanner> (raw):
     Scanner mem_ptr_wrap raw
 
-fn scanner_new_raw <()*>i32> ():
-    scanner_new_impl_i 0
+fn scanner_new_raw <()*>Result<i32,str>> ():
+    scanner_new_impl
 
 fn scanner_new <()*>Result<Scanner,str>> ():
-    let raw <i32> scanner_new_raw;
-    if:
-        lt 0 raw
-        then:
+    let raw_res <Result<i32,str>> scanner_new_raw;
+    match raw_res:
+        Result::Ok raw:
             Result<Scanner,str>::Ok scanner_wrap raw
-        else:
-            Result<Scanner,str>::Err "kpread.scanner_new failed"
+        Result::Err e:
+            Result<Scanner,str>::Err e
 
 //: kpread: 競技プログラミング用高速スキャナ
 //: 
