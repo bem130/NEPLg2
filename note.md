@@ -1,3 +1,30 @@
+# 2026-03-03 作業メモ (メモリ安全コンパイラ機構の設計)
+- 目的:
+  - `i32` 生ポインタ露出を減らし、コンパイラ検査で `mem/kpread/kpwrite` の誤用を防ぐ。
+- 追加:
+  - `doc/memory_safety_compiler_design.md` を新規作成。
+  - `MemPtr<T>` / `RegionToken` モデル、境界検査挿入、解放状態検査、診断方針を定義。
+  - `alloc/realloc/dealloc/load/store` を Pure とし、I/O 系のみ Impure とする方針を明記。
+- 実装差分:
+  - まだ仕様段階で、`TypeCtx/move_check/typecheck` への反映は未着手。
+  - 実装タスクは `todo.md` の「8. メモリ安全コンパイラ機構の導入」で追跡する。
+
+# 2026-03-03 作業メモ (move/effect 再設計仕様の文書化)
+- 目的:
+  - `move` と `pure/impure` の責務分離を明文化し、`mem/kpread/kpwrite` の安全API移行を設計レベルで固定する。
+- 追加:
+  - `doc/move_effect_spec.md` を新規作成。
+  - 次を仕様として確定:
+    - `->` を Pure、`*>` を Impure として扱う。
+    - heap/線形メモリ操作（`alloc/realloc/dealloc/load/store`）は Pure。
+    - Impure は I/O・syscall・環境依存値取得に限定。
+    - move は effect と独立に評価。
+    - `entry` を常に Impure 扱いする特例は撤廃対象。
+    - `_safe` 接尾辞を廃止し、安全版APIをデフォルト化する方針。
+- 差分:
+  - 実装はまだ旧挙動が残る（特に entry 特例、Copy 判定の構造型対応、intrinsic effect 一元表）。
+  - 本エントリは仕様確定まで。実装反映は `todo.md` 側で継続管理する。
+
 # 2026-03-03 作業メモ (mem/kp の `_raw` 段階廃止と安全API寄せ)
 - 目的:
   - `mem/kpread/kpwrite` の `_raw` 接尾辞を段階廃止し、安全API（`Result/Option`）中心へ寄せる。
