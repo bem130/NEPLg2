@@ -1,3 +1,24 @@
+# 2026-03-04 作業メモ (フェーズB進行: move_check に borrow 状態遷移を実装)
+- 目的:
+  - `todo.md` のフェーズBにある `move_check` 状態機械を `BorrowedShared/BorrowedUnique` まで拡張し、分岐/ループ/match 合流を保守的に正しく扱う。
+- 実装:
+  - `nepl-core/src/passes/move_check.rs`
+    - `VarState` に `BorrowedShared` / `BorrowedUnique` を追加。
+    - `BorrowKind` を導入し、`visit_borrow` を `Shared/Unique` 区別で処理。
+    - `check_use` を更新し、borrow 中 move や unique borrow 中 use を拒否。
+    - `check_assign` / `check_drop` / `check_borrow` を追加し、代入・drop・borrow での状態遷移を一元化。
+    - `merge_state_pair` / `merge_states` を追加し、`if`/`match`/`while` 合流を `Valid/Borrowed/Moved/PossiblyMoved` で統一。
+    - `Intrinsic::load/store` のアドレス引数 borrow 判定を `BorrowKind` に接続。
+  - `tests/move_effect.n.md`
+    - 非Copy値の shared borrow 中 move が拒否される回帰を追加。
+    - Copy値 borrow が利用を阻害しない回帰を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md -i tests/typeannot.n.md --no-tree -o /tmp/tests-move-overload-typeannot.json -j 15` -> `262/262 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-full-after-move-borrow.json -j 15` -> `716/716 pass`
+- 次:
+  - フェーズB残件 (`Copy/Clone` trait制約検査, `RegionToken` 消費規則) に進む。
+
 # 2026-03-04 作業メモ (フェーズB着手: `TypeCtx::is_copy` 構造型判定)
 - 目的:
   - フェーズBの最初の実装として、`TypeCtx::is_copy` を tuple/struct/enum と generic apply へ拡張する。

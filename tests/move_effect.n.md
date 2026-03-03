@@ -188,3 +188,38 @@ fn bump_global <(i32)->i32> (x):
 fn main <()->i32> ():
     bump_global 5
 ```
+
+## 非Copy値の shared borrow 中 move は拒否
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn id <(i32)->i32> (x):
+    x
+
+fn main <()->i32> ():
+    let f @id
+    let r &f
+    let g f
+    g 1
+```
+
+## Copy値への borrow は move を阻害しない
+
+neplg2:test
+ret: 11
+```neplg2
+#entry main
+#indent 4
+#target core
+
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let x <i32> 10
+    let r &x
+    add x 1
+```
