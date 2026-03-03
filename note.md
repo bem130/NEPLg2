@@ -6093,3 +6093,25 @@
 - 状況:
   - `kpread/kpwrite` から `alloc_raw/dealloc_raw/realloc_raw` の直接使用は除去済み。
   - 次段は `core/mem` 側で `*_raw` の公開縮退方針（完全削除タイミング）を整理する。
+# 2026-03-04 作業メモ (フェーズD進行: tests/tutorials の alloc_safe 化)
+
+- 目的:
+  - `core/mem` の安全API標準化方針に合わせ、`tests/tutorials` での `alloc_raw/dealloc_raw` 直接使用を段階的に削減する。
+- 事前棚卸し:
+  - `rg` で repo 全体の `alloc_raw/dealloc_raw/realloc_raw` 呼び出しを分類し、`nm/std/collections` に広範囲の残存があることを確認。
+  - 今回は影響が大きく回帰しやすい `tests/kp.n.md` と `tutorials/getting_started/{23,25,26}` を先行移行対象に選定。
+- 修正:
+  - `tests/kp.n.md`
+    - `alloc_raw/dealloc_raw` を `unwrap_ok alloc/dealloc` へ置換。
+    - 必要なスニペットに `#import "core/result" as *` を追加。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+  - `tutorials/getting_started/26_competitive_graph_bfs.n.md`
+    - 同様に `alloc_raw/dealloc_raw` を `unwrap_ok alloc/dealloc` へ置換し、`core/result` import を追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/26_competitive_graph_bfs.n.md --no-tree -o /tmp/tests-safe-alloc-docs-scope.json -j 15` -> `217/217 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-safe-alloc-docs.json -j 15` -> `729/729 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-safe-alloc-docs.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kp` 系テスト/チュートリアルの主要サンプルは安全API経路へ移行済み。
+  - 次段は棚卸し済み残件（`stdlib/std`, `stdlib/nm`, `stdlib/alloc/collections`）を上流影響の小さい順に移行する。

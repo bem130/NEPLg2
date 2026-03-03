@@ -52,6 +52,7 @@ stdout: "6\n14\n15\n"
 #target std
 
 #import "core/math" as *
+#import "core/result" as *
 #import "core/mem" as *
 #import "kp/kpread" as *
 #import "kp/kpwrite" as *
@@ -62,7 +63,7 @@ fn main <()*>()> ():
     let q <i32> scanner_read_i32 sc;
 
     let pref_len <i32> add n 1;
-    let pref <i32> alloc_raw mul pref_len 4;
+    let pref <i32> unwrap_ok alloc mul pref_len 4;
     store_i32 pref 0;
 
     let mut i <i32> 1;
@@ -99,7 +100,7 @@ fn main <()*>()> ():
 
     set w writer_flush w;
     writer_free w;
-    dealloc_raw pref mul pref_len 4;
+    unwrap_ok dealloc pref mul pref_len 4;
 ```
 
 ## kpread_to_kpwrite_i64
@@ -202,13 +203,14 @@ stdout: "2 3\n1 2 5\n"
 #target std
 
 #import "kp/kpsearch" as *
+#import "core/result" as *
 #import "core/mem" as *
 #import "core/math" as *
 #import "std/stdio" as *
 
 fn main <()*>()> ():
     let len <i32> 6;
-    let data <i32> alloc_raw mul len 4;
+    let data <i32> unwrap_ok alloc mul len 4;
     store_i32 add data 0 1;
     store_i32 add data 4 1;
     store_i32 add data 8 2;
@@ -233,5 +235,5 @@ fn main <()*>()> ():
             print_i32 load_i32 ptr;
             set i add i 1;
     println "";
-    dealloc_raw data mul len 4;
+    unwrap_ok dealloc data mul len 4;
 ```
