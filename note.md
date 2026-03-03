@@ -1,3 +1,18 @@
+# 2026-03-04 作業メモ (フェーズD進行: kpwrite の raw 実装名分離)
+
+- 目的:
+  - `kpwrite` の内部 `i32` ハンドル実装と公開 `Writer` API を明確に分離し、公開面の型安全性を上げる。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `i32` 受け取り実装を `writer_*_raw` へ改名。
+    - `Writer` 受け取り公開関数は既存名を維持し、内部で `*_raw` を呼び出す形へ変更。
+    - 対象: `free/flush/ensure/put_u8/writeln/write_*` 一式。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpwrite-raw-split.json -j 15` -> `226/226 pass`
+- 状況:
+  - `kpwrite` は「公開 API = Writer 型」「内部実装 = *_raw」へ分離完了。
+  - 次段で `kpread` も同方針に揃える。
+
 # 2026-03-04 作業メモ (overload テスト拡充: 注釈混在ケースの追加)
 
 - 目的:
