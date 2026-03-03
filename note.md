@@ -1,3 +1,22 @@
+# 2026-03-04 作業メモ (オーバーロード修正の完了と 2026-03-03 計画への復帰)
+- 目的:
+  - オーバーロード解決の不安定箇所（関数値引数・pipe 併用・型注釈混在）を根本修正し、`todo.md` の `2026-03-03 move/effect/memory` 実装へ復帰する。
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - 関数シグネチャ参照を `function_signature_for_entry` に集約し、type_args 適用後の引数型を一貫取得するよう修正。
+    - pipe 注入時に nullary callable の過早 reduce を避ける制御と、target 入力型を使った `reduce_pipe_pending_value_with_target` を追加。
+    - オーバーロード候補の絞り込みで「具体型候補優先」「型パラメータ数最小候補優先」を導入し、`D3005` の過検出を抑制。
+  - `tests/overload.n.md`, `tests/typeannot.n.md`
+    - ブロック注釈/関数呼び出し注釈/pipe 注釈/関数リテラル注釈の混在ケースを拡充し、今回の修正点を回帰固定。
+  - `stdlib/alloc/collections/vec.nepl`, `stdlib/alloc/collections/stack.nepl`, `stdlib/tests/stack.n.md`
+    - `push` 利用形と型推論ケースを整理し、オーバーロード解決の実運用ケースを固定。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/typeannot.n.md -i stdlib/alloc/collections/vec.nepl -i stdlib/alloc/collections/stack.nepl -i stdlib/tests/stack.n.md --no-tree -o /tmp/tests-overload-typeannot-vec-stack.json -j 15` -> `286/286 pass`
+- 現状:
+  - オーバーロード修正は完了。
+  - 次は `todo.md` の `2026-03-03 move/effect/memory 本格実装計画` フェーズA（effect規則のコンパイラ反映）を再開する。
+
 # 2026-03-04 作業メモ (pipe 活用と `push` 推論の確認)
 - 目的:
   - 既存書き換え方針として、pipe 演算子を活用して中間変数とインデントを抑える。

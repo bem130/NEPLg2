@@ -206,23 +206,23 @@ ret: 1
 
 fn main <()*>i32> ():
     let s0 <Stack<i32>>:
-        new<i32>
+        new
         |> unwrap_ok<Stack<i32>, Diag>
-        |> push<i32> 1
+        |> push 1
         |> unwrap_ok<Stack<i32>, Diag>
-        |> push<i32> 2
+        |> push 2
         |> unwrap_ok<Stack<i32>, Diag>;
-    let p pop<i32> s0;
+    let p pop s0;
     let ok0 <bool> match p:
         Option::Some v:
             eq v 2
         Option::None:
             false
     let s1 <Stack<i32>>:
-        new<i32>
+        new
         |> unwrap_ok<Stack<i32>, Diag>
-        |> push<i32> 5
+        |> push 5
         |> unwrap_ok<Stack<i32>, Diag>;
-    let ok1 <bool> eq len<i32> s1 1;
+    let ok1 <bool> eq len s1 1;
     if and ok0 ok1 1 0
 ```

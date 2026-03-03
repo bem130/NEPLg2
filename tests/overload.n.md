@@ -185,9 +185,9 @@ fn new <()->bool> ():
 fn main <()*>i32> ():
     let v <Vec<i32>>:
         <Vec<i32>> new
-        |> push<i32> 1
-        |> push<i32> 2;
-    vec_len<i32> v
+        |> push 1
+        |> push 2;
+    len v
 ```
 
 ## overload_result_inferred_from_outer_arg_context
@@ -211,6 +211,24 @@ fn use_bool <(bool)->i32> (b):
 
 fn main <()->i32> ():
     use_bool choice 7
+```
+
+## overload_star_import_prefers_concrete_over_generic_new
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/collections/vec" as *
+
+fn new <()*>Vec<i32>> ():
+    vec_new<i32>
+
+fn main <()*>i32> ():
+    let v <Vec<i32>> <Vec<i32>> new;
+    len v
 ```
 
 ## overload_select_by_arity
@@ -326,6 +344,52 @@ fn main <()->i32> ():
     let c <i32> 2;
     let d <i32> 3;
     if and eq a b lt c d 1 0
+```
+
+## overload_new_resolve_with_typed_block_context
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/collections/vec" as *
+#import "alloc/collections/stack" as *
+#import "alloc/diag/error" as *
+#import "core/result" as *
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let st <Stack<i32>>:
+        new
+        |> unwrap_ok<Stack<i32>, Diag>;
+    let v <Vec<i32>>:
+        new;
+    if and eq len st 0 eq len v 0 1 0
+```
+
+## overload_new_resolve_with_typed_block_and_pipe
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/collections/vec" as *
+#import "alloc/collections/stack" as *
+#import "alloc/diag/error" as *
+#import "core/result" as *
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let st <Stack<i32>>:
+        new
+        |> unwrap_ok<Stack<i32>, Diag>
+        |> push 10
+        |> unwrap_ok<Stack<i32>, Diag>;
+    if eq len st 1 1 0
 ```
 
 ## overload_nested_call_arg_position_add_sub

@@ -1611,7 +1611,7 @@ impl<'a> BlockChecker<'a> {
     }
 
     fn find_outer_function_consumer(
-        &self,
+        &mut self,
         stack: &[StackEntry],
         inner_pos: usize,
         min_func_pos: usize,
@@ -1623,8 +1623,9 @@ impl<'a> BlockChecker<'a> {
             if !stack[j].auto_call {
                 continue;
             }
-            let rty = self.ctx.resolve_id(stack[j].ty);
-            let TypeKind::Function { params, .. } = self.ctx.get(rty) else {
+            let Some((params, _result, _effect)) =
+                self.function_signature_for_entry(&stack[j])
+            else {
                 continue;
             };
             let total_arity = params.len();
@@ -1665,8 +1666,9 @@ impl<'a> BlockChecker<'a> {
             if !stack[j].auto_call {
                 continue;
             }
-            let rty = self.ctx.resolve_id(stack[j].ty);
-            let TypeKind::Function { params, .. } = self.ctx.get(rty) else {
+            let Some((params, _result, _effect)) =
+                self.function_signature_for_entry(&stack[j])
+            else {
                 continue;
             };
             let total_arity = params.len();
@@ -1723,8 +1725,9 @@ impl<'a> BlockChecker<'a> {
             if !stack[j].auto_call {
                 continue;
             }
-            let rty = self.ctx.resolve_id(stack[j].ty);
-            let TypeKind::Function { params, .. } = self.ctx.get(rty) else {
+            let Some((params, _result, _effect)) =
+                self.function_signature_for_entry(&stack[j])
+            else {
                 continue;
             };
             let total_arity = params.len();
@@ -1771,6 +1774,89 @@ impl<'a> BlockChecker<'a> {
             return false;
         }
         self.env.lookup_all_callables(name).len() > 1
+    }
+
+    fn function_signature_for_entry(
+        &mut self,
+        entry: &StackEntry,
+    ) -> Option<(Vec<TypeId>, TypeId, Effect)> {
+        let rty = self.ctx.resolve_id(entry.ty);
+        let TypeKind::Function {
+            type_params,
+            params,
+            result,
+            effect,
+        } = self.ctx.get(rty)
+        else {
+            return None;
+        };
+        if entry.type_args.is_empty() {
+            return Some((params, result, effect));
+        }
+        if type_params.len() != entry.type_args.len() {
+            return None;
+        }
+        let mut mapping = BTreeMap::new();
+        for (p, a) in type_params.iter().zip(entry.type_args.iter()) {
+            mapping.insert(self.ctx.resolve_id(*p), self.ctx.resolve_id(*a));
+        }
+        let substituted_params = params
+            .iter()
+            .map(|p| self.ctx.substitute(*p, &mapping))
+            .collect::<Vec<_>>();
+        let substituted_result = self.ctx.substitute(result, &mapping);
+        Some((substituted_params, substituted_result, effect))
+    }
+
+    fn pipe_target_input_type(&mut self, entry: &StackEntry) -> Option<TypeId> {
+        let Some((params, _result, _effect)) = self.function_signature_for_entry(entry) else {
+            return None;
+        };
+        let total_arity = params.len();
+        let arity = self.user_visible_arity(&entry.expr, total_arity);
+        if arity == 0 {
+            return None;
+        }
+        let capture_len = total_arity.saturating_sub(arity);
+        let arg_idx = capture_len;
+        if arg_idx >= total_arity {
+            return None;
+        }
+        Some(self.ctx.resolve_id(params[arg_idx]))
+    }
+
+    fn reduce_pipe_pending_value_with_target(
+        &mut self,
+        val: StackEntry,
+        target: &StackEntry,
+        fallback_expected: Option<TypeId>,
+    ) -> StackEntry {
+        let rty = self.ctx.resolve_id(val.ty);
+        let is_nullary_callable = if !val.auto_call {
+            false
+        } else {
+            match self.ctx.get(rty) {
+                TypeKind::Function { params, .. } => {
+                    self.user_visible_arity(&val.expr, params.len()) == 0
+                }
+                _ => false,
+            }
+        };
+        if !is_nullary_callable {
+            return val;
+        }
+        let expected_input = self
+            .pipe_target_input_type(target)
+            .filter(|t| self.is_concrete_type(*t))
+            .or(fallback_expected.map(|t| self.ctx.resolve_id(t)));
+        let mut stack = vec![val.clone()];
+        let mut open_calls = Vec::new();
+        self.reduce_calls(&mut stack, &mut open_calls, expected_input.map(|t| (t, 0)));
+        if stack.len() == 1 {
+            stack.pop().unwrap_or(val)
+        } else {
+            val
+        }
     }
 
     fn has_unresolved_callable_between(
@@ -2605,6 +2691,7 @@ impl<'a> BlockChecker<'a> {
         let mut dropped = false;
         let mut last_expr: Option<HirExpr> = None;
         let mut pipe_pending: Option<StackEntry> = None;
+        let mut seen_pipe = false;
         // (target_type, stack_depth_when_annotation_appeared)
         let mut pending_ascription: Option<(TypeId, usize)> =
             expected_last_ty.map(|t| (t, base_depth));
@@ -3734,6 +3821,7 @@ impl<'a> BlockChecker<'a> {
                     }
                     pipe_pending = stack.pop();
                     last_expr = pipe_pending.as_ref().map(|se| se.expr.clone());
+                    seen_pipe = true;
                 }
             }
 
@@ -3744,13 +3832,18 @@ impl<'a> BlockChecker<'a> {
                         if top.auto_call
                             && matches!(self.ctx.get(top.ty), TypeKind::Function { .. })
                         {
+                            let lowered_val = self.reduce_pipe_pending_value_with_target(
+                                val,
+                                top,
+                                pending_ascription.map(|(target, _)| target),
+                            );
                             // pipe では「関数を積んだ直後に引数を注入」するため、
                             // 通常の末尾関数追跡だけでは open_calls に載らない。
                             let func_idx = stack.len() - 1;
                             if !open_calls.iter().any(|&i| i == func_idx) {
                                 open_calls.push(func_idx);
                             }
-                            stack.push(val);
+                            stack.push(lowered_val);
                             last_expr = Some(stack.last().unwrap().expr.clone());
                         } else {
                             self.diagnostics.push(Diagnostic::error(
@@ -3789,29 +3882,49 @@ impl<'a> BlockChecker<'a> {
                 try_apply_pending_ascription(self, stack, &mut pending_ascription);
             }
 
-            let mut pending_base = pending_ascription.map(|(_, base)| base);
-            let mut pipe_guard = false;
-            if next_is_pipe {
-                if let Some(assign_pos) = stack.iter().rposition(|e| e.assign.is_some()) {
-                    let guard_pos = assign_pos + 1;
-                    pending_base = Some(pending_base.map_or(guard_pos, |base| base.max(guard_pos)));
-                    pipe_guard = true;
+            let delay_overloaded_nullary_before_pipe = next_is_pipe
+                && pipe_pending.is_none()
+                && stack.len() == base_depth + 1
+                && stack.last().map(|entry| {
+                    if !self.is_unresolved_overloaded_callable_entry(entry) {
+                        return false;
+                    }
+                    let rty = self.ctx.resolve_id(entry.ty);
+                    let TypeKind::Function { params, .. } = self.ctx.get(rty) else {
+                        return false;
+                    };
+                    self.user_visible_arity(&entry.expr, params.len()) == 0
+                }).unwrap_or(false);
+            if !delay_overloaded_nullary_before_pipe {
+                let mut pending_base = pending_ascription.map(|(_, base)| base);
+                let mut pipe_guard = false;
+                let reduction_expected = if next_is_pipe && seen_pipe {
+                    None
+                } else {
+                    pending_ascription
+                };
+                if next_is_pipe {
+                    if let Some(assign_pos) = stack.iter().rposition(|e| e.assign.is_some()) {
+                        let guard_pos = assign_pos + 1;
+                        pending_base = Some(pending_base.map_or(guard_pos, |base| base.max(guard_pos)));
+                        pipe_guard = true;
+                    }
                 }
-            }
-            if let Some(base_len) = pending_base {
-                self.reduce_calls_guarded(stack, &mut open_calls, base_len, pending_ascription);
-            } else {
-                self.reduce_calls(stack, &mut open_calls, pending_ascription);
-            }
-                        // std::eprintln!("  Stack after reduce: {:?}", stack.iter().map(|e| self.ctx.type_to_string(e.ty)).collect::<Vec<_>>());
+                if let Some(base_len) = pending_base {
+                    self.reduce_calls_guarded(stack, &mut open_calls, base_len, reduction_expected);
+                } else {
+                    self.reduce_calls(stack, &mut open_calls, reduction_expected);
+                }
+                            // std::eprintln!("  Stack after reduce: {:?}", stack.iter().map(|e| self.ctx.type_to_string(e.ty)).collect::<Vec<_>>());
 
-            // Try applying pending ascription after call reduction.
-            if !next_is_pipe {
-                try_apply_pending_ascription(self, stack, &mut pending_ascription);
-            }
+                // Try applying pending ascription after call reduction.
+                if !next_is_pipe {
+                    try_apply_pending_ascription(self, stack, &mut pending_ascription);
+                }
 
-            if pending_base.is_some() && pending_ascription.is_none() && !pipe_guard {
-                self.reduce_calls(stack, &mut open_calls, pending_ascription);
+                if pending_base.is_some() && pending_ascription.is_none() && !pipe_guard {
+                    self.reduce_calls(stack, &mut open_calls, reduction_expected);
+                }
             }
         }
 
@@ -5099,11 +5212,29 @@ impl<'a> BlockChecker<'a> {
                                 dedup.push(c);
                             }
                         }
-                        if dedup.len() == 1 {
-                            candidates = dedup;
-                        } else {
-                            candidates = dedup;
+                        candidates = dedup;
+                    }
+                    if candidates.len() > 1 {
+                        let concrete: Vec<&Binding> = candidates
+                            .iter()
+                            .copied()
+                            .filter(|b| !type_contains_unbound_var(self.ctx, b.ty))
+                            .collect();
+                        if !concrete.is_empty() {
+                            candidates = concrete;
                         }
+                    }
+                    if candidates.len() > 1 {
+                        let min_type_params = candidates
+                            .iter()
+                            .map(|b| function_type_param_count(self.ctx, b.ty))
+                            .min()
+                            .unwrap_or(0);
+                        let narrowed: Vec<&Binding> = candidates
+                            .into_iter()
+                            .filter(|b| function_type_param_count(self.ctx, b.ty) == min_type_params)
+                            .collect();
+                        candidates = narrowed;
                     }
                     if candidates.len() > 1 {
                         self.diagnostics.push(Diagnostic::error(
@@ -6026,6 +6157,13 @@ fn find_nonshadow_same_signature_func<'a>(
             && matches!(b.kind, BindingKind::Func { .. })
             && function_signature_string(ctx, b.ty) == target_sig
     })
+}
+
+fn function_type_param_count(ctx: &TypeCtx, ty: TypeId) -> usize {
+    match ctx.get(ty) {
+        TypeKind::Function { type_params, .. } => type_params.len(),
+        _ => 0,
+    }
 }
 
 type LabelEnv = BTreeMap<String, TypeId>;

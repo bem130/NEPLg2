@@ -254,3 +254,62 @@ fn main <()*>i32> ():
         <i32> 20
     v
 ```
+
+## test_type_annot_mixed_block_call_pipe
+
+neplg2:test
+ret: 7
+```neplg2
+
+#entry main
+#indent 4
+#import "core/math" as *
+
+fn main <()*>i32> ():
+    let v <i32> <i32> block:
+        let base <i32> <i32> add 1 2
+        base |> <i32> add <i32> 4
+    v
+```
+
+## test_type_annot_mixed_function_literal_call
+
+neplg2:test
+ret: 9
+```neplg2
+
+#entry main
+#indent 4
+#import "core/math" as *
+
+fn apply <(i32,(i32)->i32)->i32> (x, f):
+    f x
+
+fn main <()*>i32> ():
+    let f <(i32)->i32> (x):
+        <i32> block:
+            let y <i32> add x 2
+            y
+    let v <i32> <i32> apply <i32> 7 f
+    v
+```
+
+## test_type_annot_mixed_pipe_with_annotated_function_literal
+
+neplg2:test
+ret: 8
+```neplg2
+
+#entry main
+#indent 4
+#import "core/math" as *
+
+fn main <()*>i32> ():
+    let plus3 <(i32)->i32> (x):
+        <i32> add x 3
+    let src <i32>:
+        <i32> block:
+            4
+    let v <i32> src |> <i32> plus3 |> <i32> add 1
+    v
+```
