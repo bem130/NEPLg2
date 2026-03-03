@@ -483,7 +483,7 @@ fn shr_u <(i32,i32)->i32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn rotl_i32 <(i32,i32)->i32> (a,b):
+fn rotl <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -492,7 +492,7 @@ fn rotl_i32 <(i32,i32)->i32> (a,b):
     #if[target=llvm]
     #llvmir:
         declare i32 @llvm.fshl.i32(i32, i32, i32)
-        define i32 @rotl_i32(i32 %a, i32 %b) {
+        define i32 @rotl(i32 %a, i32 %b) {
         entry:
             %0 = call i32 @llvm.fshl.i32(i32 %a, i32 %a, i32 %b)
             ret i32 %0
@@ -511,7 +511,7 @@ fn rotl_i32 <(i32,i32)->i32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn rotr_i32 <(i32,i32)->i32> (a,b):
+fn rotr <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -520,7 +520,7 @@ fn rotr_i32 <(i32,i32)->i32> (a,b):
     #if[target=llvm]
     #llvmir:
         declare i32 @llvm.fshr.i32(i32, i32, i32)
-        define i32 @rotr_i32(i32 %a, i32 %b) {
+        define i32 @rotr(i32 %a, i32 %b) {
         entry:
             %0 = call i32 @llvm.fshr.i32(i32 %a, i32 %a, i32 %b)
             ret i32 %0
@@ -551,7 +551,7 @@ fn rotr_i32 <(i32,i32)->i32> (a,b):
 //:     assert_eq_i32 3 ctz 8;
 //:     assert_eq_i32 4 popcnt 15;
 //: ```
-fn clz_i32 <(i32)->i32> (a):
+fn clz <(i32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -559,7 +559,7 @@ fn clz_i32 <(i32)->i32> (a):
     #if[target=llvm]
     #llvmir:
         declare i32 @llvm.ctlz.i32(i32, i1)
-        define i32 @clz_i32(i32 %a) {
+        define i32 @clz(i32 %a) {
         entry:
             %0 = call i32 @llvm.ctlz.i32(i32 %a, i1 0)
             ret i32 %0
@@ -578,7 +578,7 @@ fn clz_i32 <(i32)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn ctz_i32 <(i32)->i32> (a):
+fn ctz <(i32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -586,7 +586,7 @@ fn ctz_i32 <(i32)->i32> (a):
     #if[target=llvm]
     #llvmir:
         declare i32 @llvm.cttz.i32(i32, i1)
-        define i32 @ctz_i32(i32 %a) {
+        define i32 @ctz(i32 %a) {
         entry:
             %0 = call i32 @llvm.cttz.i32(i32 %a, i1 0)
             ret i32 %0
@@ -605,7 +605,7 @@ fn ctz_i32 <(i32)->i32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn popcnt_i32 <(i32)->i32> (a):
+fn popcnt <(i32)->i32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -613,46 +613,11 @@ fn popcnt_i32 <(i32)->i32> (a):
     #if[target=llvm]
     #llvmir:
         declare i32 @llvm.ctpop.i32(i32)
-        define i32 @popcnt_i32(i32 %a) {
+        define i32 @popcnt(i32 %a) {
         entry:
             %0 = call i32 @llvm.ctpop.i32(i32 %a)
             ret i32 %0
         }
-
-//: rotl: ビット列の左ローテート（i32）
-//:
-//: [目的/もくてき]:
-//: - i32 の循環左シフトを、型名 prefix なしで呼び出せるようにします。
-fn rotl <(i32,i32)->i32> (a,b):
-    rotl_i32 a b
-
-//: rotr: ビット列の右ローテート（i32）
-//:
-//: [目的/もくてき]:
-//: - i32 の循環右シフトを、型名 prefix なしで呼び出せるようにします。
-fn rotr <(i32,i32)->i32> (a,b):
-    rotr_i32 a b
-
-//: clz: 先頭ゼロビット数の計算（i32）
-//:
-//: [目的/もくてき]:
-//: - i32 の `clz` を、型名 prefix なしで呼び出せるようにします。
-fn clz <(i32)->i32> (a):
-    clz_i32 a
-
-//: ctz: 末尾ゼロビット数の計算（i32）
-//:
-//: [目的/もくてき]:
-//: - i32 の `ctz` を、型名 prefix なしで呼び出せるようにします。
-fn ctz <(i32)->i32> (a):
-    ctz_i32 a
-
-//: popcnt: 1ビット数の計算（i32）
-//:
-//: [目的/もくてき]:
-//: - i32 の `popcnt` を、型名 prefix なしで呼び出せるようにします。
-fn popcnt <(i32)->i32> (a):
-    popcnt_i32 a
 
 //: eq: i32 の等値比較
 //:
@@ -1797,7 +1762,7 @@ fn shr_u <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn rotl_i64 <(i64,i64)->i64> (a,b):
+fn rotl <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1806,7 +1771,7 @@ fn rotl_i64 <(i64,i64)->i64> (a,b):
     #if[target=llvm]
     #llvmir:
         declare i64 @llvm.fshl.i64(i64, i64, i64)
-        define i64 @rotl_i64(i64 %a, i64 %b) {
+        define i64 @rotl(i64 %a, i64 %b) {
         entry:
             %0 = call i64 @llvm.fshl.i64(i64 %a, i64 %a, i64 %b)
             ret i64 %0
@@ -1825,7 +1790,7 @@ fn rotl_i64 <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn rotr_i64 <(i64,i64)->i64> (a,b):
+fn rotr <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1834,7 +1799,7 @@ fn rotr_i64 <(i64,i64)->i64> (a,b):
     #if[target=llvm]
     #llvmir:
         declare i64 @llvm.fshr.i64(i64, i64, i64)
-        define i64 @rotr_i64(i64 %a, i64 %b) {
+        define i64 @rotr(i64 %a, i64 %b) {
         entry:
             %0 = call i64 @llvm.fshr.i64(i64 %a, i64 %a, i64 %b)
             ret i64 %0
@@ -1853,7 +1818,7 @@ fn rotr_i64 <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn clz_i64 <(i64)->i64> (a):
+fn clz <(i64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1861,7 +1826,7 @@ fn clz_i64 <(i64)->i64> (a):
     #if[target=llvm]
     #llvmir:
         declare i64 @llvm.ctlz.i64(i64, i1)
-        define i64 @clz_i64(i64 %a) {
+        define i64 @clz(i64 %a) {
         entry:
             %0 = call i64 @llvm.ctlz.i64(i64 %a, i1 false)
             ret i64 %0
@@ -1880,7 +1845,7 @@ fn clz_i64 <(i64)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn ctz_i64 <(i64)->i64> (a):
+fn ctz <(i64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1888,7 +1853,7 @@ fn ctz_i64 <(i64)->i64> (a):
     #if[target=llvm]
     #llvmir:
         declare i64 @llvm.cttz.i64(i64, i1)
-        define i64 @ctz_i64(i64 %a) {
+        define i64 @ctz(i64 %a) {
         entry:
             %0 = call i64 @llvm.cttz.i64(i64 %a, i1 false)
             ret i64 %0
@@ -1907,7 +1872,7 @@ fn ctz_i64 <(i64)->i64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn popcnt_i64 <(i64)->i64> (a):
+fn popcnt <(i64)->i64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1915,46 +1880,11 @@ fn popcnt_i64 <(i64)->i64> (a):
     #if[target=llvm]
     #llvmir:
         declare i64 @llvm.ctpop.i64(i64)
-        define i64 @popcnt_i64(i64 %a) {
+        define i64 @popcnt(i64 %a) {
         entry:
             %0 = call i64 @llvm.ctpop.i64(i64 %a)
             ret i64 %0
         }
-
-//: rotl: ビット列の左ローテート（i64）
-//:
-//: [目的/もくてき]:
-//: - i64 の循環左シフトを、型名 prefix なしで呼び出せるようにします。
-fn rotl <(i64,i64)->i64> (a,b):
-    rotl_i64 a b
-
-//: rotr: ビット列の右ローテート（i64）
-//:
-//: [目的/もくてき]:
-//: - i64 の循環右シフトを、型名 prefix なしで呼び出せるようにします。
-fn rotr <(i64,i64)->i64> (a,b):
-    rotr_i64 a b
-
-//: clz: 先頭ゼロビット数の計算（i64）
-//:
-//: [目的/もくてき]:
-//: - i64 の `clz` を、型名 prefix なしで呼び出せるようにします。
-fn clz <(i64)->i64> (a):
-    clz_i64 a
-
-//: ctz: 末尾ゼロビット数の計算（i64）
-//:
-//: [目的/もくてき]:
-//: - i64 の `ctz` を、型名 prefix なしで呼び出せるようにします。
-fn ctz <(i64)->i64> (a):
-    ctz_i64 a
-
-//: popcnt: 1ビット数の計算（i64）
-//:
-//: [目的/もくてき]:
-//: - i64 の `popcnt` を、型名 prefix なしで呼び出せるようにします。
-fn popcnt <(i64)->i64> (a):
-    popcnt_i64 a
 
 //: eq: i64 の等値比較
 //:
