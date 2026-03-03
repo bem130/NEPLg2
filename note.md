@@ -1,3 +1,22 @@
+# 2026-03-04 作業メモ (上流テスト整備: `tests/move_check.n.md` の skip 解除)
+
+- 目的:
+  - `move_check` 系 `.n.md` の上流回帰を `skip` 依存から外し、診断ID付き compile_fail で固定化する。
+- 変更:
+  - `tests/move_check.n.md`
+    - `move_simple_ok` を実コード化（`ret: 0`）。
+    - `move_use_after_move` を `compile_fail + diag_id: 3053` に変更。
+    - `move_in_branch` を `compile_fail + diag_id: 3054` に変更。
+    - `move_in_loop` を `compile_fail + diag_id: 3065` に変更。
+- 根本原因:
+  - 旧 Rust テスト移植時に `skip` が残っており、分岐合流/ループ再利用の move 回帰が CI で検出不能だった。
+  - 診断IDで失敗理由を固定しないと、文言揺れで意図しない回帰を見落とす。
+- 検証:
+  - `node nodesrc/tests.js -i tests/move_check.n.md --no-tree -o /tmp/tests-move-check-nmd.json -j 15` -> `217/217 pass`
+- 状況:
+  - `move_check.n.md` の先頭4ケースは実行型になり、`skip` は除去済み。
+  - 次段で `todo.md` の診断ID未付与領域（parser/typecheck/resolve）を継続する。
+
 # 2026-03-04 作業メモ (フェーズD進行: Scanner/Writer の直接利用へ下流移行)
 
 - 目的:
