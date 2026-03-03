@@ -21,6 +21,7 @@
 
 #import "core/mem" as *
 #import "core/math" as *
+#import "core/cast" as *
 #import "std/stdio" as *
 
 //: writer_new: 競プロ向けのバッファ付き stdout writer を作る
@@ -290,8 +291,8 @@ fn writer_write_i32 <(i32,i32)*>()> (w, v):
 //: 計算量:
 //: - O(桁数)
 fn writer_write_u64 <(i32,i64)*>()> (w, v):
-    let zero <i64> i64_extend_i32_u 0;
-    let ten <i64> i64_extend_i32_u 10;
+    let zero <i64> cast 0;
+    let ten <i64> cast 10;
     if:
         eq v zero
         then:
@@ -320,7 +321,7 @@ fn writer_write_u64 <(i32,i64)*>()> (w, v):
             while lt i d:
                 do:
                     let rem64 <i64> rem_u n ten;
-                    let rem <i32> i32_wrap_i64 rem64;
+                    let rem <i32> cast rem64;
                     let off <i32> sub endm1 i;
                     let code <i32> add 48 rem;
                     let p <i32> add buf off;
@@ -342,7 +343,7 @@ fn writer_write_u64 <(i32,i64)*>()> (w, v):
 //: 計算量:
 //: - O(桁数)
 fn writer_write_i64 <(i32,i64)*>()> (w, v):
-    let zero <i64> i64_extend_i32_u 0;
+    let zero <i64> cast 0;
     if:
         lt v zero
         then:
@@ -370,7 +371,7 @@ fn writer_write_i64 <(i32,i64)*>()> (w, v):
 //: - O(precision + 桁数)
 fn writer_write_f64_fixed <(i32,f64,i32)*>()> (w, v, precision):
     let mut x <f64> v;
-    let zero <f64> f64_convert_i32_u 0;
+    let zero <f64> cast 0;
     let is_neg <bool> lt x zero;
     if:
         is_neg
@@ -382,7 +383,7 @@ fn writer_write_f64_fixed <(i32,f64,i32)*>()> (w, v, precision):
         else:
             ();
 
-    let int_part <i64> i64_trunc_f64_u x;
+    let int_part <i64> cast x;
     writer_write_u64 w int_part;
 
     if:
@@ -391,17 +392,17 @@ fn writer_write_f64_fixed <(i32,f64,i32)*>()> (w, v, precision):
             ()
         else:
             writer_put_u8 w 46;
-            let int_as_f64 <f64> f64_convert_i64_u int_part;
+            let int_as_f64 <f64> cast int_part;
             let mut frac <f64> sub x int_as_f64;
-            let ten <f64> f64_convert_i32_u 10;
+            let ten <f64> cast 10;
             let mut i <i32> 0;
             while lt i precision:
                 do:
                     let frac10 <f64> mul frac ten;
                     set frac frac10;
-                    let digit <i32> i32_trunc_f64_u frac;
+                    let digit <i32> cast frac;
                     writer_put_u8 w add 48 digit;
-                    let digit_f <f64> f64_convert_i32_u digit;
+                    let digit_f <f64> cast digit;
                     let next_frac <f64> sub frac digit_f;
                     set frac next_frac;
                     set i add i 1;
@@ -419,7 +420,7 @@ fn writer_write_f64 <(i32,f64)*>()> (w, v):
 //: 計算量:
 //: - O(precision + 桁数)
 fn writer_write_f32_fixed <(i32,f32,i32)*>()> (w, v, precision):
-    let v64 <f64> f64_promote_f32 v;
+    let v64 <f64> cast v;
     writer_write_f64_fixed w v64 precision
 
 //: writer_write_f32: f32 を小数点以下 6 桁で出力する

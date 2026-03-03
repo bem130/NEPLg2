@@ -151,14 +151,14 @@ let ans <i32> fenwick_sum_range f l r;
 fn mod_pow <(i64,i64,i64)->i64> (a, e, m):
     let mut x <i64> a;
     let mut k <i64> e;
-    let mut r <i64> i64_extend_i32_u 1;
-    while i64_lt_u i64_extend_i32_u 0 k:
+    let mut r <i64> cast 1;
+    while lt_u <i64> cast 0 k:
         do:
-            if i64_eq i64_and k i64_extend_i32_u 1 i64_extend_i32_u 1:
-                then set r i64_rem_u i64_mul r x m
+            if eq and k <i64> cast 1 <i64> cast 1:
+                then set r rem_u mul r x m
                 else ();
-            set x i64_rem_u i64_mul x x m;
-            set k i64_shr_u k i64_extend_i32_u 1;
+            set x rem_u mul x x m;
+            set k shr_u k <i64> cast 1;
     r
 ```
 

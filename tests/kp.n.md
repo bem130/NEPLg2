@@ -113,15 +113,16 @@ stdout: "13\n"
 #target std
 
 #import "core/math" as *
+#import "core/cast" as *
 #import "kp/kpread" as *
 #import "kp/kpwrite" as *
 
 fn ways <(i32)*>i64> (n):
     if le n 1:
-        then i64_extend_i32_u 1
+        then <i64> cast 1
         else:
-            let mut a <i64> i64_extend_i32_u 1;
-            let mut b <i64> i64_extend_i32_u 1;
+            let mut a <i64> cast 1;
+            let mut b <i64> cast 1;
             let mut i <i32> 2;
             while le i n:
                 do:
