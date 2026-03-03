@@ -653,7 +653,11 @@ fn mem_ptr_add <.T> <(MemPtr<.T>,i32)->MemPtr<.T>> (ptr, off):
     let raw <i32> mem_ptr_addr ptr;
     mem_ptr_wrap add raw off
 
-fn load_i32_ptr <(MemPtr<i32>)->Option<i32>> (p):
+//: load_i32: MemPtr<i32> から i32 を安全に読み出すオーバーロード
+//:
+//: 目的:
+//: - 無効ポインタを `Option::None` として扱います。
+fn load_i32 <(MemPtr<i32>)->Option<i32>> (p):
     let raw <i32> mem_ptr_addr p;
     if:
         lt raw 1
@@ -662,7 +666,11 @@ fn load_i32_ptr <(MemPtr<i32>)->Option<i32>> (p):
         else:
             Option<i32>::Some load_i32 raw
 
-fn store_i32_ptr <(MemPtr<i32>,i32)->Result<(),str>> (p, v):
+//: store_i32: MemPtr<i32> へ i32 を安全に書き込むオーバーロード
+//:
+//: 目的:
+//: - 無効ポインタを `Result::Err` として返し、未定義動作を避けます。
+fn store_i32 <(MemPtr<i32>,i32)->Result<(),str>> (p, v):
     let raw <i32> mem_ptr_addr p;
     if:
         lt raw 1
@@ -672,7 +680,11 @@ fn store_i32_ptr <(MemPtr<i32>,i32)->Result<(),str>> (p, v):
             store_i32 raw v
             Result<(),str>::Ok ()
 
-fn load_u8_ptr <(MemPtr<u8>)->Option<i32>> (p):
+//: load_u8: MemPtr<u8> から 1 バイトを安全に読み出すオーバーロード
+//:
+//: 目的:
+//: - 無効ポインタを `Option::None` として扱います。
+fn load_u8 <(MemPtr<u8>)->Option<i32>> (p):
     let raw <i32> mem_ptr_addr p;
     if:
         lt raw 1
@@ -681,7 +693,11 @@ fn load_u8_ptr <(MemPtr<u8>)->Option<i32>> (p):
         else:
             Option<i32>::Some load_u8 raw
 
-fn store_u8_ptr <(MemPtr<u8>,i32)->Result<(),str>> (p, v):
+//: store_u8: MemPtr<u8> へ 1 バイトを書き込む安全オーバーロード
+//:
+//: 目的:
+//: - 無効ポインタを `Result::Err` として返し、未定義動作を避けます。
+fn store_u8 <(MemPtr<u8>,i32)->Result<(),str>> (p, v):
     let raw <i32> mem_ptr_addr p;
     if:
         lt raw 1
@@ -690,6 +706,22 @@ fn store_u8_ptr <(MemPtr<u8>,i32)->Result<(),str>> (p, v):
         else:
             store_u8 raw v
             Result<(),str>::Ok ()
+
+//: load_i32_ptr: 互換エイリアス（`load_i32` の MemPtr オーバーロード）
+fn load_i32_ptr <(MemPtr<i32>)->Option<i32>> (p):
+    load_i32 p
+
+//: store_i32_ptr: 互換エイリアス（`store_i32` の MemPtr オーバーロード）
+fn store_i32_ptr <(MemPtr<i32>,i32)->Result<(),str>> (p, v):
+    store_i32 p v
+
+//: load_u8_ptr: 互換エイリアス（`load_u8` の MemPtr オーバーロード）
+fn load_u8_ptr <(MemPtr<u8>)->Option<i32>> (p):
+    load_u8 p
+
+//: store_u8_ptr: 互換エイリアス（`store_u8` の MemPtr オーバーロード）
+fn store_u8_ptr <(MemPtr<u8>,i32)->Result<(),str>> (p, v):
+    store_u8 p v
 
 //: size_of: 型のサイズを取得する
 //:

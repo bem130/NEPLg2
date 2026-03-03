@@ -1,3 +1,20 @@
+# 2026-03-04 作業メモ (フェーズD進行: core/mem の MemPtr load/store を標準名オーバーロード化)
+
+- 目的:
+  - `*_ptr` 接尾辞依存を減らし、`MemPtr` 利用時は標準名 `load_i32/store_i32/load_u8/store_u8` で書けるようにする。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `load_i32/store_i32/load_u8/store_u8` に `MemPtr` 引数版のオーバーロードを追加。
+    - 旧 `load_i32_ptr/store_i32_ptr/load_u8_ptr/store_u8_ptr` は互換エイリアス化。
+    - `MemPtr` オーバーロードは無効ポインタ時に `Option::None` / `Result::Err` を返す。
+- テスト:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-mem-overload-loadstore.json -j 15` -> `218/218 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-mem-loadstore-overload.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-mem-loadstore-overload.json -j 15` -> `262/262 pass`
+- 状況:
+  - `MemPtr` 利用コードは標準名で安全な load/store を呼べる状態になった。
+  - 次段は `alloc/realloc/dealloc` 側の公開名安全化を継続する。
+
 # 2026-03-04 作業メモ (フェーズD進行: kpread_core 解放経路の Result 化)
 
 - 目的:
