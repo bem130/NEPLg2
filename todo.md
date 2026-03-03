@@ -1,3 +1,62 @@
+2026-03-03 move/effect/memory 本格実装計画（最優先）
+
+実装方針
+- `doc/move_effect_spec.md` と `doc/memory_safety_compiler_design.md` を正として実装する。
+- 上流から順に修正する（型システム/effect判定 -> move_check -> stdlib -> tests）。
+- 間に合わせ修正を禁止し、失敗を `Result/Option` へ収束させる。
+- 旧API互換は維持しない。公開APIは安全版へ一本化する。
+
+フェーズA: effect規則のコンパイラ反映
+- `nepl-core/src/builtins.rs`
+  - `alloc/realloc/dealloc` の effect を `Pure` に変更。
+- `nepl-core/src/typecheck.rs`
+  - `entry` 強制 `Impure` 特例を削除し、宣言シグネチャどおりに判定。
+  - intrinsic / raw target body (`#wasm` / `#llvmir`) の effect 判定を一元テーブル化。
+  - I/O 系命令のみ pure 文脈で拒否する。
+- 完了条件:
+  - pure 関数からメモリ操作は許可される。
+  - pure 関数から I/O は拒否される（diag_id 付き）。
+
+フェーズB: move/borrow/copy/clone 規則の確定実装
+- `TypeCtx::is_copy` を構造的判定（tuple/struct/enum）へ拡張。
+- move_check に `Valid/Moved/PossiblyMoved/BorrowedShared/BorrowedUnique` の状態遷移を反映。
+- `Copy/Clone` 実装可否を trait 制約として検査する経路を追加。
+- `RegionToken` を非Copyとして扱い、消費後再利用を拒否する。
+- 完了条件:
+  - 分岐/ループ合流時の move 誤判定が解消される。
+  - token の二重消費/解放後利用が検出される。
+
+フェーズC: メモリ安全型モデル導入
+- `core/mem` に `MemPtr<T>` / `RegionToken` モデルを導入。
+- 公開APIから生 `i32` ポインタを段階的に除去。
+- `load/store` の境界/生存検査を `Result/Option` ベースで統一。
+- 完了条件:
+  - 公開関数シグネチャに生ポインタが残らない。
+  - OOB/UAF/double free が `Result::Err` またはコンパイルエラーで表現される。
+
+フェーズD: stdlib移行（mem/kpread/kpwrite 優先）
+- `_safe` を標準名に統一し、旧 unsafe/生API を削除。
+- `Scanner` / `Writer` のハンドル露出を隠蔽し、型安全APIへ一本化。
+- trait 境界（`MemReadable<T>`, `MemWritable<T>`, `RegionOwned`）を導入可能な箇所から適用。
+- 完了条件:
+  - `mem/kpread/kpwrite` の公開APIが Result/Option 前提で統一。
+  - 既存 examples/tests/tutorials が新APIへ更新済み。
+
+フェーズE: テスト・診断の固定化
+- 追加:
+  - `tests/move_effect.n.md`
+  - `tests/memory_safety.n.md`
+- 更新:
+  - `tests/overload.n.md`（型注釈/オーバーロード/effect混在）
+  - `tests/kp*.n.md`（Scanner/Writer 新API）
+- `compile_fail` は `diag_id` を必須化する。
+- 完了条件:
+  - 仕様に対応する回帰テストが揃い、失敗理由が診断IDで固定される。
+
+コミット方針
+- 各フェーズ完了時に1コミット（必要なら中間で2分割）。
+- コミット前に対象範囲テストを実行し、結果を `note.md` に記録。
+
 2026-02-22 今後の実装計画（未完了のみ）
 
 方針
