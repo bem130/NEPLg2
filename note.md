@@ -1,3 +1,19 @@
+# 2026-03-04 作業メモ (フェーズE前進: memory_safety 回帰追加)
+
+- 目的:
+  - `todo.md` フェーズEの追加項目 `tests/memory_safety.n.md` を先行で固定化する。
+- 変更:
+  - `tests/memory_safety.n.md` を新規追加。
+    - `alloc_ptr/load_i32_ptr/store_i32_ptr/dealloc_ptr` の正常系。
+    - 無効ポインタ `load` が `Option::None` を返す異常系。
+    - 無効ポインタ `store` が `Result::Err` を返す異常系。
+- テスト:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety.json -j 15` -> `211/211 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-full-after-memory-safety-tests.json -j 15` -> `723/723 pass`
+- 状況:
+  - `tests/memory_safety.n.md` 追加タスクは完了し、`todo.md` から削除済み。
+  - 次は `mem/kpread/kpwrite` の `_safe` なし安全API一本化と `_raw` 最終削除へ進む。
+
 # 2026-03-04 作業メモ (フェーズC着手: MemPtr のジェネリクス化)
 
 - 目的:

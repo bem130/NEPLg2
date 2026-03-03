@@ -30,7 +30,6 @@
 フェーズE: テスト・診断の固定化
 - 追加:
   - `tests/move_effect.n.md`
-  - `tests/memory_safety.n.md`
 - 更新:
   - `tests/overload.n.md`（型注釈/オーバーロード/effect混在）
   - `tests/kp*.n.md`（Scanner/Writer 新API）
