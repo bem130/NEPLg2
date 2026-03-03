@@ -14,8 +14,7 @@ stdout: "10\n20\n30\n"
 #import "std/stdio" as *
 
 fn main <()*>()> ():
-    let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <Scanner> sc_obj;
+    let sc <Scanner> unwrap_ok scanner_new;
     println_i32 scanner_read_i32 sc;
     println_i32 scanner_read_i32 sc;
     println_i32 scanner_read_i32 sc;
@@ -58,8 +57,7 @@ stdout: "6\n14\n15\n"
 #import "kp/kpwrite" as *
 
 fn main <()*>()> ():
-    let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <Scanner> sc_obj;
+    let sc <Scanner> unwrap_ok scanner_new;
     let n <i32> scanner_read_i32 sc;
     let q <i32> scanner_read_i32 sc;
 
@@ -136,8 +134,7 @@ fn ways <(i32)*>i64> (n):
             b
 
 fn main <()*>()> ():
-    let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <Scanner> sc_obj;
+    let sc <Scanner> unwrap_ok scanner_new;
     let n <i32> scanner_read_i32 sc;
     let ans <i64> ways n;
     let mut w <Writer> unwrap_ok writer_new;
@@ -161,8 +158,7 @@ stdout: "3.500000\n-2.250000\n100.000000\n"
 #import "kp/kpwrite" as *
 
 fn main <()*>()> ():
-    let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <Scanner> sc_obj;
+    let sc <Scanner> unwrap_ok scanner_new;
     let a <f64> scanner_read_f64 sc;
     let b <f64> scanner_read_f64 sc;
     let c <f64> scanner_read_f64 sc;
@@ -188,8 +184,7 @@ stdout: "1.250000\n"
 #import "kp/kpwrite" as *
 
 fn main <()*>()> ():
-    let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <Scanner> sc_obj;
+    let sc <Scanner> unwrap_ok scanner_new;
     let v <f32> scanner_read_f32 sc;
     let mut w <Writer> unwrap_ok writer_new;
     set w writer_write_f32_ln w v;

@@ -1,3 +1,30 @@
+# 2026-03-04 作業メモ (フェーズD進行: Scanner/Writer の直接利用へ下流移行)
+
+- 目的:
+  - `kpread/kpwrite` 公開APIの安全型利用を下流へ浸透させ、生ハンドル由来の中間束縛を減らす。
+- 変更:
+  - `tests/kp.n.md`
+  - `tests/kp_i64.n.md`
+  - `tests/stdin.n.md`
+  - `tutorials/getting_started/22_competitive_io_and_arith.n.md`
+  - `tutorials/getting_started/24_competitive_dp_basics.n.md`
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+  - `tutorials/getting_started/27_competitive_algorithms_catalog.n.md`
+  - `examples/kp_fizzbuzz.nepl`
+  - それぞれ `let sc_obj <Scanner> unwrap_ok scanner_new; let sc <Scanner> sc_obj;` を
+    `let sc <Scanner> unwrap_ok scanner_new;` へ統一。
+  - カタログ内の `sc_handle` も削除し、`Scanner` を直接渡す形へ統一。
+- 根本原因:
+  - 公開APIが安全型で整っていても、下流コードに旧来の二段束縛が残ると、生ハンドル前提へ戻しやすくなる。
+  - 先に利用側の書き方を揃えることで、次段の公開面整理（ハンドル版隔離）を安全に進められる。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md --no-tree -o /tmp/tests-kp-typed-usage.json -j 15` -> `225/225 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-scanner-writer-typed-direct.json -j 15` -> `729/729 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-scanner-writer-typed-direct.json -j 15` -> `262/262 pass`
+- 状況:
+  - 下流の主要利用箇所は `Scanner/Writer` 直接利用へ移行済み。
+  - 次段で `kpread/kpwrite` の i32 ハンドル受け取りオーバーロードの公開面整理を継続する。
+
 # 2026-03-04 作業メモ (フェーズD進行: `scanner_new` / `writer_new` の曖昧オーバーロード根治)
 
 - 目的:

@@ -22,8 +22,7 @@ stdout: "6\n14\n15\n"
 #import "kp/kpwrite" as *
 
 fn main <()*> ()> ():
-    let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <Scanner> sc_obj;
+    let sc <Scanner> unwrap_ok scanner_new;
     let n <i32> scanner_read_i32 sc;
     let q <i32> scanner_read_i32 sc;
 
