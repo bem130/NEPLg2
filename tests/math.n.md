@@ -59,10 +59,10 @@ fn main <()->i32> ():
     let three64 <i64> cast 3;
     let two64 <i64> cast 2;
     let c <i128> add a b;
-    let d <i128> sub c cast three64;
-    let e <i128> mul d cast two64;
+    let d <i128> sub c <i128> cast three64;
+    let e <i128> mul d <i128> cast two64;
     let out64 <i64> cast e;
-    cast out64
+    <i32> cast out64
 ```
 
 ## cast_overload_numeric_roundtrip

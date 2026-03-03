@@ -5258,3 +5258,23 @@
 - 差分方針:
   - 現時点は「非破壊での安全化足場（typed API 併設）」まで。
   - 公開 API を完全に専用型へ移行するには、move 規則に沿ったハンドル再束縛パターン（consume/return）を標準化してから段階移行する。
+
+# 2026-03-03 作業メモ (オーバーロード/シャドーイング根本修正)
+- 目的:
+  - `add add 1` など同名の値束縛と関数束縛が共存するケース、内外同名関数（同一シグネチャ）での `ambiguous overload` を解消する。
+- 根本原因:
+  - 先頭位置の識別子でオーバーロード遅延を行う際、値束縛 (`i32` など) へのフォールバックが先に走り、呼び出し式が値として解釈され `D3016` になっていた。
+  - 候補が複数あるとき、同一シグネチャ（実質シャドー）の候補も曖昧扱いされていた。
+- 修正:
+  - `nepl-core/src/typecheck.rs`
+    - 先頭位置かつ後続トークンありの場合は、オーバーロード遅延で値束縛へ落とさないよう条件を修正。
+    - 候補選別後にシグネチャ重複を除去し、同一シグネチャの内外候補は内側を優先するよう修正。
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_read_i64` / `scanner_read_f64` の符号フラグ変数名を `neg` から `is_neg` に統一し、`neg` 関数との衝突を解消。
+  - `tests/math.n.md`
+    - `cast` が曖昧になる位置に `<i128>` / `<i32>` 注釈を付与（現行仕様に合わせた明示）。
+- 検証:
+  - `NO_COLOR=false trunk build` 成功
+  - `node nodesrc/tests.js -i stdlib/kp/kpgraph.nepl -o /tmp/kpgraph_focus.json -j 16` -> `223/223 pass`
+  - `node nodesrc/tests.js -i tests/math.n.md -i tests/shadowing.n.md -o /tmp/math_shadow_after_fix.json -j 16` -> `254/254 pass`
+  - `node nodesrc/tests.js -i tests -o /tmp/tests-current.json -j 16` -> `718/718 pass`

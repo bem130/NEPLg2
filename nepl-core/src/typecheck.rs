@@ -2429,55 +2429,32 @@ impl<'a> BlockChecker<'a> {
                 Stmt::Directive(_) => {}
                 Stmt::FnAlias(_) => {}
                 Stmt::FnDef(f) => {
-                    let (f_ty, captures) = {
-                        let funcs: Vec<&Binding> = self.env.lookup_all_callables(&f.name.name);
-                        if funcs.is_empty() {
-                            continue;
+                    // capture 型はホイスト時点では未確定になり得るため、
+                    // 実チェック時に現在の環境から再計算する。
+                    let captures = self.collect_nested_fn_captures(f);
+                    let mut f_ty = type_from_expr(self.ctx, self.labels, &f.signature);
+                    if let TypeKind::Function {
+                        type_params,
+                        params,
+                        result,
+                        effect,
+                    } = self.ctx.get(f_ty)
+                    {
+                        if !captures.is_empty() {
+                            let mut lifted_params =
+                                captures.iter().map(|(_, t)| *t).collect::<Vec<_>>();
+                            lifted_params.extend(params.iter().copied());
+                            f_ty =
+                                self.ctx
+                                    .function(type_params.clone(), lifted_params, result, effect);
                         }
-                        if funcs.len() == 1 {
-                            let caps = match &funcs[0].kind {
-                                BindingKind::Func { captures, .. } => captures.clone(),
-                                _ => Vec::new(),
-                            };
-                            (funcs[0].ty, caps)
-                        } else {
-                            let mut tmp_labels = LabelEnv::new();
-                            for tp in &f.type_params {
-                                let tv = self.ctx.fresh_var(Some(tp.name.name.clone()));
-                                tmp_labels.insert(tp.name.name.clone(), tv);
-                            }
-                            let sig_ty = type_from_expr(self.ctx, &mut tmp_labels, &f.signature);
-                            let sig_key = function_signature_string(self.ctx, sig_ty);
-                            let mut matched: Option<TypeId> = None;
-                            for binding in &funcs {
-                                if function_signature_string(self.ctx, binding.ty) == sig_key {
-                                    matched = Some(binding.ty);
-                                    break;
-                                }
-                            }
-                            match matched {
-                                Some(ty) => {
-                                    let mut caps = Vec::new();
-                                    for b in &funcs {
-                                        if b.ty == ty {
-                                            if let BindingKind::Func { captures, .. } = &b.kind {
-                                                caps = captures.clone();
-                                            }
-                                            break;
-                                        }
-                                    }
-                                    (ty, caps)
-                                }
-                                None => {
-                                    self.diagnostics.push(Diagnostic::error(
-                                        "function signature does not match any overload",
-                                        f.name.span,
-                                    ));
-                                    continue;
-                                }
-                            }
-                        }
-                    };
+                    } else {
+                        self.diagnostics.push(Diagnostic::error(
+                            "function signature must be a function type",
+                            f.name.span,
+                        ));
+                        continue;
+                    }
                     let mut nested_bounds = BTreeMap::new();
                     if let TypeKind::Function { type_params, .. } = self.ctx.get(f_ty) {
                         for (p_node, p_id) in f.type_params.iter().zip(type_params.iter()) {
@@ -2487,6 +2464,13 @@ impl<'a> BlockChecker<'a> {
                             }
                         }
                     }
+                    let _ = self.env.update_local_function_binding(
+                        self.ctx,
+                        &f.name.name,
+                        f.name.span,
+                        f_ty,
+                        captures.clone(),
+                    );
                     match check_function(
                         f,
                         f_ty,
@@ -2759,7 +2743,10 @@ impl<'a> BlockChecker<'a> {
                                     let should_delay_overload_resolution = !*forced_value
                                         && matches!(binding.kind, BindingKind::Func { .. })
                                         && type_args.is_empty()
-                                        && self.env.lookup_all_callables(&id.name).len() > 1;
+                                        && self.env.lookup_all_callables(&id.name).len() > 1
+                                        // 先頭位置で後続トークンがある場合は
+                                        // 呼び出しとして扱うため、値束縛へのフォールバックを避ける。
+                                        && !(stack.is_empty() && expr.items.get(idx + 1).is_some());
                                     if should_delay_overload_resolution {
                                         None
                                     } else {
@@ -5101,6 +5088,21 @@ impl<'a> BlockChecker<'a> {
                         return None;
                     }
                     if candidates.len() > 1 {
+                        let mut sig_seen: BTreeSet<String> = BTreeSet::new();
+                        let mut dedup: Vec<&Binding> = Vec::new();
+                        for c in candidates {
+                            let sig = function_signature_string(self.ctx, c.ty);
+                            if sig_seen.insert(sig) {
+                                dedup.push(c);
+                            }
+                        }
+                        if dedup.len() == 1 {
+                            candidates = dedup;
+                        } else {
+                            candidates = dedup;
+                        }
+                    }
+                    if candidates.len() > 1 {
                         self.diagnostics.push(Diagnostic::error(
                             "ambiguous overload",
                             func.expr.span,
@@ -5313,10 +5315,15 @@ impl<'a> BlockChecker<'a> {
                     };
                     let mut final_args: Vec<HirExpr> = Vec::new();
                     for (cap_name, cap_ty) in captures.iter() {
+                        let resolved_cap_ty = self
+                            .env
+                            .lookup_value(cap_name)
+                            .map(|b| self.ctx.resolve_id(b.ty))
+                            .unwrap_or(*cap_ty);
                         final_args.push(HirExpr {
-                            ty: *cap_ty,
+                            ty: resolved_cap_ty,
                             kind: HirExprKind::Var(cap_name.clone()),
-                                span: func.expr.span,
+                            span: func.expr.span,
                         });
                     }
                     for (arg, param_ty) in args.iter().zip(user_params.iter()) {
@@ -5800,6 +5807,35 @@ impl Env {
 
     fn lookup_callable(&self, name: &str) -> Option<&Binding> {
         self.lookup_all_callables(name).into_iter().next()
+    }
+
+    fn update_local_function_binding(
+        &mut self,
+        ctx: &TypeCtx,
+        name: &str,
+        span: Span,
+        ty: TypeId,
+        captures_new: Vec<(String, TypeId)>,
+    ) -> bool {
+        for scope in self.scopes.iter_mut().rev() {
+            for binding in scope.callables.iter_mut().rev() {
+                if binding.name != name || binding.span != span {
+                    continue;
+                }
+                binding.ty = ty;
+                if let BindingKind::Func { captures, arity, .. } = &mut binding.kind {
+                    *captures = captures_new.clone();
+                    if let TypeKind::Function { params, .. } = ctx.get(ty) {
+                        let cap_len = captures.len();
+                        if params.len() >= cap_len {
+                            *arity = params.len() - cap_len;
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+        false
     }
 
     /// 同名候補から型シグネチャ一致の関数シンボルを返す。
