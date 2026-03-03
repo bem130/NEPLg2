@@ -56,14 +56,14 @@ fn main <()*> ()> ():
                 eq input_len 0
                 then:
                     // read_line still allocates a buffer; free it before exit.
-                    // NOTE: stdlib read_line uses cap=1024 => alloc(4+cap)=1028 bytes.
-                    dealloc input 1028;
+                    // NOTE: stdlib read_line uses cap=1024 => alloc_raw(4+cap)=1028 bytes.
+                    dealloc_raw input 1028;
                     print ansi_bold;
                     println_color ansi_yellow "bye";
                     set running false;
                     ()
                 else:
-                    let stack <i32> alloc mul 16 4;
+                    let stack <i32> alloc_raw mul 16 4;
 
                     let mut sp <i32> 0;
                     let mut a <i32> 0;
@@ -221,8 +221,8 @@ fn main <()*> ()> ():
                             ();
 
                     // Free per-line allocations.
-                    dealloc stack mul 16 4;
-                    // NOTE: stdlib read_line uses cap=1024 => alloc(4+cap)=1028 bytes.
-                    dealloc input 1028;
+                    dealloc_raw stack mul 16 4;
+                    // NOTE: stdlib read_line uses cap=1024 => alloc_raw(4+cap)=1028 bytes.
+                    dealloc_raw input 1028;
 
     ()

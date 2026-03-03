@@ -64,7 +64,7 @@ fn main <()*>()> ():
     let q <i32> scanner_read_i32 sc;
 
     let pref_len <i32> add n 1;
-    let pref <i32> alloc mul pref_len 4;
+    let pref <i32> alloc_raw mul pref_len 4;
     store_i32 pref 0;
 
     let mut i <i32> 1;
@@ -101,7 +101,7 @@ fn main <()*>()> ():
 
     set w writer_flush w;
     writer_free w;
-    dealloc pref mul pref_len 4;
+    dealloc_raw pref mul pref_len 4;
 ```
 
 ## kpread_to_kpwrite_i64
@@ -213,7 +213,7 @@ stdout: "2 3\n1 2 5\n"
 
 fn main <()*>()> ():
     let len <i32> 6;
-    let data <i32> alloc mul len 4;
+    let data <i32> alloc_raw mul len 4;
     store_i32 add data 0 1;
     store_i32 add data 4 1;
     store_i32 add data 8 2;
@@ -238,5 +238,5 @@ fn main <()*>()> ():
             print_i32 load_i32 ptr;
             set i add i 1;
     println "";
-    dealloc data mul len 4;
+    dealloc_raw data mul len 4;
 ```

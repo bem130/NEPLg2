@@ -27,7 +27,7 @@
 //:| #import "std/stdio" as *
 //: fn main <()*> ()> ():
 //:     let len <i32> 5;
-//:     let data <i32> alloc mul len 4;
+//:     let data <i32> alloc_raw mul len 4;
 //:     store_i32 add data 0 1;
 //:     store_i32 add data 4 3;
 //:     store_i32 add data 8 3;
@@ -38,7 +38,7 @@
 //:     print_i32 upper_bound_i32 data len 3;
 //:     print " ";
 //:     println_i32 if contains_i32 data len 3 then 1 else 0;
-//:     dealloc data mul len 4
+//:     dealloc_raw data mul len 4
 //: ```
 
 //: lower_bound_i32: `x` 以上が最初に現れる位置を返す
@@ -112,7 +112,7 @@ fn contains_i32 <(i32,i32,i32)*>bool> (data, len, x):
 //:| #import "std/stdio" as *
 //: fn main <()*> ()> ():
 //:     let len <i32> 6;
-//:     let data <i32> alloc mul len 4;
+//:     let data <i32> alloc_raw mul len 4;
 //:     store_i32 add data 0 1;
 //:     store_i32 add data 4 2;
 //:     store_i32 add data 8 2;
@@ -120,7 +120,7 @@ fn contains_i32 <(i32,i32,i32)*>bool> (data, len, x):
 //:     store_i32 add data 16 5;
 //:     store_i32 add data 20 9;
 //:     println_i32 count_equal_range_i32 data len 2;
-//:     dealloc data mul len 4
+//:     dealloc_raw data mul len 4
 //: ```
 fn count_equal_range_i32 <(i32,i32,i32)*>i32> (data, len, x):
     let lb <i32> lower_bound_i32 data len x;
@@ -154,7 +154,7 @@ fn count_equal_range_i32 <(i32,i32,i32)*>i32> (data, len, x):
 //:| #import "std/stdio" as *
 //: fn main <()*> ()> ():
 //:     let len <i32> 7;
-//:     let data <i32> alloc mul len 4;
+//:     let data <i32> alloc_raw mul len 4;
 //:     store_i32 add data 0 1;
 //:     store_i32 add data 4 1;
 //:     store_i32 add data 8 2;
@@ -173,7 +173,7 @@ fn count_equal_range_i32 <(i32,i32,i32)*>i32> (data, len, x):
 //:             print_i32 load_i32 add data mul i 4;
 //:             set i add i 1;
 //:     println "";
-//:     dealloc data mul len 4
+//:     dealloc_raw data mul len 4
 //: ```
 fn unique_sorted_i32 <(i32,i32)*>i32> (data, len):
     if:

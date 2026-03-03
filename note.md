@@ -1,3 +1,28 @@
+# 2026-03-04 作業メモ (フェーズD進行: `alloc` 安全API標準名化の回帰復旧)
+
+- 目的:
+  - `core/mem` の `alloc/realloc/dealloc` を `Result` 返却へ標準名化した変更に対して、下流の `kp`/tests/tutorials の破損を上流原因から復旧する。
+- 変更:
+  - `stdlib/kp/kpprefix.nepl`
+    - doctest の `alloc/dealloc` を `alloc_raw/dealloc_raw` へ更新。
+  - `stdlib/kp/kpsearch.nepl`
+    - doctest の `alloc/dealloc` を `alloc_raw/dealloc_raw` へ更新。
+  - `tests/capacity_stack.n.md`
+  - `tests/sort.n.md`
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+  - `examples/tui_editor/editor_fs.nepl`
+    - 置換ミスで壊れていた `#import "alloc_raw/...` を `#import "alloc/...` へ復旧。
+- 根本原因:
+  - 生メモリAPI移行の一括置換時に、関数呼び出しだけでなく import パス文字列まで `alloc_raw` に書き換わっていた。
+  - `alloc` が `Result` 返却になった後も、`kp` doctest の一部が `i32` 前提の旧記述を保持していた。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/core/mem.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/memory_safety.n.md -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md --no-tree -o /tmp/tests-mem-kp-safe-api-switch.json -j 15` -> `233/233 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-mem-kp-safe-api-switch-r2.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-mem-kp-safe-api-switch-r2.json -j 15` -> `262/262 pass`
+- 状況:
+  - `alloc` 安全API標準名化の現行差分は、`tests + stdlib + tutorials` で回帰通過。
+  - 次段は `todo.md` のフェーズD残件（公開面からの raw 露出整理）を継続する。
+
 # 2026-03-04 作業メモ (フェーズD進行: vec の `alloc/realloc/dealloc` を `*_raw` へ直接移行)
 
 - 目的:

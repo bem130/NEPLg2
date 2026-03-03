@@ -75,7 +75,7 @@ fn main <()->i32> ():
             0
 ```
 
-## alloc_result/dealloc_result の基本動作
+## alloc/dealloc の基本動作
 
 neplg2:test
 ret: 1
@@ -88,20 +88,20 @@ ret: 1
 #import "core/result" as *
 
 fn main <()->i32> ():
-    match alloc_result 8:
+    match alloc 8:
         Result::Err _e:
             0
         Result::Ok p:
             store_i32 p 77
             let ok <i32> if eq load_i32 p 77 1 0
-            match dealloc_result p 8:
+            match dealloc p 8:
                 Result::Err _e:
                     0
                 Result::Ok _:
                     ok
 ```
 
-## dealloc_result は無効引数を Err で返す
+## dealloc は無効引数を Err で返す
 
 neplg2:test
 ret: 1
@@ -114,7 +114,7 @@ ret: 1
 #import "core/result" as *
 
 fn main <()->i32> ():
-    match dealloc_result 0 4:
+    match dealloc 0 4:
         Result::Err _e:
             1
         Result::Ok _:

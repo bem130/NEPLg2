@@ -21,10 +21,10 @@
 //: ```
 fn scanner_new_impl <()*>Result<i32,str>> ():
     let mut cap <i32> 65536;
-    let buf_res <Result<i32,str>> alloc_result cap;
+    let buf_res <Result<i32,str>> alloc cap;
     match buf_res:
         Result::Err _:
-            let sc0_res <Result<i32,str>> alloc_result 12;
+            let sc0_res <Result<i32,str>> alloc 12;
             match sc0_res:
                 Result::Err _:
                     Result<i32,str>::Err "kpread_core.scanner header alloc failed"
@@ -35,21 +35,21 @@ fn scanner_new_impl <()*>Result<i32,str>> ():
                     Result<i32,str>::Ok sc0
         Result::Ok buf0:
             let mut buf <i32> buf0;
-            let iov_res <Result<i32,str>> alloc_result 8;
+            let iov_res <Result<i32,str>> alloc 8;
             match iov_res:
                 Result::Err _:
                     dealloc_raw buf cap;
                     Result<i32,str>::Err "kpread_core.iov alloc failed"
                 Result::Ok iov:
-                    let nread_res <Result<i32,str>> alloc_result 4;
+                    let nread_res <Result<i32,str>> alloc 4;
                     match nread_res:
                         Result::Err _:
-                            match dealloc_result iov 8:
+                            match dealloc iov 8:
                                 Result::Ok _:
                                     ()
                                 Result::Err _e:
                                     ();
-                            match dealloc_result buf cap:
+                            match dealloc buf cap:
                                 Result::Ok _:
                                     ()
                                 Result::Err _e:
@@ -66,7 +66,7 @@ fn scanner_new_impl <()*>Result<i32,str>> ():
                                         eq read_len cap
                                         then:
                                             let new_cap <i32> mul cap 2;
-                                            let new_buf_res <Result<i32,str>> realloc_result buf cap new_cap;
+                                            let new_buf_res <Result<i32,str>> realloc buf cap new_cap;
                                             match new_buf_res:
                                                 Result::Ok new_buf:
                                                     set buf new_buf;
@@ -104,37 +104,37 @@ fn scanner_new_impl <()*>Result<i32,str>> ():
                             if:
                                 eq alloc_failed 1
                                 then:
-                                    match dealloc_result iov 8:
+                                    match dealloc iov 8:
                                         Result::Ok _:
                                             ()
                                         Result::Err _e:
                                             ();
-                                    match dealloc_result nread_ptr 4:
+                                    match dealloc nread_ptr 4:
                                         Result::Ok _:
                                             ()
                                         Result::Err _e:
                                             ();
-                                    match dealloc_result buf cap:
+                                    match dealloc buf cap:
                                         Result::Ok _:
                                             ()
                                         Result::Err _e:
                                             ();
                                     Result<i32,str>::Err "kpread_core.realloc failed"
                                 else:
-                                    let sc_res <Result<i32,str>> alloc_result 12;
+                                    let sc_res <Result<i32,str>> alloc 12;
                                     match sc_res:
                                         Result::Err _:
-                                            match dealloc_result iov 8:
+                                            match dealloc iov 8:
                                                 Result::Ok _:
                                                     ()
                                                 Result::Err _e:
                                                     ();
-                                            match dealloc_result nread_ptr 4:
+                                            match dealloc nread_ptr 4:
                                                 Result::Ok _:
                                                     ()
                                                 Result::Err _e:
                                                     ();
-                                            match dealloc_result buf cap:
+                                            match dealloc buf cap:
                                                 Result::Ok _:
                                                     ()
                                                 Result::Err _e:
@@ -144,12 +144,12 @@ fn scanner_new_impl <()*>Result<i32,str>> ():
                                             store_i32 sc buf;
                                             store_i32 add sc 4 read_len;
                                             store_i32 add sc 8 0;
-                                            match dealloc_result iov 8:
+                                            match dealloc iov 8:
                                                 Result::Ok _:
                                                     ()
                                                 Result::Err _e:
                                                     ();
-                                            match dealloc_result nread_ptr 4:
+                                            match dealloc nread_ptr 4:
                                                 Result::Ok _:
                                                     ()
                                                 Result::Err _e:

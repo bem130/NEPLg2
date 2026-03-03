@@ -12,10 +12,10 @@ ret: 123
 #import "core/mem" as *
 
 fn compute <()->i32> ():
-    let p <i32> alloc 4
+    let p <i32> alloc_raw 4
     store_i32 p 123
     let v <i32> load_i32 p
-    dealloc p 4
+    dealloc_raw p 4
     v
 
 fn main <()->i32> ():

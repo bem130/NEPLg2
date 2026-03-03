@@ -77,7 +77,7 @@ ret: 1535
 fn main <()->i32> ():
     let n <i32> 1024;
     let bytes <i32> mul n 4;
-    let p <i32> alloc bytes;
+    let p <i32> alloc_raw bytes;
 
     let mut i <i32> 0;
     while lt i n:
@@ -89,7 +89,7 @@ fn main <()->i32> ():
     let a <i32> load_i32 p;
     let b <i32> load_i32 add p mul 512 4;
     let c <i32> load_i32 add p mul 1023 4;
-    dealloc p bytes;
+    dealloc_raw p bytes;
     add add a b c
 ```
 

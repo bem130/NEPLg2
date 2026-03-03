@@ -47,7 +47,7 @@ fn writer_try_free <(i32,i32)*>()> (ptr, size):
     if:
         lt 0 ptr
         then:
-            match dealloc_result ptr size:
+            match dealloc ptr size:
                 Result::Ok _:
                     ()
                 Result::Err _e:
@@ -63,15 +63,15 @@ fn writer_try_free <(i32,i32)*>()> (ptr, size):
 //: 注意:
 //: - すべて失敗した場合は `Result::Err` を返します。
 fn writer_alloc_buf <()*>Result<WriterBuf,str>> ():
-    match alloc_result 4096:
+    match alloc 4096:
         Result::Ok p0:
             Result<WriterBuf,str>::Ok WriterBuf p0 4096
         Result::Err _e0:
-            match alloc_result 1024:
+            match alloc 1024:
                 Result::Ok p1:
                     Result<WriterBuf,str>::Ok WriterBuf p1 1024
                 Result::Err _e1:
-                    match alloc_result 256:
+                    match alloc 256:
                         Result::Ok p2:
                             Result<WriterBuf,str>::Ok WriterBuf p2 256
                         Result::Err _e2:
@@ -84,18 +84,18 @@ fn writer_new_raw <()*>Result<i32,str>> ():
         Result::Ok b:
             let buf <i32> get b "ptr";
             let cap <i32> get b "cap";
-            match alloc_result 8:
+            match alloc 8:
                 Result::Err _e:
                     writer_try_free buf cap;
                     Result<i32,str>::Err "kpwrite.writer_new iov alloc failed"
                 Result::Ok iov:
-                    match alloc_result 4:
+                    match alloc 4:
                         Result::Err _e:
                             writer_try_free iov 8;
                             writer_try_free buf cap;
                             Result<i32,str>::Err "kpwrite.writer_new nw alloc failed"
                         Result::Ok nw:
-                            match alloc_result 20:
+                            match alloc 20:
                                 Result::Err _e:
                                     writer_try_free nw 4;
                                     writer_try_free iov 8;

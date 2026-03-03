@@ -61,7 +61,7 @@ fn lower_bound_i32 <(i32,i32,i32)*>i32> (data, len, x):
 |
 fn main <()*>()> ():
     let len <i32> 4;
-    let data <i32> alloc mul len 4;
+    let data <i32> alloc_raw mul len 4;
     store_i32 add data 0 1;
     store_i32 add data 4 3;
     store_i32 add data 8 3;
@@ -73,7 +73,7 @@ fn main <()*>()> ():
     print " ";
     println_i32 lower_bound_i32 data len 8;
 
-    dealloc data mul len 4;
+    dealloc_raw data mul len 4;
 ```
 
 ## 二分探索版 `lower_bound`（本番向け）
@@ -109,7 +109,7 @@ fn lower_bound_i32_bin <(i32,i32,i32)*>i32> (data, len, x):
 |
 fn main <()*>()> ():
     let len <i32> 4;
-    let data <i32> alloc mul len 4;
+    let data <i32> alloc_raw mul len 4;
     store_i32 add data 0 1;
     store_i32 add data 4 3;
     store_i32 add data 8 3;
@@ -121,5 +121,5 @@ fn main <()*>()> ():
     print " ";
     println_i32 lower_bound_i32_bin data len 8;
 
-    dealloc data mul len 4
+    dealloc_raw data mul len 4
 ```

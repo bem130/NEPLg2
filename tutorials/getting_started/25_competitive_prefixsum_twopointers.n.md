@@ -28,7 +28,7 @@ fn main <()*> ()> ():
     let q <i32> scanner_read_i32 sc;
 
     let pref_len <i32> add n 1;
-    let pref <i32> alloc mul pref_len 4;
+    let pref <i32> alloc_raw mul pref_len 4;
     store_i32 pref 0;
 
     let mut i <i32> 1;
@@ -62,7 +62,7 @@ fn main <()*> ()> ():
 
     set w writer_flush w;
     writer_free w;
-    dealloc pref mul pref_len 4
+    dealloc_raw pref mul pref_len 4
 ```
 
 ## two pointers で条件を満たす部分配列数を数える
@@ -121,7 +121,7 @@ fn count_subarrays_leq_s <(i32,i32,i32)*>i32> (data, n, s):
 |
 fn main <()*> ()> ():
     let n <i32> 4;
-    let data <i32> alloc mul n 4;
+    let data <i32> alloc_raw mul n 4;
     store_i32 add data 0 1;
     store_i32 add data 4 2;
     store_i32 add data 8 3;
@@ -129,5 +129,5 @@ fn main <()*> ()> ():
 
     let ans <i32> count_subarrays_leq_s data n 5;
     println_i32 ans;
-    dealloc data mul n 4
+    dealloc_raw data mul n 4
 ```

@@ -40,11 +40,11 @@ ret: 0
 #import "core/mem" as *
 
 fn main <()->i32> ():
-    let p <i32> alloc 8;
+    let p <i32> alloc_raw 8;
     let v <i64> add <i64> cast 12345 <i64> cast 67890;
     store<i64> p v;
     let got <i64> load<i64> p;
-    dealloc p 8;
+    dealloc_raw p 8;
     if eq got v 0 1
 ```
 
@@ -61,11 +61,11 @@ ret: 0
 #import "core/mem" as *
 
 fn main <()->i32> ():
-    let p <i32> alloc 8;
+    let p <i32> alloc_raw 8;
     let v <f64> cast 42;
     store<f64> p v;
     let got <f64> load<f64> p;
-    dealloc p 8;
+    dealloc_raw p 8;
     if eq got v 0 1
 ```
 
