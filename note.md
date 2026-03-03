@@ -5014,3 +5014,225 @@
   - `node tests/tree/run.js` -> `18/18 pass`
   - `node nodesrc/tests.js -i tests/if.n.md -i tests/while.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-if-while-diag.json -j 2` -> `170/170 pass`
   - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual -j 2` -> `1876/1876 pass`
+
+# 2026-03-03 作業メモ (prefix 廃止移行: math/kp/stdio の入れ子式を手修正)
+- 目的:
+  - `i32_` 等 prefix 廃止方針に合わせて、曖昧な入れ子 prefix 呼び出しを手作業で分解し、型注釈+オーバーロード解決で通る形へ移行する。
+- 根本原因:
+  - 旧式の `add a add b c` / `store_u8 add buf add off i ...` 形式が、prefix 廃止途中のオーバーロード解決で `no matching overload` を誘発。
+  - 一部はローカル変数名 `neg` が関数 `neg` と衝突して誤解決を発生。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - `u128_add/sub`, `i128_add/sub`, `u64_mul_wide`, `i128_mul` の入れ子式を段階変数に分解。
+    - `add/sub/mul` の `i128` オーバーロードを追加。
+    - `u8` 系 (`add/sub/mul/div_u/rem_u/eq/ne/lt_u/le_u/gt_u/ge_u`) の prefix なしオーバーロードを追加。
+  - `stdlib/core/mem.nepl`
+    - `align8` の入れ子算術を分解。
+  - `stdlib/alloc/string.nepl`
+    - 数値パース/文字列化の入れ子式を段階変数に分解。
+    - `neg` 変数と `neg` 関数の衝突箇所を `sub 0 x` 方式に置換。
+  - `stdlib/std/stdio.nepl`
+    - `read_line` / `print_i32` 周辺のポインタ計算を段階変数に分解。
+  - `stdlib/kp/kpread.nepl`, `stdlib/kp/kpwrite.nepl`, `stdlib/kp/kpsearch.nepl`
+    - ポインタ計算・桁処理・二分探索/unique処理の入れ子式を段階変数に分解。
+  - `tests/math.n.md`, `tests/numerics.n.md`, `tests/overload.n.md`, `tests/typeannot.n.md`, `tests/kp.n.md`
+    - 新規約（prefix なし + 必要箇所の型注釈/段階変数）に更新。
+- 検証:
+  - `node nodesrc/tests.js -i tests/math.n.md -i tests/numerics.n.md -i tests/overload.n.md -i tests/typeannot.n.md -i tests/kp.n.md -i tests/intrinsic.n.md --no-stdlib --runner wasm --assert-io --no-tree -o /tmp/tests-prefix-migration-focus.json -j 1`
+    - `59/59 pass`
+
+# 2026-03-03 作業メモ (prefix廃止移行: cast 記法統一の継続)
+- 方針:
+  - `cast<T>` は使わず、`<T> cast expr`（または `let x <T> cast expr`）に統一。
+  - `i32_`/`i64_` など prefix 呼び出しの削減を、呼び出し側から段階的に進める。
+- 実装:
+  - `stdlib/kp/kpwrite.nepl`: 変換呼び出しを `cast` 形式へ更新。
+  - `stdlib/kp/kpread.nepl`: u64/i64/f64/f32 読み取り系の変換を `cast` 形式へ更新。
+  - `stdlib/std/fs.nepl`, `stdlib/std/env/cliarg.nepl`: syscall 引数変換を `cast` 形式へ更新。
+  - `stdlib/alloc/string.nepl`: `from_i64`/`to_i64`/`from_f64`/`to_f64`/`from_f32`/`to_f32` の変換を `cast` 形式へ更新。
+  - `stdlib/std/test.nepl`: `test_str_eq_loop` の `add a add 4 i` 形を `off` 先計算へ変更し、オーバーロード解決失敗を根本回避。
+  - `tests/kp.n.md`, `tests/intrinsic.n.md`, `tutorials/getting_started/24_competitive_dp_basics.n.md`, `tutorials/getting_started/27_competitive_algorithms_catalog.n.md` を新記法へ更新。
+  - `tests/typeannot.n.md`: 「重ね注釈は仕様上可能だが冗長」の説明へ更新（ケース自体は維持）。
+- 検証:
+  - `/tmp/tests-prefix-migration-focus2.json` : 59/59 pass
+  - `/tmp/tests-cast-annotation-style.json` : 43/43 pass
+  - `/tmp/tests-kp-after-kpread-cast.json` : 7/7 pass
+  - `/tmp/tests-std-fs-cliarg-cast-focused.json` : 11/11 pass
+  - `/tmp/tests-string-cast-migration.json` : 29/29 pass
+# 2026-03-03 作業メモ (math依存側のprefix縮退: std/test・std/fs・tree診断テスト)
+- 目的:
+  - `型名_` prefix 廃止方針に合わせ、`math.nepl` 依存側の命名と利用を `型注釈 + cast` / オーバーロードへ寄せる。
+- 実装:
+  - `stdlib/std/test.nepl`
+    - `bool_to_str` / `i32_to_str` を廃止し、`to_str` オーバーロード (`(bool)->str`, `(i32)->str`) に統一。
+    - 失敗メッセージ構築での呼び出しを `to_str` へ更新。
+  - `stdlib/std/fs.nepl`
+    - `i64_from_i32` ヘルパを削除し、使用箇所を `cast` に置換。
+  - `stdlib/kp/kpwrite.nepl`
+    - doctest 例の `i64_extend_i32_u` を `<i64> cast` へ更新。
+  - `tests/tree/05_overload_shadow_diagnostics.js`
+    - `i32_ne` を `ne` へ更新（オーバーロード解決前提の新規約）。
+  - `tests/tree/18_diagnostic_ids.js`
+    - `i32_to_f32` を `<f32> cast` へ更新。
+- 検証:
+  - `node tests/tree/run.js` -> `18/18 pass`。
+  - `nodesrc/tests.js` の対象限定実行は長時間でタイムアウトする挙動を確認したため、現時点は tree スイートを優先して回帰確認。
+
+# 2026-03-03 作業メモ (bit演算APIのprefix縮退)
+- 目的:
+  - `core/math` の bit 演算についても `型名_` なしで使える経路を追加する。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - `rotl/rotr/clz/ctz/popcnt` の i32/i64 オーバーロードを追加（内部は既存 `i32_*` / `i64_*` 実装へ委譲）。
+  - `stdlib/tests/math.n.md`
+    - `i32_clz/i32_ctz` 呼び出しを `clz/ctz` 呼び出しへ更新。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-stdlib-math-prefixless-only.json -j 1`
+    - `1/1 pass`
+
+# 2026-03-03 作業メモ (cast依存の変換APIをprefixなし名へ追従)
+- 目的:
+  - `core/cast` が `core/math` の `型名_` 変換名へ直接依存しない形へ寄せる。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - 変換用のprefixなしエントリを追加:
+      - `extend_s`, `wrap`, `convert_s`, `trunc_s`, `promote`, `demote`, `to_i128`
+    - `u128/i128` 実装内の `i64_extend_i32_u/s` 利用を `cast` に置換。
+  - `stdlib/core/cast.nepl`
+    - `cast_i32_to_i64` などの実装本体を上記prefixなし関数呼び出しへ変更。
+  - `from_i64` 名は `alloc/string.nepl` の `from_i64`（impure）と衝突し、`pure context cannot call impure function` を誘発したため、`to_i128` に改名して根本解消。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-cast-prefixless.json -j 1`
+    - `2/2 pass`
+
+# 2026-03-03 作業メモ (math: u32/u64/u128/i128 API のprefix縮退)
+- 目的:
+  - `型名_` prefix 廃止方針に合わせ、`u32_/u64_/u128_/i128_` 公開API名を削減する。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - `u32_*` / `u64_*` 公開関数群を削除。
+    - `u128`:
+      - `u128_new` -> `new <(i64,i64)->u128>`
+      - `u128_from_u64` -> `to_u128`
+      - `u128_add/sub/lt` -> `add/sub/lt` オーバーロード
+    - `i128`:
+      - `i128_new` -> `new <(i64,i64)->i128>`
+      - `i128_from_i64` -> `to_i128`
+      - `i128_add/sub/mul/lt` -> `add/sub/mul/lt` オーバーロード
+    - `u64_mul_wide` -> `mul_wide` に変更。
+    - `f32_*/f64_*` の基本演算名を `sqrt/abs/ceil/floor/trunc/nearest/min/max/copysign` のオーバーロード名に統一。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-cast-prefixless-v3.json -j 1`
+    - `2/2 pass`
+
+# 2026-03-03 作業メモ (cast APIのヘルパー名を廃止してオーバーロード本体へ統一)
+- 目的:
+  - `cast_i32_to_*` 系ヘルパー名を廃止し、`cast` のオーバーロード本体だけで運用する。
+- 実装:
+  - `stdlib/core/cast.nepl`
+    - `fn cast cast_*` alias 群を削除。
+    - すべて `fn cast <(A)->B>` 形式の直接定義へ統一。
+  - `stdlib/tests/cast.n.md`
+    - 旧ヘルパー呼び出し（`cast_bool_to_i32`, `cast_i32_to_bool`）を削除し、`cast` + 単一型注釈へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-cast-prefixless-v4.json -j 1`
+    - `2/2 pass`
+
+# 2026-03-03 作業メモ (math.nepl: i64定数の根本修正)
+- 目的:
+  - `型名_` prefix 廃止移行中に発生した `core/math` の大量型崩れを根本解消する。
+- 根本原因:
+  - `math.nepl` 後半（u128/i128実装）で `cast` を直接使っていたが、`core/math` では `core/cast` を import していないため `cast` が未定義。
+  - さらに `<i64> 0` の型注釈は「型一致チェック」であり暗黙変換ではないため、i32 リテラルを i64 にできず `D3004` が連鎖した。
+- 修正:
+  - `u128/i128/mul_wide` の全 i64 定数生成を `extend_s_i32_to_i64` に統一。
+  - `cast` 依存を `math.nepl` 実コードから除去し、`core/math` 単体で自己完結する状態へ戻した。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i tests/math.n.md -i tests/typeannot.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-scope-no-stdlib.json -j 1`
+  - 結果: `19/19 pass`
+
+# 2026-03-03 作業メモ (math.nepl: u8 prefix実体の縮退)
+- 目的:
+  - `型名_` prefix 廃止方針に合わせ、`u8_*` 実体関数名を prefix 先頭なしへ統一する。
+- 実装:
+  - `u8_add/sub/mul/div_u/rem_u/eq/ne/lt_u/le_u/gt_u/ge_u` を
+    `add_u8/sub_u8/mul_u8/div_u_u8/rem_u_u8/eq_u8/ne_u8/lt_u_u8/le_u_u8/gt_u_u8/ge_u_u8` へ変更。
+  - `fn add/sub/... <(u8,u8)->...>` の公開オーバーロードは新実体名へ委譲。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i tests/math.n.md -i tests/typeannot.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-scope-no-stdlib.json -j 1`
+  - 結果: `19/19 pass`
+
+# 2026-03-03 作業メモ (math.nepl: 冗長な二重型注釈の整理)
+- 目的:
+  - 新規約に合わせて `math.nepl` ドキュメント内の二重注釈 (`<i64> <i64> cast` 等) を除去する。
+- 実装:
+  - `math.nepl` 内の `<i64> <i64> cast` / `<f64> <f64> cast` を `<i64> cast` / `<f64> cast` へ統一。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i tests/math.n.md -i tests/typeannot.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-scope-no-stdlib.json -j 1`
+  - 結果: `19/19 pass`
+
+# 2026-03-03 作業メモ (tutorial: 数値章の曖昧オーバーロード対策)
+- 目的:
+  - `math` のオーバーロード拡張（u8 系統合）により、チュートリアルの短い数値式で発生した曖昧解決を解消する。
+- 根本原因:
+  - 小さい整数リテラルだけで構成された合成式が、`i32`/`u8` の候補で曖昧化した。
+- 修正:
+  - `tutorials/getting_started/02_numbers_and_variables.n.md`
+    - 複合式を中間 `let` に分解し、曖昧なリテラルに `<i32>` 注釈を付与。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+    - 二分探索の `mid` 計算を `sum`/`mv_off`/`mv_ptr` へ分解して型解決を安定化。
+- 検証:
+  - `node nodesrc/tests.js -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/03_functions.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-tutorial-math-scope.json -j 1`
+  - 結果: `14/14 pass`
+
+# 2026-03-03 作業メモ (math.nepl: 残存prefix文字列の統一)
+- 目的:
+  - `型名_` prefix 廃止方針に合わせ、`math.nepl` 内の残存 prefix 文字列（ドキュメント見出し・LLVM シンボル名）も統一する。
+- 実装:
+  - `u8_*` 表記を `*_u8` へ統一（コメント表記・`#llvmir` 内シンボル名を含む）。
+  - `f32_*` / `f64_*` 表記を `*_f32` / `*_f64` へ統一（コメント表記・`#llvmir` 内シンボル名を含む）。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i tests/math.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-post-rename.json -j 1` -> `6/6 pass`
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i stdlib/tests/vec.n.md -i tests/math.n.md -i tests/typeannot.n.md -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-migration-bundle.json -j 1` -> `28/28 pass`
+
+# 2026-03-03 作業メモ (vec/sort と tutorial の新規約整備)
+- 目的:
+  - `型名_` prefix 廃止方針に合わせ、`alloc/collections/vec/sort.nepl` の曖昧式を解消し、tutorial 側をライブラリ利用へ更新する。
+- 根本原因:
+  - `vec/sort.nepl` に `op op ...` の入れ子前置式が残っており、オーバーロード候補増加後に `D3006` を誘発していた。
+  - tutorial の sort 章は自前挿入ソート実装だったため、現在の stdlib を使う流れと乖離していた。
+  - `sort_quick` は `Vec` を消費するため、tutorial で同一変数を後続参照すると move エラーが発生した。
+- 修正:
+  - `stdlib/alloc/collections/vec/sort.nepl`
+    - `sort_comb` / `sort_heap_sift_down_data` / `sort_heap` / `sort_merge_range_data` / `sort_heap_ret` の曖昧な入れ子式を中間 `let` で分解。
+    - `u8` の `Ord::lt` を `cast` 後比較へ明示化。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+    - 先頭章を自前挿入ソートから `alloc/collections/vec` + `alloc/collections/vec/sort` 利用例へ置換。
+    - `sort_quick_ret` を使用して move エラーを回避。
+- 検証:
+  - `node nodesrc/tests.js -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-tut23-no-stdlib.json -j 1` -> `3/3 pass`
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i tests/math.n.md -i tests/typeannot.n.md -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-migration-scope.json -j 1` -> `29/29 pass`
+
+# 2026-03-03 作業メモ (heap/linear memory 安全化の段階導入)
+- 目的:
+  - `mem.nepl` / `kpread.nepl` / `kpwrite.nepl` で生ポインタ `i32` の露出を減らし、段階的に専用型へ移行する。
+- 根本原因:
+  - `Scanner` / `Writer` を `struct` 化して公開 API を直接置換すると、NEPL の move 規則でハンドル再利用時に `use of moved value` が発生する。
+  - `*` を外すと impure 呼び出し制約 (`pure context cannot call impure function`) に抵触する。
+- 修正:
+  - `stdlib/core/mem.nepl`
+    - `MemPtr` を追加し、`alloc_ptr` / `realloc_ptr` / `dealloc_ptr` / `mem_ptr_add` を追加。
+    - `load_i32_ptr` / `store_i32_ptr` / `load_u8_ptr` / `store_u8_ptr` を追加（既存 `load_i32` 等の名前衝突を回避）。
+  - `stdlib/kp/kpread.nepl`
+    - `Scanner` 型と `scanner_wrap` / `scanner_raw` / `scanner_new_typed` を追加。
+    - 既存公開 API (`scanner_new` と各 read) は `i32` ベースのまま維持して破壊的影響を回避。
+  - `stdlib/kp/kpwrite.nepl`
+    - `Writer` 型と `writer_wrap` / `writer_raw` / `writer_new_typed` を追加。
+    - 既存公開 API (`writer_new` と各 write) は `i32` ベースのまま維持。
+  - 影響テスト群（`kp` / tutorial）で型注釈を一時導入していた箇所は `i32` に戻し、`25_competitive_prefixsum_twopointers.n.md` の曖昧な入れ子前置式を中間 `let` 展開で解消。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-kp-typed-handles.json -j 1`
+  - 結果: `21/21 pass`
+- 差分方針:
+  - 現時点は「非破壊での安全化足場（typed API 併設）」まで。
+  - 公開 API を完全に専用型へ移行するには、move 規則に沿ったハンドル再束縛パターン（consume/return）を標準化してから段階移行する。

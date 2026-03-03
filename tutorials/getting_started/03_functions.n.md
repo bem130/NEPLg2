@@ -15,10 +15,10 @@ neplg2:test
 #import "std/test" as *
 
 fn add2 <(i32,i32)->i32> (a, b):
-    i32_add a b
+    add a b
 
 fn square <(i32)->i32> (x):
-    i32_mul x x
+    mul x x
 
 fn main <()*> ()> ():
     assert_eq_i32 7 add2 3 4

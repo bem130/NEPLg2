@@ -14,15 +14,15 @@ neplg2:test
 
 fn main <()*> ()> ():
     // Test bool to i32 conversion
-    assert_eq_i32 1 cast_bool_to_i32 true;
-    assert_eq_i32 0 cast_bool_to_i32 false;
+    assert_eq_i32 1 <i32> cast true;
+    assert_eq_i32 0 <i32> cast false;
     assert_eq_i32 1 cast true;
     assert_eq_i32 0 cast false;
 
     // Test i32 to bool conversion
-    assert cast_i32_to_bool 1;
-    assert cast_i32_to_bool 42;
-    assert_ne true cast_i32_to_bool 0;
+    assert <bool> cast 1;
+    assert <bool> cast 42;
+    assert_ne true <bool> cast 0;
     assert cast 1;
     assert cast 42;
     assert_ne true cast 0;

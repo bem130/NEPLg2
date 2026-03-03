@@ -9,6 +9,7 @@
 
 #import "core/mem" as *
 #import "core/math" as *
+#import "core/cast" as *
 #import "core/option" as *
 
 //: cliarg: コマンドライン引数取得（WASI / LLVM）
@@ -46,12 +47,12 @@ fn __cli_copy_to_cstr <(str)*>i32> (s):
 fn __cli_open_cmdline <()*>i32> ():
     let path <str> "/proc/self/cmdline";
     let cpath <i32> __cli_copy_to_cstr path;
-    let fd64 <i64> __cli_syscall i64_extend_i32_u 257 i64_extend_i32_s -100 i64_extend_i32_u cpath i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+    let fd64 <i64> __cli_syscall <i64> cast 257 <i64> cast -100 <i64> cast cpath <i64> cast 0 <i64> cast 0 <i64> cast 0 <i64> cast 0;
     if:
         cond:
-            i64_lt_s fd64 i64_extend_i32_u 0
+            lt fd64 <i64> cast 0
         then -1
-        else i32_wrap_i64 fd64
+        else <i32> cast fd64
 
 #if[target=llvm]
 fn __cli_read_cmdline <(i32,i32)*>i32> (buf, cap):
@@ -62,13 +63,13 @@ fn __cli_read_cmdline <(i32,i32)*>i32> (buf, cap):
         then:
             -1
         else:
-            let n64 <i64> __cli_syscall i64_extend_i32_u 0 i64_extend_i32_u fd i64_extend_i32_u buf i64_extend_i32_u cap i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
-            __cli_syscall i64_extend_i32_u 3 i64_extend_i32_u fd i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+            let n64 <i64> __cli_syscall <i64> cast 0 <i64> cast fd <i64> cast buf <i64> cast cap <i64> cast 0 <i64> cast 0 <i64> cast 0;
+            __cli_syscall <i64> cast 3 <i64> cast fd <i64> cast 0 <i64> cast 0 <i64> cast 0 <i64> cast 0 <i64> cast 0;
             if:
                 cond:
-                    i64_lt_s n64 i64_extend_i32_u 0
+                    lt n64 <i64> cast 0
                 then -1
-                else i32_wrap_i64 n64
+                else <i32> cast n64
 
 #if[target=llvm]
 fn args_sizes_get <(i32,i32)*>i32> (argc_ptr, buf_ptr):

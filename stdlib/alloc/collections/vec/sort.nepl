@@ -97,7 +97,9 @@ impl Ord for i32:
 // u8 の Ord 実装
 impl Ord for u8:
     fn lt <(u8,u8)->bool> (a, b):
-        lt cast a cast b
+        let ai <i32> cast a;
+        let bi <i32> cast b;
+        lt ai bi
 
 
 // sort_lt: a < b
@@ -608,7 +610,9 @@ fn sort_comb <.T: Ord> <(Vec<.T>)*>()> (v):
             while eq sorted 0:
                 do:
                     // gap = floor(gap * 10 / 13)
-                    set gap div_s mul gap 10 13;
+                    let scaled_gap <i32> mul gap 10;
+                    let reduced_gap <i32> div_s scaled_gap 13;
+                    set gap reduced_gap;
                     if:
                         lt gap 1
                         then set gap 1
@@ -620,18 +624,25 @@ fn sort_comb <.T: Ord> <(Vec<.T>)*>()> (v):
                         else ();
 
                     let mut i <i32> 0;
-                    while lt add i gap n:
+                    let mut done_scan <i32> 0;
+                    while eq done_scan 0:
                         do:
-                            let a <.T> sort_get_unchecked<.T> v i;
-                            let b <.T> sort_get_unchecked<.T> v add i gap;
+                            let next_i <i32> add i gap;
                             if:
-                                sort_lt<.T> b a
+                                lt next_i n
                                 then:
-                                    sort_swap<.T> v i add i gap;
-                                    set sorted 0;
+                                    let a <.T> sort_get_unchecked<.T> v i;
+                                    let b <.T> sort_get_unchecked<.T> v next_i;
+                                    if:
+                                        sort_lt<.T> b a
+                                        then:
+                                            sort_swap<.T> v i next_i;
+                                            set sorted 0;
+                                            ()
+                                        else ();
+                                    set i add i 1;
                                     ()
-                                else ();
-                            set i add i 1;
+                                else set done_scan 1;
             ()
 
 
@@ -740,14 +751,17 @@ fn sort_heap_sift_down_data <.T: Ord> <(i32,i32,i32)*>()> (data_ptr, start, end)
 
     while eq done 0:
         do:
-            let child <i32> add mul root 2 1;
+            let doubled_root <i32> mul root 2;
+            let child <i32> add doubled_root 1;
             if:
                 lt child end
                 then:
                     let mut swap_idx <i32> root;
 
+                    let swap_v <.T> sort_get_unchecked_data<.T> data_ptr swap_idx;
+                    let child_v <.T> sort_get_unchecked_data<.T> data_ptr child;
                     if:
-                        sort_lt<.T> sort_get_unchecked_data<.T> data_ptr swap_idx sort_get_unchecked_data<.T> data_ptr child
+                        sort_lt<.T> swap_v child_v
                         then set swap_idx child
                         else ();
 
@@ -755,8 +769,10 @@ fn sort_heap_sift_down_data <.T: Ord> <(i32,i32,i32)*>()> (data_ptr, start, end)
                     if:
                         lt right end
                         then:
+                            let swap_v2 <.T> sort_get_unchecked_data<.T> data_ptr swap_idx;
+                            let right_v <.T> sort_get_unchecked_data<.T> data_ptr right;
                             if:
-                                sort_lt<.T> sort_get_unchecked_data<.T> data_ptr swap_idx sort_get_unchecked_data<.T> data_ptr right
+                                sort_lt<.T> swap_v2 right_v
                                 then set swap_idx right
                                 else ();
                             ()
@@ -794,7 +810,8 @@ fn sort_heap <.T: Ord> <(Vec<.T>)*>()> (v):
         le n 1
         then ()
         else:
-            let mut start <i32> div_s sub n 2 2;
+            let n_minus_two <i32> sub n 2;
+            let mut start <i32> div_s n_minus_two 2;
             let mut done0 <i32> 0;
             while eq done0 0:
                 do:
@@ -866,11 +883,13 @@ fn sort_buf_set <.T> <(i32,i32,.T)*>()> (buf, idx, val):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn sort_merge_range_data <.T: Ord> <(i32,i32,i32,i32)*>()> (data_ptr, buf, l, r):
+    let width <i32> sub r l;
     if:
-        le sub r l 1
+        le width 1
         then ()
         else:
-            let mid <i32> div_s add l r 2;
+            let lr_sum <i32> add l r;
+            let mid <i32> div_s lr_sum 2;
             sort_merge_range_data<.T> data_ptr buf l mid;
             sort_merge_range_data<.T> data_ptr buf mid r;
 
@@ -885,21 +904,29 @@ fn sort_merge_range_data <.T: Ord> <(i32,i32,i32,i32)*>()> (data_ptr, buf, l, r)
             let mut j <i32> mid;
             let mut k <i32> l;
 
-            while and lt i mid lt j r:
+            let mut done_merge <i32> 0;
+            while eq done_merge 0:
                 do:
-                    let a <.T> sort_buf_get<.T> buf i;
-                    let b <.T> sort_buf_get<.T> buf j;
+                    let left_open <bool> lt i mid;
+                    let right_open <bool> lt j r;
                     if:
-                        sort_lt<.T> b a
+                        and left_open right_open
                         then:
-                            sort_set_unchecked_data<.T> data_ptr k b;
-                            set j add j 1;
+                            let a <.T> sort_buf_get<.T> buf i;
+                            let b <.T> sort_buf_get<.T> buf j;
+                            if:
+                                sort_lt<.T> b a
+                                then:
+                                    sort_set_unchecked_data<.T> data_ptr k b;
+                                    set j add j 1;
+                                    ()
+                                else:
+                                    sort_set_unchecked_data<.T> data_ptr k a;
+                                    set i add i 1;
+                                    ();
+                            set k add k 1;
                             ()
-                        else:
-                            sort_set_unchecked_data<.T> data_ptr k a;
-                            set i add i 1;
-                            ();
-                    set k add k 1;
+                        else set done_merge 1;
 
             while lt i mid:
                 do:
@@ -1027,7 +1054,8 @@ fn sort_heap_ret <.T: Ord> <(Vec<.T>)*>Vec<.T>> (v):
         le n 1
         then ()
         else:
-            let mut start <i32> div_s sub n 2 2;
+            let n_minus_two <i32> sub n 2;
+            let mut start <i32> div_s n_minus_two 2;
             while ge start 0:
                 do:
                     sort_heap_sift_down_data<.T> data_ptr start n;

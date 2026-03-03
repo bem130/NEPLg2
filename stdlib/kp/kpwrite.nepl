@@ -21,7 +21,17 @@
 
 #import "core/mem" as *
 #import "core/math" as *
+#import "core/cast" as *
 #import "std/stdio" as *
+
+struct Writer:
+    raw <i32>
+
+fn writer_wrap <(i32)->Writer> (raw):
+    Writer raw
+
+fn writer_raw <(Writer)*>i32> (w):
+    get w "raw"
 
 //: writer_new: 競プロ向けのバッファ付き stdout writer を作る
 //:
@@ -34,7 +44,7 @@
 //:
 //: 計算量:
 //: - O(1)
-fn writer_new <()*>i32> ():
+fn writer_new_raw <()*>i32> ():
     let mut cap <i32> 4096;
     let mut buf <i32> alloc cap;
     if:
@@ -63,6 +73,12 @@ fn writer_new <()*>i32> ():
     store_i32 add w 12 iov;
     store_i32 add w 16 nw;
     w
+
+fn writer_new <()*>i32> ():
+    writer_new_raw
+
+fn writer_new_typed <()*>Writer> ():
+    writer_wrap writer_new_raw
 
 //: writer_free: writer の確保領域を解放する
 //:
@@ -145,8 +161,9 @@ fn writer_flush <(i32)*>()> (w):
 fn writer_ensure <(i32,i32)*>()> (w, need):
     let cap <i32> load_i32 add w 4;
     let write_len <i32> load_i32 add w 8;
+    let required <i32> add write_len need;
     if:
-        le add write_len need cap
+        le required cap
         then:
             ()
         else:
@@ -197,10 +214,16 @@ fn writer_write_str <(i32,str)*>()> (w, s):
             let mut i <i32> 0;
             while lt i n:
                 do:
-                    store_u8 add buf add write_len i load_u8 add src i;
+                    let dst_off <i32> add write_len i;
+                    let dst_ptr <i32> add buf dst_off;
+                    let src_ptr <i32> add src i;
+                    let ch <i32> load_u8 src_ptr;
+                    store_u8 dst_ptr ch;
                     set i add i 1;
 
-            store_i32 add w 8 add write_len n;
+            let w_len_ptr <i32> add w 8;
+            let new_len <i32> add write_len n;
+            store_i32 w_len_ptr new_len;
             ()
 
 //: writer_write_i32: i32 を 10 進で出力する（alloc なし）
@@ -247,18 +270,22 @@ fn writer_write_i32 <(i32,i32)*>()> (w, v):
 
                     let buf <i32> load_i32 w;
                     let old_len <i32> load_i32 add w 8;
-                    store_i32 add w 8 add old_len d;
+                    let w_len_ptr <i32> add w 8;
+                    let new_len <i32> add old_len d;
+                    store_i32 w_len_ptr new_len;
 
                     let mut n <i32> x;
                     let mut i <i32> 0;
-                    let endm1 <i32> sub add old_len d 1;
+                    let end <i32> add old_len d;
+                    let endm1 <i32> sub end 1;
 
                     while lt i d:
                         do:
                             let rem <i32> mod_s n 10;
                             let off <i32> sub endm1 i;
                             let code <i32> add 48 rem;
-                            store_u8 add buf off code;
+                            let p <i32> add buf off;
+                            store_u8 p code;
                             set n div_s n 10;
                             set i add i 1;
 
@@ -279,38 +306,42 @@ fn writer_write_i32 <(i32,i32)*>()> (w, v):
 //: 計算量:
 //: - O(桁数)
 fn writer_write_u64 <(i32,i64)*>()> (w, v):
-    let zero <i64> i64_extend_i32_u 0;
-    let ten <i64> i64_extend_i32_u 10;
+    let zero <i64> cast 0;
+    let ten <i64> cast 10;
     if:
-        i64_eq v zero
+        eq v zero
         then:
             writer_put_u8 w 48;
             ()
         else:
             let mut t <i64> v;
             let mut d <i32> 0;
-            while i64_gt_u t zero:
+            while gt_u t zero:
                 do:
                     set d add d 1;
-                    set t i64_div_u t ten;
+                    set t div_u t ten;
 
             writer_ensure w d;
 
             let buf <i32> load_i32 w;
             let old_len <i32> load_i32 add w 8;
-            store_i32 add w 8 add old_len d;
+            let w_len_ptr <i32> add w 8;
+            let new_len <i32> add old_len d;
+            store_i32 w_len_ptr new_len;
 
             let mut n <i64> v;
             let mut i <i32> 0;
-            let endm1 <i32> sub add old_len d 1;
+            let end <i32> add old_len d;
+            let endm1 <i32> sub end 1;
             while lt i d:
                 do:
-                    let rem64 <i64> i64_rem_u n ten;
-                    let rem <i32> i32_wrap_i64 rem64;
+                    let rem64 <i64> rem_u n ten;
+                    let rem <i32> cast rem64;
                     let off <i32> sub endm1 i;
                     let code <i32> add 48 rem;
-                    store_u8 add buf off code;
-                    set n i64_div_u n ten;
+                    let p <i32> add buf off;
+                    store_u8 p code;
+                    set n div_u n ten;
                     set i add i 1;
 
             ()
@@ -327,12 +358,12 @@ fn writer_write_u64 <(i32,i64)*>()> (w, v):
 //: 計算量:
 //: - O(桁数)
 fn writer_write_i64 <(i32,i64)*>()> (w, v):
-    let zero <i64> i64_extend_i32_u 0;
+    let zero <i64> cast 0;
     if:
-        i64_lt_s v zero
+        lt v zero
         then:
             writer_put_u8 w 45;
-            let abs_u <i64> i64_sub zero v;
+            let abs_u <i64> sub zero v;
             writer_write_u64 w abs_u;
             ()
         else:
@@ -355,19 +386,19 @@ fn writer_write_i64 <(i32,i64)*>()> (w, v):
 //: - O(precision + 桁数)
 fn writer_write_f64_fixed <(i32,f64,i32)*>()> (w, v, precision):
     let mut x <f64> v;
-    let zero <f64> f64_convert_i32_u 0;
-    let is_neg <bool> f64_lt x zero;
+    let zero <f64> cast 0;
+    let is_neg <bool> lt x zero;
     if:
         is_neg
         then:
             writer_put_u8 w 45;
-            let nx <f64> f64_neg x;
+            let nx <f64> neg x;
             set x nx;
             ()
         else:
             ();
 
-    let int_part <i64> i64_trunc_f64_u x;
+    let int_part <i64> cast x;
     writer_write_u64 w int_part;
 
     if:
@@ -376,18 +407,18 @@ fn writer_write_f64_fixed <(i32,f64,i32)*>()> (w, v, precision):
             ()
         else:
             writer_put_u8 w 46;
-            let int_as_f64 <f64> f64_convert_i64_u int_part;
-            let mut frac <f64> f64_sub x int_as_f64;
-            let ten <f64> f64_convert_i32_u 10;
+            let int_as_f64 <f64> cast int_part;
+            let mut frac <f64> sub x int_as_f64;
+            let ten <f64> cast 10;
             let mut i <i32> 0;
             while lt i precision:
                 do:
-                    let frac10 <f64> f64_mul frac ten;
+                    let frac10 <f64> mul frac ten;
                     set frac frac10;
-                    let digit <i32> i32_trunc_f64_u frac;
+                    let digit <i32> cast frac;
                     writer_put_u8 w add 48 digit;
-                    let digit_f <f64> f64_convert_i32_u digit;
-                    let next_frac <f64> f64_sub frac digit_f;
+                    let digit_f <f64> cast digit;
+                    let next_frac <f64> sub frac digit_f;
                     set frac next_frac;
                     set i add i 1;
             ()
@@ -404,7 +435,7 @@ fn writer_write_f64 <(i32,f64)*>()> (w, v):
 //: 計算量:
 //: - O(precision + 桁数)
 fn writer_write_f32_fixed <(i32,f32,i32)*>()> (w, v, precision):
-    let v64 <f64> f64_promote_f32 v;
+    let v64 <f64> cast v;
     writer_write_f64_fixed w v64 precision
 
 //: writer_write_f32: f32 を小数点以下 6 桁で出力する
@@ -489,7 +520,7 @@ fn writer_write_i32_ln <(i32,i32)*>()> (w, v):
 //:| #import "kp/kpwrite" as *
 //: fn main <()*> ()> ():
 //:     let w <i32> writer_new;
-//:     writer_write_i64_ln w i64_extend_i32_u 42;
+//:     writer_write_i64_ln w <i64> cast 42;
 //:     writer_flush w;
 //:     writer_free w
 //: ```
@@ -506,3 +537,57 @@ fn writer_write_f64_ln <(i32,f64)*>()> (w, v):
 fn writer_write_f32_ln <(i32,f32)*>()> (w, v):
     writer_write_f32 w v;
     writer_writeln w
+
+fn writer_free <(Writer)*>()> (w):
+    writer_free writer_raw w
+
+fn writer_flush <(Writer)*>()> (w):
+    writer_flush writer_raw w
+
+fn writer_ensure <(Writer,i32)*>()> (w, need):
+    writer_ensure writer_raw w need
+
+fn writer_put_u8 <(Writer,i32)*>()> (w, b):
+    writer_put_u8 writer_raw w b
+
+fn writer_writeln <(Writer)*>()> (w):
+    writer_writeln writer_raw w
+
+fn writer_write_str <(Writer,str)*>()> (w, s):
+    writer_write_str writer_raw w s
+
+fn writer_write_i32 <(Writer,i32)*>()> (w, v):
+    writer_write_i32 writer_raw w v
+
+fn writer_write_u64 <(Writer,i64)*>()> (w, v):
+    writer_write_u64 writer_raw w v
+
+fn writer_write_i64 <(Writer,i64)*>()> (w, v):
+    writer_write_i64 writer_raw w v
+
+fn writer_write_f64_fixed <(Writer,f64,i32)*>()> (w, v, precision):
+    writer_write_f64_fixed writer_raw w v precision
+
+fn writer_write_f64 <(Writer,f64)*>()> (w, v):
+    writer_write_f64 writer_raw w v
+
+fn writer_write_f32_fixed <(Writer,f32,i32)*>()> (w, v, precision):
+    writer_write_f32_fixed writer_raw w v precision
+
+fn writer_write_f32 <(Writer,f32)*>()> (w, v):
+    writer_write_f32 writer_raw w v
+
+fn writer_write_space <(Writer)*>()> (w):
+    writer_write_space writer_raw w
+
+fn writer_write_i32_ln <(Writer,i32)*>()> (w, v):
+    writer_write_i32_ln writer_raw w v
+
+fn writer_write_i64_ln <(Writer,i64)*>()> (w, v):
+    writer_write_i64_ln writer_raw w v
+
+fn writer_write_f64_ln <(Writer,f64)*>()> (w, v):
+    writer_write_f64_ln writer_raw w v
+
+fn writer_write_f32_ln <(Writer,f32)*>()> (w, v):
+    writer_write_f32_ln writer_raw w v

@@ -183,7 +183,7 @@ struct Point:
 // コンパイラが trait 実装を認識し、HashMap で利用できるようにする
 impl Point:
     fn hash <(Point)->i32> (self):
-        i32_xor self.x self.y
+        xor self.x self.y
 
     fn eq <(Point, Point)->bool> (a, b):
         and (eq a.x b.x) (eq a.y b.y)

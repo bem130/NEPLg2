@@ -94,8 +94,8 @@ fn new_fnv1a32 <()->Fnv1a32> ():
 fn fnv1a32_update <(Fnv1a32, i32)->Fnv1a32> (h, byte):
     let prime <i32> 16777619
     let current <i32> h.hash
-    let x <i32> i32_xor current byte
-    let next <i32> i32_mul x prime
+    let x <i32> xor current byte
+    let next <i32> mul x prime
     Fnv1a32 next
 
 // fnv1a32_finalize: ハッシュ値を取り出す

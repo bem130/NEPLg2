@@ -18,7 +18,7 @@ neplg2:test
 fn checked_half <(i32)->Result<i32,str>> (x):
     if:
         cond eq mod_s x 2 0
-        then Result::Ok i32_div_s x 2
+        then Result::Ok div_s x 2
         else Result::Err "not even"
 
 fn main <()*> ()> ():

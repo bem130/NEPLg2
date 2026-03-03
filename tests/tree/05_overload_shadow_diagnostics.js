@@ -16,7 +16,7 @@ fn val_cast <(i32)->i32> (v):
     v
 
 fn val_cast <(i32)->bool> (v):
-    i32_ne v 0
+    ne v 0
 
 fn main <()*>i32> ():
     let v <i32> 10

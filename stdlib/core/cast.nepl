@@ -19,7 +19,6 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/result" as *
-#import "alloc/string" as string
 
 // cast: 型変換ユーティリティ
 //
@@ -49,35 +48,7 @@
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn cast cast_i32_to_f32;
-
-// cast_i32_to_f32: i32 -> f32 変換
-//
-// 目的:
-// - i32 を f32 に変換します。
-//
-// 実装(アルゴリズム):
-// - intrinsic "i32_to_f32" を呼びます。
-//
-// 注意(重要):
-// - 丸めは wasm の規則に従います。
-//
-// 計算量:
-// - O(1)
-//: cast_i32_to_f32: 主な用途
-//:
-//: [目的/もくてき]:
-//: - cast_i32_to_f32 の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn cast_i32_to_f32 <(i32)->f32> (v):
+fn cast <(i32)->f32> (v):
     #intrinsic "i32_to_f32" <> (v)
 
 // cast: f32 -> i32 変換のエイリアス
@@ -94,35 +65,7 @@ fn cast_i32_to_f32 <(i32)->f32> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn cast cast_f32_to_i32;
-
-// cast_f32_to_i32: f32 -> i32 変換
-//
-// 目的:
-// - f32 を i32 に変換します。
-//
-// 実装(アルゴリズム):
-// - intrinsic "f32_to_i32" を呼びます。
-//
-// 注意(重要):
-// - 範囲外や NaN の扱いは intrinsic に依存します。
-//
-// 計算量:
-// - O(1)
-//: cast_f32_to_i32: 主な用途
-//:
-//: [目的/もくてき]:
-//: - cast_f32_to_i32 の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn cast_f32_to_i32 <(f32)->i32> (v):
+fn cast <(f32)->i32> (v):
     #intrinsic "f32_to_i32" <> (v)
 
 // cast: bool -> i32 変換のエイリアス
@@ -139,35 +82,7 @@ fn cast_f32_to_i32 <(f32)->i32> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn cast cast_bool_to_i32;
-
-// cast_bool_to_i32: bool -> i32 変換
-//
-// 目的:
-// - true を 1、false を 0 に変換します。
-//
-// 実装(アルゴリズム):
-// - if で分岐します。
-//
-// 注意(重要):
-// - bool は i32 の 0/1 表現に対応します。
-//
-// 計算量:
-// - O(1)
-//: cast_bool_to_i32: 主な用途
-//:
-//: [目的/もくてき]:
-//: - cast_bool_to_i32 の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn cast_bool_to_i32 <(bool)->i32> (v):
+fn cast <(bool)->i32> (v):
     if:
         v
         then:
@@ -175,7 +90,7 @@ fn cast_bool_to_i32 <(bool)->i32> (v):
         else:
             0
 
-// cast_i32_to_bool: i32 -> bool 変換
+// cast_bool_from_i32: i32 -> bool 変換
 //
 // 目的:
 // - 0 以外を true として返します。
@@ -188,10 +103,10 @@ fn cast_bool_to_i32 <(bool)->i32> (v):
 //
 // 計算量:
 // - O(1)
-//: cast_i32_to_bool: 主な用途
+//: cast_bool_from_i32: 主な用途
 //:
 //: [目的/もくてき]:
-//: - cast_i32_to_bool の主な用途と呼び出し方を示します。
+//: - cast_bool_from_i32 の主な用途と呼び出し方を示します。
 //:
 //: [実装/じっそう]:
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
@@ -201,24 +116,8 @@ fn cast_bool_to_i32 <(bool)->i32> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn cast_i32_to_bool <(i32)->bool> (v):
+fn cast <(i32)->bool> (v):
     ne v 0
-
-// cast: i32 -> bool 変換のエイリアス
-//: cast: 主な用途
-//:
-//: [目的/もくてき]:
-//: - cast の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn cast cast_i32_to_bool;
 
 // cast: i32 -> u8 変換のエイリアス
 //: cast: 主な用途
@@ -234,35 +133,7 @@ fn cast cast_i32_to_bool;
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn cast cast_i32_to_u8;
-
-// cast_i32_to_u8: i32 -> u8 変換
-//
-// 目的:
-// - i32 を u8 に変換します。
-//
-// 実装(アルゴリズム):
-// - intrinsic "i32_to_u8" を呼びます。
-//
-// 注意(重要):
-// - 下位 8 ビットのみが保持されます。
-//
-// 計算量:
-// - O(1)
-//: cast_i32_to_u8: 主な用途
-//:
-//: [目的/もくてき]:
-//: - cast_i32_to_u8 の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn cast_i32_to_u8 <(i32)->u8> (v):
+fn cast <(i32)->u8> (v):
     #intrinsic "i32_to_u8" <> (v)
 
 // cast: u8 -> i32 変換のエイリアス
@@ -279,35 +150,7 @@ fn cast_i32_to_u8 <(i32)->u8> (v):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn cast cast_u8_to_i32;
-
-// cast_u8_to_i32: u8 -> i32 変換
-//
-// 目的:
-// - u8 を i32 に変換します。
-//
-// 実装(アルゴリズム):
-// - intrinsic "u8_to_i32" を呼びます。
-//
-// 注意(重要):
-// - 値域は 0..=255 です。
-//
-// 計算量:
-// - O(1)
-//: cast_u8_to_i32: 主な用途
-//:
-//: [目的/もくてき]:
-//: - cast_u8_to_i32 の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn cast_u8_to_i32 <(u8)->i32> (v):
+fn cast <(u8)->i32> (v):
     #intrinsic "u8_to_i32" <> (v)
 
 // bitcast_i32_to_f32: i32 のビット列を f32 として解釈する
@@ -368,77 +211,61 @@ fn bitcast_i32_to_f32 <(i32)->f32> (v):
 fn bitcast_f32_to_i32 <(f32)->i32> (v):
     #intrinsic "reinterpret_f32_i32" <> (v)
 
-//: cast_i32_to_i64: i32 を i64 に変換する
-fn cast_i32_to_i64 <(i32)->i64> (v):
-    i64_extend_i32_s v
+//: cast: i32 を i64 に変換する
+fn cast <(i32)->i64> (v):
+    extend_s v
 
-//: cast_i64_to_i32: i64 を i32 に変換する
-fn cast_i64_to_i32 <(i64)->i32> (v):
-    i32_wrap_i64 v
+//: cast: i64 を i32 に変換する
+fn cast <(i64)->i32> (v):
+    wrap v
 
-//: cast_i32_to_f64: i32 を f64 に変換する
-fn cast_i32_to_f64 <(i32)->f64> (v):
-    f64_convert_i32_s v
+//: cast: i32 を f64 に変換する
+fn cast <(i32)->f64> (v):
+    convert_s v
 
-//: cast_f64_to_i32: f64 を i32 に変換する
-fn cast_f64_to_i32 <(f64)->i32> (v):
-    i32_trunc_f64_s v
+//: cast: f64 を i32 に変換する
+fn cast <(f64)->i32> (v):
+    trunc_s v
 
-//: cast_i64_to_f64: i64 を f64 に変換する
-fn cast_i64_to_f64 <(i64)->f64> (v):
-    f64_convert_i64_s v
+//: cast: i64 を f64 に変換する
+fn cast <(i64)->f64> (v):
+    convert_s v
 
-//: cast_f64_to_i64: f64 を i64 に変換する
-fn cast_f64_to_i64 <(f64)->i64> (v):
-    i64_trunc_f64_s v
+//: cast: f64 を i64 に変換する
+fn cast <(f64)->i64> (v):
+    trunc_s v
 
-//: cast_i64_to_f32: i64 を f32 に変換する
-fn cast_i64_to_f32 <(i64)->f32> (v):
-    f32_convert_i64_s v
+//: cast: i64 を f32 に変換する
+fn cast <(i64)->f32> (v):
+    convert_s v
 
-//: cast_f32_to_i64: f32 を i64 に変換する
-fn cast_f32_to_i64 <(f32)->i64> (v):
-    i64_trunc_f32_s v
+//: cast: f32 を i64 に変換する
+fn cast <(f32)->i64> (v):
+    trunc_s v
 
-//: cast_f32_to_f64: f32 を f64 に昇格する
-fn cast_f32_to_f64 <(f32)->f64> (v):
-    f64_promote_f32 v
+//: cast: f32 を f64 に昇格する
+fn cast <(f32)->f64> (v):
+    promote v
 
-//: cast_f64_to_f32: f64 を f32 に縮小する
-fn cast_f64_to_f32 <(f64)->f32> (v):
-    f32_demote_f64 v
+//: cast: f64 を f32 に縮小する
+fn cast <(f64)->f32> (v):
+    demote v
 
-//: cast_i32_to_str: i32 を文字列へ変換する
-fn cast_i32_to_str <(i32)*>str> (v):
-    string::from_i32 v
+//: cast: i64 を i128 に変換する
+fn cast <(i64)->i128> (v):
+    to_i128 v
 
-//: cast_str_to_i32: 文字列を i32 へ変換する
-fn cast_str_to_i32 <(str)*>Result<i32,i32>> (s):
-    string::to_i32 s
+//: cast: i128 を i64 に変換する
+fn cast <(i128)->i64> (v):
+    get v "lo"
 
-//: cast_i64_to_str: i64 を文字列へ変換する
-fn cast_i64_to_str <(i64)*>str> (v):
-    string::from_i64 v
+//: cast: i32 を i128 に変換する
+fn cast <(i32)->i128> (v):
+    to_i128 extend_s v
 
-//: cast_str_to_i64: 文字列を i64 へ変換する
-fn cast_str_to_i64 <(str)*>Result<i64,i32>> (s):
-    string::to_i64 s
-
-//: cast_f32_to_str: f32 を文字列へ変換する
-fn cast_f32_to_str <(f32)*>str> (v):
-    string::from_f32 v
-
-//: cast_str_to_f32: 文字列を f32 へ変換する
-fn cast_str_to_f32 <(str)*>Result<f32,i32>> (s):
-    string::to_f32 s
-
-//: cast_f64_to_str: f64 を文字列へ変換する
-fn cast_f64_to_str <(f64)*>str> (v):
-    string::from_f64 v
-
-//: cast_str_to_f64: 文字列を f64 へ変換する
-fn cast_str_to_f64 <(str)*>Result<f64,i32>> (s):
-    string::to_f64 s
+//: cast: i128 を i32 に変換する
+fn cast <(i128)->i32> (v):
+    wrap get v "lo"
 
 // ptr_cast: ポインタの型を変える（unsafe）
 //

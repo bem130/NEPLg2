@@ -17,14 +17,17 @@ neplg2:test
 fn sum_to_loop <(i32)*>i32> (n):
     let mut i <i32> 0
     let mut acc <i32> 0
-    while lt i add n 1:
+    let n1 <i32> add n 1
+    while lt i n1:
         do:
             set acc add acc i
             set i add i 1
     acc
 
 fn sum_to_formula <(i32)->i32> (n):
-    i32_div_s mul n add n 1 2
+    let n1 <i32> add n 1
+    let num <i32> mul n n1
+    div_s num 2
 
 fn main <()*> ()> ():
     assert_eq_i32 sum_to_loop 0 sum_to_formula 0
@@ -47,13 +50,13 @@ neplg2:test
 #import "std/test" as *
 
 fn safe_div_old <(i32,i32)->Result<i32,str>> (a, b):
-    if eq b 0 then Result::Err "division by zero" else Result::Ok i32_div_s a b
+    if eq b 0 then Result::Err "division by zero" else Result::Ok div_s a b
 
 fn safe_div_new <(i32,i32)->Result<i32,str>> (a, b):
     if:
         cond eq b 0
         then Result::Err "division by zero"
-        else Result::Ok i32_div_s a b
+        else Result::Ok div_s a b
 
 fn assert_same <(i32,i32)*>()> (a, b):
     match safe_div_old a b:

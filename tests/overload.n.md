@@ -18,7 +18,7 @@ fn val_cast <(i32)->i32> (v):
 
 // Case 2: i32 -> bool (non-zero check)
 fn val_cast <(i32)->bool> (v):
-    i32_ne v 0
+    ne v 0
 
 fn main <()*>i32> ():
     let v <i32> 10
@@ -57,7 +57,7 @@ fn main <()*>i32> ():
     let s1 <i32> my_print 100
     let s2 <i32> my_print true
     
-    i32_add s1 s2
+    add s1 s2
 ```
 
 ## test_explicit_type_annotation_prefix
@@ -72,7 +72,7 @@ ret: 11
 
 // magic: Same input, different return types
 fn magic <(i32)->i32> (v):
-    i32_add v 1
+    add v 1
 
 fn magic <(i32)->bool> (v):
     true
@@ -82,10 +82,10 @@ fn main <()*>i32> ():
     // This is useful when type cannot be inferred from context
     
     // Force selection of (i32)->i32
-    let v1 <i32> <i32> magic 10
+    let v1 <i32> magic 10
     
     // Force selection of (i32)->bool
-    let v2 <bool> <bool> magic 10
+    let v2 <bool> magic 10
     
     if:
         v2
@@ -148,7 +148,7 @@ ret: 8
 #import "core/math" as *
 
 fn size <(str)->i32> (s):
-    i32_add 1000 1
+    add 1000 1
 
 fn size <(Vec<i32>)->i32> (v):
     vec_len<i32> v
@@ -160,7 +160,10 @@ fn main <()->i32> ():
         |> push<i32> 5;
     let a <i32> size v;
     let b <i32> size "x";
-    if and eq a 2 eq b 1001 8 0
+    let ok_a <bool> eq a 2;
+    let ok_b <bool> eq b 1001;
+    let ok <bool> and ok_a ok_b;
+    if ok 8 0
 ```
 
 ## overload_new_with_pipe_vec
@@ -201,7 +204,7 @@ fn choice <(i32)->i32> (v):
     v
 
 fn choice <(i32)->bool> (v):
-    i32_ne v 0
+    ne v 0
 
 fn use_bool <(bool)->i32> (b):
     if b 1 0
@@ -221,10 +224,10 @@ ret: 12
 #import "core/math" as *
 
 fn calc <(i32)->i32> (a):
-    i32_add a 1
+    add a 1
 
 fn calc <(i32,i32)->i32> (a, b):
-    i32_add a b
+    add a b
 
 fn use_binary <(i32,i32,(i32,i32)->i32)->i32> (a, b, f):
     f a b
@@ -232,7 +235,7 @@ fn use_binary <(i32,i32,(i32,i32)->i32)->i32> (a, b, f):
 fn main <()->i32> ():
     let a <i32> calc 5;
     let b <i32> use_binary 3 4 calc;
-    i32_add a b
+    add a b
 ```
 
 ## overload_select_by_arity_unary_simple
@@ -246,10 +249,10 @@ ret: 6
 #import "core/math" as *
 
 fn calc <(i32)->i32> (a):
-    i32_add a 1
+    add a 1
 
 fn calc <(i32,i32)->i32> (a, b):
-    i32_add a b
+    add a b
 
 fn main <()->i32> ():
     calc 5
@@ -266,10 +269,10 @@ diag_id: 3006
 #import "core/math" as *
 
 fn calc <(i32)->i32> (a):
-    i32_add a 1
+    add a 1
 
 fn calc <(i32,i32)->i32> (a, b):
-    i32_add a b
+    add a b
 
 fn use_unary <(i32,(i32)->i32)->i32> (a, f):
     f a
@@ -289,10 +292,10 @@ ret: 7
 #import "core/math" as *
 
 fn calc <(i32)->i32> (a):
-    i32_add a 1
+    add a 1
 
 fn calc <(i32,i32)->i32> (a, b):
-    i32_add a b
+    add a b
 
 fn use_binary <(i32,i32,(i32,i32)->i32)->i32> (a, b, f):
     f a b
@@ -312,10 +315,10 @@ diag_id: 3006
 #import "core/math" as *
 
 fn calc <(i32)->i32> (a):
-    i32_add a 1
+    add a 1
 
 fn calc <(i32,i32)->i32> (a, b):
-    i32_add a b
+    add a b
 
 fn use_unary <(i32,(i32)->i32)->i32> (a, f):
     f a
@@ -338,7 +341,7 @@ fn choose <(i32)->i32> (v):
     v
 
 fn choose <(i32)->bool> (v):
-    i32_ne v 0
+    ne v 0
 
 fn take_i32 <(i32)->i32> (v):
     v
@@ -347,7 +350,7 @@ fn take_bool <(bool)->i32> (v):
     if v 2 0
 
 fn main <()->i32> ():
-    i32_add take_i32 choose 10 take_bool choose 1
+    add take_i32 choose 10 take_bool choose 1
 ```
 
 ## overload_select_by_explicit_result_ascription
@@ -364,7 +367,7 @@ fn convert <(i32)->i32> (v):
     v
 
 fn convert <(i32)->bool> (v):
-    i32_ne v 0
+    ne v 0
 
 fn main <()->i32> ():
     let b <bool> <bool> convert 9;
@@ -385,7 +388,7 @@ fn cast_like <(i32)->i32> (v):
     v
 
 fn cast_like <(i32)->bool> (v):
-    i32_ne v 0
+    ne v 0
 
 fn main <()->i32> ():
     let tmp cast_like 1
