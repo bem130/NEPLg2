@@ -5194,3 +5194,21 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i tests/math.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-post-rename.json -j 1` -> `6/6 pass`
   - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i stdlib/tests/vec.n.md -i tests/math.n.md -i tests/typeannot.n.md -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-migration-bundle.json -j 1` -> `28/28 pass`
+
+# 2026-03-03 作業メモ (vec/sort と tutorial の新規約整備)
+- 目的:
+  - `型名_` prefix 廃止方針に合わせ、`alloc/collections/vec/sort.nepl` の曖昧式を解消し、tutorial 側をライブラリ利用へ更新する。
+- 根本原因:
+  - `vec/sort.nepl` に `op op ...` の入れ子前置式が残っており、オーバーロード候補増加後に `D3006` を誘発していた。
+  - tutorial の sort 章は自前挿入ソート実装だったため、現在の stdlib を使う流れと乖離していた。
+  - `sort_quick` は `Vec` を消費するため、tutorial で同一変数を後続参照すると move エラーが発生した。
+- 修正:
+  - `stdlib/alloc/collections/vec/sort.nepl`
+    - `sort_comb` / `sort_heap_sift_down_data` / `sort_heap` / `sort_merge_range_data` / `sort_heap_ret` の曖昧な入れ子式を中間 `let` で分解。
+    - `u8` の `Ord::lt` を `cast` 後比較へ明示化。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+    - 先頭章を自前挿入ソートから `alloc/collections/vec` + `alloc/collections/vec/sort` 利用例へ置換。
+    - `sort_quick_ret` を使用して move エラーを回避。
+- 検証:
+  - `node nodesrc/tests.js -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-tut23-no-stdlib.json -j 1` -> `3/3 pass`
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i tests/math.n.md -i tests/typeannot.n.md -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-migration-scope.json -j 1` -> `29/29 pass`
