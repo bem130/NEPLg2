@@ -125,8 +125,9 @@ function parseArgs(argv) {
     }
 
     if (jobs <= 0) {
-        // GH Actions でも暴れない程度
-        jobs = Math.max(1, Math.min(8, Math.floor((os.cpus()?.length || 4) / 2)));
+        // ローカル実行では CPU を積極利用し、CI では明示 -j を優先する。
+        const cpuCount = os.cpus()?.length || 4;
+        jobs = Math.max(1, Math.min(32, cpuCount - 1));
     }
 
     if (!['wasm', 'llvm', 'all'].includes(runner)) {
@@ -735,10 +736,9 @@ async function runAllLlvm(cases, jobs, options = {}) {
         }
     }
 
-    const workerCount = Math.max(
-        1,
-        Math.min(4, Number(process.env.NEPL_LLVM_TEST_JOBS || jobs || 2) || 2),
-    );
+    const cpuCount = os.cpus()?.length || 4;
+    const requested = Number(process.env.NEPL_LLVM_TEST_JOBS || jobs || 2) || 2;
+    const workerCount = Math.max(1, Math.min(32, cpuCount, requested));
     const ws = [];
     for (let i = 0; i < workerCount; i++) ws.push(worker(i + 1));
     await Promise.all(ws);
@@ -986,13 +986,15 @@ async function main() {
     } else if (runner === 'llvm') {
         results = await runAllLlvm(llvmCases, jobs, { assertIo, llvmCompileOnly });
     } else {
-        const wasmResults = await runAll(wasmCases, jobs, distHint);
+        const [wasmResults, llvmResults] = await Promise.all([
+            runAll(wasmCases, jobs, distHint),
+            runAllLlvm(llvmCases, jobs, { assertIo, llvmCompileOnly }),
+        ]);
         const wasmCaseMap = buildCaseMap(wasmCases);
         const checkedWasm = wasmResults.map((r) => {
             const c = wasmCaseMap.get(r.id);
             return c ? applyDoctestExpectations(r, c, { assertIo }) : r;
         });
-        const llvmResults = await runAllLlvm(llvmCases, jobs, { assertIo, llvmCompileOnly });
         const compared = compareWasmLlvmResults(checkedWasm, llvmResults, { strictDual });
         results = [...checkedWasm, ...llvmResults, ...compared];
     }
