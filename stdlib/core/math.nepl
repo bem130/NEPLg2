@@ -967,7 +967,7 @@ fn ge_u <(i32,i32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_add <(u8,u8)->u8> (a,b):
+fn add_u8 <(u8,u8)->u8> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -997,7 +997,7 @@ fn u8_add <(u8,u8)->u8> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_sub <(u8,u8)->u8> (a,b):
+fn sub_u8 <(u8,u8)->u8> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1027,7 +1027,7 @@ fn u8_sub <(u8,u8)->u8> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_mul <(u8,u8)->u8> (a,b):
+fn mul_u8 <(u8,u8)->u8> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1057,7 +1057,7 @@ fn u8_mul <(u8,u8)->u8> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_div_u <(u8,u8)->u8> (a,b):
+fn div_u_u8 <(u8,u8)->u8> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1084,7 +1084,7 @@ fn u8_div_u <(u8,u8)->u8> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_rem_u <(u8,u8)->u8> (a,b):
+fn rem_u_u8 <(u8,u8)->u8> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1111,7 +1111,7 @@ fn u8_rem_u <(u8,u8)->u8> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_eq <(u8,u8)->bool> (a,b):
+fn eq_u8 <(u8,u8)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1139,7 +1139,7 @@ fn u8_eq <(u8,u8)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_ne <(u8,u8)->bool> (a,b):
+fn ne_u8 <(u8,u8)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1167,7 +1167,7 @@ fn u8_ne <(u8,u8)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_lt_u <(u8,u8)->bool> (a,b):
+fn lt_u_u8 <(u8,u8)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1195,7 +1195,7 @@ fn u8_lt_u <(u8,u8)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_le_u <(u8,u8)->bool> (a,b):
+fn le_u_u8 <(u8,u8)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1223,7 +1223,7 @@ fn u8_le_u <(u8,u8)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_gt_u <(u8,u8)->bool> (a,b):
+fn gt_u_u8 <(u8,u8)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1251,7 +1251,7 @@ fn u8_gt_u <(u8,u8)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u8_ge_u <(u8,u8)->bool> (a,b):
+fn ge_u_u8 <(u8,u8)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1268,47 +1268,47 @@ fn u8_ge_u <(u8,u8)->bool> (a,b):
 
 //: add: u8 の加算（mod 2^8）
 fn add <(u8,u8)->u8> (a,b):
-    u8_add a b
+    add_u8 a b
 
 //: sub: u8 の減算（mod 2^8）
 fn sub <(u8,u8)->u8> (a,b):
-    u8_sub a b
+    sub_u8 a b
 
 //: mul: u8 の乗算（mod 2^8）
 fn mul <(u8,u8)->u8> (a,b):
-    u8_mul a b
+    mul_u8 a b
 
 //: div_u: u8 の符号なし除算
 fn div_u <(u8,u8)->u8> (a,b):
-    u8_div_u a b
+    div_u_u8 a b
 
 //: rem_u: u8 の符号なし剰余
 fn rem_u <(u8,u8)->u8> (a,b):
-    u8_rem_u a b
+    rem_u_u8 a b
 
 //: eq: u8 の等値比較
 fn eq <(u8,u8)->bool> (a,b):
-    u8_eq a b
+    eq_u8 a b
 
 //: ne: u8 の非等値比較
 fn ne <(u8,u8)->bool> (a,b):
-    u8_ne a b
+    ne_u8 a b
 
 //: lt_u: u8 の符号なし小なり比較
 fn lt_u <(u8,u8)->bool> (a,b):
-    u8_lt_u a b
+    lt_u_u8 a b
 
 //: le_u: u8 の符号なし以下比較
 fn le_u <(u8,u8)->bool> (a,b):
-    u8_le_u a b
+    le_u_u8 a b
 
 //: gt_u: u8 の符号なし大なり比較
 fn gt_u <(u8,u8)->bool> (a,b):
-    u8_gt_u a b
+    gt_u_u8 a b
 
 //: ge_u: u8 の符号なし以上比較
 fn ge_u <(u8,u8)->bool> (a,b):
-    u8_ge_u a b
+    ge_u_u8 a b
 
 
 //: add: i64 の加算（mod 2^64）

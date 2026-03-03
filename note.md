@@ -5150,3 +5150,14 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i tests/math.n.md -i tests/typeannot.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-scope-no-stdlib.json -j 1`
   - 結果: `19/19 pass`
+
+# 2026-03-03 作業メモ (math.nepl: u8 prefix実体の縮退)
+- 目的:
+  - `型名_` prefix 廃止方針に合わせ、`u8_*` 実体関数名を prefix 先頭なしへ統一する。
+- 実装:
+  - `u8_add/sub/mul/div_u/rem_u/eq/ne/lt_u/le_u/gt_u/ge_u` を
+    `add_u8/sub_u8/mul_u8/div_u_u8/rem_u_u8/eq_u8/ne_u8/lt_u_u8/le_u_u8/gt_u_u8/ge_u_u8` へ変更。
+  - `fn add/sub/... <(u8,u8)->...>` の公開オーバーロードは新実体名へ委譲。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i tests/math.n.md -i tests/typeannot.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-scope-no-stdlib.json -j 1`
+  - 結果: `19/19 pass`
