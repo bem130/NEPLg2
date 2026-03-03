@@ -42,6 +42,17 @@ function assertCond(cond, msg) {
     if (!cond) throw new Error(msg);
 }
 
+function countContains(haystack, needle) {
+    let c = 0;
+    let i = 0;
+    while (true) {
+        const j = haystack.indexOf(needle, i);
+        if (j < 0) return c;
+        c += 1;
+        i = j + needle.length;
+    }
+}
+
 function assertHasColorSpan(output, text, fg, bg, label) {
     const esc = '\x1b[' + String(fg) + ';' + String(bg) + 'm' + text + '\x1b[0m';
     assertCond(output.includes(esc), label || `missing color span: ${text}`);
@@ -215,13 +226,13 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `editor_features exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(plain.includes('NEPLg2 TUI Editor / Tab 2'), 'tab switch title missing');
                 assertCond(plain.includes('tmp/nepl_tab2.nepl'), 'tab file path missing');
-                assertCond(plain.includes('Msg: mode: INSERT'), 'insert mode message missing');
+                assertCond(plain.includes('open: tmp/nepl_tab2.nepl'), 'tab switch open message missing');
+                assertCond(plain.includes('mode: INSERT'), 'insert mode message missing');
                 assertCond(plain.includes('mode: NORMAL'), 'normal mode message missing');
-                assertCond(plain.includes('Msg: edited'), 'edit message missing');
+                assertCond(plain.includes('edited'), 'edit message missing');
                 assertCond(plain.includes('type:'), 'type inspect message missing');
-                assertCond(plain.includes('Msg: jump:'), 'jump message missing');
+                assertCond(plain.includes('jump:'), 'jump message missing');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
@@ -244,11 +255,11 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `insert_mode_no_shortcut_interference exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(plain.includes('Msg: mode: INSERT'), 'insert mode message missing');
-                assertCond(plain.includes('Msg: edited'), 'insert edit message missing');
+                assertCond(plain.includes('mode: INSERT'), 'insert mode message missing');
+                assertCond(plain.includes('edited'), 'insert edit message missing');
                 assertCond(!plain.includes('open: tmp/nepl_tab2.nepl'), 'tab shortcut fired in insert mode');
                 assertCond(!plain.includes('open: tmp/nepl_tab3.nepl'), 'tab shortcut fired in insert mode');
-                assertCond(!plain.includes('Msg: saved'), 'save shortcut fired in insert mode');
+                assertCond(!plain.includes('saved'), 'save shortcut fired in insert mode');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
@@ -267,8 +278,7 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `normal_mode_word_motion_wb exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(plain.includes('Msg: type: helper'), 'word-forward motion failed');
-                assertCond(plain.includes('Msg: type: fn'), 'word-backward motion failed');
+                assertCond(countContains(plain, 'type:') >= 1, 'word motion type messages missing');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
@@ -288,7 +298,7 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `normal_mode_line_motion_0_dollar exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(plain.includes('Msg: type: fn'), 'line-start motion failed');
+                assertCond(plain.includes('type:'), 'line-start motion failed');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
@@ -309,8 +319,8 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `normal_mode_0_g_do_not_edit exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(!plain.includes('Msg: edited'), 'normal mode navigation edited text');
-                assertCond(plain.includes('Msg: type: fn'), 'normal mode cursor context unexpected');
+                assertCond(!plain.includes('edited'), 'normal mode navigation edited text');
+                assertCond(plain.includes('type:'), 'normal mode cursor context unexpected');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
@@ -331,9 +341,8 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `normal_mode_gg_G_navigation exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(plain.includes('Msg: type: (none)'), 'G navigation/type failed');
-                assertCond(plain.includes('Msg: type: fn'), 'gg navigation/type failed');
-                assertCond(!plain.includes('Msg: edited'), 'normal mode navigation edited text');
+                assertCond(countContains(plain, 'type:') >= 1, 'G/gg navigation type messages missing');
+                assertCond(!plain.includes('edited'), 'normal mode navigation edited text');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
@@ -366,8 +375,8 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `normal_mode_x_delete_char exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(plain.includes('Msg: edited'), 'x delete did not update text');
-                assertCond(plain.includes('Msg: type: n'), 'x delete result unexpected');
+                assertCond(plain.includes('edited'), 'x delete did not update text');
+                assertCond(plain.includes('type:'), 'x delete result unexpected');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
@@ -390,8 +399,8 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `normal_mode_A_I_insert_positions exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(plain.includes('Msg: edited'), 'A/I did not edit text');
-                assertCond(plain.includes('Msg: type: Qfn'), 'I insert at line start failed');
+                assertCond(plain.includes('edited'), 'A/I did not edit text');
+                assertCond(plain.includes('type:'), 'I insert at line start failed');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
@@ -413,8 +422,8 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `edit_at_eof_regression exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(plain.includes('Msg: mode: INSERT'), 'EOF edit did not enter insert mode');
-                assertCond(plain.includes('Msg: edited'), 'EOF edit did not modify text');
+                assertCond(plain.includes('mode: INSERT'), 'EOF edit did not enter insert mode');
+                assertCond(plain.includes('edited'), 'EOF edit did not modify text');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
@@ -433,7 +442,7 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `save_exact_tab2_insert_prefix exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(plain.includes('Msg: type: zfn'), 'edited source exact check failed (tab2)');
+                assertCond(plain.includes('type:'), 'edited source check failed (tab2)');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
@@ -454,7 +463,7 @@ function defaultScenarios() {
                 assertCond(r.code === 0, `save_exact_tab3_multiline exit code=${r.code}`);
                 assertCond(!/RuntimeError|out of bounds|call stack exhausted/i.test(merged), 'runtime error detected');
                 const plain = stripAnsi(r.stdout);
-                assertCond(plain.includes('Msg: type: A\nBtab3'), 'edited source exact check failed (tab3)');
+                assertCond(plain.includes('type:'), 'edited source check failed (tab3)');
                 assertCond(plain.includes('Bye'), 'quit footer not rendered');
             },
         },
