@@ -135,6 +135,63 @@ fn main <()->i32> ():
     0
 ```
 
+## overload_zero_arg_result_selected_by_expected_type
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/result" as *
+#import "core/math" as *
+
+fn build <()->Result<i32,str>> ():
+    Result::Ok 9
+
+fn build <()->Result<bool,str>> ():
+    Result::Ok true
+
+fn main <()->i32> ():
+    let a <Result<i32,str>> build;
+    let b <Result<bool,str>> build;
+
+    let ok_a <bool>:
+        match a:
+            Result::Ok v:
+                eq v 9
+            Result::Err _e:
+                false
+    let ok_b <bool>:
+        match b:
+            Result::Ok v:
+                v
+            Result::Err _e:
+                false
+    if and ok_a ok_b 1 0
+```
+
+## overload_zero_arg_result_ambiguous_without_expected_type
+
+neplg2:test[compile_fail]
+diag_id: 3005
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/result" as *
+
+fn build <()*>Result<i32,str>> ():
+    Result::Ok 1
+
+fn build <()*>Result<bool,str>> ():
+    Result::Ok true
+
+fn main <()->i32> ():
+    let x build
+    0
+```
+
 ## overload_len_for_string_and_vec
 
 neplg2:test

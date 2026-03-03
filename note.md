@@ -1,3 +1,28 @@
+# 2026-03-04 作業メモ (フェーズD進行: `scanner_new` / `writer_new` の曖昧オーバーロード根治)
+
+- 目的:
+  - `unwrap_ok scanner_new` / `unwrap_ok writer_new` で発生した `D3005 ambiguous overload` を、戻り値型のみで分岐する nullary オーバーロード設計から解消する。
+- 根本原因:
+  - `scanner_new` / `writer_new` に `Result<i32,str>` 版と `Result<Scanner/Writer,str>` 版を同名で共存させたため、引数0の呼び出しで文脈不足時に戻り値型だけでは選択不能になっていた。
+  - その曖昧性が `kp` doctest / `tests` / `tutorials` の `unwrap_ok scanner_new` 系呼び出しに波及し、下流で連鎖的に型不一致を誘発していた。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new <()*>Result<i32,str>>` を `scanner_new_handle <()*>Result<i32,str>>` に改名。
+    - 公開 `scanner_new` は `Result<Scanner,str>` のみを提供。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new <()*>Result<i32,str>>` を `writer_new_handle <()*>Result<i32,str>>` に改名。
+    - 公開 `writer_new` は `Result<Writer,str>` のみを提供。
+  - `tests/overload.n.md`
+    - 追加した zero-arg `Result` ケースのシグネチャ/式を修正し、pure 文脈で正しく検証できる状態へ調整。
+- 検証:
+  - `node nodesrc/tests.js -i tests/overload.n.md --no-tree -o /tmp/tests-overload-zeroarg-result.json -j 15` -> `241/241 pass`
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpread-kpwrite-new-overload.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-kpread-overload-unify.json -j 15` -> `729/729 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-kpread-overload-unify.json -j 15` -> `262/262 pass`
+- 状況:
+  - `new` 系の公開 API で「戻り値型のみ差分」の曖昧性を除去。
+  - フェーズDの安全API統一路線（公開面は安全型、ハンドル版は内部名に隔離）に整合。
+
 # 2026-03-04 作業メモ (フェーズD進行: `kpread` の `_raw` 依存を同名オーバーロードへ整理)
 
 - 目的:
