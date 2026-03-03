@@ -5212,3 +5212,27 @@
 - 検証:
   - `node nodesrc/tests.js -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-tut23-no-stdlib.json -j 1` -> `3/3 pass`
   - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i tests/math.n.md -i tests/typeannot.n.md -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-migration-scope.json -j 1` -> `29/29 pass`
+
+# 2026-03-03 作業メモ (heap/linear memory 安全化の段階導入)
+- 目的:
+  - `mem.nepl` / `kpread.nepl` / `kpwrite.nepl` で生ポインタ `i32` の露出を減らし、段階的に専用型へ移行する。
+- 根本原因:
+  - `Scanner` / `Writer` を `struct` 化して公開 API を直接置換すると、NEPL の move 規則でハンドル再利用時に `use of moved value` が発生する。
+  - `*` を外すと impure 呼び出し制約 (`pure context cannot call impure function`) に抵触する。
+- 修正:
+  - `stdlib/core/mem.nepl`
+    - `MemPtr` を追加し、`alloc_ptr` / `realloc_ptr` / `dealloc_ptr` / `mem_ptr_add` を追加。
+    - `load_i32_ptr` / `store_i32_ptr` / `load_u8_ptr` / `store_u8_ptr` を追加（既存 `load_i32` 等の名前衝突を回避）。
+  - `stdlib/kp/kpread.nepl`
+    - `Scanner` 型と `scanner_wrap` / `scanner_raw` / `scanner_new_typed` を追加。
+    - 既存公開 API (`scanner_new` と各 read) は `i32` ベースのまま維持して破壊的影響を回避。
+  - `stdlib/kp/kpwrite.nepl`
+    - `Writer` 型と `writer_wrap` / `writer_raw` / `writer_new_typed` を追加。
+    - 既存公開 API (`writer_new` と各 write) は `i32` ベースのまま維持。
+  - 影響テスト群（`kp` / tutorial）で型注釈を一時導入していた箇所は `i32` に戻し、`25_competitive_prefixsum_twopointers.n.md` の曖昧な入れ子前置式を中間 `let` 展開で解消。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-kp-typed-handles.json -j 1`
+  - 結果: `21/21 pass`
+- 差分方針:
+  - 現時点は「非破壊での安全化足場（typed API 併設）」まで。
+  - 公開 API を完全に専用型へ移行するには、move 規則に沿ったハンドル再束縛パターン（consume/return）を標準化してから段階移行する。

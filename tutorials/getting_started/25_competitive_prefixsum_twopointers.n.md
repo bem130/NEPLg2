@@ -33,7 +33,8 @@ fn main <()*> ()> ():
     while le i n:
         do:
             let a <i32> scanner_read_i32 sc;
-            let prev_off <i32> mul sub i 1 4;
+            let im1 <i32> sub i 1;
+            let prev_off <i32> mul im1 4;
             let prev_ptr <i32> add pref prev_off;
             let prev <i32> load_i32 prev_ptr;
             let cur <i32> add prev a;
@@ -85,16 +86,31 @@ fn count_subarrays_leq_s <(i32,i32,i32)*>i32> (data, n, s):
 
     while lt l n:
         do:
-            while and lt r n le add sum load_i32 add data mul r 4 s:
+            let mut extend <i32> 1;
+            while eq extend 1:
                 do:
-                    set sum add sum load_i32 add data mul r 4;
-                    set r add r 1;
+                    if lt r n:
+                        then:
+                            let rr_off <i32> mul r 4;
+                            let rr_val <i32> load_i32 add data rr_off;
+                            let next_sum <i32> add sum rr_val;
+                            if le next_sum s:
+                                then:
+                                    set sum add sum rr_val;
+                                    set r add r 1;
+                                else:
+                                    set extend 0;
+                        else:
+                            set extend 0;
 
-            set ans add ans sub r l;
+            let width <i32> sub r l;
+            set ans add ans width;
 
             if lt l r:
                 then:
-                    set sum sub sum load_i32 add data mul l 4;
+                    let ll_off <i32> mul l 4;
+                    let ll_val <i32> load_i32 add data ll_off;
+                    set sum sub sum ll_val;
                     set l add l 1;
                 else:
                     set l add l 1;

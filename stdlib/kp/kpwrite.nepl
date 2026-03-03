@@ -24,6 +24,15 @@
 #import "core/cast" as *
 #import "std/stdio" as *
 
+struct Writer:
+    raw <i32>
+
+fn writer_wrap <(i32)->Writer> (raw):
+    Writer raw
+
+fn writer_raw <(Writer)*>i32> (w):
+    get w "raw"
+
 //: writer_new: 競プロ向けのバッファ付き stdout writer を作る
 //:
 //: 目的:
@@ -35,7 +44,7 @@
 //:
 //: 計算量:
 //: - O(1)
-fn writer_new <()*>i32> ():
+fn writer_new_raw <()*>i32> ():
     let mut cap <i32> 4096;
     let mut buf <i32> alloc cap;
     if:
@@ -64,6 +73,12 @@ fn writer_new <()*>i32> ():
     store_i32 add w 12 iov;
     store_i32 add w 16 nw;
     w
+
+fn writer_new <()*>i32> ():
+    writer_new_raw
+
+fn writer_new_typed <()*>Writer> ():
+    writer_wrap writer_new_raw
 
 //: writer_free: writer の確保領域を解放する
 //:
@@ -522,3 +537,57 @@ fn writer_write_f64_ln <(i32,f64)*>()> (w, v):
 fn writer_write_f32_ln <(i32,f32)*>()> (w, v):
     writer_write_f32 w v;
     writer_writeln w
+
+fn writer_free <(Writer)*>()> (w):
+    writer_free writer_raw w
+
+fn writer_flush <(Writer)*>()> (w):
+    writer_flush writer_raw w
+
+fn writer_ensure <(Writer,i32)*>()> (w, need):
+    writer_ensure writer_raw w need
+
+fn writer_put_u8 <(Writer,i32)*>()> (w, b):
+    writer_put_u8 writer_raw w b
+
+fn writer_writeln <(Writer)*>()> (w):
+    writer_writeln writer_raw w
+
+fn writer_write_str <(Writer,str)*>()> (w, s):
+    writer_write_str writer_raw w s
+
+fn writer_write_i32 <(Writer,i32)*>()> (w, v):
+    writer_write_i32 writer_raw w v
+
+fn writer_write_u64 <(Writer,i64)*>()> (w, v):
+    writer_write_u64 writer_raw w v
+
+fn writer_write_i64 <(Writer,i64)*>()> (w, v):
+    writer_write_i64 writer_raw w v
+
+fn writer_write_f64_fixed <(Writer,f64,i32)*>()> (w, v, precision):
+    writer_write_f64_fixed writer_raw w v precision
+
+fn writer_write_f64 <(Writer,f64)*>()> (w, v):
+    writer_write_f64 writer_raw w v
+
+fn writer_write_f32_fixed <(Writer,f32,i32)*>()> (w, v, precision):
+    writer_write_f32_fixed writer_raw w v precision
+
+fn writer_write_f32 <(Writer,f32)*>()> (w, v):
+    writer_write_f32 writer_raw w v
+
+fn writer_write_space <(Writer)*>()> (w):
+    writer_write_space writer_raw w
+
+fn writer_write_i32_ln <(Writer,i32)*>()> (w, v):
+    writer_write_i32_ln writer_raw w v
+
+fn writer_write_i64_ln <(Writer,i64)*>()> (w, v):
+    writer_write_i64_ln writer_raw w v
+
+fn writer_write_f64_ln <(Writer,f64)*>()> (w, v):
+    writer_write_f64_ln writer_raw w v
+
+fn writer_write_f32_ln <(Writer,f32)*>()> (w, v):
+    writer_write_f32_ln writer_raw w v

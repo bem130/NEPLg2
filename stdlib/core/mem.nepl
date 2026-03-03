@@ -52,6 +52,15 @@
 #import "core/math" as *
 #import "core/result" as *
 
+struct MemPtr:
+    raw <i32>
+
+fn mem_ptr_wrap <(i32)->MemPtr> (raw):
+    MemPtr raw
+
+fn mem_ptr_raw <(MemPtr)->i32> (p):
+    get p "raw"
+
 #if[target=llvm]
 #llvmir:
     @__nepl_mem = internal global [67108864 x i8] zeroinitializer, align 16
@@ -597,6 +606,32 @@ fn fill_i32 <(i32,i32,i32)*>()> (ptr, count, value):
         do:
             store_i32 <i32> add ptr <i32> mul i 4 value;
             set i add i 1;
+
+fn alloc_ptr <(i32)*>MemPtr> (size):
+    mem_ptr_wrap alloc size
+
+fn realloc_ptr <(MemPtr,i32,i32)*>MemPtr> (ptr, old_size, new_size):
+    let raw <i32> mem_ptr_raw ptr;
+    mem_ptr_wrap realloc raw old_size new_size
+
+fn dealloc_ptr <(MemPtr,i32)*>()> (ptr, size):
+    dealloc mem_ptr_raw ptr size
+
+fn mem_ptr_add <(MemPtr,i32)->MemPtr> (ptr, off):
+    let raw <i32> mem_ptr_raw ptr;
+    mem_ptr_wrap add raw off
+
+fn load_i32_ptr <(MemPtr)->i32> (p):
+    load_i32 mem_ptr_raw p
+
+fn store_i32_ptr <(MemPtr,i32)*>()> (p, v):
+    store_i32 mem_ptr_raw p v
+
+fn load_u8_ptr <(MemPtr)->i32> (p):
+    load_u8 mem_ptr_raw p
+
+fn store_u8_ptr <(MemPtr,i32)*>()> (p, v):
+    store_u8 mem_ptr_raw p v
 
 //: size_of: 型のサイズを取得する
 //:
