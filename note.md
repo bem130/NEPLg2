@@ -1,3 +1,19 @@
+# 2026-03-04 作業メモ (フェーズD進行: `core/mem` に `*_raw` 隔離を導入)
+
+- 目的:
+  - 生ポインタAPIを段階的に分離し、次段の安全API標準名化に備える。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - 生API本体を `alloc_raw` / `realloc_raw` / `dealloc_raw` へ改名。
+    - `alloc` / `realloc` / `dealloc` は `*_raw` への委譲エイリアスへ変更。
+    - `alloc_result` / `realloc_result` / `dealloc_result` と `alloc_ptr` 系は `*_raw` を直接呼ぶように変更。
+- テスト:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety-after-raw-alias.json -j 15` -> `213/213 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-mem-raw-alias.json -j 15` -> `725/725 pass`
+- 状況:
+  - `mem` 側で「生API本体」と「公開名」を分離できた。
+  - 次段は `alloc/realloc/dealloc` 公開名を安全APIへ切り替える際の呼び出し側移行（stdlib/tests/tutorials）に着手できる状態。
+
 # 2026-03-04 作業メモ (フェーズE前進: `mem_result` 系APIの回帰テスト追加)
 
 - 目的:
