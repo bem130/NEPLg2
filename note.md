@@ -1,3 +1,20 @@
+# 2026-03-04 作業メモ (フェーズD進行: kpread の raw 実装名分離)
+
+- 目的:
+  - `kpread` の内部 `i32` ハンドル実装と公開 `Scanner` API を明確に分離し、公開面の型安全性を上げる。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `i32` 受け取り実装を `scanner_*_raw` へ改名。
+    - `Scanner` 受け取り公開関数は既存名を維持し、内部で `*_raw` を呼び出す形へ変更。
+    - 対象: `skip_ws/is_eof/skip_token/read_token/read_i32/read_i64/read_u64/read_f32/read_f64/read_vec/read_matrix/read_all/read_*input` 一式。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -i examples/kp_fizzbuzz.nepl --no-tree -o /tmp/tests-kp-raw-split-both.json -j 15` -> `230/230 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kpread-split.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kpread-split.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread/kpwrite` ともに「公開 API = Scanner/Writer 型」「内部実装 = *_raw」へ分離済み。
+  - 次段は `todo.md` 2026-03-03 フェーズDの残件（`mem` 公開面の `_safe` 廃止と `_raw` 最終削除）へ進む。
+
 # 2026-03-04 作業メモ (フェーズD進行: kpwrite の raw 実装名分離)
 
 - 目的:
