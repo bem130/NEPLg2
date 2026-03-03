@@ -23,7 +23,7 @@ stdout: "6\n14\n15\n"
 
 fn main <()*> ()> ():
     let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <i32> scanner_handle sc_obj;
+    let sc <Scanner> sc_obj;
     let n <i32> scanner_read_i32 sc;
     let q <i32> scanner_read_i32 sc;
 

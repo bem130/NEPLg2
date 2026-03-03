@@ -21,7 +21,6 @@
 
 フェーズD: stdlib移行（mem/kpread/kpwrite 優先）
 - `_safe` を標準名に統一し、旧 unsafe/生API を削除。
-- `Scanner` / `Writer` のハンドル露出を隠蔽し、型安全APIへ一本化。
 - trait 境界（`MemReadable<T>`, `MemWritable<T>`, `RegionOwned`）を導入可能な箇所から適用。
 - 完了条件:
   - `mem/kpread/kpwrite` の公開APIが Result/Option 前提で統一。
@@ -69,7 +68,6 @@
 5. stdlib の段階的リファクタリング（言語仕様安定後）
 - `stdlib/kp` のドキュメントコメント/ドキュメントテスト形式を基準に、他 stdlib へ統一展開する。
 - 複雑データ処理の箇所を中心に改行 `|>` パイプを活用し、可読性とメモリ安全性を両立する。
-- `mem/kpread/kpwrite` の安全API移行の残課題として、`*_handle` / `mem_ptr_addr` を公開APIから隠蔽し、`Result/Option` のみで利用できる設計へ完成させる。
 
 6. LLVM IR target 追加（nepl-cli 限定）
 

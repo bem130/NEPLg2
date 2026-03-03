@@ -23,7 +23,7 @@ stdout: "7\n"
 
 fn main <()*> ()> ():
     let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <i32> scanner_handle sc_obj;
+    let sc <Scanner> sc_obj;
     let a <i32> scanner_read_i32 sc;
     let b <i32> scanner_read_i32 sc;
     let mut w <Writer> unwrap_ok writer_new;
@@ -50,7 +50,7 @@ stdout: "1000000000007\n"
 
 fn main <()*> ()> ():
     let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <i32> scanner_handle sc_obj;
+    let sc <Scanner> sc_obj;
     let a <i64> scanner_read_i64 sc;
     let b <i64> scanner_read_i64 sc;
     let mut w <Writer> unwrap_ok writer_new;
@@ -77,7 +77,7 @@ stdout: "5 8 13\n"
 
 fn main <()*> ()> ():
     let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <i32> scanner_handle sc_obj;
+    let sc <Scanner> sc_obj;
     let a <i32> scanner_read_i32 sc;
     let b <i32> scanner_read_i32 sc;
     let c <i32> scanner_read_i32 sc;

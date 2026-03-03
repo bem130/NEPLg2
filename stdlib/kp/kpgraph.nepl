@@ -26,7 +26,7 @@
 //:| #import "core/mem" as *
 //: fn main <()*> ()> ():
 //:     let sc_obj <Scanner> unwrap_ok scanner_new;
-//:     let sc <i32> scanner_handle sc_obj;
+//:     let sc <Scanner> sc_obj;
 //:     let g <DenseGraph> dense_graph_read_undirected_1indexed sc;
 //:     let n <i32> get g "n";
 //:     let mat <i32> get g "mat";
@@ -121,7 +121,7 @@ fn dense_graph_add_undirected <(DenseGraph,i32,i32)*>()> (g, u, v):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(n^2 + m)
-fn dense_graph_read_undirected_1indexed <(i32)*>DenseGraph> (sc):
+fn dense_graph_read_undirected_1indexed <(Scanner)*>DenseGraph> (sc):
     let n <i32> scanner_read_i32 sc;
     let m <i32> scanner_read_i32 sc;
     let size <i32> mul n n;

@@ -18,7 +18,7 @@
 #import "kp/kpread" as *
 #import "core/result" as *
 let sc <Scanner> unwrap_ok scanner_new;
-let sc_handle <i32> scanner_handle sc;
+let sc_handle <Scanner> sc;
 let a <i32> scanner_read_i32 sc_handle;
 let b <i32> scanner_read_i32 sc_handle;
 ```

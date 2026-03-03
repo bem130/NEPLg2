@@ -92,7 +92,7 @@ impl Drop for UnifyDepthGuard {
 
 impl TypeCtx {
     fn is_explicit_noncopy_name(name: &str) -> bool {
-        matches!(name, "RegionToken" | "Scanner" | "Writer")
+        matches!(name, "RegionToken" | "Writer")
     }
 
     fn is_explicit_noncopy_type(

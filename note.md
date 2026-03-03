@@ -1,3 +1,32 @@
+# 2026-03-04 作業メモ (フェーズD進行: Scanner/Writer API一本化とハンドル露出除去)
+
+- 目的:
+  - `kpread/kpwrite` の公開APIから `scanner_handle/writer_handle` を除去し、`Scanner`/`Writer` 型APIへ一本化する。
+  - `Scanner` 呼び出しが move で破綻する根本原因（コンパイラの非Copy特例）を上流で修正する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - 生ハンドル実装を `*_raw` 名へ分離。
+    - 公開関数は `Scanner` 引数の通常名（`scanner_read_i32` など）に統一。
+    - `scanner_handle` 相当の公開関数を削除し、内部でのみ `mem_ptr_addr get sc "raw"` を使用。
+  - `stdlib/kp/kpwrite.nepl`
+    - 生ハンドル実装を `*_raw` 名へ分離。
+    - 公開関数は `Writer` 引数の通常名（`writer_write_i32` など）に統一。
+    - `writer_handle` 相当の公開関数を削除し、内部でのみ `mem_ptr_addr get w "raw"` を使用。
+  - 依存箇所の移行:
+    - `tests/kp.n.md`, `tests/kp_i64.n.md`, `tests/stdin.n.md`
+    - `tutorials/getting_started/22_*.n.md`, `24_*.n.md`, `25_*.n.md`, `27_*.n.md`
+    - `examples/kp_fizzbuzz.nepl`
+    - `stdlib/kp/kpgraph.nepl`（`dense_graph_read_undirected_1indexed` を `Scanner` 受け取りへ変更）
+  - 上流修正:
+    - `nepl-core/src/types.rs` の明示非Copy判定から `Scanner` を除外（`RegionToken`/`Writer` は維持）。
+- テスト:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpgraph.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -i examples/kp_fizzbuzz.nepl --no-tree -o /tmp/tests-kp-api-unify.json -j 15` -> `231/231 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-full-after-kp-api-unify.json -j 15` -> `781/781 pass`
+- 状況:
+  - `kpread/kpwrite` の公開APIは `Scanner`/`Writer` 型ベースに揃った。
+  - 次段は `todo.md` フェーズDの残件（`_safe` 廃止と `_raw` 最終削除、trait 境界導入）を進める。
+
 # 2026-03-04 作業メモ (フェーズD前進: ptr安全APIの _safe 依存切り離し)
 
 - 目的:
