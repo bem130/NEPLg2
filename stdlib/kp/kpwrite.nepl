@@ -28,83 +28,86 @@
 struct Writer:
     raw <MemPtr<u8>>
 
+struct WriterBuf:
+    ptr <i32>
+    cap <i32>
+
 fn writer_wrap <(i32)->Writer> (raw):
     Writer mem_ptr_wrap raw
 
-//: writer_new: 競プロ向けのバッファ付き stdout writer を作る
+//: writer_try_free: 解放失敗を無視して領域を解放する内部補助
 //:
 //: 目的:
-//: - 出力を内部バッファに溜め、fd_write の呼び出し回数を減らします。
+//: - 初期化失敗時の巻き戻しで、解放失敗を追加エラーにせず処理を継続します。
 //:
-//: 実装:
-//: - ヒープ上に [buf_ptr, cap, len, iov_ptr, nw_ptr] のヘッダ(20B)を置きます。
-//: - iov(8B) と nw(4B) は 1 回だけ確保して使い回します。
+//: 注意:
+//: - ptr<=0 は何もしません。
+//: - この関数は内部補助用途です。
+fn writer_try_free <(i32,i32)*>()> (ptr, size):
+    if:
+        lt 0 ptr
+        then:
+            match dealloc_result ptr size:
+                Result::Ok _:
+                    ()
+                Result::Err _e:
+                    ()
+        else:
+            ()
+
+//: writer_alloc_buf: writer 用バッファを段階的に確保する内部補助
 //:
-//: 計算量:
-//: - O(1)
-fn writer_new_handle_raw <()*>i32> ():
-    let mut cap <i32> 4096;
-    let mut buf <i32> alloc_raw cap;
-    if:
-        eq buf 0
-        then:
-            set cap 1024;
-            set buf alloc_raw cap;
-            ()
-        else:
-            ();
-    if:
-        eq buf 0
-        then:
-            set cap 256;
-            set buf alloc_raw cap;
-            ()
-        else:
-            ();
-    if:
-        eq buf 0
-        then:
-            0
-        else:
-            let iov <i32> alloc_raw 8;
-            if:
-                eq iov 0
-                then:
-                    dealloc_raw buf cap;
-                    0
-                else:
-                    let nw  <i32> alloc_raw 4;
-                    if:
-                        eq nw 0
-                        then:
-                            dealloc_raw iov 8;
-                            dealloc_raw buf cap;
-                            0
-                        else:
-                            let w <i32> alloc_raw 20;
-                            if:
-                                eq w 0
-                                then:
-                                    dealloc_raw nw 4;
-                                    dealloc_raw iov 8;
-                                    dealloc_raw buf cap;
-                                    0
-                                else:
+//: 目的:
+//: - 4096 -> 1024 -> 256 の順で確保を試行し、最初に成功した構成を返します。
+//:
+//: 注意:
+//: - すべて失敗した場合は `Result::Err` を返します。
+fn writer_alloc_buf <()*>Result<WriterBuf,str>> ():
+    match alloc_result 4096:
+        Result::Ok p0:
+            Result<WriterBuf,str>::Ok WriterBuf p0 4096
+        Result::Err _e0:
+            match alloc_result 1024:
+                Result::Ok p1:
+                    Result<WriterBuf,str>::Ok WriterBuf p1 1024
+                Result::Err _e1:
+                    match alloc_result 256:
+                        Result::Ok p2:
+                            Result<WriterBuf,str>::Ok WriterBuf p2 256
+                        Result::Err _e2:
+                            Result<WriterBuf,str>::Err "kpwrite.writer_new buffer alloc failed"
+
+fn writer_new_raw <()*>Result<i32,str>> ():
+    match writer_alloc_buf:
+        Result::Err e:
+            Result<i32,str>::Err e
+        Result::Ok b:
+            let buf <i32> get b "ptr";
+            let cap <i32> get b "cap";
+            match alloc_result 8:
+                Result::Err _e:
+                    writer_try_free buf cap;
+                    Result<i32,str>::Err "kpwrite.writer_new iov alloc failed"
+                Result::Ok iov:
+                    match alloc_result 4:
+                        Result::Err _e:
+                            writer_try_free iov 8;
+                            writer_try_free buf cap;
+                            Result<i32,str>::Err "kpwrite.writer_new nw alloc failed"
+                        Result::Ok nw:
+                            match alloc_result 20:
+                                Result::Err _e:
+                                    writer_try_free nw 4;
+                                    writer_try_free iov 8;
+                                    writer_try_free buf cap;
+                                    Result<i32,str>::Err "kpwrite.writer_new header alloc failed"
+                                Result::Ok w:
                                     store_i32 w buf;
                                     store_i32 add w 4 cap;
                                     store_i32 add w 8 0;
                                     store_i32 add w 12 iov;
                                     store_i32 add w 16 nw;
-                                    w
-
-fn writer_new_raw <()*>Result<i32,str>> ():
-    let raw <i32> writer_new_handle_raw;
-    if:
-        lt 0 raw
-        then:
-            Result<i32,str>::Ok raw
-        else:
-            Result<i32,str>::Err "kpwrite.writer_new failed"
+                                    Result<i32,str>::Ok w
 
 fn writer_new <()*>Result<Writer,str>> ():
     let raw_res <Result<i32,str>> writer_new_raw;

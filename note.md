@@ -1,3 +1,21 @@
+# 2026-03-04 作業メモ (フェーズD進行: kpwrite 初期化の根本整理)
+
+- 目的:
+  - `kpwrite` 初期化を `0` センチネル分岐から外し、`Result` ベースで確保失敗と巻き戻しを一元化する。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_handle_raw` を削除。
+    - `writer_alloc_buf` を追加し、`4096 -> 1024 -> 256` の段階確保を `Result<WriterBuf,str>` で返すように変更。
+    - `writer_try_free` を追加し、初期化途中の失敗時に解放失敗を吸収して巻き戻せるように変更。
+    - `writer_new_raw` は `alloc_result/dealloc_result` 前提の `match` 連鎖へ置換し、確保失敗時の返却理由を段階別に固定。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpwrite-result-init-refine.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kpwrite-resultrefine.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kpwrite-resultrefine.json -j 15` -> `262/262 pass`
+- 状況:
+  - `writer_new_raw` の失敗表現は `Result` へ収束し、センチネル `0` 依存の分岐を初期化経路から除去できた。
+  - 次段は `todo.md` フェーズDの主課題（`core/mem` 公開APIの安全名統一）を継続する。
+
 # 2026-03-04 作業メモ (フェーズD進行: kpwrite 初期化経路の Result 化)
 
 - 目的:
