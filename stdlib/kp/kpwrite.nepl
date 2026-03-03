@@ -505,7 +505,7 @@ fn writer_write_i32_ln <(i32,i32)*>()> (w, v):
 //:| #import "kp/kpwrite" as *
 //: fn main <()*> ()> ():
 //:     let w <i32> writer_new;
-//:     writer_write_i64_ln w i64_extend_i32_u 42;
+//:     writer_write_i64_ln w <i64> cast 42;
 //:     writer_flush w;
 //:     writer_free w
 //: ```

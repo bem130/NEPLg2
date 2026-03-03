@@ -5059,3 +5059,21 @@
   - `/tmp/tests-kp-after-kpread-cast.json` : 7/7 pass
   - `/tmp/tests-std-fs-cliarg-cast-focused.json` : 11/11 pass
   - `/tmp/tests-string-cast-migration.json` : 29/29 pass
+# 2026-03-03 作業メモ (math依存側のprefix縮退: std/test・std/fs・tree診断テスト)
+- 目的:
+  - `型名_` prefix 廃止方針に合わせ、`math.nepl` 依存側の命名と利用を `型注釈 + cast` / オーバーロードへ寄せる。
+- 実装:
+  - `stdlib/std/test.nepl`
+    - `bool_to_str` / `i32_to_str` を廃止し、`to_str` オーバーロード (`(bool)->str`, `(i32)->str`) に統一。
+    - 失敗メッセージ構築での呼び出しを `to_str` へ更新。
+  - `stdlib/std/fs.nepl`
+    - `i64_from_i32` ヘルパを削除し、使用箇所を `cast` に置換。
+  - `stdlib/kp/kpwrite.nepl`
+    - doctest 例の `i64_extend_i32_u` を `<i64> cast` へ更新。
+  - `tests/tree/05_overload_shadow_diagnostics.js`
+    - `i32_ne` を `ne` へ更新（オーバーロード解決前提の新規約）。
+  - `tests/tree/18_diagnostic_ids.js`
+    - `i32_to_f32` を `<f32> cast` へ更新。
+- 検証:
+  - `node tests/tree/run.js` -> `18/18 pass`。
+  - `nodesrc/tests.js` の対象限定実行は長時間でタイムアウトする挙動を確認したため、現時点は tree スイートを優先して回帰確認。

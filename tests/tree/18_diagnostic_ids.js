@@ -68,7 +68,7 @@ fn main <()->i32> ():
 #target core
 
 fn cast <(i32)->i32> (x): x
-fn cast <(i32)->f32> (x): i32_to_f32 x
+fn cast <(i32)->f32> (x): <f32> cast x
 fn main <()->i32> ():
     let y cast 1
     0

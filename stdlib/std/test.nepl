@@ -108,7 +108,7 @@ fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
                 then test_str_eq_loop a b len add i 1
                 else false
 
-//: bool_to_str: bool を "true"/"false" に変換する
+//: to_str: bool を "true"/"false" に変換する
 //:
 //: 目的:
 //: - 失敗メッセージ用に bool を文字列化します。
@@ -121,10 +121,10 @@ fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
 //:
 //: 計算量:
 //: - O(1)
-//: bool_to_str: 使い方の最小例
+//: to_str: 使い方の最小例
 //:
 //: [目的/もくてき]:
-//: - `bool_to_str` の典型的な使い方を最小構成で示します。
+//: - `to_str` の典型的な使い方を最小構成で示します。
 //: - 値を返す関数は結果の受け取り方も合わせて確認できます。
 //:
 //: [注意/ちゅうい]:
@@ -137,9 +137,9 @@ fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
 //:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
-//:     bool_to_str true;
+//:     to_str true;
 //: ```
-fn bool_to_str <(bool)->str> (b):
+fn to_str <(bool)->str> (b):
     if:
         b
         then:
@@ -147,7 +147,7 @@ fn bool_to_str <(bool)->str> (b):
         else:
             "false"
 
-//: i32_to_str: i32 を文字列に変換する（符号対応）
+//: to_str: i32 を文字列に変換する（符号対応）
 //:
 //: 目的:
 //: - 失敗メッセージ用に i32 を文字列化します。
@@ -161,10 +161,10 @@ fn bool_to_str <(bool)->str> (b):
 //:
 //: 計算量:
 //: - O(d)
-//: i32_to_str: 使い方の最小例
+//: to_str: 使い方の最小例
 //:
 //: [目的/もくてき]:
-//: - `i32_to_str` の典型的な使い方を最小構成で示します。
+//: - `to_str` の典型的な使い方を最小構成で示します。
 //: - 値を返す関数は結果の受け取り方も合わせて確認できます。
 //:
 //: [注意/ちゅうい]:
@@ -177,9 +177,9 @@ fn bool_to_str <(bool)->str> (b):
 //:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
-//:     i32_to_str 0;
+//:     to_str 0;
 //: ```
-fn i32_to_str <(i32)*>str> (v):
+fn to_str <(i32)*>str> (v):
     if:
         eq v 0
         then:
@@ -414,8 +414,8 @@ fn noshadow assert_eq_i32 <(i32,i32)*>()> (expected, actual):
         eq expected actual
         then ()
         else:
-            let se <str> i32_to_str expected;
-            let sa <str> i32_to_str actual;
+            let se <str> to_str expected;
+            let sa <str> to_str actual;
             let m0 <str> concat "assert_eq_i32 failed: expected=" se;
             let m1 <str> concat m0 " actual=";
             let m2 <str> concat m1 sa;
@@ -459,8 +459,8 @@ fn noshadow assert_ne <(bool,bool)*>()> (a, b):
             if:
                 b
                 then:
-                    let sa <str> bool_to_str a;
-                    let sb <str> bool_to_str b;
+                    let sa <str> to_str a;
+                    let sb <str> to_str b;
                     let m0 <str> concat "assert_ne failed: a=" sa;
                     let m1 <str> concat m0 " b=";
                     let m2 <str> concat m1 sb;
@@ -471,8 +471,8 @@ fn noshadow assert_ne <(bool,bool)*>()> (a, b):
                 b
                 then ()
                 else:
-                    let sa <str> bool_to_str a;
-                    let sb <str> bool_to_str b;
+                    let sa <str> to_str a;
+                    let sb <str> to_str b;
                     let m0 <str> concat "assert_ne failed: a=" sa;
                     let m1 <str> concat m0 " b=";
                     let m2 <str> concat m1 sb;
@@ -556,7 +556,7 @@ fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
         Result::Ok v:
             ()
         Result::Err e:
-            let se <str> i32_to_str e;
+            let se <str> to_str e;
             let m0 <str> concat "assert_ok_i32 failed: Err=" se;
             test_fail m0;
 
@@ -594,7 +594,7 @@ fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
 fn noshadow assert_err_i32 <(Result<i32,i32>)*>()> (r):
     match r:
         Result::Ok v:
-            let sv <str> i32_to_str v;
+            let sv <str> to_str v;
             let m0 <str> concat "assert_err_i32 failed: Ok=" sv;
             test_fail m0;
         Result::Err e:
