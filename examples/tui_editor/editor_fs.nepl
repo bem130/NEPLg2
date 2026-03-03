@@ -14,10 +14,10 @@
 #import "alloc/string" as *
 
 fn wasi_right_fd_read <()*>i64> ():
-    i64_extend_i32_u 2
+    <i64> cast 2
 
 fn wasi_right_fd_write <()*>i64> ():
-    i64_extend_i32_u 64
+    <i64> cast 64
 
 fn open_with_candidates <(str,i32,i64)*>i32> (path, oflags, rights):
     let pptr <i32> add path 4;
@@ -87,8 +87,10 @@ fn read_from_file_or <(str,str)*>str> (path, fallback):
                             let out <i32> alloc add 4 n;
                             store_i32 out n;
                             let mut i <i32> 0;
+                            let out_ptr <i32> add out 4;
                             while lt i n:
                                 do:
-                                    store_u8 add out add 4 i load_u8 add buf i;
+                                    let b <i32> load_u8 add buf i;
+                                    store_u8 add out_ptr i b;
                                     set i add i 1;
                             out

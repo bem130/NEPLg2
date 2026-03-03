@@ -64,7 +64,8 @@
 //:             if eq x 20 1 0
 //:         Option::None:
 //:             0
-//:     add ok0 add ok1 ok2
+//:     let s01 <i32> add ok0 ok1;
+//:     add s01 ok2
 //: ```
 //:
 //: 使い方:
@@ -131,7 +132,9 @@ struct Stack<.T>:
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+//:     let st <Stack<i32>>:
+//:         stack_new<i32>
+//:         |> unwrap_ok<Stack<i32>, Diag>;
 //:     if stack_is_empty<i32> st 0 1
 //: ```
 fn stack_new <.T> <()*>Result<Stack<.T>, Diag>> ():
@@ -178,8 +181,12 @@ fn stack_new <.T> <()*>Result<Stack<.T>, Diag>> ():
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
-//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 10;
+//:     let mut st <Stack<i32>>:
+//:         stack_new<i32>
+//:         |> unwrap_ok<Stack<i32>, Diag>;
+//:     set st:
+//:         stack_push<i32> st 10
+//:         |> unwrap_ok<Stack<i32>, Diag>;
 //:     if eq stack_len<i32> st 1 0 1
 //: ```
 fn stack_push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
@@ -306,8 +313,10 @@ fn stack_peek <.T> <(Stack<.T>)->Option<.T>> (stk):
             none<.T>
         else:
             let data <i32> load_i32 add header 8
-            let off <i32> mul sub len 1 size_of<.T>
-            some<.T> load<.T> add data off
+            let last <i32> sub len 1
+            let off <i32> mul last size_of<.T>
+            let v <.T> load<.T> add data off
+            some<.T> v
 
 //: stack_len: 長さを返す
 //:

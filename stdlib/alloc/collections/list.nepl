@@ -59,7 +59,9 @@
 //:             if eq list_len<i32> t 2 1 0
 //:         Option::None:
 //:             0
-//:     add ok0 add ok1 add ok2 ok3
+//:     let s01 <i32> add ok0 ok1;
+//:     let s23 <i32> add ok2 ok3;
+//:     add s01 s23
 //: ```
 //:
 //: 使い方:
@@ -98,7 +100,8 @@
 //:     let l3c list_cons<str> "a" l2c;
 //:     let rc list_reverse<str> l3c;
 //:     let ok2 if is_none<str> list_get<str> rc 3 1 0;
-//:     add ok0 add ok1 ok2
+//:     let s01 <i32> add ok0 ok1;
+//:     add s01 ok2
 //: ```
 
 #indent 4

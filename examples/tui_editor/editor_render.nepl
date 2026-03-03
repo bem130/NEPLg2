@@ -9,14 +9,22 @@
 #import "platforms/wasix/tui" as tui
 #import "./editor_text" as et
 
+fn line_byte_at <(str,i32)*>i32> (line, idx):
+    let p <i32> add line 4;
+    load_u8 add p idx
+
 fn find_comment_start <(str)*>i32> (line):
     let n <i32> len line;
     let mut i <i32> 0;
     let mut ci <i32> n;
-    while lt add i 1 n:
+    let max_i <i32> sub n 1;
+    while lt i max_i:
         do:
+            let i1 <i32> add i 1;
+            let b0 <i32> line_byte_at line i;
+            let b1 <i32> line_byte_at line i1;
             if:
-                and eq load_u8 add line add 4 i 47 eq load_u8 add line add 4 add i 1 47
+                and eq b0 47 eq b1 47
                 then:
                     set ci i;
                     set i n;
@@ -164,7 +172,7 @@ fn style_code_tokens <(str)*>str> (s):
     let mut out <str> "";
     while lt i n:
         do:
-            let b <i32> load_u8 add s add 4 i;
+            let b <i32> line_byte_at s i;
             if:
                 eq b 34
                 then:
@@ -173,7 +181,7 @@ fn style_code_tokens <(str)*>str> (s):
                     while and lt j n not done:
                         do:
                             if:
-                                eq load_u8 add s add 4 j 34
+                                eq line_byte_at s j 34
                                 then:
                                     set done true;
                                     set j add j 1;
@@ -201,7 +209,7 @@ fn style_code_tokens <(str)*>str> (s):
                                         then:
                                             set cont2 false;
                                         else:
-                                            let b2 <i32> load_u8 add s add 4 j2;
+                                            let b2 <i32> line_byte_at s j2;
                                             if:
                                                 is_ident_continue_byte b2
                                                 then:
@@ -229,7 +237,7 @@ fn style_code_tokens <(str)*>str> (s):
                                                 then:
                                                     set cont3 false;
                                                 else:
-                                                    let b3 <i32> load_u8 add s add 4 j3;
+                                                    let b3 <i32> line_byte_at s j3;
                                                     if:
                                                         and ge b3 48 le b3 57
                                                         then:
@@ -240,7 +248,7 @@ fn style_code_tokens <(str)*>str> (s):
                                     if:
                                         lt j3 n
                                         then:
-                                            let bdot <i32> load_u8 add s add 4 j3;
+                                            let bdot <i32> line_byte_at s j3;
                                             if:
                                                 eq bdot 46
                                                 then:
@@ -261,7 +269,7 @@ fn style_code_tokens <(str)*>str> (s):
                                                         then:
                                                             set cont4 false;
                                                         else:
-                                                            let b4 <i32> load_u8 add s add 4 j3;
+                                                            let b4 <i32> line_byte_at s j3;
                                                             if:
                                                                 and ge b4 48 le b4 57
                                                                 then:
@@ -291,7 +299,7 @@ fn style_digits_and_brackets <(str)*>str> (s):
     let mut out <str> "";
     while lt i n:
         do:
-            let b <i32> load_u8 add s add 4 i;
+            let b <i32> line_byte_at s i;
             if:
                 and ge b 48 le b 57
                 then:
@@ -319,7 +327,7 @@ fn style_directive_line <(str)*>str> (line):
             while and lt j n not found:
                 do:
                     if:
-                        eq load_u8 add line add 4 j 93
+                        eq line_byte_at line j 93
                         then:
                             set cut add j 1;
                             set found true;
@@ -337,7 +345,7 @@ fn style_directive_line <(str)*>str> (line):
             while and lt i n not found2:
                 do:
                     if:
-                        eq load_u8 add line add 4 i 32
+                        eq line_byte_at line i 32
                         then:
                             set cut i;
                             set found2 true;
@@ -354,7 +362,7 @@ fn render_code_line <(str)*>str> (line):
             line
         else:
             if:
-                eq load_u8 add line 4 35
+                eq line_byte_at line 0 35
                 then:
                     style_directive_line line
                 else:
@@ -448,7 +456,7 @@ fn count_source_lines <(str)*>i32> (text):
             while lt i n:
                 do:
                     if:
-                        eq load_u8 add text add 4 i 10
+                        eq line_byte_at text i 10
                         then:
                             set lines add lines 1;
                         else:
@@ -519,17 +527,21 @@ fn draw_editor <(i32,i32,i32,i32,str,i32,str,str,i32)*>()> (buf, cols, rows, fra
     tui::buffer_set_line buf rows tui::line_box path cols;
     tui::buffer_present_diff buf;
     let cur_row <i32> add 3 get p 0;
-    let cur_col_raw <i32> add add 2 gutter_w get p 1;
+    let cur_col_base <i32> add 2 gutter_w;
+    let cur_col_raw <i32> add cur_col_base get p 1;
     let mut cur_col <i32> cur_col_raw;
     let cur_col_max <i32> add 1 left_w;
+    let cur_col_limit <i32> add cur_col_max 1;
     if:
-        not lt cur_col_raw add cur_col_max 1
+        not lt cur_col_raw cur_col_limit
         then:
             set cur_col cur_col_max;
         else:
             ();
+    let in_row <bool> and ge cur_row 3 lt cur_row rows;
+    let in_col <bool> ge cur_col 2;
     if:
-        and and ge cur_row 3 lt cur_row rows ge cur_col 2
+        and in_row in_col
         then:
             tui::move_cursor cur_col cur_row;
             tui::show_cursor;

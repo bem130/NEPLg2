@@ -6,6 +6,10 @@
 #import "alloc/string" as *
 #import "core/field" as *
 
+fn text_byte_at <(str,i32)*>i32> (text, idx):
+    let p <i32> add text 4;
+    load_u8 add p idx
+
 fn one_char <(i32)*>str> (b):
     if:
         and ge b 97 le b 122
@@ -205,8 +209,9 @@ fn find_line_start <(str,i32)*>i32> (text, idx):
     let mut done <bool> false;
     while and gt j 0 not done:
         do:
+            let j1 <i32> sub j 1;
             if:
-                eq load_u8 add text add 4 sub j 1 10
+                eq text_byte_at text j1 10
                 then:
                     set done true
                 else:
@@ -220,7 +225,7 @@ fn find_line_end <(str,i32)*>i32> (text, idx):
     while and lt i n not done:
         do:
             if:
-                eq load_u8 add text add 4 i 10
+                eq text_byte_at text i 10
                 then:
                     set done true
                 else:
@@ -265,7 +270,7 @@ fn cursor_line_col <(str,i32)*>.Pair> (text, idx):
     while lt i c:
         do:
             if:
-                eq load_u8 add text add 4 i 10
+                eq text_byte_at text i 10
                 then:
                     set line add line 1;
                     set col 0;
@@ -294,7 +299,7 @@ fn get_line_at <(str,i32)*>str> (text, line_no):
                         then:
                             set i n;
                         else:
-                            let b <i32> load_u8 add text add 4 i;
+                            let b <i32> text_byte_at text i;
                             if:
                                 eq b 10
                                 then:
@@ -325,8 +330,9 @@ fn get_word_at <(str,i32)*>str> (text, idx):
             let mut r <i32> idx;
             while gt l 0:
                 do:
+                    let l1 <i32> sub l 1;
                     if:
-                        is_word_byte load_u8 add text add 4 sub l 1
+                        is_word_byte text_byte_at text l1
                         then:
                             set l sub l 1
                         else:
@@ -334,8 +340,9 @@ fn get_word_at <(str,i32)*>str> (text, idx):
             if:
                 gt idx 0
                 then:
+                    let idx1 <i32> sub idx 1;
                     if:
-                        not is_word_byte load_u8 add text add 4 sub idx 1
+                        not is_word_byte text_byte_at text idx1
                         then:
                             set l idx
                         else:
@@ -345,7 +352,7 @@ fn get_word_at <(str,i32)*>str> (text, idx):
             while lt r n:
                 do:
                     if:
-                        is_word_byte load_u8 add text add 4 r
+                        is_word_byte text_byte_at text r
                         then:
                             set r add r 1
                         else:
@@ -366,7 +373,8 @@ fn find_definition_cursor_from <(str,str,i32)*>i32> (text, word, cursor):
     let mut first_found <i32> -1;
     let mut best_before <i32> -1;
     let c <i32> clamp_idx text cursor;
-    while le add i m n:
+    let max_i <i32> sub n m;
+    while le i max_i:
         do:
             if:
                 str_eq_at text pat i m 0

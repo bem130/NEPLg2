@@ -224,6 +224,10 @@ fn repeat_text <(str,i32)*>str> (s, n):
                     set i add i 1;
             out
 
+fn str_byte_at <(str,i32)*>i32> (s, i):
+    let p <i32> add s 4;
+    load_u8 add p i
+
 //: str_display_width: 文字列の表示幅を概算する
 //:
 //: [目的/もくてき]:
@@ -245,14 +249,15 @@ fn str_display_width <(str)*>i32> (s):
     let mut w <i32> 0;
     while lt i n:
         do:
-            let b <i32> load_u8 add s add 4 i;
+            let b <i32> str_byte_at s i;
             if:
                 eq b 27
                 then:
+                    let i1 <i32> add i 1;
                     if:
-                        lt add i 1 n
+                        lt i1 n
                         then:
-                            let n1 <i32> load_u8 add s add 4 add i 1;
+                            let n1 <i32> str_byte_at s i1;
                             // CSI: ESC [ ... final(0x40-0x7e)
                             if:
                                 eq n1 91
@@ -261,9 +266,10 @@ fn str_display_width <(str)*>i32> (s):
                                     let mut done <bool> false;
                                     while and lt i n not done:
                                         do:
-                                            let c <i32> load_u8 add s add 4 i;
+                                            let c <i32> str_byte_at s i;
+                                            let is_final <bool> and ge c 64 lt c 127;
                                             if:
-                                                and not lt c 64 lt c 127
+                                                is_final
                                                 then:
                                                     set done true
                                                 else:
@@ -278,9 +284,12 @@ fn str_display_width <(str)*>i32> (s):
                                             let mut done2 <bool> false;
                                             while and lt i n not done2:
                                                 do:
-                                                    let c2 <i32> load_u8 add s add 4 i;
+                                                    let c2 <i32> str_byte_at s i;
+                                                    let i2 <i32> add i 1;
+                                                    let has_next <bool> lt i2 n;
+                                                    let is_esc_br <bool> and eq c2 27 and has_next eq str_byte_at s i2 92;
                                                     if:
-                                                        and and eq c2 27 lt add i 1 n eq load_u8 add s add 4 add i 1 92
+                                                        is_esc_br
                                                         then:
                                                             set i add i 2;
                                                             set done2 true;
@@ -367,7 +376,7 @@ fn line_clip_to_cols <(str,i32)*>str> (s, cols):
             let mut w <i32> 0;
             while lt i n:
                 do:
-                    let b <i32> load_u8 add s add 4 i;
+                    let b <i32> str_byte_at s i;
                     let ch_len <i32> if:
                         lt b 128
                         then 1
@@ -385,12 +394,13 @@ fn line_clip_to_cols <(str,i32)*>str> (s, cols):
                                                 then 2
                                                 else 1;
                     let ch_w <i32> if lt b 128 1 2;
+                    let next_w <i32> add w ch_w;
                     if:
-                        lt cols add w ch_w
+                        lt cols next_w
                         then:
                             set i n
                         else:
-                            set w add w ch_w;
+                            set w next_w;
                             set i add i ch_len;
             str_slice s 0 i
 
@@ -422,7 +432,7 @@ fn text_wrap_lines <(str,i32)*>Vec<str>> (text, cols):
             let mut line_w <i32> 0;
             while lt i n:
                 do:
-                    let b <i32> load_u8 add text add 4 i;
+                    let b <i32> str_byte_at text i;
                     if:
                         eq b 10
                         then:
@@ -449,8 +459,9 @@ fn text_wrap_lines <(str,i32)*>Vec<str>> (text, cols):
                                                         then 2
                                                         else 1;
                             let ch_w <i32> if lt b 128 1 2;
+                            let next_w <i32> add line_w ch_w;
                             if:
-                                lt cols add line_w ch_w
+                                lt cols next_w
                                 then:
                                     if:
                                         eq i line_start
@@ -467,7 +478,7 @@ fn text_wrap_lines <(str,i32)*>Vec<str>> (text, cols):
                                             set line_w 0;
                                 else:
                                     set i add i ch_len;
-                                    set line_w add line_w ch_w;
+                                    set line_w next_w;
             let tail <str> str_slice text line_start n;
             set out vec_push<str> out tail;
             out
@@ -500,7 +511,7 @@ fn buffer_set_wrapped_text <(i32,i32,i32,i32,str)*>()> (b, start_row, cols, heig
             while and lt i n lt row_i height:
                 do:
                     let row <i32> add start_row row_i;
-                    let b0 <i32> load_u8 add text add 4 i;
+                    let b0 <i32> str_byte_at text i;
                     if:
                         eq b0 10
                         then:
@@ -530,8 +541,9 @@ fn buffer_set_wrapped_text <(i32,i32,i32,i32,str)*>()> (b, start_row, cols, heig
                                                         then 2
                                                         else 1;
                             let ch_w <i32> if lt b0 128 1 2;
+                            let next_w <i32> add line_w ch_w;
                             if:
-                                lt cols add line_w ch_w
+                                lt cols next_w
                                 then:
                                     if:
                                         eq i line_start
@@ -554,7 +566,7 @@ fn buffer_set_wrapped_text <(i32,i32,i32,i32,str)*>()> (b, start_row, cols, heig
                                             set row_i add row_i 1;
                                 else:
                                     set i add i ch_len;
-                                    set line_w add line_w ch_w;
+                                    set line_w next_w;
             if:
                 lt row_i height
                 then:
@@ -678,8 +690,9 @@ fn buffer_new <(i32,i32)*>i32> (cols, rows):
     let mut i <i32> 0;
     while lt i rows:
         do:
-            store_i32 add curr mul i 4 "";
-            store_i32 add prev mul i 4 "";
+            let off <i32> mul i 4;
+            store_i32 add curr off "";
+            store_i32 add prev off "";
             set i add i 1;
     let b <i32> alloc 16;
     store_i32 b cols;
@@ -710,11 +723,14 @@ fn buffer_free <(i32)*>()> (b):
 //: - 行番号が範囲外の場合は何もしません。
 fn buffer_set_line <(i32,i32,str)*>()> (b, row, line):
     let rows <i32> load_i32 add b 4;
+    let row_max_excl <i32> add rows 1;
     if:
-        and gt row 0 lt row add rows 1
+        and gt row 0 lt row row_max_excl
         then:
             let curr <i32> load_i32 add b 8;
-            store_i32 add curr mul sub row 1 4 line;
+            let row0 <i32> sub row 1;
+            let off <i32> mul row0 4;
+            store_i32 add curr off line;
         else:
             ();
     ()
@@ -730,7 +746,7 @@ fn line_has_escape <(str)*>bool> (s):
     while and lt i n not found:
         do:
             if:
-                eq load_u8 add s add 4 i 27
+                eq str_byte_at s i 27
                 then:
                     set found true
                 else:
@@ -761,8 +777,9 @@ fn buffer_present_diff <(i32)*>()> (b):
     let mut i <i32> 0;
     while lt i rows:
         do:
-            let c <str> load_i32 add curr mul i 4;
-            let p <str> load_i32 add prev mul i 4;
+            let off <i32> mul i 4;
+            let c <str> load_i32 add curr off;
+            let p <str> load_i32 add prev off;
             if:
                 not str_eq c p
                 then:
@@ -780,18 +797,21 @@ fn buffer_present_diff <(i32)*>()> (b):
                             while and lt d minlen not found:
                                 do:
                                     if:
-                                        eq load_u8 add c add 4 d load_u8 add p add 4 d
+                                        eq str_byte_at c d str_byte_at p d
                                         then:
                                             set d add d 1
                                         else:
                                             set found true;
                             let prefix <str> str_slice c 0 d;
-                            let col0 <i32> add str_display_width prefix 1;
+                            let prefix_w <i32> str_display_width prefix;
+                            let col0 <i32> add prefix_w 1;
                             let tail <str> str_slice c d lc;
-                            let remain_cols <i32> add sub cols col0 1;
+                            let remain_base <i32> sub cols col0;
+                            let remain_cols <i32> add remain_base 1;
+                            let tail_padded <str> line_pad_to_cols tail remain_cols;
                             move_cursor col0 add i 1;
-                            print line_pad_to_cols tail remain_cols;
-                    store_i32 add prev mul i 4 c;
+                            print tail_padded;
+                    store_i32 add prev off c;
                 else:
                     ();
             set i add i 1;

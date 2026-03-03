@@ -7,6 +7,10 @@
 #import "./editor_fs" as efs
 #import "./editor_messages" as em
 
+fn text_byte_at <(str,i32)*>i32> (text, idx):
+    let p <i32> add text 4;
+    load_u8 add p idx
+
 fn move_left <(i32)*>i32> (cursor):
     if:
         gt cursor 0
@@ -40,12 +44,26 @@ fn move_right <(str,i32)*>i32> (text, cursor):
 fn move_word_forward <(str,i32)*>i32> (text, cursor):
     let n <i32> len text;
     let mut i <i32> clamp_cursor text cursor;
-    while and lt i n et::is_word_byte load_u8 add text add 4 i:
+    let mut scan_word <bool> true;
+    while and scan_word lt i n:
         do:
-            set i add i 1;
-    while and lt i n not et::is_word_byte load_u8 add text add 4 i:
+            let b <i32> text_byte_at text i;
+            if:
+                et::is_word_byte b
+                then:
+                    set i add i 1;
+                else:
+                    set scan_word false;
+    let mut scan_sep <bool> true;
+    while and scan_sep lt i n:
         do:
-            set i add i 1;
+            let b2 <i32> text_byte_at text i;
+            if:
+                not et::is_word_byte b2
+                then:
+                    set i add i 1;
+                else:
+                    set scan_sep false;
     i
 
 fn move_word_backward <(str,i32)*>i32> (text, cursor):
@@ -56,12 +74,27 @@ fn move_word_backward <(str,i32)*>i32> (text, cursor):
             set i sub i 1;
         else:
             ();
-    while and gt i 0 not et::is_word_byte load_u8 add text add 4 i:
+    let mut scan_sep <bool> true;
+    while and scan_sep gt i 0:
         do:
-            set i sub i 1;
-    while and gt i 0 et::is_word_byte load_u8 add text add 4 sub i 1:
+            let b <i32> text_byte_at text i;
+            if:
+                not et::is_word_byte b
+                then:
+                    set i sub i 1;
+                else:
+                    set scan_sep false;
+    let mut scan_word <bool> true;
+    while and scan_word gt i 0:
         do:
-            set i sub i 1;
+            let k1 <i32> sub i 1;
+            let b1 <i32> text_byte_at text k1;
+            if:
+                et::is_word_byte b1
+                then:
+                    set i k1;
+                else:
+                    set scan_word false;
     i
 
 fn cursor_move_up <(str,i32)*>i32> (text, cursor):
