@@ -336,20 +336,24 @@ fn scanner_read_token_handle <(i32)*>str> (sc):
         then:
             ""
         else:
-            let s <i32> alloc_raw add 4 tlen;
-            store_i32 s tlen;
-            let mut i <i32> 0;
-            while lt i tlen:
-                do:
-                    let sb <i32> add s 4;
-                    let sp <i32> add sb i;
-                    let boff <i32> add start i;
-                    let bp <i32> add buf boff;
-                    let bv <i32> load_u8 bp;
-                    store_u8 sp bv;
-                    set i add i 1;
-            store_i32 add sc 8 p;
-            s
+            match alloc add 4 tlen:
+                Result::Err _e:
+                    store_i32 add sc 8 p;
+                    ""
+                Result::Ok s:
+                    store_i32 s tlen;
+                    let mut i <i32> 0;
+                    while lt i tlen:
+                        do:
+                            let sb <i32> add s 4;
+                            let sp <i32> add sb i;
+                            let boff <i32> add start i;
+                            let bp <i32> add buf boff;
+                            let bv <i32> load_u8 bp;
+                            store_u8 sp bv;
+                            set i add i 1;
+                    store_i32 add sc 8 p;
+                    s
 
 //: scanner_read_i32: 次のトークンを i32 として読み込む（符号付き 10 進数）
 //: 

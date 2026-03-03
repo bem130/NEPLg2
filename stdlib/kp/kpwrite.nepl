@@ -130,10 +130,10 @@ fn writer_free_handle <(i32)*>()> (w):
     let iov <i32> load_i32 add w 12;
     let nw  <i32> load_i32 add w 16;
 
-    dealloc_raw buf cap;
-    dealloc_raw iov 8;
-    dealloc_raw nw 4;
-    dealloc_raw w 20;
+    writer_try_free buf cap;
+    writer_try_free iov 8;
+    writer_try_free nw 4;
+    writer_try_free w 20;
     ()
 
 //: writer_flush: バッファ内容を stdout に書き出す

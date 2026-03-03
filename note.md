@@ -6073,3 +6073,23 @@
 - 状況:
   - `kpread/kpwrite` の公開名は `Scanner/Writer` 版を中心に整理された。
   - 次段で `core/mem` 側の `*_raw` 段階縮退（`Result` 一本化）を進める。
+# 2026-03-04 作業メモ (フェーズD進行: kpread/kpwrite の raw 呼び出し除去)
+
+- 目的:
+  - `kpread/kpwrite` 実装内部に残っていた `alloc_raw/dealloc_raw` 直呼びを `Result` 系APIへ寄せ、失敗時挙動を型で扱えるようにする。
+- 根本原因:
+  - `scanner_read_token` は `alloc_raw` 失敗時（0返却）を考慮しておらず、ヘッダ書き込みで未定義動作になり得た。
+  - `writer_free` は `dealloc_raw` 直呼びで、解放失敗を吸収する一貫した経路がなかった。
+- 修正:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_read_token_handle` の文字列確保を `alloc` + `Result` 分岐へ変更。
+    - 確保失敗時はカーソルだけ進めて `""` を返す動作に統一。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_free_handle` の解放を `writer_try_free` 経由へ変更（`dealloc` の `Err` 吸収）。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -i examples/kp_fizzbuzz.nepl --no-tree -o /tmp/tests-kp-safe-mem-no-raw.json -j 15` -> `230/230 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kp-no-raw.json -j 15` -> `729/729 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kp-no-raw.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread/kpwrite` から `alloc_raw/dealloc_raw/realloc_raw` の直接使用は除去済み。
+  - 次段は `core/mem` 側で `*_raw` の公開縮退方針（完全削除タイミング）を整理する。
