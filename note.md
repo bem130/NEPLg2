@@ -1,3 +1,21 @@
+# 2026-03-04 作業メモ (上流修正: parser 診断IDの未付与箇所を明示化)
+
+- 目的:
+  - `todo.md` の「診断IDの明示付与（parser/typecheck/resolve）」を上流から進め、`parser.rs` の未付与診断を生成点で固定する。
+- 根本原因:
+  - `Diagnostic::error(...)` が `with_id` なしで残っており、同種エラーでもIDが安定しない経路があった。
+  - 文言依存のままだと `compile_fail` の回帰固定が不十分になる。
+- 変更:
+  - `nepl-core/src/parser.rs`
+    - 再帰上限/無進捗回復/marker配置/mlstr/#externシグネチャ/型パラメータ解析などの未付与診断へ `with_id` を付与。
+    - 付与IDは既存の Parser 系 (`ParserExpectedToken`, `ParserUnexpectedToken`, `ParserExpectedIdentifier`, `ParserInvalidTypeExpr`, `ParserInvalidExternSignature`) を利用。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-parser-diagid.json -j 15` -> `789/789 pass`
+- 状況:
+  - parser の `Diagnostic::error` は診断生成点で ID 明示化済み。
+  - 次段は `typecheck.rs` の未付与診断へ同方針を展開する。
+
 # 2026-03-04 作業メモ (上流テスト整備: `tests/move_check.n.md` の skip 解除)
 
 - 目的:

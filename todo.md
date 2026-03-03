@@ -48,7 +48,7 @@
 - capture あり関数値は closure conversion の設計を確定して段階導入する。
 
 2. 診断IDの明示付与（nepl-core全域）
-- `parser.rs` で開始した `with_id(DiagnosticId::...)` 明示付与を、`lexer.rs` / `typecheck.rs` / `resolve.rs` / `codegen_*.rs` の主要診断へ拡張する。
+- `parser.rs` の明示付与を完了したため、残タスクとして `lexer.rs` / `typecheck.rs` / `resolve.rs` / `codegen_*.rs` の主要診断へ拡張する。
 - `Diagnostic::error` 側の推測付与は使わず、診断生成側で enum を直接指定する。
 - parser/typecheck/name-resolution/overload 系の compile_fail テストに `diag_id` を追加し、ID一致を固定化する。
 
