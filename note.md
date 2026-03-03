@@ -5161,3 +5161,12 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i tests/math.n.md -i tests/typeannot.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-scope-no-stdlib.json -j 1`
   - 結果: `19/19 pass`
+
+# 2026-03-03 作業メモ (math.nepl: 冗長な二重型注釈の整理)
+- 目的:
+  - 新規約に合わせて `math.nepl` ドキュメント内の二重注釈 (`<i64> <i64> cast` 等) を除去する。
+- 実装:
+  - `math.nepl` 内の `<i64> <i64> cast` / `<f64> <f64> cast` を `<i64> cast` / `<f64> cast` へ統一。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i tests/math.n.md -i tests/typeannot.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-scope-no-stdlib.json -j 1`
+  - 結果: `19/19 pass`
