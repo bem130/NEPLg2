@@ -1,3 +1,18 @@
+# 2026-03-04 作業メモ (フェーズD前進: ptr安全APIの _safe 依存切り離し)
+
+- 目的:
+  - `mem` の公開 `Result` API を `_safe` ラッパ名から独立させ、`_safe` 廃止に向けた段階移行を進める。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `alloc_ptr` / `realloc_ptr` / `dealloc_ptr` の内部実装を `alloc_safe/realloc_safe/dealloc_safe` 呼び出しから分離。
+    - `alloc` / `realloc` / `dealloc` を直接呼び、公開API側で `Result` 判定を行うように変更。
+- テスト:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety-after-ptr-safe-decouple.json -j 15` -> `211/211 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-full-after-ptr-safe-decouple.json -j 15` -> `723/723 pass`
+- 状況:
+  - `*_ptr` 系の公開安全APIは `_safe` 名に依存しない形へ移行済み。
+  - 次段では `alloc_safe/realloc_safe/dealloc_safe` 自体を縮退し、公開名一本化へ進める。
+
 # 2026-03-04 作業メモ (フェーズE前進: memory_safety 回帰追加)
 
 - 目的:
