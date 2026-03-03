@@ -1,3 +1,24 @@
+# 2026-03-04 作業メモ (上流修正: typecheck field-access 診断IDの明示化)
+
+- 目的:
+  - `typecheck.rs` の field access 系エラーを診断生成点で `DiagnosticId` 固定し、`compile_fail` を ID で安定検証できるようにする。
+- 根本原因:
+  - `core/field::get` / `put` 経由の失敗は、型検査フェーズで発生するにもかかわらず、`with_id` なしの `Diagnostic::error` が残っていた。
+  - 文言のみ依存だと、エラーテキスト調整時に回帰検出が不安定になる。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `resolve_field_access_with_mode` 配下の field 参照失敗（範囲外/フィールド不存在/非複合型）に
+      `TypeInvalidFieldAccess (D3011)` を明示付与。
+  - `tests/move_effect.n.md`
+    - `core/field` の不正アクセスを `compile_fail + diag_id: 3011` で固定するケースを追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md --no-tree -o /tmp/tests-move_effect-check.json -j 15` -> `221/221 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-typecheck-field-diagid.json -j 15` -> `790/790 pass`
+- 状況:
+  - field access 系は `D3011` で明示化完了。
+  - 次段は `typecheck` の未付与領域（shadow / overload / pipe / undefined 系）を順次明示化する。
+
 # 2026-03-04 作業メモ (上流修正: parser 診断IDの未付与箇所を明示化)
 
 - 目的:

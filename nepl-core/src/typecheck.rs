@@ -2064,12 +2064,15 @@ impl<'a> BlockChecker<'a> {
                     if i < fields.len() {
                         Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                     } else {
-                        if emit_diagnostics {
-                            self.diagnostics.push(Diagnostic::error(
-                                format!("struct index out of bounds: {}", i),
-                                span,
-                            ));
-                        }
+                                        if emit_diagnostics {
+                                            self.diagnostics.push(
+                                                Diagnostic::error(
+                                                    format!("struct index out of bounds: {}", i),
+                                                    span,
+                                                )
+                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                            );
+                                        }
                         None
                     }
                 }
@@ -2077,12 +2080,15 @@ impl<'a> BlockChecker<'a> {
                     if let Some(i) = field_names.iter().position(|n| *n == name) {
                         Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                     } else {
-                        if emit_diagnostics {
-                            self.diagnostics.push(Diagnostic::error(
-                                format!("struct has no field {}", name),
-                                span,
-                            ));
-                        }
+                                        if emit_diagnostics {
+                                            self.diagnostics.push(
+                                                Diagnostic::error(
+                                                    format!("struct has no field {}", name),
+                                                    span,
+                                                )
+                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                            );
+                                        }
                         None
                     }
                 }
@@ -2092,12 +2098,15 @@ impl<'a> BlockChecker<'a> {
                     if i < items.len() {
                         Some((items[i], composite_field_offset_bytes(self.ctx, &items, i)))
                     } else {
-                        if emit_diagnostics {
-                            self.diagnostics.push(Diagnostic::error(
-                                format!("tuple index out of bounds: {}", i),
-                                span,
-                            ));
-                        }
+                                        if emit_diagnostics {
+                                            self.diagnostics.push(
+                                                Diagnostic::error(
+                                                    format!("tuple index out of bounds: {}", i),
+                                                    span,
+                                                )
+                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                            );
+                                        }
                         None
                     }
                 }
@@ -2107,19 +2116,25 @@ impl<'a> BlockChecker<'a> {
                             Some((items[i], composite_field_offset_bytes(self.ctx, &items, i)))
                         } else {
                             if emit_diagnostics {
-                                self.diagnostics.push(Diagnostic::error(
-                                    format!("tuple index out of bounds: {}", i),
-                                    span,
-                                ));
+                                self.diagnostics.push(
+                                    Diagnostic::error(
+                                        format!("tuple index out of bounds: {}", i),
+                                        span,
+                                    )
+                                    .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                );
                             }
                             None
                         }
                     } else {
                         if emit_diagnostics {
-                            self.diagnostics.push(Diagnostic::error(
-                                format!("invalid tuple field access: {}", name),
-                                span,
-                            ));
+                            self.diagnostics.push(
+                                Diagnostic::error(
+                                    format!("invalid tuple field access: {}", name),
+                                    span,
+                                )
+                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                            );
                         }
                         None
                     }
@@ -2151,10 +2166,13 @@ impl<'a> BlockChecker<'a> {
                                     ))
                                 } else {
                                     if emit_diagnostics {
-                                        self.diagnostics.push(Diagnostic::error(
-                                            format!("generic struct index out of bounds: {}", i),
-                                            span,
-                                        ));
+                                        self.diagnostics.push(
+                                            Diagnostic::error(
+                                                format!("generic struct index out of bounds: {}", i),
+                                                span,
+                                            )
+                                            .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                        );
                                     }
                                     None
                                 }
@@ -2167,10 +2185,13 @@ impl<'a> BlockChecker<'a> {
                                     ))
                                 } else {
                                     if emit_diagnostics {
-                                        self.diagnostics.push(Diagnostic::error(
-                                            format!("generic struct has no field {}", name),
-                                            span,
-                                        ));
+                                        self.diagnostics.push(
+                                            Diagnostic::error(
+                                                format!("generic struct has no field {}", name),
+                                                span,
+                                            )
+                                            .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                        );
                                     }
                                     None
                                 }
@@ -2199,10 +2220,13 @@ impl<'a> BlockChecker<'a> {
                                         ))
                                     } else {
                                         if emit_diagnostics {
-                                            self.diagnostics.push(Diagnostic::error(
-                                                format!("generic struct index out of bounds: {}", i),
-                                                span,
-                                            ));
+                                            self.diagnostics.push(
+                                                Diagnostic::error(
+                                                    format!("generic struct index out of bounds: {}", i),
+                                                    span,
+                                                )
+                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                            );
                                         }
                                         None
                                     }
@@ -2215,10 +2239,13 @@ impl<'a> BlockChecker<'a> {
                                         ))
                                     } else {
                                         if emit_diagnostics {
-                                            self.diagnostics.push(Diagnostic::error(
-                                                format!("generic struct has no field {}", name),
-                                                span,
-                                            ));
+                                            self.diagnostics.push(
+                                                Diagnostic::error(
+                                                    format!("generic struct has no field {}", name),
+                                                    span,
+                                                )
+                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                            );
                                         }
                                         None
                                     }
@@ -2226,16 +2253,20 @@ impl<'a> BlockChecker<'a> {
                             }
                         } else {
                             if emit_diagnostics {
-                                self.diagnostics
-                                    .push(Diagnostic::error("cannot access field on this type", span));
+                                self.diagnostics.push(
+                                    Diagnostic::error("cannot access field on this type", span)
+                                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                );
                             }
                             None
                         }
                     }
                     _ => {
                         if emit_diagnostics {
-                            self.diagnostics
-                                .push(Diagnostic::error("cannot access field on this type", span));
+                            self.diagnostics.push(
+                                Diagnostic::error("cannot access field on this type", span)
+                                    .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                            );
                         }
                         None
                     }
@@ -2251,10 +2282,13 @@ impl<'a> BlockChecker<'a> {
                                 Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                             } else {
                                 if emit_diagnostics {
-                                    self.diagnostics.push(Diagnostic::error(
-                                        format!("struct index out of bounds: {}", i),
-                                        span,
-                                    ));
+                                    self.diagnostics.push(
+                                        Diagnostic::error(
+                                            format!("struct index out of bounds: {}", i),
+                                            span,
+                                        )
+                                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                    );
                                 }
                                 None
                             }
@@ -2264,10 +2298,13 @@ impl<'a> BlockChecker<'a> {
                                 Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                             } else {
                                 if emit_diagnostics {
-                                    self.diagnostics.push(Diagnostic::error(
-                                        format!("struct has no field {}", name),
-                                        span,
-                                    ));
+                                    self.diagnostics.push(
+                                        Diagnostic::error(
+                                            format!("struct has no field {}", name),
+                                            span,
+                                        )
+                                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                    );
                                 }
                                 None
                             }
@@ -2275,20 +2312,26 @@ impl<'a> BlockChecker<'a> {
                     }
                 } else {
                     if emit_diagnostics {
-                        self.diagnostics.push(Diagnostic::error(
-                            "cannot access field on this type",
-                            span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "cannot access field on this type",
+                                span,
+                            )
+                            .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                        );
                     }
                     None
                 }
             }
             _ => {
                 if emit_diagnostics {
-                    self.diagnostics.push(Diagnostic::error(
-                        "cannot access field on non-composite type",
-                        span,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "cannot access field on non-composite type",
+                            span,
+                        )
+                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                    );
                 }
                 None
             }

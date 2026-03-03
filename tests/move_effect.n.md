@@ -368,3 +368,19 @@ fn main <()->i32> ():
             0
     consume t
 ```
+
+## 非複合型への field access は拒否
+
+neplg2:test[compile_fail]
+diag_id: 3011
+```neplg2
+#entry main
+#indent 4
+#target core
+
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v <i32> get 1 0
+    v
+```
