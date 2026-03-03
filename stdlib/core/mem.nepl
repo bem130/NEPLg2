@@ -214,7 +214,8 @@ fn alloc <(i32)*>i32> (size):
                             ()
                         else:
                             let need_bytes <i32> sub new_heap cur_bytes
-                            let grow_pages <i32> div_s add need_bytes 65535 65536
+                            let need_round <i32> add need_bytes 65535
+                            let grow_pages <i32> div_s need_round 65536
                             let prev_pages <i32> mem_grow grow_pages
                             if:
                                 cond:

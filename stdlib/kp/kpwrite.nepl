@@ -145,8 +145,9 @@ fn writer_flush <(i32)*>()> (w):
 fn writer_ensure <(i32,i32)*>()> (w, need):
     let cap <i32> load_i32 add w 4;
     let write_len <i32> load_i32 add w 8;
+    let required <i32> add write_len need;
     if:
-        le add write_len need cap
+        le required cap
         then:
             ()
         else:
