@@ -1,3 +1,21 @@
+# 2026-03-04 作業メモ (フェーズD進行: kpread_core 解放経路の Result 化)
+
+- 目的:
+  - `kpread_core` の初期化失敗時巻き戻しで `dealloc_raw` 直呼びを減らし、失敗処理を `Result` へ寄せる。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `nread` 確保失敗時、`iov/buf` の解放を `dealloc_result` ベースへ変更。
+    - `realloc` 失敗時、`iov/nread_ptr/buf` の解放を `dealloc_result` ベースへ変更。
+    - `scanner` ヘッダ確保失敗時と成功後の一時領域解放も `dealloc_result` ベースへ変更。
+    - 解放失敗は巻き戻し処理を止めず吸収する方針で統一。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kp-core-dealloc-result.json -j 15` -> `228/228 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kpreadcore-dealloc-result.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kpreadcore-dealloc-result.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread_core` 初期化失敗時の解放経路は `Result` 系APIに寄せられた。
+  - 次段で `core/mem` 公開名の安全API標準化を継続する。
+
 # 2026-03-04 作業メモ (フェーズD進行: kpwrite 初期化の根本整理)
 
 - 目的:
