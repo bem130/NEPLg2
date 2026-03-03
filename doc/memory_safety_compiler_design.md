@@ -1,112 +1,108 @@
-# メモリ操作を安全に扱うコンパイラ設計
+# メモリ安全コンパイラ設計
 
 最終更新: 2026-03-03
 
 ## 1. 目的
 
-- `mem` / `kpread` / `kpwrite` を含む線形メモリ操作を、言語仕様として安全に扱う。
-- `i32` 生ポインタ露出を段階的に排除し、型と診断で誤用を防止する。
-- 実行時クラッシュ（OOB, use-after-free, double free）を減らし、失敗を `Result/Option` へ収束させる。
+- GC なしで、コンパイラ管理のみでメモリ安全性を確保する。
+- heap/線形メモリ操作を pure として扱うための実装条件を定義する。
+- `mem` / `kpread` / `kpwrite` を `Result/Option` 前提の安全APIに統一する。
 
-## 2. 安全性モデル
+## 2. 公開モデル
 
-## 2.1 値カテゴリ
+### 2.1 公開型
 
-- `RawAddr`（内部専用）
-  - 実体は `i32` オフセット。
-  - ユーザコードには公開しない。
-- `MemPtr<T>`（公開）
-  - `addr`, `size`, `region_id`, `alive` を保持する構造体。
-  - `T` は論理型タグとして使う。
+- `MemPtr<T>`
+  - 型付きメモリ参照。
+  - 生アドレス整数は隠蔽する。
 - `RegionToken`
-  - 割り当て単位の所有権トークン。
-  - `dealloc` は `RegionToken` を消費し、再利用不能にする。
+  - 領域の所有権を表す線形トークン。
+  - `dealloc` で消費される。
 
-## 2.2 基本不変条件
+### 2.2 不変条件
 
-- `MemPtr<T>` の `region_id` は生成元 `RegionToken` と一致しなければならない。
-- `alive=false` の領域は読み書き不可。
-- `offset + sizeof(U) <= size` を満たす場合のみ `load/store<U>` を許可する。
-- `dealloc` 済みトークンは再利用不可。
+- `MemPtr<T>` は有効な `RegionToken` と対応している。
+- 解放済み `RegionToken` からのアクセスは不可能。
+- `offset + sizeof(U) <= size` を満たす場合のみ `load/store<U>` を許可。
+- 二重解放・解放後アクセスは検出して拒否する。
 
-## 3. コンパイラで行う検査
+## 3. effect との整合
 
-## 3.1 型検査フェーズ
+- メモリ操作（`alloc/realloc/dealloc/load/store`）は Pure。
+- I/O 操作（stdin/stdout/fs/env/time/random/syscall）は Impure。
+- したがって、I/O を含まないメモリ処理関数は `->` を保てる。
 
-- `load/store/alloc/realloc/dealloc` の公開APIを `MemPtr<T>` ベースへ統一。
-- `RawAddr` を受け取る API はコンパイラ内部/stdlib内部限定にする。
-- `MemPtr<T>` 以外を `load/store` に渡したら型エラーにする。
+この整理は `doc/move_effect_spec.md` の規則を前提とする。
 
-## 3.2 move/所有権検査フェーズ
+## 4. コンパイラで行う検査
+
+### 4.1 型検査
+
+- `load/store` などを `MemPtr<T>` 受け取りに統一する。
+- 生 `i32` ポインタ受け取りを公開APIから禁止する。
+- fallible 操作を `Result/Option` で型に反映する。
+
+### 4.2 move/borrow 検査
 
 - `RegionToken` は非Copy。
-- `dealloc(token)` 呼び出し時に token を moved にする。
-- moved token の再利用は `use of moved value` で拒否する。
-- `MemPtr<T>` は Copy 可否を設計で選択:
-  - 初期方針: 非Copy（厳格）
-  - 最適化方針: `RegionToken` 管理が安定後に Copy 化を検討
+- `dealloc(token)` 後の token 再利用を禁止する。
+- `MemPtr<T>` の借用中は可変性制約を適用する。
+- 分岐/ループ合流で `PossiblyMoved` を保守的に維持する。
 
-## 3.3 境界検査フェーズ（新設）
+### 4.3 境界/生存検査
 
-- `load/store` 前に bounds check を自動挿入:
-  - 失敗時は `Err(Diag::OutOfBounds)` を返す分岐へ lower。
-- 既知定数で安全が証明できる場合はチェックを削除（定数畳み込み）。
+- `load/store` の境界検査を挿入する。
+- 解放後アクセスを `Result::Err` 経路へ分岐させる。
+- 定数証明可能な安全アクセスは最適化で検査削除可能。
 
-## 3.4 解放検査フェーズ（新設）
+### 4.4 trait 制約検査
 
-- `RegionToken` の状態遷移:
-  - `Alive -> Freed`
-- `Freed` への二重 `dealloc` は `Err(Diag::DoubleFree)` へ変換。
-- `Freed` 領域へのアクセスは `Err(Diag::UseAfterFree)` へ変換。
+- `Copy` 実装可否を構造的に検査し、リソース所有型の `Copy` 実装を禁止する。
+- `Clone` 実装は move 規則と矛盾しない複製規約を満たすことを要求する。
+- メモリ系 trait（`MemReadable<T>`, `MemWritable<T>`, `RegionOwned`）の境界を満たさない呼び出しは型エラーにする。
 
-## 4. effect 規則との関係
+## 5. API 設計指針
 
-- `alloc/realloc/dealloc/load/store` は Pure。
-- `stdin/stdout/fs/env/time/random/syscall` は Impure。
-- したがって「メモリ操作を含むが I/O を含まない関数」は Pure で記述できる。
+### 5.1 core/mem
 
-## 5. stdlib API への適用方針
+- `_raw` 公開関数は段階的に削除し最終的に廃止。
+- `_safe` 接尾辞は廃止し、安全版を標準名へ統一。
+- 失敗を `Result<_, Diag>` または `Option<_>` で返す。
 
-## 5.1 `core/mem.nepl`
+### 5.2 kpread / kpwrite
 
-- `_raw` を最終削除し、`Result/Option` 版のみ残す。
-- `alloc_ptr` は `Result<MemPtr<u8>, Diag>` を返す。
-- `load/store` は `MemPtr<T>` を受け、成功/失敗を返す。
+- `Scanner` / `Writer` に所有権と領域情報を保持させる。
+- ハンドル `i32` を外部APIへ露出しない。
+- I/O 実行部のみ Impure として扱う。
 
-## 5.2 `kp/kpread.nepl`
+### 5.3 trait ベース API
 
-- `Scanner` 内部に `MemPtr<u8>` と `RegionToken` を保持する。
-- `scanner_free` は token を消費する。
-- `scanner_read_*` は `Result<value, Diag>` を標準化する。
+- `core/mem` の読み書きAPIは trait 境界で能力を表現する。
+- `kpread/kpwrite` は `RegionOwned` を満たす型のみが解放操作を実行できるようにする。
 
-## 5.3 `kp/kpwrite.nepl`
+## 6. 診断
 
-- `Writer` も同様に `MemPtr<u8>` と `RegionToken` を保持する。
-- バッファ拡張失敗を `Err(Diag::OutOfMemory)` で返す。
-- flush/write の I/O 本体のみ Impure とする。
+少なくとも以下の診断カテゴリを持つ。
 
-## 6. 診断方針
-
-追加する診断カテゴリ（IDは実装時に採番）:
-
-- メモリ型不一致（`MemPtr<T>` 必須箇所）
+- メモリ型不一致
 - 範囲外アクセス
 - 解放後アクセス
 - 二重解放
-- 解放漏れ（将来的に関数境界検査を導入）
+- moved 値使用
+- pure 文脈での impure 呼び出し
 
-`compile_fail` では `diag_id` で固定検証する。
+compile_fail テストでは diag_id で固定検証する。
 
-## 7. 最小導入ステップ
+## 7. 段階導入
 
-1. `MemPtr<T>` / `RegionToken` 型を `core/mem` に定義。
-2. `mem` 公開APIを `Result/Option` 版に一本化。
-3. move_check に token 消費検査を追加。
-4. `kpread/kpwrite` を新APIへ移行。
-5. `tests/memory_safety.n.md` を追加し、OOB/二重解放/解放後アクセスを検証。
+1. `MemPtr<T>` / `RegionToken` を core/mem で確立。
+2. builtins/effect 判定を仕様へ合わせる。
+3. move check を token 消費対応へ拡張。
+4. stdlib (`mem/kpread/kpwrite`) を安全APIへ統一。
+5. tests に memory/effect 回帰を追加。
 
 ## 8. 非目標
 
 - GC 導入は行わない。
-- 暗黙回復（不正アクセスを自動修復）は行わない。
-- 旧 `i32` ポインタ API との後方互換は維持しない。
+- 未定義動作で隠す設計は採用しない。
+- 旧ポインタAPIとの後方互換は維持しない。

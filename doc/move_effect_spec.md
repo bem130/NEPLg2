@@ -1,159 +1,173 @@
-# move規則・pure/impure規則 再設計仕様
+# move規則・pure/impure規則 統合仕様
 
 最終更新: 2026-03-03
 
-## 0. 3軸の分離
+## 0. 仕様の前提
 
-この仕様では、次の3軸を明確に分離して扱う。
+この仕様は、次の3軸を分離して扱う。
 
 - `Option/Result`: 欠損・失敗の表現
 - `Pure/Impure`: 外部観測可能な副作用の表現
-- `Move/Borrow/Copy`: 所有権と再利用可能性の表現
+- `Move/Borrow/Copy/Clone`: 所有権と再利用可能性の表現
 
-`Result` を返すこと自体は impure を意味しない。  
-逆に pure 関数であっても、非Copy値を引数で受け取れば move は発生する。
+`Result` を返すこと自体は impure を意味しない。
+move は effect と独立に判定する。
 
 ## 1. 目的
 
-- move規則と effect 規則の責務を分離し、判定理由を明確化する。
-- heap / 線形メモリ操作は「外部世界への副作用ではない」ため pure として扱う。
-- impure は I/O（入出力、OS呼び出し、環境依存値取得）に限定する。
-- stdlib の API 設計（`mem` / `kpread` / `kpwrite`）を move 規則と整合させる。
+- GC なしで、コンパイラ管理のみでメモリ安全性を担保する。
+- heap/線形メモリ操作を pure として扱える論理モデルを確定する。
+- impure を I/O 系操作に限定し、effect 判定を明確化する。
+- stdlib を `Result/Option` 前提の安全APIへ統一する。
 
-## 2. 基本方針
+## 2. Pure/Impure の意味
 
-### 2.1 effect は「外部観測可能な副作用」で判定する
+### 2.1 判定基準
 
-- `->` : Pure
-- `*>` : Impure
+- `->`: Pure
+- `*>`: Impure
 
-判定基準:
+Pure/Impure は「外部環境に対する観測可能な副作用」で判定する。
 
 - Pure:
-  - 算術・比較・分岐・束縛
-  - heap / 線形メモリの `alloc/realloc/dealloc/load/store`
-  - コンパイラ管理の内部状態のみを書き換える処理
+  - 算術、比較、分岐、束縛、データ構築
+  - heap/線形メモリ操作（`alloc/realloc/dealloc/load/store`）
 - Impure:
   - 標準入力/標準出力
   - ファイルシステム
-  - 環境変数・argv・時刻・乱数
-  - syscall / extern によるホスト依存操作
+  - 環境変数、argv、時刻、乱数
+  - syscall/extern によるホスト依存I/O
 
-### 2.2 move は「所有権と再利用可能性」で判定する
+### 2.2 heap/線形メモリを Pure にできる条件
 
-effect と独立に判定する。  
-Pure でも move される値は move される。Impure でも Copy 値は再利用できる。
+heap/線形メモリ操作を Pure とするため、以下を必須条件とする。
 
-## 3. effect 規則（呼び出し規則）
+1. メモリ状態はコンパイラ内部で線形資源として管理される。
+2. 生ポインタ整数は公開APIに露出しない。
+3. アドレス値の比較・算術など、実装依存の観測を禁止する。
+4. 不正操作は未定義動作にせず `Result/Option` で返す。
 
-### 3.1 呼び出し制約
+この条件下では、メモリ操作は「隠蔽された内部状態遷移」であり、I/O とは分離できる。
 
-- Pure 文脈から Impure 関数を呼び出してはならない。
-- Impure 文脈から Pure/Impure の両方を呼び出してよい。
+### 2.3 entry 関数の扱い
 
-### 3.2 エントリ関数
+- entry を強制的に Impure へ昇格する特例は廃止する。
+- entry も署名どおりに effect を判定する。
 
-- エントリ関数も署名どおりに effect を評価する。
-- 既存実装の「entry を常に Impure 文脈で評価する」挙動は廃止する。
-- これにより、I/O を行わない `main` を Pure のまま記述できる。
+## 3. Move/Borrow/Copy/Clone
 
-### 3.3 intrinsic / extern の effect
+### 3.1 move の原則
 
-- intrinsic は effect を固定表で管理する。
-  - `load/store/alloc/realloc/dealloc` は Pure
-  - `fd_read/fd_write` 相当は Impure
-- extern は既定で Impure とする。
-  - Pure 指定を許可する場合は、個別 whitelist とテストで管理する。
+- 値渡し引数はデフォルトで move。
+- `Copy` 型は move でなく複製として扱う。
+- 非Copy型は move 後に再利用不可。
 
-## 4. move 規則
+### 3.2 borrow の原則
 
-### 4.1 型カテゴリ
+- borrow は所有権を移さない一時参照として扱う。
+- borrow 中の可変性制約はコンパイラが検査する。
+- 解放済み領域への borrow は禁止する。
 
-- Copy 型:
-  - `unit`, `bool`, 数値型、参照型
-  - 全フィールドが Copy の tuple/struct/enum
-- Move 型:
-  - `Box`, 所有コンテナ（`Vec`, `String`, `HashMap` 等）
-  - 非Copyフィールドを含む tuple/struct/enum
-- Resource 型（非Copy）:
-  - `Scanner`, `Writer`, `File` など I/O ハンドル
+### 3.3 Copy/Clone の原則
 
-### 4.2 関数引数の扱い
+- `Copy`: 暗黙複製可能な値型のみ。
+- `Clone`: 明示的複製。コストや共有有無は型ごとに定義する。
+- リソース型（メモリトークン、I/Oハンドル）は非Copy。
 
-- デフォルトは値渡し（所有権移動）。
-- Copy 型は実質コピーなので再利用可能。
-- 非Copy 型は 1 回消費で moved 扱い。
+### 3.4 変数状態の追跡
 
-### 4.3 分岐・ループの合流
+move check は少なくとも以下を追跡する。
 
-- `if/match`: 分岐合流は `Valid / Moved / PossiblyMoved` の3値でマージする。
-- `while`: ループ本体で move が起きる値は `PossiblyMoved` に昇格する。
+- `Valid`
+- `Moved`
+- `PossiblyMoved`
+- `BorrowedShared`
+- `BorrowedUnique`
 
-### 4.4 borrow 相当の扱い
+分岐合流とループで状態を保守的にマージする。
 
-- アドレス引数を取る `load/store` 系は、アドレス式を borrow 扱いにする。
-- borrow は move を発生させない。
-- borrow 先が `Moved/PossiblyMoved` の場合はエラーにする。
+### 3.5 trait の位置づけ
 
-## 5. heap / 線形メモリを Pure とするための条件
+`trait` は effect と move の補助情報を型に付与する契約として扱う。
 
-### 5.1 条件
+- `Copy` trait:
+  - 暗黙複製可能な型のみ実装可。
+  - リソース所有型（`RegionToken`, `Scanner`, `Writer`）には実装禁止。
+- `Clone` trait:
+  - 明示複製のみ許可。
+  - 共有複製か独立複製かを型ごとに定義する。
+- メモリ系 trait（導入予定）:
+  - 例: `MemReadable<T>`, `MemWritable<T>`, `RegionOwned`
+  - `load/store` や `dealloc` の呼び出し可能条件を型制約として表現する。
 
-- メモリ領域はランタイム内部状態としてコンパイラが一貫管理する。
-- 同一入力・同一初期状態で評価結果が決定的である。
-- 外部 I/O（fd/syscall）に依存しない。
+trait 実装可否は move check と整合して検査する。
 
-### 5.2 API 設計制約
+## 4. メモリ安全モデル
 
-- `mem` は `Result/Option` を標準とし、失敗を値で返す。
-- `_safe` 接尾辞は廃止し、安全版をデフォルト API とする。
-- `_raw` 系は移行完了後に削除する。
+### 4.1 公開型
 
-## 6. stdlib 設計指針（move 規則整合）
+- `MemPtr<T>`: 型付きメモリ参照
+- `RegionToken`: 領域所有権トークン
 
-### 6.1 破壊的更新 API
+`i32` 生ポインタは公開APIで禁止する。
 
-- `push/insert/update/remove` は更新後の `Self` を返す（チェーン可能）。
-- `Pair<Self, T>` を返さない（取得系でのみ値を返す）。
+### 4.2 不変条件
 
-### 6.2 取得 API
+- `MemPtr<T>` は有効な `RegionToken` と対応していること。
+- `dealloc` は `RegionToken` を消費し、以後再利用不可。
+- 境界外アクセス、解放後アクセス、二重解放はコンパイラ/ランタイム検査で拒否。
 
-- `get/len/peek/contains` は取得値のみを返す。
-- 継続利用が必要な場合は API 呼び出し前に値束縛を分離するか、Copy 化可能なラッパを採用する。
+### 4.3 失敗の表現
 
-### 6.3 `kpread/kpwrite`
+- fallible API は `Result<_, Diag>` を標準とする。
+- optional API は `Option<_>` を用いる。
+- 旧 `_safe` 接尾辞は廃止し、安全版をデフォルト命名に統一する。
 
-- `Scanner` / `Writer` は `i32` 生ハンドルを公開しない設計へ最終移行する。
-- I/O 操作を含む関数は Impure、メモリ整形のみの補助関数は Pure に分離する。
+## 5. #wasm / #llvmir と effect
 
-## 7. 実装タスク（コンパイラ）
+- 生ターゲットブロックも effect 検査対象に含める。
+- メモリアクセス命令は pure 文脈で許可可能。
+- I/O 系命令を含む場合は impure 文脈を要求する。
+- 判定は命令種別テーブルで一元管理する。
 
-1. `entry` を強制 Impure にする特例を削除する。
-2. `TypeCtx::is_copy` を構造的判定へ拡張する（struct/enum を含む）。
-3. intrinsic の effect テーブルを実装し、typecheck で一元参照する。
-4. move_check の borrow 判定を API 設計と一致させる。
-5. 診断IDを move/effect 系へ拡充し、compile_fail テストで固定化する。
+## 6. NEPLg2 既存仕様との整合
 
-## 8. テスト計画
+### 6.1 前置記法・式指向との整合
 
-- `tests/move_effect.n.md`（新規）
-  - pure から I/O 呼び出しが失敗すること
-  - pure から `mem` 操作が通ること
-  - 分岐/ループ合流で `PossiblyMoved` が検出されること
-- `tests/overload.n.md`
-  - effect が混在するオーバーロード解決の回帰
-- `tests/kp.n.md`, `tests/stdin.n.md`
-  - `Scanner` / `Writer` の move 安全性回帰
+- 本仕様は前置記法を変更しない。
+- `Pure/Impure` 判定は関数型 `a->b` / `a*>b` で表現し、既存の式指向規則と整合する。
+- 型注釈 `<T>` は既存仕様どおり `(.T)->.T` として扱い、overload 解決の曖昧性解消に用いる。
+
+### 6.2 オーバーロードとの整合
+
+- 同名オーバーロードは既存の解決規則（引数型・戻り型・型引数）に従う。
+- 暗黙castは行わない。必要な場合は明示 `cast` と型注釈で解決する。
+- 現行実装の「同名オーバーロードは同一 effect を要求する」制約を維持する。
+  - そのため、pure/impure を同名だけで分岐させるAPI設計は採用しない。
+  - effect が異なる場合は別名関数か明示的な呼び分けを使う。
+
+## 7. コンパイラ実装要件
+
+1. builtins の `alloc/realloc/dealloc` を Pure に統一する。
+2. `entry` 強制 Impure 特例を削除する。
+3. intrinsic effect 判定を一元テーブル化する。
+4. move check に `RegionToken` 消費規則を導入する。
+5. `TypeCtx::is_copy` を構造型（tuple/struct/enum）まで拡張する。
+6. 診断IDを move/effect/memory safety 系へ割り当てる。
+
+## 8. テスト要件
+
+- `tests/move_effect.n.md`:
+  - pure から I/O 呼び出しが拒否されること
+  - pure からメモリ操作が許可されること
+- `tests/memory_safety.n.md`:
+  - OOB / UAF / double free の検出
+- `tests/overload.n.md`:
+  - type annotation と overload が move/effect と両立すること
+  - 同名オーバーロードの effect 一致制約が維持されること
 
 ## 9. 非目標
 
-- 暗黙 cast による overload 解決は行わない。
-- 旧 API との後方互換は維持しない。
-
-## 10. 現行実装との主要ギャップ（2026-03-03時点）
-
-- `check_function` が entry 関数を強制的に Impure 文脈で評価している。
-- `builtins` の `alloc/realloc/dealloc` が Impure として登録されている。
-- `TypeCtx::is_copy` が `struct/enum` を常に非Copyとして扱っている。
-
-これらは本仕様と不一致であり、`todo.md` の実装項目で順次解消する。
+- GC 導入は行わない。
+- 暗黙castによる overload 解決は行わない。
+- 旧APIとの後方互換は維持しない。

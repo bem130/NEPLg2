@@ -1,3 +1,30 @@
+# 2026-03-03 作業メモ (仕様最終確認: 前置記法/オーバーロード整合)
+- 実施:
+  - `doc/move_effect_spec.md` に「NEPLg2既存仕様との整合」章を追加。
+  - 前置記法、型注釈、オーバーロード、暗黙cast禁止との整合を明記。
+  - 同名オーバーロードの effect 一致制約を仕様へ反映。
+- 結果:
+  - 設計方針（メモリ操作 pure / I/O のみ impure）と既存言語仕様の論理矛盾は無し。
+  - 実装未反映箇所（builtins の effect, entry 特例）は引き続き `todo.md` 管理。
+
+# 2026-03-03 作業メモ (move/effect/memory 仕様の再確定: trait 統合)
+- 目的:
+  - heap/線形メモリ操作を pure とする設計を矛盾なく確定し、`move/borrow/copy/clone` と一体で仕様化する。
+- 実施:
+  - `doc/move_effect_spec.md` を更新。
+    - `Pure/Impure` の判定を「I/O 外部副作用基準」に固定。
+    - メモリ操作 pure 化の成立条件（状態隠蔽・生ポインタ非公開・Result/Option 化）を明文化。
+    - `trait` の位置づけを追加し、`Copy/Clone` とメモリ系 trait の役割を定義。
+  - `doc/memory_safety_compiler_design.md` を更新。
+    - trait 制約検査（`Copy` 可否、`Clone` 規約、`MemReadable/MemWritable/RegionOwned`）を追加。
+    - `core/mem` と `kpread/kpwrite` の trait ベース API 方針を追記。
+- 現実装との差分:
+  - `builtins.rs` では `alloc/realloc/dealloc` が依然 `Effect::Impure`。
+  - `typecheck.rs` では entry を強制 `Impure` にしている。
+  - trait 境界でのメモリ能力検査は未実装。
+- 次:
+  - `todo.md` の move/effect・メモリ安全タスクに trait 導入を反映し、実装フェーズへ進む。
+
 # 2026-03-03 作業メモ (メモリ安全コンパイラ機構の設計)
 - 目的:
   - `i32` 生ポインタ露出を減らし、コンパイラ検査で `mem/kpread/kpwrite` の誤用を防ぐ。

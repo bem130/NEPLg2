@@ -37,6 +37,7 @@
 - `doc/move_effect_spec.md` に基づいて、`entry` の強制 Impure 特例を撤廃する。
 - `TypeCtx::is_copy` を構造型（tuple/struct/enum）へ拡張する。
 - intrinsic の effect を一元管理するテーブルを導入し、typecheck 判定を統一する。
+- `Copy/Clone` の trait 実装可否を move 規則と整合する形で検査する。
 - `mem/kpread/kpwrite` を `_safe` なしの安全APIへ一本化し、`_raw` を最終削除する。
 - move/effect の回帰テスト（`tests/move_effect.n.md` ほか）を追加する。
 
@@ -44,6 +45,7 @@
 - `doc/memory_safety_compiler_design.md` に基づいて、`MemPtr<T>` と `RegionToken` の型モデルを導入する。
 - `load/store` での境界チェック挿入と、証明可能ケースのチェック削除を実装する。
 - move_check に token 消費検査（解放後アクセス/二重解放検出）を導入する。
+- `MemReadable<T>`, `MemWritable<T>`, `RegionOwned` の trait 境界でメモリ能力を型検査する。
 - `tests/memory_safety.n.md` を追加し、diag_id を含めて検証する。
 
 ---
