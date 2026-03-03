@@ -192,6 +192,7 @@ fn main <()->i32> ():
 ## 非Copy値の shared borrow 中 move は拒否
 
 neplg2:test[compile_fail]
+diag_id: 3051
 ```neplg2
 #entry main
 #indent 4
@@ -303,6 +304,7 @@ fn main <()->i32> ():
 ## RegionToken は非Copyとして move 後再利用不可
 
 neplg2:test[compile_fail]
+diag_id: 3053
 ```neplg2
 #entry main
 #indent 4
@@ -317,5 +319,52 @@ fn consume <(RegionToken)->i32> (_t):
 fn main <()->i32> ():
     let t <RegionToken> RegionToken 1
     consume t
+    consume t
+```
+
+## move 後の borrow は拒否
+
+neplg2:test[compile_fail]
+diag_id: 3063
+```neplg2
+#entry main
+#indent 4
+#target core
+
+struct RegionToken:
+    raw <i32>
+
+fn consume <(RegionToken)->i32> (_t):
+    1
+
+fn main <()->i32> ():
+    let t <RegionToken> RegionToken 1
+    consume t
+    let r &t
+    0
+```
+
+## 分岐で move された可能性のある値の使用は拒否
+
+neplg2:test[compile_fail]
+diag_id: 3054
+```neplg2
+#entry main
+#indent 4
+#target core
+
+struct RegionToken:
+    raw <i32>
+
+fn consume <(RegionToken)->i32> (_t):
+    1
+
+fn main <()->i32> ():
+    let t <RegionToken> RegionToken 1
+    if true:
+        then:
+            consume t
+        else:
+            0
     consume t
 ```

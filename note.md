@@ -23,7 +23,32 @@
   - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-scanner-writer-typed-direct.json -j 15` -> `262/262 pass`
 - 状況:
   - 下流の主要利用箇所は `Scanner/Writer` 直接利用へ移行済み。
-  - 次段で `kpread/kpwrite` の i32 ハンドル受け取りオーバーロードの公開面整理を継続する。
+- 次段で `kpread/kpwrite` の i32 ハンドル受け取りオーバーロードの公開面整理を継続する。
+
+# 2026-03-04 作業メモ (上流修正: move_check 診断IDの明示化)
+
+- 目的:
+  - `move_check` が生成する主要エラーに `diag_id` を付与し、`compile_fail` を診断IDで固定検証できる状態にする。
+- 根本原因:
+  - move/borrow 系エラーは文言一致に依存しており、将来の文言調整でテストが壊れやすかった。
+  - `todo.md` の「診断IDの明示付与」を満たすには、診断生成点（`move_check.rs`）で enum を直接指定する必要があった。
+- 変更:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `3051..3065` の move/borrow 系 `DiagnosticId` を追加。
+    - `from_u32` / `message` に新IDを追加。
+  - `nepl-core/src/passes/move_check.rs`
+    - `Diagnostic::error(...)` に `with_id(...)` を付与。
+    - 対象: use/move/borrow/assign/drop/loop合流の主要診断。
+  - `tests/move_effect.n.md`
+    - 既存 compile_fail 2件に `diag_id` を追加（shared borrow move / move後再利用）。
+    - 新規 compile_fail 2件を追加（move後borrow=3063、分岐後potentially moved=3054）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md --no-tree -o /tmp/tests-move-effect-diagid.json -j 15` -> `220/220 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-move-diagid.json -j 15` -> `789/789 pass`
+- 状況:
+  - move/borrow系の `compile_fail + diag_id` 基盤が上流で確立。
+  - 次段は `todo.md` の診断ID未適用領域（parser/typecheck/resolveの残り）へ拡張する。
 
 # 2026-03-04 作業メモ (フェーズD進行: `scanner_new` / `writer_new` の曖昧オーバーロード根治)
 

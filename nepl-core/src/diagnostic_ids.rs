@@ -113,6 +113,36 @@ pub enum DiagnosticId {
     TypeCopyImplTargetNotCopy = 3049,
     /// Copy 実装には Clone 実装が必要。
     TypeCopyImplRequiresClone = 3050,
+    /// shared borrow 中の値を move しようとした。
+    TypeMoveFromSharedBorrowedValue = 3051,
+    /// unique borrow 中の値を使用しようとした。
+    TypeUseUniquelyBorrowedValue = 3052,
+    /// move 済み値を使用しようとした。
+    TypeUseMovedValue = 3053,
+    /// move された可能性のある値を使用しようとした。
+    TypeUsePossiblyMovedValue = 3054,
+    /// shared borrow 中の値へ代入しようとした。
+    TypeAssignSharedBorrowedValue = 3055,
+    /// unique borrow 中の値へ代入しようとした。
+    TypeAssignUniquelyBorrowedValue = 3056,
+    /// shared borrow 中の値を drop しようとした。
+    TypeDropSharedBorrowedValue = 3057,
+    /// unique borrow 中の値を drop しようとした。
+    TypeDropUniquelyBorrowedValue = 3058,
+    /// move 済み値を drop しようとした。
+    TypeDropMovedValue = 3059,
+    /// move された可能性のある値を drop しようとした。
+    TypeDropPossiblyMovedValue = 3060,
+    /// shared borrow 中の値を unique borrow しようとした。
+    TypeUniqueBorrowSharedBorrowedValue = 3061,
+    /// unique borrow 中の値を borrow しようとした。
+    TypeBorrowUniquelyBorrowedValue = 3062,
+    /// move 済み値を borrow しようとした。
+    TypeBorrowMovedValue = 3063,
+    /// move された可能性のある値を borrow しようとした。
+    TypeBorrowPossiblyMovedValue = 3064,
+    /// ループ反復で move される可能性がある。
+    TypeLoopPotentiallyMovedValue = 3065,
 }
 
 impl DiagnosticId {
@@ -176,6 +206,21 @@ impl DiagnosticId {
             3048 => Some(DiagnosticId::TypeIntrinsicArgTypeMismatch),
             3049 => Some(DiagnosticId::TypeCopyImplTargetNotCopy),
             3050 => Some(DiagnosticId::TypeCopyImplRequiresClone),
+            3051 => Some(DiagnosticId::TypeMoveFromSharedBorrowedValue),
+            3052 => Some(DiagnosticId::TypeUseUniquelyBorrowedValue),
+            3053 => Some(DiagnosticId::TypeUseMovedValue),
+            3054 => Some(DiagnosticId::TypeUsePossiblyMovedValue),
+            3055 => Some(DiagnosticId::TypeAssignSharedBorrowedValue),
+            3056 => Some(DiagnosticId::TypeAssignUniquelyBorrowedValue),
+            3057 => Some(DiagnosticId::TypeDropSharedBorrowedValue),
+            3058 => Some(DiagnosticId::TypeDropUniquelyBorrowedValue),
+            3059 => Some(DiagnosticId::TypeDropMovedValue),
+            3060 => Some(DiagnosticId::TypeDropPossiblyMovedValue),
+            3061 => Some(DiagnosticId::TypeUniqueBorrowSharedBorrowedValue),
+            3062 => Some(DiagnosticId::TypeBorrowUniquelyBorrowedValue),
+            3063 => Some(DiagnosticId::TypeBorrowMovedValue),
+            3064 => Some(DiagnosticId::TypeBorrowPossiblyMovedValue),
+            3065 => Some(DiagnosticId::TypeLoopPotentiallyMovedValue),
             _ => None,
         }
     }
@@ -265,6 +310,35 @@ impl DiagnosticId {
             DiagnosticId::TypeCopyImplRequiresClone => {
                 "copy impl requires clone impl for the same target type"
             }
+            DiagnosticId::TypeMoveFromSharedBorrowedValue => {
+                "cannot move out of shared borrowed value"
+            }
+            DiagnosticId::TypeUseUniquelyBorrowedValue => "use of uniquely borrowed value",
+            DiagnosticId::TypeUseMovedValue => "use of moved value",
+            DiagnosticId::TypeUsePossiblyMovedValue => "use of potentially moved value",
+            DiagnosticId::TypeAssignSharedBorrowedValue => {
+                "cannot assign to shared borrowed value"
+            }
+            DiagnosticId::TypeAssignUniquelyBorrowedValue => {
+                "cannot assign to uniquely borrowed value"
+            }
+            DiagnosticId::TypeDropSharedBorrowedValue => "cannot drop shared borrowed value",
+            DiagnosticId::TypeDropUniquelyBorrowedValue => {
+                "cannot drop uniquely borrowed value"
+            }
+            DiagnosticId::TypeDropMovedValue => "drop of moved value",
+            DiagnosticId::TypeDropPossiblyMovedValue => "drop of potentially moved value",
+            DiagnosticId::TypeUniqueBorrowSharedBorrowedValue => {
+                "cannot uniquely borrow shared borrowed value"
+            }
+            DiagnosticId::TypeBorrowUniquelyBorrowedValue => {
+                "cannot borrow uniquely borrowed value"
+            }
+            DiagnosticId::TypeBorrowMovedValue => "borrow of moved value",
+            DiagnosticId::TypeBorrowPossiblyMovedValue => {
+                "borrow of potentially moved value"
+            }
+            DiagnosticId::TypeLoopPotentiallyMovedValue => "potentially moved value in loop",
         }
     }
 
