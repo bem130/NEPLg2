@@ -10,6 +10,7 @@
 
 #import "core/mem" as *
 #import "core/math" as *
+#import "core/cast" as *
 
 //: stdio: 標準入出力（WASI / LLVM）
 //:
@@ -63,12 +64,12 @@ fn fd_write <(i32,i32,i32,i32)*>i32> (_fd,iovs,iovs_len,nwritten_ptr):
                     let n64 <i64> __linux_syscall_rw 1 fd base len;
                     if:
                         cond:
-                            lt n64 i64_extend_i32_u 0
+                            lt n64 <i64> cast 0
                         then:
                             set err 1;
                             set done 1;
                         else:
-                            let n <i32> i32_wrap_i64 n64;
+                            let n <i32> cast n64;
                             set total add total n;
                             if:
                                 cond:
@@ -103,12 +104,12 @@ fn fd_read <(i32,i32,i32,i32)*>i32> (_fd,iovs,iovs_len,nread_ptr):
                     let n64 <i64> __linux_syscall_rw 0 fd base len;
                     if:
                         cond:
-                            lt n64 i64_extend_i32_u 0
+                            lt n64 <i64> cast 0
                         then:
                             set err 1;
                             set done 1;
                         else:
-                            let n <i32> i32_wrap_i64 n64;
+                            let n <i32> cast n64;
                             set total add total n;
                             if:
                                 cond:
