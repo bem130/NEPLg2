@@ -1,6 +1,6 @@
 # collections の診断（Diag）検証
 
-`alloc/collections` の不正操作が `Result<_, Diag>` で適切に返ることを確認します。
+`alloc/collections` の不正操作が `Result<_,Diag>` で適切に返ることを確認します。
 
 ## hashmap_remove_missing_key_returns_diag
 
@@ -37,8 +37,8 @@ neplg2:test
 #import "std/test" as *
 
 fn main <()*>()> ():
-    let hs0 <HashSet> unwrap_ok<HashSet, Diag> hashset_new;
-    let hs1 <HashSet> unwrap_ok<HashSet, Diag> hashset_insert hs0 1;
+    let hs0 <HashSet> unwrap_ok hashset_new;
+    let hs1 <HashSet> unwrap_ok hashset_insert hs0 1;
     match hashset_remove hs1 99:
         Result::Ok _h:
             test_fail "expected KeyNotFound";
@@ -88,11 +88,11 @@ neplg2:test
 #import "std/test" as *
 
 fn main <()*>()> ():
-    let mut hs <HashSet> unwrap_ok<HashSet, Diag> hashset_new;
+    let mut hs <HashSet> unwrap_ok hashset_new;
     let mut i <i32> 0;
     while lt i 16:
         do:
-            set hs unwrap_ok<HashSet, Diag> hashset_insert hs i;
+            set hs unwrap_ok hashset_insert hs i;
             set i add i 1;
 
     match hashset_insert hs 999:

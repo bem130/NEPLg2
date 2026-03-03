@@ -106,7 +106,7 @@ fn main <()->i32> ():
     let s_str <i32> size_of<str>;
     let s_opt_i32 <i32> size_of<Option<i32>>;
     let s_opt_str <i32> size_of<Option<str>>;
-    let s_res_i32_str <i32> size_of<Result<i32, str>>;
+    let s_res_i32_str <i32> size_of<Result<i32,str>>;
     if:
         lt s_opt_i32 s_i32
         then:

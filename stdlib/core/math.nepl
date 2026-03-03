@@ -40,6 +40,7 @@
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 42 add 40 2;
@@ -78,6 +79,7 @@ fn add <(i32,i32)->i32> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 5 sub 9 4;
@@ -116,6 +118,7 @@ fn sub <(i32,i32)->i32> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 42 mul 6 7;
@@ -154,6 +157,7 @@ fn mul <(i32,i32)->i32> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 -3 div_s -9 3;
@@ -192,6 +196,7 @@ fn div_s <(i32,i32)->i32> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 3 div_u 11 3;
@@ -230,6 +235,7 @@ fn div_u <(i32,i32)->i32> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 1 rem_s 10 3;
@@ -272,6 +278,7 @@ fn mod_s <(i32,i32)->i32> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 2 rem_u 11 3;
@@ -310,6 +317,7 @@ fn rem_u <(i32,i32)->i32> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 2 and 6 3;
@@ -545,6 +553,7 @@ fn rotr <(i32,i32)->i32> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 31 clz 1;
@@ -638,6 +647,7 @@ fn popcnt <(i32)->i32> (a):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     assert eq 7 7;
@@ -1295,14 +1305,17 @@ fn ge_u <(u8,u8)->bool> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> cast 40;
 //:     let b <i64> cast 2;
-//:     assert eq add a b <i64> cast 42;
+//:     let r0 <i64> add a b;
+//:     assert eq r0 <i64> cast 42;
 //:     let a <i64> cast 0;
 //:     let b <i64> cast 7;
-//:     assert eq add a b b;
+//:     let r1 <i64> add a b;
+//:     assert eq r1 b;
 //: ```
 fn add <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1337,14 +1350,17 @@ fn add <(i64,i64)->i64> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> cast 44;
 //:     let b <i64> cast 2;
-//:     assert eq sub a b <i64> cast 42;
+//:     let r0 <i64> sub a b;
+//:     assert eq r0 <i64> cast 42;
 //:     let z <i64> cast 0;
 //:     let one <i64> cast 1;
-//:     assert lt sub z one z;
+//:     let r1 <i64> sub z one;
+//:     assert lt r1 z;
 //: ```
 fn sub <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1379,12 +1395,17 @@ fn sub <(i64,i64)->i64> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> cast 6;
 //:     let b <i64> cast 7;
-//:     assert eq mul a b <i64> cast 42;
-//:     assert eq mul <i64> cast 0 <i64> cast 999 <i64> cast 0;
+//:     let r0 <i64> mul a b;
+//:     assert eq r0 <i64> cast 42;
+//:     let z <i64> cast 0;
+//:     let n <i64> cast 999;
+//:     let r1 <i64> mul z n;
+//:     assert eq r1 z;
 //: ```
 fn mul <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1420,6 +1441,7 @@ fn mul <(i64,i64)->i64> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let n9 <i64> cast -9;
@@ -1464,14 +1486,17 @@ fn div_s <(i64,i64)->i64> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> cast 100;
 //:     let b <i64> cast 9;
-//:     assert eq div_u a b <i64> cast 11;
+//:     let r0 <i64> div_u a b;
+//:     assert eq r0 <i64> cast 11;
 //:     let a <i64> cast 9;
 //:     let b <i64> cast 10;
-//:     assert eq div_u a b <i64> cast 0;
+//:     let r1 <i64> div_u a b;
+//:     assert eq r1 <i64> cast 0;
 //: ```
 fn div_u <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1507,6 +1532,7 @@ fn div_u <(i64,i64)->i64> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let n10 <i64> cast -10;
@@ -1550,14 +1576,17 @@ fn rem_s <(i64,i64)->i64> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> cast 100;
 //:     let b <i64> cast 9;
-//:     assert eq rem_u a b <i64> cast 1;
+//:     let r0 <i64> rem_u a b;
+//:     assert eq r0 <i64> cast 1;
 //:     let a <i64> cast 9;
 //:     let b <i64> cast 10;
-//:     assert eq rem_u a b a;
+//:     let r1 <i64> rem_u a b;
+//:     assert eq r1 a;
 //: ```
 fn rem_u <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1592,13 +1621,17 @@ fn rem_u <(i64,i64)->i64> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> cast 14;
 //:     let b <i64> cast 11;
-//:     assert eq and a b <i64> cast 10;
-//:     assert eq or a b <i64> cast 15;
-//:     assert eq xor a b <i64> cast 5;
+//:     let r_and <i64> and a b;
+//:     let r_or <i64> or a b;
+//:     let r_xor <i64> xor a b;
+//:     assert eq r_and <i64> cast 10;
+//:     assert eq r_or <i64> cast 15;
+//:     assert eq r_xor <i64> cast 5;
 //: ```
 fn and <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1905,6 +1938,7 @@ fn popcnt <(i64)->i64> (a):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let a <i64> cast -1;
@@ -2203,6 +2237,7 @@ fn ge_u <(i64,i64)->bool> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let x <f32> add 1.5 2.25;
@@ -2760,6 +2795,7 @@ fn ge <(f32,f32)->bool> (a,b):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let one <f64> cast 1;
@@ -3377,6 +3413,7 @@ fn extend16_s_i32 <(i32)->i32> (a):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let v <i64> cast -1;
@@ -3416,6 +3453,7 @@ fn extend_s_i32_to_i64 <(i32)->i64> (a):
 //:| #entry main
 //:| #target core
 //:| #import "core/test" as *
+//:| #import "core/cast" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let v <i64> cast -1;
@@ -4395,6 +4433,7 @@ fn not <(bool)->bool> (a):
 //:| #target core
 //:| #import "core/test" as *
 //:| #import "core/math" as *
+//:| #import "core/cast" as *
 //: fn main <()*>()> ():
 //:     assert_eq_i32 3 add 1 2;
 //:     assert lt_u <i64> cast 9 <i64> cast 10;

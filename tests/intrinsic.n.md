@@ -80,7 +80,7 @@ ret: 0
 #import "core/result" as *
 
 fn main <()->i32> ():
-    let r <Result<(), str>> Result<(), str>::Ok ();
+    let r <Result<(),str>> Result<(),str>::Ok ();
     match r:
         Result::Ok _u:
             0

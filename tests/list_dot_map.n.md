@@ -15,7 +15,7 @@ fn inc <(i32)->i32> (x):
 fn main <()->i32> ():
     let r result::ok<i32, i32> 1;
     let mapped result::map r inc;
-    result::unwrap_ok<i32, i32> mapped
+    result::unwrap_ok mapped
 ```
 
 ## list_dot_map_not_yet_supported
@@ -52,5 +52,5 @@ fn inc <(i32)->i32> (x):
 fn main <()->i32> ():
     let r ok<i32, i32> 1;
     let mapped map<i32, i32, i32> r inc;
-    unwrap_ok<i32, i32> mapped
+    unwrap_ok mapped
 ```

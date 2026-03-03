@@ -210,7 +210,7 @@ ret: 1
 #import "core/math" as *
 #import "core/result" as *
 
-fn must_hs <(Result<HashSet, Diag>)*>HashSet> (r):
+fn must_hs <(Result<HashSet,Diag>)*>HashSet> (r):
     match r:
         Result::Ok hs:
             hs

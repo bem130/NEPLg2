@@ -13,6 +13,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { spawn, spawnSync } = require('node:child_process');
+const { Worker } = require('node:worker_threads');
 const { parseFile } = require('./parser');
 const { createRunner, runSingle } = require('./run_test');
 const { runTreeSuite } = require('../tests/tree/run');
@@ -245,7 +246,7 @@ function collectChangedTestInputs(baseRef) {
         });
 }
 
-async function runAll(cases, jobs, distHint) {
+async function runAllLegacy(cases, jobs, distHint) {
     const results = [];
     let idx = 0;
 
@@ -311,6 +312,116 @@ async function runAll(cases, jobs, distHint) {
         return (a.index || 0) - (b.index || 0);
     });
     return results;
+}
+
+async function runAllThreadPool(cases, jobs, distHint) {
+    if (!Array.isArray(cases) || cases.length === 0) return [];
+
+    const workerScript = path.resolve(__dirname, 'tests_wasm_worker.js');
+    const workerCount = Math.max(1, Math.min(jobs, cases.length));
+    const results = new Array(cases.length);
+    let nextIndex = 0;
+    let finished = 0;
+    let aborted = false;
+
+    return await new Promise((resolve, reject) => {
+        const workers = [];
+
+        function shutdownAll() {
+            for (const w of workers) {
+                try { w.terminate(); } catch {}
+            }
+        }
+
+        function schedule(w) {
+            if (aborted) return;
+            if (nextIndex >= cases.length) return;
+            const i = nextIndex++;
+            const c = cases[i];
+            w.postMessage({
+                kind: 'run',
+                index: i,
+                req: {
+                    id: c.id,
+                    file: c.file,
+                    source: c.source,
+                    tags: c.tags,
+                    stdin: c.stdin || '',
+                    distHint,
+                },
+            });
+        }
+
+        for (let i = 0; i < workerCount; i++) {
+            const w = new Worker(workerScript, {
+                workerData: { distHint },
+            });
+            workers.push(w);
+
+            w.on('message', (msg) => {
+                if (aborted) return;
+                if (!msg || msg.kind !== 'result') return;
+                const idx = Number(msg.index);
+                const c = cases[idx];
+                const r = msg.result || {
+                    ok: false,
+                    status: 'error',
+                    error: 'worker returned empty result',
+                };
+                results[idx] = {
+                    ...r,
+                    id: c.id,
+                    file: c.file,
+                    index: c.index,
+                    tags: c.tags,
+                    worker: i + 1,
+                };
+                finished++;
+                if (finished >= cases.length) {
+                    shutdownAll();
+                    resolve(results.filter(Boolean));
+                    return;
+                }
+                schedule(w);
+            });
+
+            w.on('error', (err) => {
+                if (aborted) return;
+                aborted = true;
+                shutdownAll();
+                reject(err);
+            });
+
+            w.on('exit', (code) => {
+                if (aborted) return;
+                if (code !== 0 && finished < cases.length) {
+                    aborted = true;
+                    shutdownAll();
+                    reject(new Error(`wasm test worker exited unexpectedly: code=${code}`));
+                }
+            });
+        }
+
+        for (const w of workers) schedule(w);
+    });
+}
+
+async function runAll(cases, jobs, distHint) {
+    const useThreadPool = (process.env.NEPL_WASM_THREAD_POOL || '1') !== '0';
+    if (!useThreadPool || jobs <= 1 || cases.length <= 1) {
+        return runAllLegacy(cases, jobs, distHint);
+    }
+    try {
+        const results = await runAllThreadPool(cases, jobs, distHint);
+        results.sort((a, b) => {
+            if (a.file < b.file) return -1;
+            if (a.file > b.file) return 1;
+            return (a.index || 0) - (b.index || 0);
+        });
+        return results;
+    } catch {
+        return runAllLegacy(cases, jobs, distHint);
+    }
 }
 
 function hasTag(tags, name) {

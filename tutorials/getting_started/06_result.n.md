@@ -1,6 +1,6 @@
 # Result（[成功/せいこう] / [失敗/しっぱい]）
 
-`Result<T, E>` は「成功 (`Ok`) / 失敗 (`Err`)」を表す型です。
+`Result<T,E>` は「成功 (`Ok`) / 失敗 (`Err`)」を表す型です。
 
 NEPL では `core/result` に Result と基本操作が入っています。
 
@@ -16,8 +16,8 @@ neplg2:test
 #import "std/test" as *
 
 fn main <()*> ()> ():
-    let a <Result<i32, str>> Result::Ok 42
-    let b <Result<i32, str>> Result::Err "oops"
+    let a <Result<i32,str>> Result::Ok 42
+    let b <Result<i32,str>> Result::Err "oops"
 
     match a:
         Result::Ok v:
