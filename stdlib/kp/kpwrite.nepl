@@ -26,7 +26,7 @@
 #import "std/stdio" as *
 
 struct Writer:
-    raw <MemPtr>
+    raw <MemPtr<u8>>
 
 fn writer_wrap <(i32)->Writer> (raw):
     Writer mem_ptr_wrap raw

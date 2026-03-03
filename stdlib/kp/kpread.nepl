@@ -26,7 +26,7 @@
 #import "core/field" as *
 
 struct Scanner:
-    raw <MemPtr>
+    raw <MemPtr<u8>>
 
 fn scanner_wrap <(i32)->Scanner> (raw):
     Scanner mem_ptr_wrap raw

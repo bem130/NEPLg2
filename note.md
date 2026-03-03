@@ -1,3 +1,23 @@
+# 2026-03-04 作業メモ (フェーズC着手: MemPtr のジェネリクス化)
+
+- 目的:
+  - `doc/memory_safety_compiler_design.md` の型モデルに沿って、`MemPtr<T>` を公開API側へ反映する。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `MemPtr` を `MemPtr<.T>` へ変更。
+    - `mem_ptr_wrap` / `mem_ptr_addr` / `alloc_ptr` / `realloc_ptr` / `dealloc_ptr` / `mem_ptr_add` をジェネリクス対応。
+    - `load_i32_ptr` / `store_i32_ptr` は `MemPtr<i32>`、`load_u8_ptr` / `store_u8_ptr` は `MemPtr<u8>` を受けるように変更。
+  - `stdlib/kp/kpread.nepl`
+    - `Scanner.raw` を `MemPtr<u8>` 化。
+  - `stdlib/kp/kpwrite.nepl`
+    - `Writer.raw` を `MemPtr<u8>` 化。
+- テスト:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-mem-kp-generic-memptr.json -j 15` -> `220/220 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-full-after-memptr-generic.json -j 15` -> `720/720 pass`
+- 状況:
+  - `MemPtr<T>` 型モデルは導入済み（公開APIの i32 生ポインタ除去は継続）。
+  - 次は `RegionToken` 導入と `alloc/realloc/dealloc` の `Result` 一本化を進める。
+
 # 2026-03-04 作業メモ (フェーズB完了: Copy/Clone 制約 + RegionToken 非Copy化)
 
 - 目的:

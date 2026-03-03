@@ -53,13 +53,13 @@
 #import "core/result" as *
 #import "core/option" as *
 
-struct MemPtr:
+struct MemPtr<.T>:
     raw <i32>
 
-fn mem_ptr_wrap <(i32)->MemPtr> (raw):
+fn mem_ptr_wrap <.T> <(i32)->MemPtr<.T>> (raw):
     MemPtr raw
 
-fn mem_ptr_addr <(MemPtr)->i32> (p):
+fn mem_ptr_addr <.T> <(MemPtr<.T>)->i32> (p):
     get p "raw"
 
 #if[target=llvm]
@@ -608,29 +608,29 @@ fn fill_i32 <(i32,i32,i32)->()> (ptr, count, value):
             store_i32 <i32> add ptr <i32> mul i 4 value;
             set i add i 1;
 
-fn alloc_ptr <(i32)->Result<MemPtr,str>> (size):
+fn alloc_ptr <.T> <(i32)->Result<MemPtr<.T>,str>> (size):
     match alloc_safe size:
         Result::Ok raw:
-            Result<MemPtr,str>::Ok mem_ptr_wrap raw
+            Result<MemPtr<.T>,str>::Ok mem_ptr_wrap raw
         Result::Err e:
-            Result<MemPtr,str>::Err e
+            Result<MemPtr<.T>,str>::Err e
 
-fn realloc_ptr <(MemPtr,i32,i32)->Result<MemPtr,str>> (ptr, old_size, new_size):
+fn realloc_ptr <.T> <(MemPtr<.T>,i32,i32)->Result<MemPtr<.T>,str>> (ptr, old_size, new_size):
     let raw <i32> mem_ptr_addr ptr;
     match realloc_safe raw old_size new_size:
         Result::Ok next_ptr:
-            Result<MemPtr,str>::Ok mem_ptr_wrap next_ptr
+            Result<MemPtr<.T>,str>::Ok mem_ptr_wrap next_ptr
         Result::Err e:
-            Result<MemPtr,str>::Err e
+            Result<MemPtr<.T>,str>::Err e
 
-fn dealloc_ptr <(MemPtr,i32)->Result<(),str>> (ptr, size):
+fn dealloc_ptr <.T> <(MemPtr<.T>,i32)->Result<(),str>> (ptr, size):
     dealloc_safe mem_ptr_addr ptr size
 
-fn mem_ptr_add <(MemPtr,i32)->MemPtr> (ptr, off):
+fn mem_ptr_add <.T> <(MemPtr<.T>,i32)->MemPtr<.T>> (ptr, off):
     let raw <i32> mem_ptr_addr ptr;
     mem_ptr_wrap add raw off
 
-fn load_i32_ptr <(MemPtr)->Option<i32>> (p):
+fn load_i32_ptr <(MemPtr<i32>)->Option<i32>> (p):
     let raw <i32> mem_ptr_addr p;
     if:
         lt raw 1
@@ -639,7 +639,7 @@ fn load_i32_ptr <(MemPtr)->Option<i32>> (p):
         else:
             Option<i32>::Some load_i32 raw
 
-fn store_i32_ptr <(MemPtr,i32)->Result<(),str>> (p, v):
+fn store_i32_ptr <(MemPtr<i32>,i32)->Result<(),str>> (p, v):
     let raw <i32> mem_ptr_addr p;
     if:
         lt raw 1
@@ -649,7 +649,7 @@ fn store_i32_ptr <(MemPtr,i32)->Result<(),str>> (p, v):
             store_i32 raw v
             Result<(),str>::Ok ()
 
-fn load_u8_ptr <(MemPtr)->Option<i32>> (p):
+fn load_u8_ptr <(MemPtr<u8>)->Option<i32>> (p):
     let raw <i32> mem_ptr_addr p;
     if:
         lt raw 1
@@ -658,7 +658,7 @@ fn load_u8_ptr <(MemPtr)->Option<i32>> (p):
         else:
             Option<i32>::Some load_u8 raw
 
-fn store_u8_ptr <(MemPtr,i32)->Result<(),str>> (p, v):
+fn store_u8_ptr <(MemPtr<u8>,i32)->Result<(),str>> (p, v):
     let raw <i32> mem_ptr_addr p;
     if:
         lt raw 1
