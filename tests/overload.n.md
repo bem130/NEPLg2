@@ -722,3 +722,57 @@ fn make_bool <()->bool> ():
 fn main <()->i32> ():
     if make_bool make_i32 0
 ```
+
+## overload_mixed_annotations_block_call_pipe_lambda
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn pick <(i32)->i32> (v):
+    v
+
+fn pick <(i32)->bool> (v):
+    ne v 0
+
+fn apply_i32 <((i32)->i32,i32)->i32> (f, x):
+    f x
+
+fn main <()->i32> ():
+    let inc <(i32)->i32> (x):
+        add x 1
+
+    let base <i32>:
+        <i32> block:
+            apply_i32 inc 6
+    let v <i32> add base 3;
+
+    let ok_pick <bool> <bool> pick 1;
+    if and ok_pick eq v 10 1 0
+```
+
+## overload_pipe_annotations_with_mixed_cast_i32_i64_i128
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+#import "core/cast" as *
+
+fn main <()->i32> ():
+    let seed <i64> <i64> cast 5;
+    let v64 <i64>:
+        seed
+        |> add <i64> cast 7;
+
+    let v128 <i128> <i128> cast v64;
+    let back <i32> <i32> cast v128;
+    if eq back 12 1 0
+```

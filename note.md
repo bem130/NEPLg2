@@ -1,3 +1,22 @@
+# 2026-03-04 作業メモ (overload テスト拡充: 注釈混在ケースの追加)
+
+- 目的:
+  - `overload` 回帰に、型注釈の混在パターン（ブロック注釈・関数呼び出し注釈・パイプ・関数リテラル）を追加する。
+- 変更:
+  - `tests/overload.n.md`
+    - `overload_mixed_annotations_block_call_pipe_lambda` を追加。
+    - `overload_pipe_annotations_with_mixed_cast_i32_i64_i128` を追加。
+- 切り分け:
+  - 初版では `pipe requires a value on the stack (D3013)` と `ambiguous overload (D3005)` を再現。
+  - 解析結果:
+    - `let ...:` の引数ブロック直後に `|>` を直接接続する形は現行仕様では式境界が分かれる。
+    - `|> <i64> cast` は「関数値への注釈」として解釈され、戻り値注釈にはならず曖昧化する。
+  - テストは仕様に整合する形へ修正:
+    - ブロック注釈は `base` に束縛してから通常呼び出しで連結。
+    - cast は `seed` を明示変換した後に pipe で加算を実施。
+- テスト:
+  - `node nodesrc/tests.js -i tests/overload.n.md --no-tree -o /tmp/tests-overload-after-fix2.json -j 15` -> `239/239 pass`
+
 # 2026-03-04 作業メモ (フェーズD進行: stdlib の生メモリ呼び出しを `*_raw` へ段階移行)
 
 - 目的:
