@@ -269,10 +269,11 @@ ret: 1
 #import "alloc/string" as *
 #import "alloc/collections/stack" as *
 #import "core/math" as *
+#import "core/result" as *
 
 fn main <()->i32> ():
     let s <str> "abc";
-    let st <Stack<i32>> stack_new<i32>;
+    let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
     let n1 <i32> len s;
     let n2 <i32> len st;
     if and eq n1 3 eq n2 0 1 0
@@ -356,10 +357,10 @@ fn main <()->i32> ():
     if eq v 15 1 0
 ```
 
-## overload_select_by_arity_from_param_context_unary_not_supported_yet
+## overload_select_by_arity_from_param_context_unary
 
-neplg2:test[compile_fail]
-diag_id: 3006
+neplg2:test
+ret: 6
 ```neplg2
 #entry main
 #indent 4
@@ -402,10 +403,10 @@ fn main <()->i32> ():
     use_binary 3 4 calc
 ```
 
-## overload_select_by_arity_with_pipe_unary_not_supported_yet
+## overload_select_by_arity_with_pipe_unary
 
-neplg2:test[compile_fail]
-diag_id: 3006
+neplg2:test
+ret: 6
 ```neplg2
 #entry main
 #indent 4

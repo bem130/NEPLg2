@@ -1,3 +1,25 @@
+# 2026-03-03 作業メモ (オーバーロード根本修正: 関数値引数の arity/型文脈解決)
+- 目的:
+  - `use_binary 3 4 calc` や `5 |> use_unary calc` のように、オーバーロード関数名を「関数値引数」として渡すケースを安定解決する。
+  - 間に合わせで中間変数へ分解せず、入れ子呼び出し/パイプのまま通す。
+- 原因:
+  - typecheck の直接 callable 経路で、引数位置に `Var(calc)` が来た時に、期待される関数型（例: `(i32,i32)->i32`）へ具体化されず、未解決のまま残っていた。
+  - その結果、compile では `undefined identifier` / run では `null function or function signature mismatch` が発生していた。
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - `apply_function` の引数処理で、`Var(name)` かつ値 binding 不在の場合に callable 候補を検索。
+    - 引数位置の期待型 `param_ty` に unify する候補を選別し、単一候補なら `FnValue(selected_symbol)` へ置換。
+    - 複数候補一致時は `D3005`（ambiguous overload）を返す。
+    - 候補なしは既存どおり `D3006`（no matching overload）へ到達。
+  - `tests/overload.n.md`
+    - パイプ/混在 cast/関数戻り値注釈推論ケースを拡充。
+    - 仕様変更で成功可能になった 2 ケース（単項 arity 文脈・pipe 単項文脈）を `compile_fail` から成功テストへ変更。
+    - `stack_new` の `Result` 化に合わせて該当ケースを `unwrap_ok` ベースへ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/overload.n.md --no-stdlib --no-tree -o /tmp/overload_after_expect_update.json -j 1`
+    - `30/30 pass`
+
 # 2026-02-27 作業メモ (GitHub Actions: wasm-bindgen ダウンロード失敗の安定化)
 - 背景:
   - `trunk build` 実行時に、Trunk 内部の `wasm-bindgen` 自動ダウンロードが接続断で失敗するケースが発生。

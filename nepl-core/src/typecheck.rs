@@ -5316,10 +5316,59 @@ impl<'a> BlockChecker<'a> {
                         final_args.push(HirExpr {
                             ty: *cap_ty,
                             kind: HirExprKind::Var(cap_name.clone()),
-                            span: func.expr.span,
+                                span: func.expr.span,
                         });
                     }
-                    final_args.extend(args.iter().map(|a| a.expr.clone()));
+                    for (arg, param_ty) in args.iter().zip(user_params.iter()) {
+                        let mut arg_expr = arg.expr.clone();
+                        if let HirExprKind::Var(var_name) = &arg_expr.kind {
+                            if self.env.lookup_value(var_name).is_none() {
+                                let callables = self.env.lookup_all_callables(var_name);
+                                if !callables.is_empty() {
+                                    let mut matched_symbol: Option<String> = None;
+                                    let mut ambiguous = false;
+                                    for cb in callables {
+                                        let (symbol, captures_len) = match &cb.kind {
+                                            BindingKind::Func {
+                                                symbol, captures, ..
+                                            } => (symbol.clone(), captures.len()),
+                                            _ => continue,
+                                        };
+                                        if captures_len != 0 {
+                                            continue;
+                                        }
+                                        let mut tmp_ctx = self.ctx.clone();
+                                        let (cand_ty, _fresh) = tmp_ctx.instantiate(cb.ty);
+                                        if tmp_ctx.unify(cand_ty, *param_ty).is_ok() {
+                                            if matched_symbol.is_some() {
+                                                ambiguous = true;
+                                                break;
+                                            }
+                                            matched_symbol = Some(symbol);
+                                        }
+                                    }
+                                    if ambiguous {
+                                        self.diagnostics.push(
+                                            Diagnostic::error(
+                                                "ambiguous overload",
+                                                arg_expr.span,
+                                            )
+                                            .with_id(DiagnosticId::TypeAmbiguousOverload),
+                                        );
+                                        return None;
+                                    }
+                                    if let Some(symbol) = matched_symbol {
+                                        arg_expr = HirExpr {
+                                            ty: arg.ty,
+                                            kind: HirExprKind::FnValue(symbol),
+                                            span: arg_expr.span,
+                                        };
+                                    }
+                                }
+                            }
+                        }
+                        final_args.push(arg_expr);
+                    }
                     let mut trait_callee: Option<FuncRef> = None;
                     if let Some((trait_name, method_name)) = parse_variant_name(name) {
                         if let Some(trait_info) = self.traits.get(trait_name) {
