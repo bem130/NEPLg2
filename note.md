@@ -1,3 +1,16 @@
+# 2026-03-04 作業メモ (フェーズE前進: `mem_result` 系APIの回帰テスト追加)
+
+- 目的:
+  - `core/mem` の `alloc_result/realloc_result/dealloc_result` 命名変更をテストで固定する。
+- 変更:
+  - `tests/memory_safety.n.md`
+    - `alloc_result/dealloc_result` の正常系テストを追加。
+    - `dealloc_result` の無効引数 `Err` 返却テストを追加。
+- テスト:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety-after-result-rename.json -j 15` -> `213/213 pass`
+- 状況:
+  - `core/mem` の `_safe` 命名除去分について、命名変更後の最小回帰を固定した。
+
 # 2026-03-04 作業メモ (フェーズD進行: `core/mem` の `_safe` 命名除去)
 
 - 目的:
