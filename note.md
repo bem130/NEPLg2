@@ -5124,3 +5124,16 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-cast-prefixless-v3.json -j 1`
     - `2/2 pass`
+
+# 2026-03-03 作業メモ (cast APIのヘルパー名を廃止してオーバーロード本体へ統一)
+- 目的:
+  - `cast_i32_to_*` 系ヘルパー名を廃止し、`cast` のオーバーロード本体だけで運用する。
+- 実装:
+  - `stdlib/core/cast.nepl`
+    - `fn cast cast_*` alias 群を削除。
+    - すべて `fn cast <(A)->B>` 形式の直接定義へ統一。
+  - `stdlib/tests/cast.n.md`
+    - 旧ヘルパー呼び出し（`cast_bool_to_i32`, `cast_i32_to_bool`）を削除し、`cast` + 単一型注釈へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-cast-prefixless-v4.json -j 1`
+    - `2/2 pass`

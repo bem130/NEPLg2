@@ -318,8 +318,8 @@ fn rem_u <(i32,i32)->i32> (a,b):
 //:     assert_eq_i32 8 shl 1 3;
 //:     assert_eq_i32 -2 shr_s -8 2;
 //:     assert_eq_i32 1073741822 shr_u -8 2;
-//:     assert_eq_i32 2 i32_rotl 1 1;
-//:     assert_eq_i32 1 i32_rotr 2 1;
+//:     assert_eq_i32 2 rotl 1 1;
+//:     assert_eq_i32 1 rotr 2 1;
 //: ```
 fn and <(i32,i32)->i32> (a,b):
     #if[target=wasm]
@@ -470,7 +470,7 @@ fn shr_u <(i32,i32)->i32> (a,b):
             ret i32 %0
         }
 
-//: i32_rotl: i32 の左ローテート
+//: rotl: i32 の左ローテート
 //:
 //: [目的/もくてき]:
 //: - i32 のビット列を左方向に循環回転します。
@@ -498,7 +498,7 @@ fn i32_rotl <(i32,i32)->i32> (a,b):
             ret i32 %0
         }
 
-//: i32_rotr: i32 の右ローテート
+//: rotr: i32 の右ローテート
 //:
 //: [目的/もくてき]:
 //: - i32 のビット列を右方向に循環回転します。
@@ -526,7 +526,7 @@ fn i32_rotr <(i32,i32)->i32> (a,b):
             ret i32 %0
         }
 
-//: i32_clz: 先頭ゼロビット数を数える
+//: clz: 先頭ゼロビット数を数える
 //:
 //: [目的/もくてき]:
 //: - i32 の上位側に連続する 0 ビット数を返します。
@@ -547,9 +547,9 @@ fn i32_rotr <(i32,i32)->i32> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 31 i32_clz 1;
-//:     assert_eq_i32 3 i32_ctz 8;
-//:     assert_eq_i32 4 i32_popcnt 15;
+//:     assert_eq_i32 31 clz 1;
+//:     assert_eq_i32 3 ctz 8;
+//:     assert_eq_i32 4 popcnt 15;
 //: ```
 fn i32_clz <(i32)->i32> (a):
     #if[target=wasm]
@@ -565,7 +565,7 @@ fn i32_clz <(i32)->i32> (a):
             ret i32 %0
         }
 
-//: i32_ctz: 末尾ゼロビット数を数える
+//: ctz: 末尾ゼロビット数を数える
 //:
 //: [目的/もくてき]:
 //: - i32 の下位側に連続する 0 ビット数を返します。
@@ -592,7 +592,7 @@ fn i32_ctz <(i32)->i32> (a):
             ret i32 %0
         }
 
-//: i32_popcnt: 1 ビットの個数を数える
+//: popcnt: 1 ビットの個数を数える
 //:
 //: [目的/もくてき]:
 //: - i32 のビット列に含まれる 1 の個数を返します。
@@ -1332,11 +1332,11 @@ fn ge_u <(u8,u8)->bool> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let a <i64> i64_extend_i32_u 40;
-//:     let b <i64> i64_extend_i32_u 2;
-//:     assert eq add a b i64_extend_i32_u 42;
-//:     let a <i64> i64_extend_i32_u 0;
-//:     let b <i64> i64_extend_i32_u 7;
+//:     let a <i64> <i64> cast 40;
+//:     let b <i64> <i64> cast 2;
+//:     assert eq add a b <i64> cast 42;
+//:     let a <i64> <i64> cast 0;
+//:     let b <i64> <i64> cast 7;
 //:     assert eq add a b b;
 //: ```
 fn add <(i64,i64)->i64> (a,b):
@@ -1374,11 +1374,11 @@ fn add <(i64,i64)->i64> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let a <i64> i64_extend_i32_u 44;
-//:     let b <i64> i64_extend_i32_u 2;
-//:     assert eq sub a b i64_extend_i32_u 42;
-//:     let z <i64> i64_extend_i32_u 0;
-//:     let one <i64> i64_extend_i32_u 1;
+//:     let a <i64> <i64> cast 44;
+//:     let b <i64> <i64> cast 2;
+//:     assert eq sub a b <i64> cast 42;
+//:     let z <i64> <i64> cast 0;
+//:     let one <i64> <i64> cast 1;
 //:     assert lt sub z one z;
 //: ```
 fn sub <(i64,i64)->i64> (a,b):
@@ -1416,10 +1416,10 @@ fn sub <(i64,i64)->i64> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let a <i64> i64_extend_i32_u 6;
-//:     let b <i64> i64_extend_i32_u 7;
-//:     assert eq mul a b i64_extend_i32_u 42;
-//:     assert eq mul i64_extend_i32_u 0 i64_extend_i32_u 999 i64_extend_i32_u 0;
+//:     let a <i64> <i64> cast 6;
+//:     let b <i64> <i64> cast 7;
+//:     assert eq mul a b <i64> cast 42;
+//:     assert eq mul <i64> cast 0 <i64> cast 999 <i64> cast 0;
 //: ```
 fn mul <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1457,14 +1457,14 @@ fn mul <(i64,i64)->i64> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let n9 <i64> i64_extend_i32_s -9;
-//:     let p9 <i64> i64_extend_i32_s 9;
-//:     let p3 <i64> i64_extend_i32_s 3;
-//:     let n3 <i64> i64_extend_i32_s -3;
+//:     let n9 <i64> <i64> cast -9;
+//:     let p9 <i64> <i64> cast 9;
+//:     let p3 <i64> <i64> cast 3;
+//:     let n3 <i64> <i64> cast -3;
 //:     let p <i64> div_s n9 p3;
 //:     let q <i64> div_s p9 n3;
-//:     assert eq p i64_extend_i32_s -3;
-//:     assert eq q i64_extend_i32_s -3;
+//:     assert eq p <i64> cast -3;
+//:     assert eq q <i64> cast -3;
 //: ```
 fn div_s <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1501,12 +1501,12 @@ fn div_s <(i64,i64)->i64> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let a <i64> i64_extend_i32_u 100;
-//:     let b <i64> i64_extend_i32_u 9;
-//:     assert eq div_u a b i64_extend_i32_u 11;
-//:     let a <i64> i64_extend_i32_u 9;
-//:     let b <i64> i64_extend_i32_u 10;
-//:     assert eq div_u a b i64_extend_i32_u 0;
+//:     let a <i64> <i64> cast 100;
+//:     let b <i64> <i64> cast 9;
+//:     assert eq div_u a b <i64> cast 11;
+//:     let a <i64> <i64> cast 9;
+//:     let b <i64> <i64> cast 10;
+//:     assert eq div_u a b <i64> cast 0;
 //: ```
 fn div_u <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1544,13 +1544,13 @@ fn div_u <(i64,i64)->i64> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let n10 <i64> i64_extend_i32_s -10;
-//:     let p10 <i64> i64_extend_i32_s 10;
-//:     let p3 <i64> i64_extend_i32_s 3;
+//:     let n10 <i64> <i64> cast -10;
+//:     let p10 <i64> <i64> cast 10;
+//:     let p3 <i64> <i64> cast 3;
 //:     let a <i64> rem_s n10 p3;
 //:     let b <i64> rem_s p10 p3;
-//:     assert eq a i64_extend_i32_s -1;
-//:     assert eq b i64_extend_i32_s 1;
+//:     assert eq a <i64> cast -1;
+//:     assert eq b <i64> cast 1;
 //: ```
 fn rem_s <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1587,11 +1587,11 @@ fn rem_s <(i64,i64)->i64> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let a <i64> i64_extend_i32_u 100;
-//:     let b <i64> i64_extend_i32_u 9;
-//:     assert eq rem_u a b i64_extend_i32_u 1;
-//:     let a <i64> i64_extend_i32_u 9;
-//:     let b <i64> i64_extend_i32_u 10;
+//:     let a <i64> <i64> cast 100;
+//:     let b <i64> <i64> cast 9;
+//:     assert eq rem_u a b <i64> cast 1;
+//:     let a <i64> <i64> cast 9;
+//:     let b <i64> <i64> cast 10;
 //:     assert eq rem_u a b a;
 //: ```
 fn rem_u <(i64,i64)->i64> (a,b):
@@ -1629,11 +1629,11 @@ fn rem_u <(i64,i64)->i64> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let a <i64> i64_extend_i32_u 14;
-//:     let b <i64> i64_extend_i32_u 11;
-//:     assert eq and a b i64_extend_i32_u 10;
-//:     assert eq or a b i64_extend_i32_u 15;
-//:     assert eq xor a b i64_extend_i32_u 5;
+//:     let a <i64> <i64> cast 14;
+//:     let b <i64> <i64> cast 11;
+//:     assert eq and a b <i64> cast 10;
+//:     assert eq or a b <i64> cast 15;
+//:     assert eq xor a b <i64> cast 5;
 //: ```
 fn and <(i64,i64)->i64> (a,b):
     #if[target=wasm]
@@ -1784,7 +1784,7 @@ fn shr_u <(i64,i64)->i64> (a,b):
             ret i64 %0
         }
 
-//: i64_rotl: i64 の左ローテート
+//: rotl: i64 の左ローテート
 //:
 //: [目的/もくてき]:
 //: - i64 のビット列を左へ循環シフトします。
@@ -1812,7 +1812,7 @@ fn i64_rotl <(i64,i64)->i64> (a,b):
             ret i64 %0
         }
 
-//: i64_rotr: i64 の右ローテート
+//: rotr: i64 の右ローテート
 //:
 //: [目的/もくてき]:
 //: - i64 のビット列を右へ循環シフトします。
@@ -1840,7 +1840,7 @@ fn i64_rotr <(i64,i64)->i64> (a,b):
             ret i64 %0
         }
 
-//: i64_clz: 先頭ゼロビット数の計算
+//: clz: 先頭ゼロビット数の計算
 //:
 //: [目的/もくてき]:
 //: - i64 の先頭側に連続する 0 bit の個数を返します。
@@ -1867,7 +1867,7 @@ fn i64_clz <(i64)->i64> (a):
             ret i64 %0
         }
 
-//: i64_ctz: 末尾ゼロビット数の計算
+//: ctz: 末尾ゼロビット数の計算
 //:
 //: [目的/もくてき]:
 //: - i64 の末尾側に連続する 0 bit の個数を返します。
@@ -1894,7 +1894,7 @@ fn i64_ctz <(i64)->i64> (a):
             ret i64 %0
         }
 
-//: i64_popcnt: 1 ビット数の計算
+//: popcnt: 1 ビット数の計算
 //:
 //: [目的/もくてき]:
 //: - i64 に立っている 1 bit の個数を返します。
@@ -1977,10 +1977,10 @@ fn popcnt <(i64)->i64> (a):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let a <i64> i64_extend_i32_s -1;
-//:     let b <i64> i64_extend_i32_s 1;
-//:     let c <i64> i64_extend_i32_s -2;
-//:     let d <i64> i64_extend_i32_s -1;
+//:     let a <i64> <i64> cast -1;
+//:     let b <i64> <i64> cast 1;
+//:     let c <i64> <i64> cast -2;
+//:     let d <i64> <i64> cast -1;
 //:     assert eq a d;
 //:     assert ne a b;
 //:     assert lt c d;
@@ -2832,10 +2832,10 @@ fn ge <(f32,f32)->bool> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let one <f64> f64_convert_i32_s 1;
-//:     let two <f64> f64_convert_i32_s 2;
-//:     let three <f64> f64_convert_i32_s 3;
-//:     let six <f64> f64_convert_i32_s 6;
+//:     let one <f64> <f64> cast 1;
+//:     let two <f64> <f64> cast 2;
+//:     let three <f64> <f64> cast 3;
+//:     let six <f64> <f64> cast 6;
 //:     let x <f64> add one two;
 //:     let y <f64> mul x two;
 //:     assert eq x three;
@@ -3428,7 +3428,7 @@ fn i32_extend_i16_s <(i32)->i32> (a):
             ret i32 %0
         }
 
-//: i64_extend_i32_s: i32 を符号拡張して i64 へ変換する
+//: <i64> cast: i32 を符号拡張して i64 へ変換する
 //:
 //: [目的/もくてき]:
 //: - i32 の符号を保ったまま i64 に拡張します。
@@ -3449,10 +3449,10 @@ fn i32_extend_i16_s <(i32)->i32> (a):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let v <i64> i64_extend_i32_s -1;
-//:     assert lt v i64_extend_i32_u 0;
-//:     let v <i64> i64_extend_i32_s 123;
-//:     assert eq v i64_extend_i32_u 123;
+//:     let v <i64> <i64> cast -1;
+//:     assert lt v <i64> cast 0;
+//:     let v <i64> <i64> cast 123;
+//:     assert eq v <i64> cast 123;
 //: ```
 fn i64_extend_i32_s <(i32)->i64> (a):
     #if[target=wasm]
@@ -3467,7 +3467,7 @@ fn i64_extend_i32_s <(i32)->i64> (a):
             ret i64 %0
         }
 
-//: i64_extend_i32_u: i32 をゼロ拡張して i64 へ変換する
+//: <i64> cast: i32 をゼロ拡張して i64 へ変換する
 //:
 //: [目的/もくてき]:
 //: - i32 を符号なし値として i64 に拡張します。
@@ -3488,10 +3488,10 @@ fn i64_extend_i32_s <(i32)->i64> (a):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let v <i64> i64_extend_i32_u -1;
-//:     assert gt_u v i64_extend_i32_u 0;
-//:     let v <i64> i64_extend_i32_u 1;
-//:     assert eq v i64_extend_i32_u 1;
+//:     let v <i64> <i64> cast -1;
+//:     assert gt_u v <i64> cast 0;
+//:     let v <i64> <i64> cast 1;
+//:     assert eq v <i64> cast 1;
 //: ```
 fn i64_extend_i32_u <(i32)->i64> (a):
     #if[target=wasm]
@@ -3848,7 +3848,7 @@ fn i64_trunc_sat_f32_u <(f32)->i64> (a):
             ret i64 %0
         }
 
-//: f64_convert_i32_s: i32(符号付き) を f64 へ変換
+//: <f64> cast: i32(符号付き) を f64 へ変換
 //:
 //: [目的/もくてき]:
 //: - 符号付き i32 を f64 に変換します。
