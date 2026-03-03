@@ -6,14 +6,6 @@
 - 間に合わせ修正を禁止し、失敗を `Result/Option` へ収束させる。
 - 旧API互換は維持しない。公開APIは安全版へ一本化する。
 
-フェーズA: effect規則のコンパイラ反映
-- `nepl-core/src/typecheck.rs`
-  - intrinsic / raw target body (`#wasm` / `#llvmir`) の effect 判定を一元テーブル化。
-  - I/O 系命令のみ pure 文脈で拒否する。
-- 完了条件:
-  - pure 関数からメモリ操作は許可される。
-  - pure 関数から I/O は拒否される（diag_id 付き）。
-
 フェーズB: move/borrow/copy/clone 規則の確定実装
 - `TypeCtx::is_copy` を構造的判定（tuple/struct/enum）へ拡張。
 - move_check に `Valid/Moved/PossiblyMoved/BorrowedShared/BorrowedUnique` の状態遷移を反映。
@@ -90,12 +82,10 @@
 - `collections` 配下の既存データ構造を新配置に合わせて改修する。
 
 7. move/effect 再設計の実装反映
-- `doc/move_effect_spec.md` に基づいて、`entry` の強制 Impure 特例を撤廃する。
 - `TypeCtx::is_copy` を構造型（tuple/struct/enum）へ拡張する。
-- intrinsic の effect を一元管理するテーブルを導入し、typecheck 判定を統一する。
 - `Copy/Clone` の trait 実装可否を move 規則と整合する形で検査する。
 - `mem/kpread/kpwrite` を `_safe` なしの安全APIへ一本化し、`_raw` を最終削除する。
-- move/effect の回帰テスト（`tests/move_effect.n.md` ほか）を追加する。
+- move/effect 回帰テストを拡張し、`move_check` と整合する失敗パターン（分岐合流/再借用/二重解放）を追加する。
 
 8. メモリ安全コンパイラ機構の導入
 - `doc/memory_safety_compiler_design.md` に基づいて、`MemPtr<T>` と `RegionToken` の型モデルを導入する。

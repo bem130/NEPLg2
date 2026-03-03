@@ -44,6 +44,34 @@ fn main <()->i32> ():
     bad 1
 ```
 
+## pure の raw body で I/O を含む場合は拒否
+
+neplg2:test[compile_fail]
+diag_id: 3025
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn raw_io <()->i32> ():
+    #if[target=wasm]
+    #wasm:
+        i32.const 0
+        call $fd_write
+        drop
+        i32.const 0
+    #if[target=llvm]
+    #llvmir:
+        define i32 @raw_io() {
+        entry:
+            %x = call i32 @fd_write(i32 0)
+            ret i32 0
+        }
+
+fn main <()->i32> ():
+    raw_io
+```
+
 ## ローカル変数の set は pure のまま使える
 
 neplg2:test

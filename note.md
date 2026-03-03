@@ -1,3 +1,24 @@
+# 2026-03-04 作業メモ (2026-03-03 フェーズA完了: raw/intrinsic effect 一元化)
+- 目的:
+  - フェーズA残件だった「intrinsic / raw target body の effect 判定一元化」を実装し、pure 文脈からの I/O を型検査段階で拒否する。
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - `IMPURE_IO_EFFECT_MARKERS` を追加し、I/O語彙テーブルを導入。
+    - `intrinsic_effect` / `raw_lines_effect` / `raw_body_effect` を追加して effect 判定を共通化。
+    - `BlockChecker::validate_raw_body_effect` を追加し、`#wasm`/`#llvmir` 本体が I/O語彙を含む場合、pure 関数で `D3025` を返すように変更。
+    - `FnBody::Parsed` の target選択raw本体、および `FnBody::Wasm` / `FnBody::LlvmIr` 直指定の両方で同じ検査を実施。
+    - `PrefixItem::Intrinsic` でも共通 effect 判定を通すよう変更。
+  - `tests/move_effect.n.md`
+    - pure raw body で `fd_write` を含むケースを追加（`compile_fail`, `diag_id: 3025`）。
+  - `todo.md`
+    - 完了済みフェーズA項目を削除し、未完のみへ整理。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md -i tests/typeannot.n.md -i tests/intrinsic.n.md --no-tree -o /tmp/tests-effect-overload-typeannot-intrinsic.json -j 15` -> `263/263 pass`
+- 現状:
+  - フェーズA（effect規則の反映）は完了。
+  - 次はフェーズB（`TypeCtx::is_copy` 拡張と move/borrow 状態遷移の厳密化）へ進む。
+
 # 2026-03-04 作業メモ (2026-03-03 フェーズA再開: effect診断IDと回帰追加)
 - 目的:
   - `todo.md` の 2026-03-03 計画フェーズAを再開し、pure/impure 判定の診断固定を進める。
