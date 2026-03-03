@@ -5089,3 +5089,18 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/tests/math.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-stdlib-math-prefixless-only.json -j 1`
     - `1/1 pass`
+
+# 2026-03-03 作業メモ (cast依存の変換APIをprefixなし名へ追従)
+- 目的:
+  - `core/cast` が `core/math` の `型名_` 変換名へ直接依存しない形へ寄せる。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - 変換用のprefixなしエントリを追加:
+      - `extend_s`, `wrap`, `convert_s`, `trunc_s`, `promote`, `demote`, `to_i128`
+    - `u128/i128` 実装内の `i64_extend_i32_u/s` 利用を `cast` に置換。
+  - `stdlib/core/cast.nepl`
+    - `cast_i32_to_i64` などの実装本体を上記prefixなし関数呼び出しへ変更。
+  - `from_i64` 名は `alloc/string.nepl` の `from_i64`（impure）と衝突し、`pure context cannot call impure function` を誘発したため、`to_i128` に改名して根本解消。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-cast-prefixless.json -j 1`
+    - `2/2 pass`

@@ -19,7 +19,6 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/result" as *
-#import "alloc/string" as string
 
 // cast: 型変換ユーティリティ
 //
@@ -370,75 +369,101 @@ fn bitcast_f32_to_i32 <(f32)->i32> (v):
 
 //: cast_i32_to_i64: i32 を i64 に変換する
 fn cast_i32_to_i64 <(i32)->i64> (v):
-    i64_extend_i32_s v
+    extend_s v
+
+//: cast: i32 を i64 へ変換するオーバーロード
+fn cast cast_i32_to_i64;
 
 //: cast_i64_to_i32: i64 を i32 に変換する
 fn cast_i64_to_i32 <(i64)->i32> (v):
-    i32_wrap_i64 v
+    wrap v
+
+//: cast: i64 を i32 へ変換するオーバーロード
+fn cast cast_i64_to_i32;
 
 //: cast_i32_to_f64: i32 を f64 に変換する
 fn cast_i32_to_f64 <(i32)->f64> (v):
-    f64_convert_i32_s v
+    convert_s v
+
+//: cast: i32 を f64 へ変換するオーバーロード
+fn cast cast_i32_to_f64;
 
 //: cast_f64_to_i32: f64 を i32 に変換する
 fn cast_f64_to_i32 <(f64)->i32> (v):
-    i32_trunc_f64_s v
+    trunc_s v
+
+//: cast: f64 を i32 へ変換するオーバーロード
+fn cast cast_f64_to_i32;
 
 //: cast_i64_to_f64: i64 を f64 に変換する
 fn cast_i64_to_f64 <(i64)->f64> (v):
-    f64_convert_i64_s v
+    convert_s v
+
+//: cast: i64 を f64 へ変換するオーバーロード
+fn cast cast_i64_to_f64;
 
 //: cast_f64_to_i64: f64 を i64 に変換する
 fn cast_f64_to_i64 <(f64)->i64> (v):
-    i64_trunc_f64_s v
+    trunc_s v
+
+//: cast: f64 を i64 へ変換するオーバーロード
+fn cast cast_f64_to_i64;
 
 //: cast_i64_to_f32: i64 を f32 に変換する
 fn cast_i64_to_f32 <(i64)->f32> (v):
-    f32_convert_i64_s v
+    convert_s v
+
+//: cast: i64 を f32 へ変換するオーバーロード
+fn cast cast_i64_to_f32;
 
 //: cast_f32_to_i64: f32 を i64 に変換する
 fn cast_f32_to_i64 <(f32)->i64> (v):
-    i64_trunc_f32_s v
+    trunc_s v
+
+//: cast: f32 を i64 へ変換するオーバーロード
+fn cast cast_f32_to_i64;
 
 //: cast_f32_to_f64: f32 を f64 に昇格する
 fn cast_f32_to_f64 <(f32)->f64> (v):
-    f64_promote_f32 v
+    promote v
+
+//: cast: f32 を f64 へ変換するオーバーロード
+fn cast cast_f32_to_f64;
 
 //: cast_f64_to_f32: f64 を f32 に縮小する
 fn cast_f64_to_f32 <(f64)->f32> (v):
-    f32_demote_f64 v
+    demote v
 
-//: cast_i32_to_str: i32 を文字列へ変換する
-fn cast_i32_to_str <(i32)*>str> (v):
-    string::from_i32 v
+//: cast: f64 を f32 へ変換するオーバーロード
+fn cast cast_f64_to_f32;
 
-//: cast_str_to_i32: 文字列を i32 へ変換する
-fn cast_str_to_i32 <(str)*>Result<i32,i32>> (s):
-    string::to_i32 s
+//: cast_i64_to_i128: i64 を i128 に変換する
+fn cast_i64_to_i128 <(i64)->i128> (v):
+    to_i128 v
 
-//: cast_i64_to_str: i64 を文字列へ変換する
-fn cast_i64_to_str <(i64)*>str> (v):
-    string::from_i64 v
+//: cast: i64 を i128 へ変換するオーバーロード
+fn cast cast_i64_to_i128;
 
-//: cast_str_to_i64: 文字列を i64 へ変換する
-fn cast_str_to_i64 <(str)*>Result<i64,i32>> (s):
-    string::to_i64 s
+//: cast_i128_to_i64: i128 を i64 に変換する
+fn cast_i128_to_i64 <(i128)->i64> (v):
+    get v "lo"
 
-//: cast_f32_to_str: f32 を文字列へ変換する
-fn cast_f32_to_str <(f32)*>str> (v):
-    string::from_f32 v
+//: cast: i128 を i64 へ変換するオーバーロード
+fn cast cast_i128_to_i64;
 
-//: cast_str_to_f32: 文字列を f32 へ変換する
-fn cast_str_to_f32 <(str)*>Result<f32,i32>> (s):
-    string::to_f32 s
+//: cast_i32_to_i128: i32 を i128 に変換する
+fn cast_i32_to_i128 <(i32)->i128> (v):
+    to_i128 extend_s v
 
-//: cast_f64_to_str: f64 を文字列へ変換する
-fn cast_f64_to_str <(f64)*>str> (v):
-    string::from_f64 v
+//: cast: i32 を i128 へ変換するオーバーロード
+fn cast cast_i32_to_i128;
 
-//: cast_str_to_f64: 文字列を f64 へ変換する
-fn cast_str_to_f64 <(str)*>Result<f64,i32>> (s):
-    string::to_f64 s
+//: cast_i128_to_i32: i128 を i32 に変換する
+fn cast_i128_to_i32 <(i128)->i32> (v):
+    wrap get v "lo"
+
+//: cast: i128 を i32 へ変換するオーバーロード
+fn cast cast_i128_to_i32;
 
 // ptr_cast: ポインタの型を変える（unsafe）
 //

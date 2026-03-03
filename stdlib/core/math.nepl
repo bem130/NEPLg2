@@ -4320,6 +4320,54 @@ fn i64_reinterpret_f64 <(f64)->i64> (a):
             ret i64 %0
         }
 
+//: extend_s: 符号拡張を行う
+//:
+//: [目的/もくてき]:
+//: - 型名 prefix を使わずに符号拡張を呼び出せるようにします。
+fn extend_s <(i32)->i64> (a):
+    i64_extend_i32_s a
+
+//: wrap: i64 を i32 へ切り詰める
+//:
+//: [目的/もくてき]:
+//: - 型名 prefix を使わずに切り詰め変換を呼び出せるようにします。
+fn wrap <(i64)->i32> (a):
+    i32_wrap_i64 a
+
+//: convert_s: 符号付き整数を浮動小数へ変換する
+//:
+//: [目的/もくてき]:
+//: - 変換関数を型オーバーロードで統一します。
+fn convert_s <(i32)->f64> (a):
+    f64_convert_i32_s a
+fn convert_s <(i64)->f64> (a):
+    f64_convert_i64_s a
+fn convert_s <(i64)->f32> (a):
+    f32_convert_i64_s a
+
+//: trunc_s: 浮動小数を符号付き整数へ切り捨て変換する
+//:
+//: [目的/もくてき]:
+//: - 切り捨て変換を型オーバーロードで統一します。
+fn trunc_s <(f64)->i32> (a):
+    i32_trunc_f64_s a
+fn trunc_s <(f64)->i64> (a):
+    i64_trunc_f64_s a
+fn trunc_s <(f32)->i64> (a):
+    i64_trunc_f32_s a
+
+//: promote: f32 を f64 に拡張する
+fn promote <(f32)->f64> (a):
+    f64_promote_f32 a
+
+//: demote: f64 を f32 に縮小する
+fn demote <(f64)->f32> (a):
+    f32_demote_f64 a
+
+//: to_i128: i64 から拡張整数を構築する
+fn to_i128 <(i64)->i128> (v):
+    i128_from_i64 v
+
 
 //: and: bool の論理積
 //:
@@ -4510,7 +4558,7 @@ fn u128_new <(i64,i64)->u128> (hi, lo):
 
 //: u128_from_u64: u64 値から u128 値を作る
 fn u128_from_u64 <(i64)->u128> (v):
-    u128 i64_extend_i32_u 0 v
+    u128 <i64> cast 0 v
 
 //: u128_add: u128 の加算（mod 2^128）
 fn u128_add <(u128,u128)->u128> (a, b):
@@ -4520,8 +4568,8 @@ fn u128_add <(u128,u128)->u128> (a, b):
     let b_lo <i64> get b "lo";
     let lo <i64> add a_lo b_lo;
     let carry <i64> if lt_u lo a_lo:
-        then i64_extend_i32_u 1
-        else i64_extend_i32_u 0;
+        then <i64> cast 1
+        else <i64> cast 0;
     let hi0 <i64> add a_hi b_hi;
     let hi <i64> add hi0 carry;
     u128 hi lo
@@ -4534,8 +4582,8 @@ fn u128_sub <(u128,u128)->u128> (a, b):
     let b_lo <i64> get b "lo";
     let lo <i64> sub a_lo b_lo;
     let borrow <i64> if lt_u a_lo b_lo:
-        then i64_extend_i32_u 1
-        else i64_extend_i32_u 0;
+        then <i64> cast 1
+        else <i64> cast 0;
     let hi0 <i64> sub a_hi b_hi;
     let hi <i64> sub hi0 borrow;
     u128 hi lo
@@ -4565,9 +4613,9 @@ fn i128_new <(i64,i64)->i128> (hi, lo):
 
 //: i128_from_i64: i64 値を符号拡張して i128 に変換する
 fn i128_from_i64 <(i64)->i128> (v):
-    let hi <i64> if lt v i64_extend_i32_u 0:
-        then i64_extend_i32_s -1
-        else i64_extend_i32_u 0;
+    let hi <i64> if lt v <i64> cast 0:
+        then <i64> cast -1
+        else <i64> cast 0;
     i128 hi v
 
 //: i128_add: i128 の加算（mod 2^128）
@@ -4578,8 +4626,8 @@ fn i128_add <(i128,i128)->i128> (a, b):
     let b_lo <i64> get b "lo";
     let lo <i64> add a_lo b_lo;
     let carry <i64> if lt_u lo a_lo:
-        then i64_extend_i32_u 1
-        else i64_extend_i32_u 0;
+        then <i64> cast 1
+        else <i64> cast 0;
     let hi0 <i64> add a_hi b_hi;
     let hi <i64> add hi0 carry;
     i128 hi lo
@@ -4592,8 +4640,8 @@ fn i128_sub <(i128,i128)->i128> (a, b):
     let b_lo <i64> get b "lo";
     let lo <i64> sub a_lo b_lo;
     let borrow <i64> if lt_u a_lo b_lo:
-        then i64_extend_i32_u 1
-        else i64_extend_i32_u 0;
+        then <i64> cast 1
+        else <i64> cast 0;
     let hi0 <i64> sub a_hi b_hi;
     let hi <i64> sub hi0 borrow;
     i128 hi lo
@@ -4613,8 +4661,8 @@ fn i128_sub <(i128,i128)->i128> (a, b):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn u64_mul_wide <(i64,i64)->u128> (a, b):
-    let mask32 <i64> i64_extend_i32_u -1;
-    let sh32 <i64> i64_extend_i32_u 32;
+    let mask32 <i64> cast -1;
+    let sh32 <i64> cast 32;
 
     let a0 <i64> and a mask32;
     let a1 <i64> shr_u a sh32;
@@ -4628,14 +4676,14 @@ fn u64_mul_wide <(i64,i64)->u128> (a, b):
 
     let mid <i64> add p1 p2;
     let carry_mid <i64> if lt_u mid p1:
-        then i64_extend_i32_u 1
-        else i64_extend_i32_u 0;
+        then <i64> cast 1
+        else <i64> cast 0;
 
     let lo_add <i64> shl mid sh32;
     let lo <i64> add p0 lo_add;
     let carry_lo <i64> if lt_u lo p0:
-        then i64_extend_i32_u 1
-        else i64_extend_i32_u 0;
+        then <i64> cast 1
+        else <i64> cast 0;
 
     let mid_hi <i64> shr_u mid sh32;
     let hi0 <i64> add p3 mid_hi;
