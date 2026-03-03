@@ -1,3 +1,20 @@
+# 2026-03-04 作業メモ (pipe 活用と `push` 推論の確認)
+- 目的:
+  - 既存書き換え方針として、pipe 演算子を活用して中間変数とインデントを抑える。
+  - `vec_push<i32> ...` ではなく `push ...` だけで型推論できる利用形を明示する。
+- 実施:
+  - `stdlib/alloc/collections/list.nepl`
+    - doctest のリスト構築を `list_nil |> list_push_front ...` へ変更。
+    - move 規則に合わせて再利用箇所を再束縛へ整理。
+    - 実装の一部で中間変数を削減（`list_len`, `list_get`, `list_free`, `list_reverse`）。
+  - `stdlib/alloc/collections/vec.nepl`
+    - doctest の `vec_push<i32>` / `push<i32>` を `push` に統一。
+    - `vec_new<i32> |> push 10 |> push 20` の形へ変更し、型引数省略で成立する例へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/list.nepl -i stdlib/alloc/collections/vec.nepl --no-stdlib --no-tree -o /tmp/tests-list-vec-pipe.json -j 15` -> `28/28 pass`
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/vec.nepl --no-stdlib --no-tree -o /tmp/tests-vec-push-infer.json -j 15` -> `17/17 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-plus-tests-after-push-alias.json -j 15` -> `700/700 pass`
+
 # 2026-03-03 作業メモ (仕様最終確認: 前置記法/オーバーロード整合)
 - 実施:
   - `doc/move_effect_spec.md` に「NEPLg2既存仕様との整合」章を追加。
