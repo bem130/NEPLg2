@@ -4999,3 +4999,18 @@
   - `260/260 pass`
 - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-full-after-list-wrapper.json --no-tree`
   - `684/684 pass`
+# 2026-03-03 作業メモ (parser 診断IDの明示付与を拡張)
+- 目的:
+  - parser の `if/while layout` と `#wasm/#llvmir` ブロックで未付与だった診断IDを明示化し、`compile_fail diag_id` の安定性を上げる。
+- 実装:
+  - `nepl-core/src/parser.rs`
+    - `expected wasm text line` / `expected llvm ir text line` に `ParserExpectedToken (2001)` を付与。
+    - `if-layout` の `invalid marker` / `invalid marker order` / `duplicate marker` / `too many expressions` に `ParserUnexpectedToken (2002)` を付与。
+    - `if-layout` の `missing expression(s)` に `ParserExpectedToken (2001)` を付与。
+    - `while-layout` の同種エラーに `ParserUnexpectedToken (2002)` / `ParserExpectedToken (2001)` を付与。
+    - `argument layout` の `only expressions are allowed` に `ParserUnexpectedToken (2002)`、`must contain expressions` に `ParserExpectedToken (2001)` を付与。
+- 検証:
+  - `NO_COLOR=false trunk build --release --public-url /NEPLg2/` -> pass
+  - `node tests/tree/run.js` -> `18/18 pass`
+  - `node nodesrc/tests.js -i tests/if.n.md -i tests/while.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-if-while-diag.json -j 2` -> `170/170 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual -j 2` -> `1876/1876 pass`
