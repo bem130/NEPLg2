@@ -5184,3 +5184,13 @@
 - 検証:
   - `node nodesrc/tests.js -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/03_functions.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-tutorial-math-scope.json -j 1`
   - 結果: `14/14 pass`
+
+# 2026-03-03 作業メモ (math.nepl: 残存prefix文字列の統一)
+- 目的:
+  - `型名_` prefix 廃止方針に合わせ、`math.nepl` 内の残存 prefix 文字列（ドキュメント見出し・LLVM シンボル名）も統一する。
+- 実装:
+  - `u8_*` 表記を `*_u8` へ統一（コメント表記・`#llvmir` 内シンボル名を含む）。
+  - `f32_*` / `f64_*` 表記を `*_f32` / `*_f64` へ統一（コメント表記・`#llvmir` 内シンボル名を含む）。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i tests/math.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-post-rename.json -j 1` -> `6/6 pass`
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i stdlib/tests/vec.n.md -i tests/math.n.md -i tests/typeannot.n.md -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-migration-bundle.json -j 1` -> `28/28 pass`

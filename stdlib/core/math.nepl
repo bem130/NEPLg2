@@ -954,7 +954,7 @@ fn ge_u <(i32,i32)->bool> (a,b):
         }
 
 
-//: u8_add: u8 の加算（mod 2^8）
+//: add_u8: u8 の加算（mod 2^8）
 //:
 //: [目的/もくてき]:
 //: - u8 と u8 を加算します。
@@ -977,14 +977,14 @@ fn add_u8 <(u8,u8)->u8> (a,b):
         i32.and
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_add(i32 %a, i32 %b) {
+        define i32 @add_u8(i32 %a, i32 %b) {
         entry:
             %sum = add i32 %a, %b
             %0 = and i32 %sum, 255
             ret i32 %0
         }
 
-//: u8_sub: u8 の減算（mod 2^8）
+//: sub_u8: u8 の減算（mod 2^8）
 //:
 //: [目的/もくてき]:
 //: - u8 から u8 を減算します。
@@ -1007,14 +1007,14 @@ fn sub_u8 <(u8,u8)->u8> (a,b):
         i32.and
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_sub(i32 %a, i32 %b) {
+        define i32 @sub_u8(i32 %a, i32 %b) {
         entry:
             %dif = sub i32 %a, %b
             %0 = and i32 %dif, 255
             ret i32 %0
         }
 
-//: u8_mul: u8 の乗算（mod 2^8）
+//: mul_u8: u8 の乗算（mod 2^8）
 //:
 //: [目的/もくてき]:
 //: - u8 と u8 の積を計算します。
@@ -1037,14 +1037,14 @@ fn mul_u8 <(u8,u8)->u8> (a,b):
         i32.and
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_mul(i32 %a, i32 %b) {
+        define i32 @mul_u8(i32 %a, i32 %b) {
         entry:
             %prd = mul i32 %a, %b
             %0 = and i32 %prd, 255
             ret i32 %0
         }
 
-//: u8_div_u: u8 の符号なし除算
+//: div_u_u8: u8 の符号なし除算
 //:
 //: [目的/もくてき]:
 //: - u8 を符号なし整数として除算します。
@@ -1065,13 +1065,13 @@ fn div_u_u8 <(u8,u8)->u8> (a,b):
         i32.div_u
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_div_u(i32 %a, i32 %b) {
+        define i32 @div_u_u8(i32 %a, i32 %b) {
         entry:
             %0 = udiv i32 %a, %b
             ret i32 %0
         }
 
-//: u8_rem_u: u8 の符号なし剰余
+//: rem_u_u8: u8 の符号なし剰余
 //:
 //: [目的/もくてき]:
 //: - u8 を符号なし整数として剰余を計算します。
@@ -1092,13 +1092,13 @@ fn rem_u_u8 <(u8,u8)->u8> (a,b):
         i32.rem_u
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_rem_u(i32 %a, i32 %b) {
+        define i32 @rem_u_u8(i32 %a, i32 %b) {
         entry:
             %0 = urem i32 %a, %b
             ret i32 %0
         }
 
-//: u8_eq: u8 の等値比較
+//: eq_u8: u8 の等値比較
 //:
 //: [目的/もくてき]:
 //: - u8 の `a == b` を判定します。
@@ -1119,14 +1119,14 @@ fn eq_u8 <(u8,u8)->bool> (a,b):
         i32.eq
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_eq(i32 %a, i32 %b) {
+        define i32 @eq_u8(i32 %a, i32 %b) {
         entry:
             %cmp = icmp eq i32 %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: u8_ne: u8 の非等値比較
+//: ne_u8: u8 の非等値比較
 //:
 //: [目的/もくてき]:
 //: - u8 の `a != b` を判定します。
@@ -1147,14 +1147,14 @@ fn ne_u8 <(u8,u8)->bool> (a,b):
         i32.ne
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_ne(i32 %a, i32 %b) {
+        define i32 @ne_u8(i32 %a, i32 %b) {
         entry:
             %cmp = icmp ne i32 %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: u8_lt_u: u8 の符号なし小なり比較
+//: lt_u_u8: u8 の符号なし小なり比較
 //:
 //: [目的/もくてき]:
 //: - u8 を符号なし整数として `a < b` を判定します。
@@ -1175,14 +1175,14 @@ fn lt_u_u8 <(u8,u8)->bool> (a,b):
         i32.lt_u
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_lt_u(i32 %a, i32 %b) {
+        define i32 @lt_u_u8(i32 %a, i32 %b) {
         entry:
             %cmp = icmp ult i32 %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: u8_le_u: u8 の符号なし以下比較
+//: le_u_u8: u8 の符号なし以下比較
 //:
 //: [目的/もくてき]:
 //: - u8 を符号なし整数として `a <= b` を判定します。
@@ -1203,14 +1203,14 @@ fn le_u_u8 <(u8,u8)->bool> (a,b):
         i32.le_u
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_le_u(i32 %a, i32 %b) {
+        define i32 @le_u_u8(i32 %a, i32 %b) {
         entry:
             %cmp = icmp ule i32 %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: u8_gt_u: u8 の符号なし大なり比較
+//: gt_u_u8: u8 の符号なし大なり比較
 //:
 //: [目的/もくてき]:
 //: - u8 を符号なし整数として `a > b` を判定します。
@@ -1231,14 +1231,14 @@ fn gt_u_u8 <(u8,u8)->bool> (a,b):
         i32.gt_u
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_gt_u(i32 %a, i32 %b) {
+        define i32 @gt_u_u8(i32 %a, i32 %b) {
         entry:
             %cmp = icmp ugt i32 %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: u8_ge_u: u8 の符号なし以上比較
+//: ge_u_u8: u8 の符号なし以上比較
 //:
 //: [目的/もくてき]:
 //: - u8 を符号なし整数として `a >= b` を判定します。
@@ -1259,7 +1259,7 @@ fn ge_u_u8 <(u8,u8)->bool> (a,b):
         i32.ge_u
     #if[target=llvm]
     #llvmir:
-        define i32 @u8_ge_u(i32 %a, i32 %b) {
+        define i32 @ge_u_u8(i32 %a, i32 %b) {
         entry:
             %cmp = icmp uge i32 %a, %b
             %0 = zext i1 %cmp to i32
@@ -2375,7 +2375,7 @@ fn div <(f32,f32)->f32> (a,b):
             ret float %0
         }
 
-//: f32_sqrt: f32 の平方根
+//: sqrt_f32: f32 の平方根
 //:
 //: [目的/もくてき]:
 //: - f32 の平方根を返します。
@@ -2396,13 +2396,13 @@ fn sqrt <(f32)->f32> (a):
         f32.sqrt
     #if[target=llvm]
     #llvmir:
-        define float @f32_sqrt(float %a) {
+        define float @sqrt_f32(float %a) {
         entry:
             %0 = call float @llvm.sqrt.f32(float %a)
             ret float %0
         }
 
-//: f32_abs: f32 の絶対値
+//: abs_f32: f32 の絶対値
 //:
 //: [目的/もくてき]:
 //: - f32 の符号を取り除いた絶対値を返します。
@@ -2423,7 +2423,7 @@ fn abs <(f32)->f32> (a):
         f32.abs
     #if[target=llvm]
     #llvmir:
-        define float @f32_abs(float %a) {
+        define float @abs_f32(float %a) {
         entry:
             %bits = bitcast float %a to i32
             %masked = and i32 %bits, 2147483647
@@ -2457,7 +2457,7 @@ fn neg <(f32)->f32> (a):
             ret float %0
         }
 
-//: f32_ceil: f32 の切り上げ
+//: ceil_f32: f32 の切り上げ
 //:
 //: [目的/もくてき]:
 //: - f32 を「以上の最小整数値」へ切り上げます。
@@ -2477,13 +2477,13 @@ fn ceil <(f32)->f32> (a):
         f32.ceil
     #if[target=llvm]
     #llvmir:
-        define float @f32_ceil(float %a) {
+        define float @ceil_f32(float %a) {
         entry:
             %0 = call float @llvm.ceil.f32(float %a)
             ret float %0
         }
 
-//: f32_floor: f32 の切り下げ
+//: floor_f32: f32 の切り下げ
 //:
 //: [目的/もくてき]:
 //: - f32 を「以下の最大整数値」へ切り下げます。
@@ -2503,13 +2503,13 @@ fn floor <(f32)->f32> (a):
         f32.floor
     #if[target=llvm]
     #llvmir:
-        define float @f32_floor(float %a) {
+        define float @floor_f32(float %a) {
         entry:
             %0 = call float @llvm.floor.f32(float %a)
             ret float %0
         }
 
-//: f32_trunc: f32 の小数部切り捨て
+//: trunc_f32: f32 の小数部切り捨て
 //:
 //: [目的/もくてき]:
 //: - f32 の小数部を 0 方向へ切り捨てます。
@@ -2529,13 +2529,13 @@ fn trunc <(f32)->f32> (a):
         f32.trunc
     #if[target=llvm]
     #llvmir:
-        define float @f32_trunc(float %a) {
+        define float @trunc_f32(float %a) {
         entry:
             %0 = call float @llvm.trunc.f32(float %a)
             ret float %0
         }
 
-//: f32_nearest: f32 の最近接整数丸め
+//: nearest_f32: f32 の最近接整数丸め
 //:
 //: [目的/もくてき]:
 //: - f32 を最近接整数へ丸めます。
@@ -2555,13 +2555,13 @@ fn nearest <(f32)->f32> (a):
         f32.nearest
     #if[target=llvm]
     #llvmir:
-        define float @f32_nearest(float %a) {
+        define float @nearest_f32(float %a) {
         entry:
             %0 = call float @llvm.nearbyint.f32(float %a)
             ret float %0
         }
 
-//: f32_min: f32 の最小値
+//: min_f32: f32 の最小値
 //:
 //: [目的/もくてき]:
 //: - 2つの f32 から小さい方を返します。
@@ -2582,13 +2582,13 @@ fn min <(f32,f32)->f32> (a,b):
         f32.min
     #if[target=llvm]
     #llvmir:
-        define float @f32_min(float %a, float %b) {
+        define float @min_f32(float %a, float %b) {
         entry:
             %0 = call float @llvm.minimum.f32(float %a, float %b)
             ret float %0
         }
 
-//: f32_max: f32 の最大値
+//: max_f32: f32 の最大値
 //:
 //: [目的/もくてき]:
 //: - 2つの f32 から大きい方を返します。
@@ -2609,13 +2609,13 @@ fn max <(f32,f32)->f32> (a,b):
         f32.max
     #if[target=llvm]
     #llvmir:
-        define float @f32_max(float %a, float %b) {
+        define float @max_f32(float %a, float %b) {
         entry:
             %0 = call float @llvm.maximum.f32(float %a, float %b)
             ret float %0
         }
 
-//: f32_copysign: f32 の符号コピー
+//: copysign_f32: f32 の符号コピー
 //:
 //: [目的/もくてき]:
 //: - 第1引数の絶対値に、第2引数の符号ビットを適用した値を返します。
@@ -2636,7 +2636,7 @@ fn copysign <(f32,f32)->f32> (a,b):
         f32.copysign
     #if[target=llvm]
     #llvmir:
-        define float @f32_copysign(float %a, float %b) {
+        define float @copysign_f32(float %a, float %b) {
         entry:
             %0 = call float @llvm.copysign.f32(float %a, float %b)
             ret float %0
@@ -2936,7 +2936,7 @@ fn div <(f64,f64)->f64> (a,b):
             ret double %0
         }
 
-//: f64_sqrt: f64 の平方根
+//: sqrt_f64: f64 の平方根
 //:
 //: [目的/もくてき]:
 //: - f64 の平方根を返します。
@@ -2957,13 +2957,13 @@ fn sqrt <(f64)->f64> (a):
         f64.sqrt
     #if[target=llvm]
     #llvmir:
-        define double @f64_sqrt(double %a) {
+        define double @sqrt_f64(double %a) {
         entry:
             %0 = call double @llvm.sqrt.f64(double %a)
             ret double %0
         }
 
-//: f64_abs: f64 の絶対値
+//: abs_f64: f64 の絶対値
 //:
 //: [目的/もくてき]:
 //: - f64 の符号を取り除いた絶対値を返します。
@@ -2984,7 +2984,7 @@ fn abs <(f64)->f64> (a):
         f64.abs
     #if[target=llvm]
     #llvmir:
-        define double @f64_abs(double %a) {
+        define double @abs_f64(double %a) {
         entry:
             %bits = bitcast double %a to i64
             %masked = and i64 %bits, 9223372036854775807
@@ -3018,7 +3018,7 @@ fn neg <(f64)->f64> (a):
             ret double %0
         }
 
-//: f64_ceil: f64 の切り上げ
+//: ceil_f64: f64 の切り上げ
 //:
 //: [目的/もくてき]:
 //: - f64 を「以上の最小整数値」へ切り上げます。
@@ -3038,13 +3038,13 @@ fn ceil <(f64)->f64> (a):
         f64.ceil
     #if[target=llvm]
     #llvmir:
-        define double @f64_ceil(double %a) {
+        define double @ceil_f64(double %a) {
         entry:
             %0 = call double @llvm.ceil.f64(double %a)
             ret double %0
         }
 
-//: f64_floor: f64 の切り下げ
+//: floor_f64: f64 の切り下げ
 //:
 //: [目的/もくてき]:
 //: - f64 を「以下の最大整数値」へ切り下げます。
@@ -3064,13 +3064,13 @@ fn floor <(f64)->f64> (a):
         f64.floor
     #if[target=llvm]
     #llvmir:
-        define double @f64_floor(double %a) {
+        define double @floor_f64(double %a) {
         entry:
             %0 = call double @llvm.floor.f64(double %a)
             ret double %0
         }
 
-//: f64_trunc: f64 の小数部切り捨て
+//: trunc_f64: f64 の小数部切り捨て
 //:
 //: [目的/もくてき]:
 //: - f64 の小数部を 0 方向へ切り捨てます。
@@ -3090,13 +3090,13 @@ fn trunc <(f64)->f64> (a):
         f64.trunc
     #if[target=llvm]
     #llvmir:
-        define double @f64_trunc(double %a) {
+        define double @trunc_f64(double %a) {
         entry:
             %0 = call double @llvm.trunc.f64(double %a)
             ret double %0
         }
 
-//: f64_nearest: f64 の最近接整数丸め
+//: nearest_f64: f64 の最近接整数丸め
 //:
 //: [目的/もくてき]:
 //: - f64 を最近接整数へ丸めます。
@@ -3116,13 +3116,13 @@ fn nearest <(f64)->f64> (a):
         f64.nearest
     #if[target=llvm]
     #llvmir:
-        define double @f64_nearest(double %a) {
+        define double @nearest_f64(double %a) {
         entry:
             %0 = call double @llvm.nearbyint.f64(double %a)
             ret double %0
         }
 
-//: f64_min: f64 の最小値
+//: min_f64: f64 の最小値
 //:
 //: [目的/もくてき]:
 //: - 2つの f64 から小さい方を返します。
@@ -3143,13 +3143,13 @@ fn min <(f64,f64)->f64> (a,b):
         f64.min
     #if[target=llvm]
     #llvmir:
-        define double @f64_min(double %a, double %b) {
+        define double @min_f64(double %a, double %b) {
         entry:
             %0 = call double @llvm.minimum.f64(double %a, double %b)
             ret double %0
         }
 
-//: f64_max: f64 の最大値
+//: max_f64: f64 の最大値
 //:
 //: [目的/もくてき]:
 //: - 2つの f64 から大きい方を返します。
@@ -3170,13 +3170,13 @@ fn max <(f64,f64)->f64> (a,b):
         f64.max
     #if[target=llvm]
     #llvmir:
-        define double @f64_max(double %a, double %b) {
+        define double @max_f64(double %a, double %b) {
         entry:
             %0 = call double @llvm.maximum.f64(double %a, double %b)
             ret double %0
         }
 
-//: f64_copysign: f64 の符号コピー
+//: copysign_f64: f64 の符号コピー
 //:
 //: [目的/もくてき]:
 //: - 第1引数の絶対値に、第2引数の符号ビットを適用した値を返します。
@@ -3197,7 +3197,7 @@ fn copysign <(f64,f64)->f64> (a,b):
         f64.copysign
     #if[target=llvm]
     #llvmir:
-        define double @f64_copysign(double %a, double %b) {
+        define double @copysign_f64(double %a, double %b) {
         entry:
             %0 = call double @llvm.copysign.f64(double %a, double %b)
             ret double %0
