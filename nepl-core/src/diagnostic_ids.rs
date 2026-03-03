@@ -109,6 +109,10 @@ pub enum DiagnosticId {
     TypeIntrinsicArgArityMismatch = 3047,
     /// intrinsic の引数型不一致。
     TypeIntrinsicArgTypeMismatch = 3048,
+    /// Copy 実装対象が Copy 可能でない。
+    TypeCopyImplTargetNotCopy = 3049,
+    /// Copy 実装には Clone 実装が必要。
+    TypeCopyImplRequiresClone = 3050,
 }
 
 impl DiagnosticId {
@@ -170,6 +174,8 @@ impl DiagnosticId {
             3046 => Some(DiagnosticId::TypeIntrinsicTypeArgArityMismatch),
             3047 => Some(DiagnosticId::TypeIntrinsicArgArityMismatch),
             3048 => Some(DiagnosticId::TypeIntrinsicArgTypeMismatch),
+            3049 => Some(DiagnosticId::TypeCopyImplTargetNotCopy),
+            3050 => Some(DiagnosticId::TypeCopyImplRequiresClone),
             _ => None,
         }
     }
@@ -252,6 +258,12 @@ impl DiagnosticId {
             DiagnosticId::TypeIntrinsicArgArityMismatch => "intrinsic expects 1 argument",
             DiagnosticId::TypeIntrinsicArgTypeMismatch => {
                 "intrinsic argument type mismatch"
+            }
+            DiagnosticId::TypeCopyImplTargetNotCopy => {
+                "copy impl target type is not copyable"
+            }
+            DiagnosticId::TypeCopyImplRequiresClone => {
+                "copy impl requires clone impl for the same target type"
             }
         }
     }

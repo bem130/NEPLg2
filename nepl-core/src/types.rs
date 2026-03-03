@@ -91,6 +91,28 @@ impl Drop for UnifyDepthGuard {
 }
 
 impl TypeCtx {
+    fn is_explicit_noncopy_name(name: &str) -> bool {
+        matches!(name, "RegionToken" | "Scanner" | "Writer")
+    }
+
+    fn is_explicit_noncopy_type(
+        &self,
+        id: TypeId,
+        mapping: &BTreeMap<TypeId, TypeId>,
+    ) -> bool {
+        let resolved = mapping
+            .get(&self.resolve_id(id))
+            .copied()
+            .unwrap_or_else(|| self.resolve_id(id));
+        match self.get_ref(resolved) {
+            TypeKind::Named(name) => Self::is_explicit_noncopy_name(name),
+            TypeKind::Struct { name, .. } => Self::is_explicit_noncopy_name(name),
+            TypeKind::Enum { name, .. } => Self::is_explicit_noncopy_name(name),
+            TypeKind::Apply { base, .. } => self.is_explicit_noncopy_type(*base, mapping),
+            _ => false,
+        }
+    }
+
     pub fn new() -> Self {
         let mut arena = Vec::new();
         let unit = TypeId(arena.len());
@@ -231,6 +253,9 @@ impl TypeCtx {
         visiting: &mut BTreeSet<TypeId>,
         mapping: &BTreeMap<TypeId, TypeId>,
     ) -> bool {
+        if self.is_explicit_noncopy_type(id, mapping) {
+            return false;
+        }
         let resolved = mapping
             .get(&self.resolve_id(id))
             .copied()

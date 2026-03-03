@@ -223,3 +223,99 @@ fn main <()->i32> ():
     let r &x
     add x 1
 ```
+
+## Copy impl の対象が非Copy型なら拒否
+
+neplg2:test[compile_fail]
+diag_id: 3049
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Clone:
+    fn clone <(Self)->Self> (x):
+        x
+
+trait Copy:
+    fn copy_mark <(Self)->Self> (x):
+        x
+
+struct RegionToken:
+    raw <i32>
+
+impl Copy for RegionToken:
+    fn copy_mark <(RegionToken)->RegionToken> (x):
+        x
+```
+
+## Copy impl には Clone impl が必要
+
+neplg2:test[compile_fail]
+diag_id: 3050
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Clone:
+    fn clone <(Self)->Self> (x):
+        x
+
+trait Copy:
+    fn copy_mark <(Self)->Self> (x):
+        x
+
+impl Copy for i32:
+    fn copy_mark <(i32)->i32> (x):
+        x
+```
+
+## Clone と Copy の両方があれば受理
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Clone:
+    fn clone <(Self)->Self> (x):
+        x
+
+trait Copy:
+    fn copy_mark <(Self)->Self> (x):
+        x
+
+impl Clone for i32:
+    fn clone <(i32)->i32> (x):
+        x
+
+impl Copy for i32:
+    fn copy_mark <(i32)->i32> (x):
+        x
+
+fn main <()->i32> ():
+    0
+```
+
+## RegionToken は非Copyとして move 後再利用不可
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+#target core
+
+struct RegionToken:
+    raw <i32>
+
+fn consume <(RegionToken)->i32> (_t):
+    1
+
+fn main <()->i32> ():
+    let t <RegionToken> RegionToken 1
+    consume t
+    consume t
+```

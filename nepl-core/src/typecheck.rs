@@ -152,6 +152,8 @@ pub fn typecheck(
     let mut structs: BTreeMap<String, StructInfo> = BTreeMap::new();
     let mut traits: BTreeMap<String, TraitInfo> = BTreeMap::new();
     let mut impls: Vec<ImplInfo> = Vec::new();
+    let mut rejected_copy_targets: BTreeSet<TypeId> = BTreeSet::new();
+    let mut pending_copy_clone_checks: Vec<(TypeId, Span)> = Vec::new();
 
     let mut entry = None;
     let mut externs: Vec<HirExtern> = Vec::new();
@@ -600,6 +602,20 @@ pub fn typecheck(
                 ));
                 continue;
             }
+            if trait_name.as_deref() == Some("Copy") {
+                if !ctx.is_copy(target_ty) {
+                    diagnostics.push(
+                        Diagnostic::error(
+                            "copy impl target type is not copyable",
+                            i.target_ty.span(),
+                        )
+                        .with_id(DiagnosticId::TypeCopyImplTargetNotCopy),
+                    );
+                    rejected_copy_targets.insert(ctx.resolve_id(target_ty));
+                    continue;
+                }
+                pending_copy_clone_checks.push((target_ty, i.span));
+            }
 
             let mut methods = BTreeMap::new();
             for m in &i.methods {
@@ -614,6 +630,29 @@ pub fn typecheck(
             });
         }
     }
+    for (target_ty, span) in pending_copy_clone_checks {
+        let resolved_target = ctx.resolve_id(target_ty);
+        let has_clone_impl = impls.iter().any(|imp| {
+            imp.trait_name.as_deref() == Some("Clone")
+                && ctx.resolve_id(imp.target_ty) == resolved_target
+        });
+        if !has_clone_impl {
+            diagnostics.push(
+                Diagnostic::error(
+                    "copy impl requires clone impl for the same target type",
+                    span,
+                )
+                .with_id(DiagnosticId::TypeCopyImplRequiresClone),
+            );
+            rejected_copy_targets.insert(resolved_target);
+        }
+    }
+    impls.retain(|imp| {
+        if imp.trait_name.as_deref() != Some("Copy") {
+            return true;
+        }
+        !rejected_copy_targets.contains(&ctx.resolve_id(imp.target_ty))
+    });
     for (name, info) in structs.iter() {
         let func_ty = ctx.function(
             info.type_params.clone(),
@@ -1094,6 +1133,12 @@ pub fn typecheck(
                     i.target_ty.span(),
                 ));
                 continue;
+            }
+            if trait_name == "Copy" {
+                let resolved_target = ctx.resolve_id(target_ty);
+                if rejected_copy_targets.contains(&resolved_target) {
+                    continue;
+                }
             }
             f_labels.insert(String::from("Self"), target_ty);
             let prev_self = label_env.insert(String::from("Self"), target_ty);

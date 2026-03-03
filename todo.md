@@ -7,8 +7,6 @@
 - 旧API互換は維持しない。公開APIは安全版へ一本化する。
 
 フェーズB: move/borrow/copy/clone 規則の確定実装
-- `Copy/Clone` 実装可否を trait 制約として検査する経路を追加。
-- `RegionToken` を非Copyとして扱い、消費後再利用を拒否する。
 - 完了条件:
   - 分岐/ループ合流時の move 誤判定が解消される。
   - token の二重消費/解放後利用が検出される。
@@ -80,8 +78,6 @@
 - `collections` 配下の既存データ構造を新配置に合わせて改修する。
 
 7. move/effect 再設計の実装反映
-- `TypeCtx::is_copy` を構造型（tuple/struct/enum）へ拡張する。
-- `Copy/Clone` の trait 実装可否を move 規則と整合する形で検査する。
 - `mem/kpread/kpwrite` を `_safe` なしの安全APIへ一本化し、`_raw` を最終削除する。
 - move/effect 回帰テストを拡張し、`move_check` と整合する失敗パターン（分岐合流/再借用/二重解放）を追加する。
 

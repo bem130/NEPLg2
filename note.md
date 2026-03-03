@@ -1,3 +1,29 @@
+# 2026-03-04 作業メモ (フェーズB完了: Copy/Clone 制約 + RegionToken 非Copy化)
+
+- 目的:
+  - `todo.md` フェーズB残件だった `Copy/Clone` 制約検査と `RegionToken` 非Copy扱いを型検査に反映する。
+- 変更:
+  - `nepl-core/src/types.rs`
+    - `TypeCtx::is_copy` に明示非Copy型判定を追加（`RegionToken` / `Scanner` / `Writer`）。
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D3049` (`TypeCopyImplTargetNotCopy`) と `D3050` (`TypeCopyImplRequiresClone`) を追加。
+  - `nepl-core/src/typecheck.rs`
+    - `impl Copy for T` の収集時に `ctx.is_copy(T)` を検証し、非Copy対象を `D3049` で拒否。
+    - `Copy` 実装には同一対象 `Clone` 実装が必要な検査を追加し、欠落時 `D3050` で拒否。
+    - 拒否対象の `Copy` 実装は後続の impl 収集/照合から除外。
+  - `tests/move_effect.n.md`
+    - `D3049`/`D3050` の compile_fail ケースを追加。
+    - `Clone+Copy` 両実装時の成功ケースを追加。
+    - `RegionToken` の move 後再利用拒否ケースを追加。
+- テスト:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/move_effect.n.md --no-tree -o /tmp/tests-move-effect-copy-clone.json -j 15` -> `218/218 pass`
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md -i tests/typeannot.n.md --no-tree -o /tmp/tests-move-overload-typeannot-copyclone.json -j 15` -> `266/266 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-full-after-copy-clone.json -j 15` -> `720/720 pass`
+- 状況:
+  - フェーズBの `Copy/Clone` 制約と `RegionToken` 非Copy化は反映済み。
+  - 次は `todo.md` のフェーズC/D（`MemPtr<T>` と `mem/kpread/kpwrite` の安全API一本化）へ進む。
+
 # 2026-03-04 作業メモ (フェーズB進行: move_check に borrow 状態遷移を実装)
 - 目的:
   - `todo.md` のフェーズBにある `move_check` 状態機械を `BorrowedShared/BorrowedUnique` まで拡張し、分岐/ループ/match 合流を保守的に正しく扱う。
