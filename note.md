@@ -1,3 +1,24 @@
+# 2026-03-04 作業メモ (フェーズD進行: kpread/kpwrite の `_raw` 名整理完了)
+
+- 目的:
+  - `kpread/kpwrite` で残っていた `_raw` 接尾辞の公開名を整理し、通常API名へ統一する。
+  - 変更後の全体回帰を `tests + stdlib + tutorials` で確認する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_raw` を `scanner_new_i32` へ変更。
+    - `scanner_skip_ws_raw` / `scanner_is_eof_raw` / `scanner_skip_token_raw` / `scanner_read_*_raw` を `scanner_*` へ統一。
+    - ドキュメントコメント中の関数名記述も実体に合わせて更新。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_raw` を `writer_new_i32` へ変更。
+    - `writer_write_*_raw` / `writer_writeln_raw` / `writer_flush_raw` / `writer_free_raw` を `writer_*` へ統一。
+    - ドキュメントコメント中の関数名記述も実体に合わせて更新。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl --no-stdlib --no-tree -o /tmp/tests-kpread-kpwrite-no-raw.json -j 15` -> `5/5 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-full-after-kp-overload-unify.json -j 15` -> `781/781 pass`
+- 状況:
+  - `kpread/kpwrite` から `_raw` 接尾辞は解消済み。
+  - `todo.md` の `_safe/_raw` 最終整理は `mem.nepl` 側（`alloc_safe/realloc_safe/dealloc_safe`）が残件。
+
 # 2026-03-04 作業メモ (フェーズD進行: Scanner/Writer API一本化とハンドル露出除去)
 
 - 目的:
