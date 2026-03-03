@@ -20,6 +20,7 @@
 #import "core/result" as *
 #import "core/option" as *
 #import "core/math" as *
+#import "core/cast" as *
 #import "alloc/collections/vec" as *
 #import "core/field" as *
 
@@ -941,7 +942,7 @@ fn to_i32 <(str)*>Result<i32,i32>> (s):
 //: - 本体処理に準じます。
 fn from_i64 <(i64)*>str> (x):
     if:
-        eq x i64_extend_i32_u 0
+        eq x <i64> cast 0
         then:
             let out0 <i32> alloc 5;
             store_i32 out0 1;
@@ -951,22 +952,22 @@ fn from_i64 <(i64)*>str> (x):
             let scratch <i32> alloc 32;
             let mut idx <i32> 0;
             let mut n <i64> x;
-            let ten <i64> i64_extend_i32_u 10;
-            while ne n i64_extend_i32_u 0:
+            let ten <i64> cast 10;
+            while ne n <i64> cast 0:
                 do:
                     let mut rem <i64> rem_s n ten;
                     if:
-                        lt rem i64_extend_i32_u 0
+                        lt rem <i64> cast 0
                         then:
-                            set rem sub i64_extend_i32_u 0 rem;
+                            set rem sub <i64> cast 0 rem;
                         else:
                             ();
-                    let d <i32> i32_wrap_i64 rem;
+                    let d <i32> cast rem;
                     store_u8 add scratch idx add 48 d;
                     set idx add idx 1;
                     set n div_s n ten;
 
-            let neg <bool> lt x i64_extend_i32_u 0;
+            let neg <bool> lt x <i64> cast 0;
             let out_len <i32> if neg add idx 1 idx;
             let out <i32> alloc add 4 out_len;
             store_i32 out out_len;
@@ -1022,10 +1023,10 @@ fn from_i64 <(i64)*>str> (x):
 fn to_i64 <(str)*>Result<i64,i32>> (s):
     let n <i32> load_i32 s;
     let mut i <i32> 0;
-    let mut res <i64> i64_extend_i32_u 0;
+    let mut res <i64> cast 0;
     let mut ok <i32> 1;
     let mut neg <i32> 0;
-    let ten <i64> i64_extend_i32_u 10;
+    let ten <i64> cast 10;
 
     if:
         eq n 0
@@ -1055,7 +1056,7 @@ fn to_i64 <(str)*>Result<i64,i32>> (s):
                                     set ok 0;
                                     set i n;
                                 else:
-                                    let d64 <i64> i64_extend_i32_u digit;
+                                    let d64 <i64> cast digit;
                                     let acc <i64> mul res ten;
                                     if:
                                         eq neg 1
@@ -1104,12 +1105,12 @@ fn from_f64 <(f64)*>str> (x):
         then:
             "nan"
         else:
-            let neg <bool> lt x f64_convert_i32_s 0;
+            let neg <bool> lt x <f64> cast 0;
             let absx <f64> if neg:
-                then sub f64_convert_i32_s 0 x
+                then sub <f64> cast 0 x
                 else x;
-            let int_part <i64> i64_trunc_f64_s absx;
-            let int_f <f64> f64_convert_i64_s int_part;
+            let int_part <i64> cast absx;
+            let int_f <f64> cast int_part;
             let mut frac <f64> sub absx int_f;
             let int_s <str> from_i64 int_part;
             let mut sb <StringBuilder> string_builder_new;
@@ -1125,10 +1126,10 @@ fn from_f64 <(f64)*>str> (x):
             let mut k <i32> 0;
             while lt k 6:
                 do:
-                    set frac mul frac f64_convert_i32_s 10;
-                    let d <i32> i32_trunc_f64_s frac;
+                    set frac mul frac <f64> cast 10;
+                    let d <i32> cast frac;
                     store_u8 add scratch k add 48 d;
-                    set frac sub frac f64_convert_i32_s d;
+                    set frac sub frac <f64> cast d;
                     set k add k 1;
 
             let mut trim <i32> 6;
@@ -1198,11 +1199,11 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
     let mut i <i32> 0;
     let mut ok <i32> 1;
     let mut neg <i32> 0;
-    let mut int_part <f64> f64_convert_i32_s 0;
-    let mut frac_part <f64> f64_convert_i32_s 0;
-    let mut frac_scale <f64> f64_convert_i32_s 1;
+    let mut int_part <f64> cast 0;
+    let mut frac_part <f64> cast 0;
+    let mut frac_scale <f64> cast 1;
     let mut has_digit <i32> 0;
-    let ten <f64> f64_convert_i32_s 10;
+    let ten <f64> cast 10;
     let mut out_res <Result<f64,i32>> Result::Err<f64,i32> 1;
 
     if:
@@ -1233,7 +1234,7 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
                         then:
                             set has_digit 1;
                             let scaled <f64> mul int_part ten;
-                            let dv <f64> f64_convert_i32_s d;
+                            let dv <f64> cast d;
                             let next_int <f64> add scaled dv;
                             set int_part next_int;
                             set i add i 1;
@@ -1259,7 +1260,7 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
                                             set has_digit 1;
                                             let next_scale <f64> div frac_scale ten;
                                             set frac_scale next_scale;
-                                            let dv <f64> f64_convert_i32_s d;
+                                            let dv <f64> cast d;
                                             let addv <f64> mul dv frac_scale;
                                             let next_frac <f64> add frac_part addv;
                                             set frac_part next_frac;
@@ -1358,7 +1359,7 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
                     if:
                         eq neg 1
                         then:
-                            let zero <f64> f64_convert_i32_s 0;
+                            let zero <f64> cast 0;
                             let signed_out <f64> sub zero out;
                             set out_res Result::Ok<f64,i32> signed_out;
                         else:
@@ -1395,7 +1396,7 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn from_f32 <(f32)*>str> (x):
-    from_f64 f64_promote_f32 x
+    from_f64 <f64> cast x
 
 //: cast: 主な用途
 //:
@@ -1426,7 +1427,7 @@ fn from_f32 <(f32)*>str> (x):
 fn to_f32 <(str)*>Result<f32,i32>> (s):
     match to_f64 s:
         Result::Ok v64:
-            Result::Ok<f32,i32> f32_demote_f64 v64
+            Result::Ok<f32,i32> <f32> cast v64
         Result::Err e:
             Result::Err<f32,i32> e
 
