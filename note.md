@@ -1,3 +1,22 @@
+# 2026-03-04 作業メモ (フェーズD進行: `kpread` の `_raw` 依存を同名オーバーロードへ整理)
+
+- 目的:
+  - `kpread` の `scanner_*_raw` 命名を段階縮退し、`i32` ハンドル版と `Scanner` 版を同名オーバーロードとして統一する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_raw` を除く `scanner_*_raw` を `scanner_*` へ改名。
+    - `i32` 受け取り実装と `Scanner` 受け取り実装を同名で共存させる構成に変更。
+    - 既存ラッパは同名オーバーロードの `i32` 版を呼び出すように更新。
+- 根本原因:
+  - `_raw` 接尾辞分岐が API 読み取りコストを上げ、実際には型だけで区別できる箇所まで命名差分を持っていた。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpread-kpwrite-overload-unify.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-kpread-overload-unify.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-kpread-overload-unify.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread` は `scanner_new_raw` を除いて `_raw` 接尾辞なしで運用可能な状態になった。
+  - 次段は `scanner_new_raw` の扱い（戻り値型依存の曖昧性解消設計）を上流設計と合わせて検討する。
+
 # 2026-03-04 作業メモ (フェーズD進行: `kpwrite` の `_raw` 依存を同名オーバーロードへ整理)
 
 - 目的:
