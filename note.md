@@ -5077,3 +5077,15 @@
 - 検証:
   - `node tests/tree/run.js` -> `18/18 pass`。
   - `nodesrc/tests.js` の対象限定実行は長時間でタイムアウトする挙動を確認したため、現時点は tree スイートを優先して回帰確認。
+
+# 2026-03-03 作業メモ (bit演算APIのprefix縮退)
+- 目的:
+  - `core/math` の bit 演算についても `型名_` なしで使える経路を追加する。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - `rotl/rotr/clz/ctz/popcnt` の i32/i64 オーバーロードを追加（内部は既存 `i32_*` / `i64_*` 実装へ委譲）。
+  - `stdlib/tests/math.n.md`
+    - `i32_clz/i32_ctz` 呼び出しを `clz/ctz` 呼び出しへ更新。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-stdlib-math-prefixless-only.json -j 1`
+    - `1/1 pass`

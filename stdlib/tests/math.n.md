@@ -16,36 +16,36 @@ neplg2:test
 
 fn main <()*> ()> ():
     // i32 arithmetic
-    assert_eq_i32 3 i32_add 1 2;
-    assert_eq_i32 -1 i32_sub 1 2;
-    assert_eq_i32 6 i32_mul 2 3;
-    assert_eq_i32 3 i32_div_s 6 2;
+    assert_eq_i32 3 add 1 2;
+    assert_eq_i32 -1 sub 1 2;
+    assert_eq_i32 6 mul 2 3;
+    assert_eq_i32 3 div_s 6 2;
     test_checked "basic math"
-    assert_eq_i32 1 i32_rem_s 7 3;
+    assert_eq_i32 1 rem_s 7 3;
 
     // i32 bitwise operations
-    assert_eq_i32 3 i32_and 7 3;  // 111 & 011 = 011
+    assert_eq_i32 3 and 7 3;  // 111 & 011 = 011
     test_checked "and"
-    assert_eq_i32 7 i32_or 5 3;   // 101 | 011 = 111
-    assert_eq_i32 6 i32_xor 5 3;  // 101 ^ 011 = 110
+    assert_eq_i32 7 or 5 3;   // 101 | 011 = 111
+    assert_eq_i32 6 xor 5 3;  // 101 ^ 011 = 110
     test_checked "xor"
 
     // i32 shifts
-    assert_eq_i32 8 i32_shl 2 2;   // 2 << 2 = 8
-    assert_eq_i32 1 i32_shr_s 4 2; // 4 >> 2 = 1
+    assert_eq_i32 8 shl 2 2;   // 2 << 2 = 8
+    assert_eq_i32 1 shr_s 4 2; // 4 >> 2 = 1
     test_checked "shifts"
 
     // i32 bit manipulation
-    assert_eq_i32 0 i32_clz 2147483648;  // leading zeros in 0x80000000
-    assert_eq_i32 0 i32_ctz 1;           // trailing zeros in 1
+    assert_eq_i32 0 clz -2147483648;            // leading zeros in 0x80000000
+    assert_eq_i32 0 ctz 1;                      // trailing zeros in 1
 
     // i32 comparisons
-    assert i32_lt_s 1 2;
-    assert i32_le_s 2 2;
-    assert i32_gt_s 2 1;
-    assert i32_ge_s 2 2;
-    assert i32_eq 5 5;
-    assert i32_ne 5 6;
+    assert lt 1 2;
+    assert le 2 2;
+    assert gt 2 1;
+    assert ge 2 2;
+    assert eq 5 5;
+    assert ne 5 6;
     test_checked "comparisons"
 
     // Backwards compatibility aliases (i32 only)
