@@ -1,3 +1,23 @@
+# 2026-03-04 作業メモ (調査: alloc 同名オーバーロードの衝突と差し戻し)
+
+- 事象:
+  - `core/mem` に `alloc/realloc/dealloc` の `MemPtr` 安全オーバーロードを追加すると、
+    `stdlib/core/option.nepl::doctest#3` / `stdlib/core/result.nepl::doctest#4` などで
+    `Maximum call stack size exceeded` が発生。
+- 原因:
+  - コンパイラ生成コード側が `alloc : (i32)->i32` を暗黙前提としており、
+    同名オーバーロード追加で実行時経路が崩れる。
+- 対応:
+  - `alloc/realloc/dealloc` の `MemPtr` 同名オーバーロードは一旦差し戻し。
+  - `load/store` の `MemPtr` 同名オーバーロードは維持。
+  - 追加した `tests/memory_safety.n.md` の `alloc<...>` ケースは削除。
+- テスト:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety-after-alloc-overload-revert.json -j 15` -> `213/213 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-mem-overload-revert.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-mem-overload-revert2.json -j 15` -> `262/262 pass`
+- 次対応:
+  - `alloc` 系の標準名安全化は、コンパイラ側の暗黙依存を先に解消してから再導入する。
+
 # 2026-03-04 作業メモ (フェーズD進行: core/mem の MemPtr load/store を標準名オーバーロード化)
 
 - 目的:
