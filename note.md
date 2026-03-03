@@ -1,3 +1,19 @@
+# 2026-03-04 作業メモ (フェーズD進行: vec の `alloc/realloc/dealloc` を `*_raw` へ直接移行)
+
+- 目的:
+  - `vec` だけ残っていた `alloc/realloc/dealloc` 呼び出しを `*_raw` に統一し、メモリAPI移行の停滞要因を解消する。
+- 変更:
+  - `stdlib/alloc/collections/vec.nepl`
+    - `alloc` -> `alloc_raw`
+    - `realloc` -> `realloc_raw`
+    - `dealloc` -> `dealloc_raw`
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/vec.nepl -i stdlib/tests/vec.n.md -i tests/capacity_stack.n.md -i tests/pipe_collections.n.md --no-tree -o /tmp/tests-vec-raw-direct.json -j 15` -> `236/236 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-vec-raw-direct.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-vec-raw-direct.json -j 15` -> `262/262 pass`
+- 状況:
+  - 以前 `todo.md` に残していた `vec` の `realloc_raw` OOB 再現は現行系で再現せず、移行を完了できた。
+
 # 2026-03-04 作業メモ (上流修正: codegen の alloc helper 解決を `*_raw` 優先へ統一)
 
 - 目的:
