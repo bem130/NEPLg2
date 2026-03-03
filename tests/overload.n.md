@@ -258,6 +258,104 @@ fn main <()->i32> ():
     calc 5
 ```
 
+## overload_nested_len_with_stack_and_string
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/string" as *
+#import "alloc/collections/stack" as *
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let s <str> "abc";
+    let st <Stack<i32>> stack_new<i32>;
+    let n1 <i32> len s;
+    let n2 <i32> len st;
+    if and eq n1 3 eq n2 0 1 0
+```
+
+## overload_nested_call_arg_position_len
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "alloc/string" as *
+#import "alloc/collections/stack" as *
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let t <str> str_trim "  x  ";
+    if eq len t 1 1 0
+```
+
+## overload_nested_call_arg_position_bool_chain
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn main <()->i32> ():
+    if and eq 1 1 lt 2 3 1 0
+```
+
+## overload_nested_call_arg_position_bool_chain_literals
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let a <i32> 1;
+    let b <i32> 1;
+    let c <i32> 2;
+    let d <i32> 3;
+    if and eq a b lt c d 1 0
+```
+
+## overload_nested_call_arg_position_add_sub
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn main <()->i32> ():
+    if eq add 10 sub 8 3 15 1 0
+```
+
+## overload_nested_call_chain_add_mul
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let v <i32> add mul 2 3 add 4 5;
+    if eq v 15 1 0
+```
+
 ## overload_select_by_arity_from_param_context_unary_not_supported_yet
 
 neplg2:test[compile_fail]

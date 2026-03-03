@@ -1617,6 +1617,9 @@ impl<'a> BlockChecker<'a> {
         min_func_pos: usize,
     ) -> Option<usize> {
         for j in (min_func_pos..inner_pos).rev() {
+            if self.is_unresolved_overloaded_callable_entry(&stack[j]) {
+                continue;
+            }
             if !stack[j].auto_call {
                 continue;
             }
@@ -1656,6 +1659,9 @@ impl<'a> BlockChecker<'a> {
         min_func_pos: usize,
     ) -> Option<TypeId> {
         for j in (min_func_pos..inner_pos).rev() {
+            if self.is_unresolved_overloaded_callable_entry(&stack[j]) {
+                continue;
+            }
             if !stack[j].auto_call {
                 continue;
             }
@@ -1673,6 +1679,9 @@ impl<'a> BlockChecker<'a> {
             }
             let user_arg_idx = inner_pos - (j + 1);
             if user_arg_idx >= arity {
+                continue;
+            }
+            if self.has_unresolved_callable_between(stack, j + 1, inner_pos) {
                 continue;
             }
             let capture_len = total_arity.saturating_sub(arity);
@@ -1708,6 +1717,9 @@ impl<'a> BlockChecker<'a> {
         min_func_pos: usize,
     ) -> Option<TypeId> {
         for j in (min_func_pos..inner_pos).rev() {
+            if self.is_unresolved_overloaded_callable_entry(&stack[j]) {
+                continue;
+            }
             if !stack[j].auto_call {
                 continue;
             }
@@ -1722,6 +1734,9 @@ impl<'a> BlockChecker<'a> {
             }
             let provided_user_args = inner_pos - (j + 1);
             if provided_user_args >= arity {
+                continue;
+            }
+            if self.has_unresolved_callable_between(stack, j + 1, inner_pos) {
                 continue;
             }
             let user_arg_idx = provided_user_args;
@@ -1746,6 +1761,34 @@ impl<'a> BlockChecker<'a> {
             return Some(self.ctx.resolve_id(params[arg_idx]));
         }
         None
+    }
+
+    fn is_unresolved_overloaded_callable_entry(&self, entry: &StackEntry) -> bool {
+        let HirExprKind::Var(name) = &entry.expr.kind else {
+            return false;
+        };
+        if !entry.type_args.is_empty() {
+            return false;
+        }
+        self.env.lookup_all_callables(name).len() > 1
+    }
+
+    fn has_unresolved_callable_between(
+        &self,
+        stack: &[StackEntry],
+        start: usize,
+        end_exclusive: usize,
+    ) -> bool {
+        if start >= end_exclusive || start >= stack.len() {
+            return false;
+        }
+        let end = end_exclusive.min(stack.len());
+        for i in start..end {
+            if self.is_unresolved_overloaded_callable_entry(&stack[i]) {
+                return true;
+            }
+        }
+        false
     }
 
     fn choose_callable_type_by_available_arity(
@@ -2711,6 +2754,17 @@ impl<'a> BlockChecker<'a> {
                                     } else {
                                         None
                                     }
+                                })
+                                .and_then(|binding| {
+                                    let should_delay_overload_resolution = !*forced_value
+                                        && matches!(binding.kind, BindingKind::Func { .. })
+                                        && type_args.is_empty()
+                                        && self.env.lookup_all_callables(&id.name).len() > 1;
+                                    if should_delay_overload_resolution {
+                                        None
+                                    } else {
+                                        Some(binding)
+                                    }
                                 });
                             selected.map(|binding| (binding, expected_function_from_outer))
                         } {
@@ -2811,6 +2865,59 @@ impl<'a> BlockChecker<'a> {
                                 }
                             }
                             if !bindings.is_empty() {
+                                let callable_overload_count =
+                                    self.env.lookup_all_callables(&lookup_name).len();
+                                let overloaded_callable_only = callable_overload_count > 1
+                                    && bindings
+                                        .iter()
+                                        .all(|b| matches!(b.kind, BindingKind::Func { .. }));
+                                if overloaded_callable_only && !*forced_value && type_args.is_empty() {
+                                    let remaining_items = expr.items.len().saturating_sub(idx + 1);
+                                    let mut arities: Vec<usize> = bindings
+                                        .iter()
+                                        .filter_map(|b| match b.kind {
+                                            BindingKind::Func { arity, .. } => Some(arity),
+                                            _ => None,
+                                        })
+                                        .collect();
+                                    arities.sort_unstable();
+                                    arities.dedup();
+                                    let inferred_arity = outer_expected_callable_arity
+                                        .filter(|a| arities.contains(a))
+                                        .or_else(|| {
+                                            arities
+                                                .iter()
+                                                .copied()
+                                                .filter(|a| *a <= remaining_items)
+                                                .max()
+                                        })
+                                        .or_else(|| arities.first().copied())
+                                        .unwrap_or(0);
+                                    let mut params = Vec::new();
+                                    for _ in 0..inferred_arity {
+                                        params.push(self.ctx.fresh_var(None));
+                                    }
+                                    let result = self.ctx.fresh_var(None);
+                                    let ty = self.ctx.function(
+                                        Vec::new(),
+                                        params,
+                                        result,
+                                        Effect::Pure,
+                                    );
+                                    stack.push(StackEntry {
+                                        ty,
+                                        expr: HirExpr {
+                                            ty,
+                                            kind: HirExprKind::Var(lookup_name.clone()),
+                                            span: id.span,
+                                        },
+                                        type_args: Vec::new(),
+                                        assign: None,
+                                        auto_call: true,
+                                    });
+                                    last_expr = Some(stack.last().unwrap().expr.clone());
+                                    continue;
+                                }
                                 if let Some(binding) = self.env.lookup_value(&lookup_name) {
                                     if *forced_value {
                                         self.diagnostics.push(Diagnostic::error(
@@ -3722,6 +3829,22 @@ impl<'a> BlockChecker<'a> {
             expr.items.first(),
             Some(PrefixItem::Symbol(Symbol::Let { .. }))
         );
+        if leading_let {
+            let mut pending_base = pending_ascription.map(|(_, base)| base);
+            let mut open_calls: Vec<usize> = Vec::new();
+            if let Some(base_len) = pending_base {
+                self.reduce_calls_guarded(stack, &mut open_calls, base_len, pending_ascription);
+            } else {
+                self.reduce_calls(stack, &mut open_calls, pending_ascription);
+            }
+            try_apply_pending_ascription(self, stack, &mut pending_ascription);
+            pending_base = pending_ascription.map(|(_, base)| base);
+            if let Some(base_len) = pending_base {
+                self.reduce_calls_guarded(stack, &mut open_calls, base_len, pending_ascription);
+            } else {
+                self.reduce_calls(stack, &mut open_calls, pending_ascription);
+            }
+        }
         // Validate final stack depth. `let` is special-cased because its RHS
         // expression remains on stack until we lower to `HirExprKind::Let`.
         if leading_let {
@@ -3879,6 +4002,13 @@ impl<'a> BlockChecker<'a> {
 
             let available_args = stack.len().saturating_sub(func_pos + 1);
             let ty_for_infer = match &stack[func_pos].expr.kind {
+                HirExprKind::Var(name)
+                    if stack[func_pos].type_args.is_empty()
+                        && self.env.lookup_all_callables(name).len() > 1 =>
+                {
+                    self.choose_callable_type_by_available_arity(name, available_args)
+                        .unwrap_or(stack[func_pos].ty)
+                }
                 HirExprKind::Var(name) if self.env.lookup_value(name).is_none() => self
                     .choose_callable_type_by_available_arity(name, available_args)
                     .unwrap_or(stack[func_pos].ty),
@@ -4054,6 +4184,13 @@ impl<'a> BlockChecker<'a> {
 
             let available_args = stack.len().saturating_sub(func_pos + 1);
             let ty_for_infer = match &stack[func_pos].expr.kind {
+                HirExprKind::Var(name)
+                    if stack[func_pos].type_args.is_empty()
+                        && self.env.lookup_all_callables(name).len() > 1 =>
+                {
+                    self.choose_callable_type_by_available_arity(name, available_args)
+                        .unwrap_or(stack[func_pos].ty)
+                }
                 HirExprKind::Var(name) if self.env.lookup_value(name).is_none() => self
                     .choose_callable_type_by_available_arity(name, available_args)
                     .unwrap_or(stack[func_pos].ty),
@@ -4769,9 +4906,25 @@ impl<'a> BlockChecker<'a> {
                 {
                     let explicit_type_args = type_args.clone();
                     let use_expected = expected_ret.is_some() && bindings.len() > 1;
+                    if crate::log::is_verbose() && use_expected {
+                        if let Some(expected) = expected_ret {
+                            std::eprintln!(
+                                "overload debug: '{}' using expected_ret={}",
+                                name,
+                                self.ctx.type_to_string(expected)
+                            );
+                        }
+                    }
                     let mut candidates: Vec<&Binding> = Vec::new();
                     let mut mismatch_count = false;
                     for binding in &bindings {
+                        if crate::log::is_verbose() {
+                            std::eprintln!(
+                                "overload debug: consider '{}' candidate {}",
+                                name,
+                                function_signature_string(self.ctx, binding.ty)
+                            );
+                        }
                         let capture_len = match &binding.kind {
                             BindingKind::Func { captures, .. } => captures.len(),
                             _ => 0,
@@ -4790,6 +4943,13 @@ impl<'a> BlockChecker<'a> {
                                 None
                             };
                             let Some((type_params, params, result, effect)) = func_data else {
+                                if crate::log::is_verbose() {
+                                    std::eprintln!(
+                                        "overload debug: skip '{}' candidate {} reason=not_function_after_type_args",
+                                        name,
+                                        function_signature_string(self.ctx, binding.ty)
+                                    );
+                                }
                                 continue;
                             };
                             if type_params.len() != explicit_type_args.len() {
@@ -4819,18 +4979,54 @@ impl<'a> BlockChecker<'a> {
                                 effect,
                                 ..
                             } => (params, result, effect),
-                            _ => continue,
+                            _ => {
+                                if crate::log::is_verbose() {
+                                    std::eprintln!(
+                                        "overload debug: skip '{}' candidate {} reason=not_function_instantiated",
+                                        name,
+                                        function_signature_string(self.ctx, binding.ty)
+                                    );
+                                }
+                                continue;
+                            }
                         };
                         if c_params.len() < capture_len {
+                            if crate::log::is_verbose() {
+                                std::eprintln!(
+                                    "overload debug: skip '{}' candidate {} reason=capture_len params={} capture={}",
+                                    name,
+                                    function_signature_string(self.ctx, binding.ty),
+                                    c_params.len(),
+                                    capture_len
+                                );
+                            }
                             continue;
                         }
                         let user_params = &c_params[capture_len..];
                         if user_params.len() != args.len() {
+                            if crate::log::is_verbose() {
+                                std::eprintln!(
+                                    "overload debug: skip '{}' candidate {} reason=arity user_params={} args={}",
+                                    name,
+                                    function_signature_string(self.ctx, binding.ty),
+                                    user_params.len(),
+                                    args.len()
+                                );
+                            }
                             continue;
                         }
                         let mut ok = true;
                         for (arg, pty) in args.iter().zip(user_params.iter()) {
                             if tmp_ctx.unify(arg.ty, *pty).is_err() {
+                                if crate::log::is_verbose() {
+                                    std::eprintln!(
+                                        "overload debug: skip '{}' candidate {} reason=unify arg={} param={}",
+                                        name,
+                                        function_signature_string(self.ctx, binding.ty),
+                                        self.ctx.type_to_string(arg.ty),
+                                        self.ctx.type_to_string(*pty)
+                                    );
+                                }
                                 ok = false;
                                 break;
                             }
@@ -4838,16 +5034,54 @@ impl<'a> BlockChecker<'a> {
                         if ok && use_expected {
                             if let Some(expected) = expected_ret {
                                 if tmp_ctx.unify(c_result, expected).is_err() {
+                                    if crate::log::is_verbose() {
+                                        std::eprintln!(
+                                            "overload debug: skip '{}' candidate {} reason=expected_ret result={} expected={}",
+                                            name,
+                                            function_signature_string(self.ctx, binding.ty),
+                                            self.ctx.type_to_string(c_result),
+                                            self.ctx.type_to_string(expected)
+                                        );
+                                    }
                                     ok = false;
                                 }
                             }
                         }
                         if ok {
+                            if crate::log::is_verbose() {
+                                std::eprintln!(
+                                    "overload debug: accept '{}' candidate {}",
+                                    name,
+                                    function_signature_string(self.ctx, binding.ty)
+                                );
+                            }
                             candidates.push(binding);
                         }
                     }
 
                     if candidates.is_empty() {
+                        if crate::log::is_verbose() {
+                            let arg_tys = args
+                                .iter()
+                                .map(|a| self.ctx.type_to_string(a.ty))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            let all = bindings
+                                .iter()
+                                .map(|b| {
+                                    format!(
+                                        "{}:{}",
+                                        b.name,
+                                        function_signature_string(self.ctx, b.ty)
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                                .join(" | ");
+                            std::eprintln!(
+                                "overload debug: no candidate for '{}' args=[{}] candidates=[{}]",
+                                name, arg_tys, all
+                            );
+                        }
                         if mismatch_count {
                             self.diagnostics.push(Diagnostic::error(
                                 "type arguments do not match any overload",
@@ -5489,13 +5723,8 @@ impl Env {
     fn lookup_all_callables(&self, name: &str) -> Vec<&Binding> {
         let mut items = Vec::new();
         for scope in self.scopes.iter().rev() {
-            let mut found_in_scope = false;
             for b in scope.callables.iter().filter(|b| b.name == name && b.defined) {
                 items.push(b);
-                found_in_scope = true;
-            }
-            if found_in_scope {
-                break;
             }
         }
         items
