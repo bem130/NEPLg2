@@ -5040,3 +5040,22 @@
 - 検証:
   - `node nodesrc/tests.js -i tests/math.n.md -i tests/numerics.n.md -i tests/overload.n.md -i tests/typeannot.n.md -i tests/kp.n.md -i tests/intrinsic.n.md --no-stdlib --runner wasm --assert-io --no-tree -o /tmp/tests-prefix-migration-focus.json -j 1`
     - `59/59 pass`
+
+# 2026-03-03 作業メモ (prefix廃止移行: cast 記法統一の継続)
+- 方針:
+  - `cast<T>` は使わず、`<T> cast expr`（または `let x <T> cast expr`）に統一。
+  - `i32_`/`i64_` など prefix 呼び出しの削減を、呼び出し側から段階的に進める。
+- 実装:
+  - `stdlib/kp/kpwrite.nepl`: 変換呼び出しを `cast` 形式へ更新。
+  - `stdlib/kp/kpread.nepl`: u64/i64/f64/f32 読み取り系の変換を `cast` 形式へ更新。
+  - `stdlib/std/fs.nepl`, `stdlib/std/env/cliarg.nepl`: syscall 引数変換を `cast` 形式へ更新。
+  - `stdlib/alloc/string.nepl`: `from_i64`/`to_i64`/`from_f64`/`to_f64`/`from_f32`/`to_f32` の変換を `cast` 形式へ更新。
+  - `stdlib/std/test.nepl`: `test_str_eq_loop` の `add a add 4 i` 形を `off` 先計算へ変更し、オーバーロード解決失敗を根本回避。
+  - `tests/kp.n.md`, `tests/intrinsic.n.md`, `tutorials/getting_started/24_competitive_dp_basics.n.md`, `tutorials/getting_started/27_competitive_algorithms_catalog.n.md` を新記法へ更新。
+  - `tests/typeannot.n.md`: 「重ね注釈は仕様上可能だが冗長」の説明へ更新（ケース自体は維持）。
+- 検証:
+  - `/tmp/tests-prefix-migration-focus2.json` : 59/59 pass
+  - `/tmp/tests-cast-annotation-style.json` : 43/43 pass
+  - `/tmp/tests-kp-after-kpread-cast.json` : 7/7 pass
+  - `/tmp/tests-std-fs-cliarg-cast-focused.json` : 11/11 pass
+  - `/tmp/tests-string-cast-migration.json` : 29/29 pass
