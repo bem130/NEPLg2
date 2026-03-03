@@ -2885,11 +2885,18 @@ impl<'a> BlockChecker<'a> {
                                     let inferred_arity = outer_expected_callable_arity
                                         .filter(|a| arities.contains(a))
                                         .or_else(|| {
+                                            if matches!(
+                                                expr.items.get(idx + 1),
+                                                Some(PrefixItem::Pipe(_))
+                                            ) && arities.contains(&0)
+                                            {
+                                                return Some(0);
+                                            }
                                             arities
                                                 .iter()
                                                 .copied()
                                                 .filter(|a| *a <= remaining_items)
-                                                .max()
+                                                .min()
                                         })
                                         .or_else(|| arities.first().copied())
                                         .unwrap_or(0);
@@ -2916,9 +2923,7 @@ impl<'a> BlockChecker<'a> {
                                         auto_call: true,
                                     });
                                     last_expr = Some(stack.last().unwrap().expr.clone());
-                                    continue;
-                                }
-                                if let Some(binding) = self.env.lookup_value(&lookup_name) {
+                                } else if let Some(binding) = self.env.lookup_value(&lookup_name) {
                                     if *forced_value {
                                         self.diagnostics.push(Diagnostic::error(
                                             "only callable symbols can be referenced with '@'",

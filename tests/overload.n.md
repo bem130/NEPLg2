@@ -530,3 +530,130 @@ fn f <(i32,i32)->i32> (a, b):
 fn main <()->i32> ():
     f 1 2 3
 ```
+
+## overload_pipe_select_by_first_arg_type
+
+neplg2:test
+ret: 3
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn kind <(i32)->i32> (v):
+    1
+
+fn kind <(bool)->i32> (v):
+    2
+
+fn main <()->i32> ():
+    let a <i32>:
+        5
+        |> kind;
+    let b <i32>:
+        true
+        |> kind;
+    add a b
+```
+
+## overload_pipe_chain_numeric_overloads
+
+neplg2:test
+ret: 14
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let v <i32>:
+        3
+        |> add 4
+        |> mul 2;
+    v
+```
+
+## overload_pipe_type_mismatch_reports_no_matching
+
+neplg2:test[compile_fail]
+diag_id: 3006
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn need_i32 <(i32)->i32> (v):
+    v
+
+fn main <()->i32> ():
+    let _v <i32>:
+        true
+        |> need_i32;
+    0
+```
+
+## overload_cast_mixed_i32_i64_i128
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+#import "core/cast" as *
+
+fn main <()->i32> ():
+    let a <i32> 7;
+    let b <i64> cast a;
+    let c <i128> cast b;
+    let d <i64> cast c;
+    let e <i64> add d <i64> cast 5;
+    let ok1 <bool> eq d <i64> cast 7;
+    let ok2 <bool> eq e <i64> cast 12;
+    if and ok1 ok2 1 0
+```
+
+## overload_cast_mixed_requires_ascription
+
+neplg2:test[compile_fail]
+diag_id: 3005
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/cast" as *
+
+fn main <()->i32> ():
+    // 返り値型が未指定の cast は曖昧になる
+    let v cast 10
+    0
+```
+
+## overload_cast_inferred_from_fn_return_annotation
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn choose <(i32)->i32> (v):
+    v
+
+fn choose <(i32)->bool> (v):
+    ne v 0
+
+fn make_i32 <()->i32> ():
+    choose 1
+
+fn make_bool <()->bool> ():
+    choose 1
+
+fn main <()->i32> ():
+    if make_bool make_i32 0
+```
