@@ -258,7 +258,7 @@ fn main <()->i32> ():
 ## overload_select_by_arity_from_param_context_unary_not_supported_yet
 
 neplg2:test[compile_fail]
-diag_id: 3016
+diag_id: 3006
 ```neplg2
 #entry main
 #indent 4
@@ -304,7 +304,7 @@ fn main <()->i32> ():
 ## overload_select_by_arity_with_pipe_unary_not_supported_yet
 
 neplg2:test[compile_fail]
-diag_id: 3016
+diag_id: 3006
 ```neplg2
 #entry main
 #indent 4
