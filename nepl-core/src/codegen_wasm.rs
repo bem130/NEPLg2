@@ -784,7 +784,8 @@ fn find_runtime_helper_index(name_map: &BTreeMap<String, u32>, base: &str) -> Op
 }
 
 fn find_alloc_index(name_map: &BTreeMap<String, u32>) -> Option<u32> {
-    find_runtime_helper_index(name_map, "alloc")
+    find_runtime_helper_index(name_map, "alloc_raw")
+        .or_else(|| find_runtime_helper_index(name_map, "alloc"))
 }
 
 fn emit_inline_alloc(locals: &mut LocalMap, insts: &mut Vec<Instruction<'static>>) {

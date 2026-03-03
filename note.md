@@ -1,3 +1,26 @@
+# 2026-03-04 作業メモ (上流修正: codegen の alloc helper 解決を `*_raw` 優先へ統一)
+
+- 目的:
+  - `alloc/dealloc/realloc` の同名安全オーバーロード導入時に、codegen 側が誤った helper を解決して再帰・スタックオーバーフローへ落ちる根本原因を上流で除去する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - 内部確保 helper 解決を `alloc_raw` 優先、`alloc` フォールバックへ変更。
+  - `nepl-core/src/codegen_llvm.rs`
+    - runtime helper 解決関数 `resolve_runtime_helper_symbol` を追加。
+    - `alloc/dealloc/realloc` 到達関数追加で `*_raw` 優先、旧名フォールバックへ変更。
+    - `resolve_alloc_symbol` を `alloc_raw` 優先に変更。
+    - entry lower 時の fallback allocator 判定を `alloc_raw` 優先探索に変更。
+    - `resolve_symbol_name` は map の実キー参照を返す実装に変更。
+  - `nepl-core/src/monomorphize.rs`
+    - runtime helper 保持対象を `alloc_raw/dealloc_raw/realloc_raw` 優先に変更（旧名フォールバック）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-overload-memory-after-core-helper-fix.json -j 15` -> `244/244 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-core-helper-fix.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-core-helper-fix.json -j 15` -> `262/262 pass`
+- 状況:
+  - 上流（codegen/monomorphize）の helper 解決経路が `*_raw` 優先で揃ったため、次段の `core/mem` 安全API標準名化を再開できる状態になった。
+
 # 2026-03-04 作業メモ (調査: alloc 同名オーバーロードの衝突と差し戻し)
 
 - 事象:

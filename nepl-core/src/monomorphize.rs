@@ -55,9 +55,20 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
     }
 
     // Ensure runtime-required helpers are retained even if not explicitly referenced.
-    // Enum/struct/tuple codegen depends on alloc being present.
-    for base in ["alloc", "dealloc", "realloc"] {
-        if let Some(name) = find_runtime_helper_name(&mono.funcs, base) {
+    // Enum/struct/tuple codegen depends on allocator helper availability.
+    for candidates in [
+        ["alloc_raw", "alloc"],
+        ["dealloc_raw", "dealloc"],
+        ["realloc_raw", "realloc"],
+    ] {
+        let mut selected: Option<String> = None;
+        for base in candidates {
+            if let Some(name) = find_runtime_helper_name(&mono.funcs, base) {
+                selected = Some(name);
+                break;
+            }
+        }
+        if let Some(name) = selected {
             if !initial.iter().any(|n| n == &name) {
                 initial.push(name);
             }
