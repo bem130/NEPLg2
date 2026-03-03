@@ -47,20 +47,20 @@ fn __fs_copy_to_cstr <(i32,i32)*>i32> (src_ptr, src_len):
 
 #if[target=llvm]
 fn __linux_syscall_read <(i32,i32,i32)*>i64> (fd,ptr,len):
-    __fs_syscall i64_extend_i32_u 0 i64_extend_i32_u fd i64_extend_i32_u ptr i64_extend_i32_u len i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0
+    __fs_syscall <i64> cast 0 <i64> cast fd <i64> cast ptr <i64> cast len <i64> cast 0 <i64> cast 0 <i64> cast 0
 
 #if[target=llvm]
 fn wasi_path_open <(i32,i32,i32,i32,i32,i64,i64,i32,i32)*>i32> (_dirfd,_dirflags,path_ptr,path_len,_oflags,_rights_base,_rights_inheriting,_fdflags,fd_out):
     let cpath <i32> __fs_copy_to_cstr path_ptr path_len;
     // Linux x86_64: openat(AT_FDCWD=-100, path, O_RDONLY=0, mode=0)
-    let fd64 <i64> __fs_syscall i64_extend_i32_u 257 i64_extend_i32_s -100 i64_extend_i32_u cpath i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+    let fd64 <i64> __fs_syscall <i64> cast 257 <i64> cast -100 <i64> cast cpath <i64> cast 0 <i64> cast 0 <i64> cast 0 <i64> cast 0;
     if:
         cond:
-            i64_lt_s fd64 i64_extend_i32_u 0
+            lt fd64 <i64> cast 0
         then:
             1
         else:
-            store_i32 fd_out i32_wrap_i64 fd64;
+            store_i32 fd_out <i32> cast fd64;
             0
 
 #if[target=llvm]
@@ -82,12 +82,12 @@ fn wasi_fd_read <(i32,i32,i32,i32)*>i32> (fd,iovs,iovs_len,nread_ptr):
                     let n64 <i64> __linux_syscall_read fd base len;
                     if:
                         cond:
-                            i64_lt_s n64 i64_extend_i32_u 0
+                            lt n64 <i64> cast 0
                         then:
                             set err 1;
                             set done 1;
                         else:
-                            let n <i32> i32_wrap_i64 n64;
+                            let n <i32> cast n64;
                             set total add total n;
                             if:
                                 cond:
@@ -105,10 +105,10 @@ fn wasi_fd_read <(i32,i32,i32,i32)*>i32> (fd,iovs,iovs_len,nread_ptr):
 #if[target=llvm]
 fn wasi_fd_close <(i32)*>i32> (fd):
     // Linux x86_64: close(fd)
-    let rc64 <i64> __fs_syscall i64_extend_i32_u 3 i64_extend_i32_u fd i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0 i64_extend_i32_u 0;
+    let rc64 <i64> __fs_syscall <i64> cast 3 <i64> cast fd <i64> cast 0 <i64> cast 0 <i64> cast 0 <i64> cast 0 <i64> cast 0;
     if:
         cond:
-            i64_lt_s rc64 i64_extend_i32_u 0
+            lt rc64 <i64> cast 0
         then 1
         else 0
 
@@ -144,7 +144,7 @@ fn wasi_fd_close <(i32)*>i32> (fd):
 //:     i64_from_i32 0;
 //: ```
 fn i64_from_i32 <(i32)->i64> (v):
-    i64_extend_i32_u v
+    <i64> cast v
 
 //: fs_open_read: ファイルを読み込み専用で開く
 //:
