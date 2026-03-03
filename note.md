@@ -1,3 +1,20 @@
+# 2026-03-04 作業メモ (フェーズD進行: kpwrite 初期化経路の Result 化)
+
+- 目的:
+  - `kpwrite` の初期化経路を `Result` 経路へ揃え、`kpread` と同じ失敗表現に統一する。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - 旧 `writer_new_raw`（`i32`返却）本体を `writer_new_handle_raw` へ分離。
+    - 新 `writer_new_raw` を `Result<i32,str>` 返却へ変更。
+    - `writer_new` は `writer_new_raw` の `Result` を `Writer` へ持ち上げる実装へ変更。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpwrite-result-init.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kpwrite-result.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kpwrite-result.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread/kpwrite` の初期化公開経路はどちらも `Result` ベースで統一済み。
+  - 次段は `todo.md` フェーズD残件として、`mem` 側公開名の安全API標準化を進める。
+
 # 2026-03-04 作業メモ (フェーズD進行: kpread_core の初期化を Result ベース化)
 
 - 目的:

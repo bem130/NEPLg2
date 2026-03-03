@@ -42,7 +42,7 @@ fn writer_wrap <(i32)->Writer> (raw):
 //:
 //: 計算量:
 //: - O(1)
-fn writer_new_raw <()*>i32> ():
+fn writer_new_handle_raw <()*>i32> ():
     let mut cap <i32> 4096;
     let mut buf <i32> alloc_raw cap;
     if:
@@ -97,14 +97,22 @@ fn writer_new_raw <()*>i32> ():
                                     store_i32 add w 16 nw;
                                     w
 
-fn writer_new <()*>Result<Writer,str>> ():
-    let raw <i32> writer_new_raw;
+fn writer_new_raw <()*>Result<i32,str>> ():
+    let raw <i32> writer_new_handle_raw;
     if:
         lt 0 raw
         then:
-            Result<Writer,str>::Ok writer_wrap raw
+            Result<i32,str>::Ok raw
         else:
-            Result<Writer,str>::Err "kpwrite.writer_new failed"
+            Result<i32,str>::Err "kpwrite.writer_new failed"
+
+fn writer_new <()*>Result<Writer,str>> ():
+    let raw_res <Result<i32,str>> writer_new_raw;
+    match raw_res:
+        Result::Ok raw:
+            Result<Writer,str>::Ok writer_wrap raw
+        Result::Err e:
+            Result<Writer,str>::Err e
 
 //: writer_free: writer の確保領域を解放する
 //:
