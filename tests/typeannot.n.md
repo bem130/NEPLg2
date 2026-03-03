@@ -33,14 +33,14 @@ ret: 60
 
 fn main <()*>i32> ():
     // 計算式全体への型注釈
-    // i32_add 10 20 は i32 を返す
-    let a <i32> i32_add 10 20
+    // add 10 20 は i32 を返す
+    let a <i32> add 10 20
     
     // 部分式への型注釈も可能
     // `<i32> 10` も `<i32> 20` もただの i32 として振る舞う
-    let b i32_add <i32> 10 <i32> 20
+    let b add <i32> 10 <i32> 20
     
-    i32_add a b
+    add a b
 ```
 
 ## test_type_annot_on_let
@@ -60,7 +60,7 @@ fn main <()*>i32> ():
     let n 10
     
     // `<bool>` は `lt n 0` という式にかかる
-    let neg <bool> i32_lt_s n 0
+    let neg <bool> lt n 0
     
     if:
         neg
@@ -85,7 +85,7 @@ fn main <()*>i32> ():
     let v <i32> block:
         let x 1
         let y 2
-        i32_add x y
+        add x y
     
     v
 ```
@@ -143,7 +143,8 @@ fn main <()*>i32> ():
     // 複雑な式の中での型注釈
     // add (mul <i32> 2 3) (<i32> 4)
     
-    let v <i32> i32_add i32_mul <i32> 2 3 <i32> 4
+    let left <i32> mul <i32> 2 <i32> 3
+    let v <i32> add left <i32> 4
     v
 ```
 
@@ -182,10 +183,10 @@ fn main <()*>i32> ():
     let mut sum 0
     
     // while の条件式に型注釈
-    while <bool> i32_lt_s i 3:
+    while <bool> lt i 3:
         do:
-            set sum i32_add sum i
-            set i i32_add i <i32> 1
+            set sum add sum i
+            set i add i <i32> 1
     
     sum
 ```
@@ -228,7 +229,8 @@ fn main <()*>i32> ():
     // 深くネストされた関数呼び出しと型注釈
     // add( add( <i32>1, <i32>2 ), <i32>3 )
     
-    let v <i32> i32_add <i32> i32_add <i32> 1 <i32> 2 <i32> 3
+    let ab <i32> add <i32> 1 <i32> 2
+    let v <i32> add ab <i32> 3
     v
 ```
 
@@ -245,7 +247,7 @@ ret: 30
 fn main <()*>i32> ():
     // ブロックとインラインの混在
     
-    let v <i32> i32_add: // 関数の引数で改行しているのは正しい インデントは各引数の先頭が+1で揃う
+    let v <i32> add: // 関数の引数で改行しているのは正しい インデントは各引数の先頭が+1で揃う
         <i32> block: // 型注釈付きの無名ブロックも正しい ブロックなので返り値はx
             let x 10
             x

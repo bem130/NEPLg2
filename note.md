@@ -5014,3 +5014,29 @@
   - `node tests/tree/run.js` -> `18/18 pass`
   - `node nodesrc/tests.js -i tests/if.n.md -i tests/while.n.md --no-stdlib --no-tree --runner all --llvm-all --assert-io --strict-dual -o /tmp/tests-if-while-diag.json -j 2` -> `170/170 pass`
   - `node nodesrc/tests.js -i tests -i stdlib -o /tmp/tests-dual-full.json --runner all --llvm-all --assert-io --strict-dual -j 2` -> `1876/1876 pass`
+
+# 2026-03-03 作業メモ (prefix 廃止移行: math/kp/stdio の入れ子式を手修正)
+- 目的:
+  - `i32_` 等 prefix 廃止方針に合わせて、曖昧な入れ子 prefix 呼び出しを手作業で分解し、型注釈+オーバーロード解決で通る形へ移行する。
+- 根本原因:
+  - 旧式の `add a add b c` / `store_u8 add buf add off i ...` 形式が、prefix 廃止途中のオーバーロード解決で `no matching overload` を誘発。
+  - 一部はローカル変数名 `neg` が関数 `neg` と衝突して誤解決を発生。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - `u128_add/sub`, `i128_add/sub`, `u64_mul_wide`, `i128_mul` の入れ子式を段階変数に分解。
+    - `add/sub/mul` の `i128` オーバーロードを追加。
+    - `u8` 系 (`add/sub/mul/div_u/rem_u/eq/ne/lt_u/le_u/gt_u/ge_u`) の prefix なしオーバーロードを追加。
+  - `stdlib/core/mem.nepl`
+    - `align8` の入れ子算術を分解。
+  - `stdlib/alloc/string.nepl`
+    - 数値パース/文字列化の入れ子式を段階変数に分解。
+    - `neg` 変数と `neg` 関数の衝突箇所を `sub 0 x` 方式に置換。
+  - `stdlib/std/stdio.nepl`
+    - `read_line` / `print_i32` 周辺のポインタ計算を段階変数に分解。
+  - `stdlib/kp/kpread.nepl`, `stdlib/kp/kpwrite.nepl`, `stdlib/kp/kpsearch.nepl`
+    - ポインタ計算・桁処理・二分探索/unique処理の入れ子式を段階変数に分解。
+  - `tests/math.n.md`, `tests/numerics.n.md`, `tests/overload.n.md`, `tests/typeannot.n.md`, `tests/kp.n.md`
+    - 新規約（prefix なし + 必要箇所の型注釈/段階変数）に更新。
+- 検証:
+  - `node nodesrc/tests.js -i tests/math.n.md -i tests/numerics.n.md -i tests/overload.n.md -i tests/typeannot.n.md -i tests/kp.n.md -i tests/intrinsic.n.md --no-stdlib --runner wasm --assert-io --no-tree -o /tmp/tests-prefix-migration-focus.json -j 1`
+    - `59/59 pass`

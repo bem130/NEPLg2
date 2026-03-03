@@ -69,7 +69,8 @@ fn main <()*>()> ():
     while le i n:
         do:
             let a <i32> scanner_read_i32 sc;
-            let prev_off <i32> mul sub i 1 4;
+            let im1 <i32> sub i 1;
+            let prev_off <i32> mul im1 4;
             let prev_ptr <i32> add pref prev_off;
             let prev <i32> load_i32 prev_ptr;
             let cur <i32> add prev a;
@@ -87,9 +88,12 @@ fn main <()*>()> ():
             let l <i32> sub l1 1;
             let left_off <i32> mul l 4;
             let right_off <i32> mul r1 4;
-            let left <i32> load_i32 add pref left_off;
-            let right <i32> load_i32 add pref right_off;
-            writer_write_i32 w sub right left;
+            let left_ptr <i32> add pref left_off;
+            let right_ptr <i32> add pref right_off;
+            let left <i32> load_i32 left_ptr;
+            let right <i32> load_i32 right_ptr;
+            let diff <i32> sub right left;
+            writer_write_i32 w diff;
             writer_writeln w;
             set k add k 1;
 
@@ -121,7 +125,7 @@ fn ways <(i32)*>i64> (n):
             let mut i <i32> 2;
             while le i n:
                 do:
-                    let c <i64> i64_add a b;
+                    let c <i64> add a b;
                     set a b;
                     set b c;
                     set i add i 1;
@@ -222,7 +226,9 @@ fn main <()*>()> ():
             if gt i 0:
                 then print " "
                 else ();
-            print_i32 load_i32 add data mul i 4;
+            let off <i32> mul i 4;
+            let ptr <i32> add data off;
+            print_i32 load_i32 ptr;
             set i add i 1;
     println "";
     dealloc data mul len 4;

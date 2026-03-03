@@ -47,10 +47,15 @@ fn lower_bound_i32 <(i32,i32,i32)*>i32> (data, len, x):
     let mut hi <i32> len;
     while lt lo hi:
         do:
-            let mid <i32> i32_div_s add lo hi 2;
-            let v <i32> load_i32 add data mul mid 4;
+            let sum <i32> add lo hi;
+            let mid <i32> div_s sum 2;
+            let off <i32> mul mid 4;
+            let ptr <i32> add data off;
+            let v <i32> load_i32 ptr;
             if lt v x:
-                then set lo add mid 1
+                then:
+                    let next <i32> add mid 1;
+                    set lo next;
                 else set hi mid;
     lo
 
@@ -60,10 +65,15 @@ fn upper_bound_i32 <(i32,i32,i32)*>i32> (data, len, x):
     let mut hi <i32> len;
     while lt lo hi:
         do:
-            let mid <i32> i32_div_s add lo hi 2;
-            let v <i32> load_i32 add data mul mid 4;
+            let sum <i32> add lo hi;
+            let mid <i32> div_s sum 2;
+            let off <i32> mul mid 4;
+            let ptr <i32> add data off;
+            let v <i32> load_i32 ptr;
             if le v x:
-                then set lo add mid 1
+                then:
+                    let next <i32> add mid 1;
+                    set lo next;
                 else set hi mid;
     lo
 
@@ -72,7 +82,11 @@ fn contains_i32 <(i32,i32,i32)*>bool> (data, len, x):
     let idx <i32> lower_bound_i32 data len x;
     if ge idx len:
         then false
-        else eq load_i32 add data mul idx 4 x
+        else:
+            let off <i32> mul idx 4;
+            let ptr <i32> add data off;
+            let v <i32> load_i32 ptr;
+            eq v x
 
 //: count_equal_range_i32: 値 `x` の出現回数を返す
 //:
@@ -170,11 +184,18 @@ fn unique_sorted_i32 <(i32,i32)*>i32> (data, len):
             let mut write <i32> 1;
             while lt read len:
                 do:
-                    let cur <i32> load_i32 add data mul read 4;
-                    let prev <i32> load_i32 add data mul sub write 1 4;
-                    if i32_ne cur prev:
+                    let read_off <i32> mul read 4;
+                    let read_ptr <i32> add data read_off;
+                    let cur <i32> load_i32 read_ptr;
+                    let write_m1 <i32> sub write 1;
+                    let prev_off <i32> mul write_m1 4;
+                    let prev_ptr <i32> add data prev_off;
+                    let prev <i32> load_i32 prev_ptr;
+                    if ne cur prev:
                         then:
-                            store_i32 add data mul write 4 cur;
+                            let write_off <i32> mul write 4;
+                            let write_ptr <i32> add data write_off;
+                            store_i32 write_ptr cur;
                             set write add write 1;
                         else ();
                     set read add read 1;

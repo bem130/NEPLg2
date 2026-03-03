@@ -97,20 +97,23 @@ fn concat <(str,str)*>str> (a,b):
     let la <i32> load_i32 a;
     let lb <i32> load_i32 b;
     let total <i32> add la lb;
-    let out <i32> alloc add 4 total;
+    let out <i32> alloc <i32> add 4 total;
     store_i32 out total;
     let mut i <i32> 0;
     while lt i la:
         do:
-            let ch <i32> load_u8 add a add 4 i;
-            store_u8 add out add 4 i ch;
-            set i add i 1;
+            let ch <i32> load_u8 <i32> add a <i32> add 4 i;
+            store_u8 <i32> add out <i32> add 4 i ch;
+            set i <i32> add i 1;
     let mut j <i32> 0;
     while lt j lb:
         do:
-            let ch <i32> load_u8 add b add 4 j;
-            store_u8 add out add 4 add la j ch;
-            set j add j 1;
+            let ch <i32> load_u8 <i32> add b <i32> add 4 j;
+            let dst <i32> add la j;
+            let out_ptr <i32> add out 4;
+            let wr_ptr <i32> add out_ptr dst;
+            store_u8 wr_ptr ch;
+            set j <i32> add j 1;
     out
 
 // concat3: 3つの文字列を連結する
@@ -298,25 +301,28 @@ fn sb_build <(StringBuilder)*>str> (sb):
     let mut idx0 <i32> 0;
     while lt idx0 n:
         do:
-            let part <str> load<str> add parts_data mul idx0 size_of<str>;
-            set total add total load_i32 part;
-            set idx0 add idx0 1;
-    let out <i32> alloc add 4 total;
+            let part <str> load<str> <i32> add parts_data <i32> mul idx0 size_of<str>;
+            set total <i32> add total load_i32 part;
+            set idx0 <i32> add idx0 1;
+    let out <i32> alloc <i32> add 4 total;
     store_i32 out total;
     let mut idx <i32> 0;
     let mut dst <i32> 0;
     while lt idx n:
         do:
-            let part <str> load<str> add parts_data mul idx size_of<str>;
+            let part <str> load<str> <i32> add parts_data <i32> mul idx size_of<str>;
             let plen <i32> load_i32 part;
             let mut i <i32> 0;
             while lt i plen:
                 do:
-                    let ch <i32> load_u8 add part add 4 i;
-                    store_u8 add out add 4 add dst i ch;
-                    set i add i 1;
-            set dst add dst plen;
-            set idx add idx 1;
+                    let ch <i32> load_u8 <i32> add part <i32> add 4 i;
+                    let out_ptr <i32> add out 4;
+                    let wr_off <i32> add dst i;
+                    let wr_ptr <i32> add out_ptr wr_off;
+                    store_u8 wr_ptr ch;
+                    set i <i32> add i 1;
+            set dst <i32> add dst plen;
+            set idx <i32> add idx 1;
     out
 
 // str_eq: 文字列が等しいか判定する
@@ -385,11 +391,11 @@ fn str_eq_loop <(str,str,i32,i32)->bool> (a,b,n,i):
         then:
             true
         else:
-            let ba <i32> load_u8 add a add 4 i;
-            let bb <i32> load_u8 add b add 4 i;
+            let ba <i32> load_u8 <i32> add a <i32> add 4 i;
+            let bb <i32> load_u8 <i32> add b <i32> add 4 i;
             if:
                 eq ba bb
-                then str_eq_loop a b n add i 1
+                then str_eq_loop a b n <i32> add i 1
                 else false
 
 // str_is_space: ASCII 空白文字か判定する
@@ -501,11 +507,13 @@ fn str_eq_at <(str,str,i32,i32,i32)->bool> (s, pat, start, n, i):
         eq i n
         then true
         else:
-            let bs <i32> load_u8 add s add 4 add start i;
-            let bp <i32> load_u8 add pat add 4 i;
+            let s_ptr <i32> add s 4;
+            let s_off <i32> add start i;
+            let bs <i32> load_u8 <i32> add s_ptr s_off;
+            let bp <i32> load_u8 <i32> add pat <i32> add 4 i;
             if:
                 eq bs bp
-                then str_eq_at s pat start n add i 1
+                then str_eq_at s pat start n <i32> add i 1
                 else false
 
 // str_ends_with: 末尾一致を判定する
@@ -588,14 +596,16 @@ fn str_slice <(str,i32,i32)*>str> (s, start, end):
         then set e0 len
         else ()
     let out_len <i32> sub e0 s0;
-    let out <i32> alloc add 4 out_len;
+    let out <i32> alloc <i32> add 4 out_len;
     store_i32 out out_len;
     let mut i <i32> 0;
     while lt i out_len:
         do:
-            let b <i32> load_u8 add s add 4 add s0 i;
-            store_u8 add out add 4 i b;
-            set i add i 1;
+            let s_ptr <i32> add s 4;
+            let rd_off <i32> add s0 i;
+            let b <i32> load_u8 <i32> add s_ptr rd_off;
+            store_u8 <i32> add out <i32> add 4 i b;
+            set i <i32> add i 1;
     out
 
 // str_trim: 前後の空白を取り除く
@@ -636,10 +646,10 @@ fn str_trim <(str)*>str> (s):
             if:
                 lt start end
                 then:
-                    let b <i32> load_u8 add s add 4 start;
+                    let b <i32> load_u8 <i32> add s <i32> add 4 start;
                     if:
                         str_is_space b
-                        then set start add start 1
+                        then set start <i32> add start 1
                         else set done 1
                 else:
                     set done 1
@@ -650,10 +660,10 @@ fn str_trim <(str)*>str> (s):
                 lt start end
                 then:
                     let idx <i32> sub end 1;
-                    let b <i32> load_u8 add s add 4 idx;
+                    let b <i32> load_u8 <i32> add s <i32> add 4 idx;
                     if:
                         str_is_space b
-                        then set end sub end 1
+                        then set end <i32> sub end 1
                         else set done2 1
                 else:
                     set done2 1
@@ -690,11 +700,13 @@ fn str_match_at <(str,str,i32,i32)*>bool> (s, sep, pos, sep_len):
     let mut ok <i32> 1;
     while lt i sep_len:
         do:
-            let bs <i32> load_u8 add s add 4 add pos i;
-            let bp <i32> load_u8 add sep add 4 i;
+            let s_ptr <i32> add s 4;
+            let rd_off <i32> add pos i;
+            let bs <i32> load_u8 <i32> add s_ptr rd_off;
+            let bp <i32> load_u8 <i32> add sep <i32> add 4 i;
             if:
                 eq bs bp
-                then set i add i 1
+                then set i <i32> add i 1
                 else:
                     set ok 0
                     set i sep_len
@@ -739,17 +751,17 @@ fn str_split <(str,str)*>Vec<str>> (s, sep):
             let s_len <i32> load_i32 s;
             let mut i <i32> 0;
             let mut start <i32> 0;
-            while le add i sep_len s_len:
+            while le <i32> add i sep_len s_len:
                 do:
                     if:
                         str_match_at s sep i sep_len
                         then:
                             let part <str> str_slice s start i;
                             set out vec_push<str> out part;
-                            set i add i sep_len;
+                            set i <i32> add i sep_len;
                             set start i;
                         else:
-                            set i add i 1;
+                            set i <i32> add i 1;
             let tail <str> str_slice s start s_len;
             set out vec_push<str> out tail;
             out
@@ -815,9 +827,9 @@ fn from_i32 <(i32)*>str> (x):
                     let mut i <i32> 0;
                     while lt i idx:
                         do:
-                            let rev <i32> sub idx add i 1;
-                            let b <i32> load_u8 add scratch rev;
-                            store_u8 add out add 4 i b;
+                            let rev <i32> sub idx <i32> add i 1;
+                            let b <i32> load_u8 <i32> add scratch rev;
+                            store_u8 <i32> add out <i32> add 4 i b;
                             set i add i 1;
 
                     out
@@ -870,7 +882,9 @@ fn to_i32 <(str)*>Result<i32,i32>> (s):
                 else:
                     while lt i n:
                         do:
-                            let b <i32> load_u8 add s add 4 i;
+                            let base <i32> add s 4;
+                            let p <i32> add base i;
+                            let b <i32> load_u8 p;
                             let digit <i32> sub b 48;
 
                             if:
@@ -884,7 +898,8 @@ fn to_i32 <(str)*>Result<i32,i32>> (s):
                                         cond:
                                             le digit 9
                                         then:
-                                            set res add mul res 10 digit;
+                                            let acc <i32> mul res 10;
+                                            set res add acc digit;
                                             set i add i 1;
                                         else:
                                             set ok 0;
@@ -926,7 +941,7 @@ fn to_i32 <(str)*>Result<i32,i32>> (s):
 //: - 本体処理に準じます。
 fn from_i64 <(i64)*>str> (x):
     if:
-        i64_eq x i64_extend_i32_u 0
+        eq x i64_extend_i32_u 0
         then:
             let out0 <i32> alloc 5;
             store_i32 out0 1;
@@ -937,21 +952,21 @@ fn from_i64 <(i64)*>str> (x):
             let mut idx <i32> 0;
             let mut n <i64> x;
             let ten <i64> i64_extend_i32_u 10;
-            while i64_ne n i64_extend_i32_u 0:
+            while ne n i64_extend_i32_u 0:
                 do:
-                    let mut rem <i64> i64_rem_s n ten;
+                    let mut rem <i64> rem_s n ten;
                     if:
-                        i64_lt_s rem i64_extend_i32_u 0
+                        lt rem i64_extend_i32_u 0
                         then:
-                            set rem i64_sub i64_extend_i32_u 0 rem;
+                            set rem sub i64_extend_i32_u 0 rem;
                         else:
                             ();
                     let d <i32> i32_wrap_i64 rem;
                     store_u8 add scratch idx add 48 d;
                     set idx add idx 1;
-                    set n i64_div_s n ten;
+                    set n div_s n ten;
 
-            let neg <bool> i64_lt_s x i64_extend_i32_u 0;
+            let neg <bool> lt x i64_extend_i32_u 0;
             let out_len <i32> if neg add idx 1 idx;
             let out <i32> alloc add 4 out_len;
             store_i32 out out_len;
@@ -968,9 +983,12 @@ fn from_i64 <(i64)*>str> (x):
             let mut i <i32> 0;
             while lt i idx:
                 do:
-                    let rev <i32> sub idx add i 1;
-                    let b <i32> load_u8 add scratch rev;
-                    store_u8 add out add 4 add dst i b;
+                    let rev <i32> sub idx <i32> add i 1;
+                    let b <i32> load_u8 <i32> add scratch rev;
+                    let out_ptr <i32> add out 4;
+                    let wr_off <i32> add dst i;
+                    let wr_ptr <i32> add out_ptr wr_off;
+                    store_u8 wr_ptr b;
                     set i add i 1;
 
             out
@@ -1029,7 +1047,7 @@ fn to_i64 <(str)*>Result<i64,i32>> (s):
                 else:
                     while lt i n:
                         do:
-                            let b <i32> load_u8 add s add 4 i;
+                            let b <i32> load_u8 <i32> add s <i32> add 4 i;
                             let digit <i32> sub b 48;
                             if:
                                 or lt digit 0 gt digit 9
@@ -1038,12 +1056,13 @@ fn to_i64 <(str)*>Result<i64,i32>> (s):
                                     set i n;
                                 else:
                                     let d64 <i64> i64_extend_i32_u digit;
+                                    let acc <i64> mul res ten;
                                     if:
                                         eq neg 1
                                         then:
-                                            set res i64_sub i64_mul res ten d64;
+                                            set res sub acc d64;
                                         else:
-                                            set res i64_add i64_mul res ten d64;
+                                            set res add acc d64;
                                     set i add i 1;
 
     if:
@@ -1081,15 +1100,17 @@ fn to_i64 <(str)*>Result<i64,i32>> (s):
 //: - 本体処理に準じます。
 fn from_f64 <(f64)*>str> (x):
     if:
-        f64_ne x x
+        ne x x
         then:
             "nan"
         else:
-            let neg <bool> f64_lt x f64_convert_i32_s 0;
-            let absx <f64> if neg f64_neg x x;
+            let neg <bool> lt x f64_convert_i32_s 0;
+            let absx <f64> if neg:
+                then sub f64_convert_i32_s 0 x
+                else x;
             let int_part <i64> i64_trunc_f64_s absx;
             let int_f <f64> f64_convert_i64_s int_part;
-            let mut frac <f64> f64_sub absx int_f;
+            let mut frac <f64> sub absx int_f;
             let int_s <str> from_i64 int_part;
             let mut sb <StringBuilder> string_builder_new;
             if:
@@ -1104,21 +1125,28 @@ fn from_f64 <(f64)*>str> (x):
             let mut k <i32> 0;
             while lt k 6:
                 do:
-                    set frac f64_mul frac f64_convert_i32_s 10;
+                    set frac mul frac f64_convert_i32_s 10;
                     let d <i32> i32_trunc_f64_s frac;
                     store_u8 add scratch k add 48 d;
-                    set frac f64_sub frac f64_convert_i32_s d;
+                    set frac sub frac f64_convert_i32_s d;
                     set k add k 1;
 
             let mut trim <i32> 6;
             let mut done_trim <i32> 0;
-            while and eq done_trim 0 lt 0 trim:
+            while eq done_trim 0:
                 do:
-                    let b <i32> load_u8 add scratch sub trim 1;
                     if:
-                        eq b 48
+                        lt 0 trim
                         then:
-                            set trim sub trim 1;
+                            let idx <i32> sub trim 1;
+                            let ptr <i32> add scratch idx;
+                            let b <i32> load_u8 ptr;
+                            if:
+                                eq b 48
+                                then:
+                                    set trim sub trim 1;
+                                else:
+                                    set done_trim 1;
                         else:
                             set done_trim 1;
 
@@ -1130,7 +1158,7 @@ fn from_f64 <(f64)*>str> (x):
                     let mut i <i32> 0;
                     while lt i trim:
                         do:
-                            store_u8 add frac_s add 4 i load_u8 add scratch i;
+                            store_u8 <i32> add frac_s <i32> add 4 i load_u8 <i32> add scratch i;
                             set i add i 1;
                     set sb sb_append sb ".";
                     set sb sb_append sb frac_s;
@@ -1198,15 +1226,15 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
 
             while and eq ok 1 lt i n:
                 do:
-                    let b <i32> load_u8 add s add 4 i;
+                    let b <i32> load_u8 <i32> add s <i32> add 4 i;
                     let d <i32> sub b 48;
                     if:
                         and ge d 0 le d 9
                         then:
                             set has_digit 1;
-                            let scaled <f64> f64_mul int_part ten;
+                            let scaled <f64> mul int_part ten;
                             let dv <f64> f64_convert_i32_s d;
-                            let next_int <f64> f64_add scaled dv;
+                            let next_int <f64> add scaled dv;
                             set int_part next_int;
                             set i add i 1;
                         else:
@@ -1215,7 +1243,7 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
             if:
                 and eq ok 2 lt i n
                 then:
-                    let dot <i32> load_u8 add s add 4 i;
+                    let dot <i32> load_u8 <i32> add s <i32> add 4 i;
                     if:
                         eq dot 46
                         then:
@@ -1223,17 +1251,17 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
                             set i add i 1;
                             while and eq ok 1 lt i n:
                                 do:
-                                    let b <i32> load_u8 add s add 4 i;
+                                    let b <i32> load_u8 <i32> add s <i32> add 4 i;
                                     let d <i32> sub b 48;
                                     if:
                                         and ge d 0 le d 9
                                         then:
                                             set has_digit 1;
-                                            let next_scale <f64> f64_div frac_scale ten;
+                                            let next_scale <f64> div frac_scale ten;
                                             set frac_scale next_scale;
                                             let dv <f64> f64_convert_i32_s d;
-                                            let addv <f64> f64_mul dv frac_scale;
-                                            let next_frac <f64> f64_add frac_part addv;
+                                            let addv <f64> mul dv frac_scale;
+                                            let next_frac <f64> add frac_part addv;
                                             set frac_part next_frac;
                                             set i add i 1;
                                         else:
@@ -1248,7 +1276,7 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
             if:
                 and eq ok 2 lt i n
                 then:
-                    let eb <i32> load_u8 add s add 4 i;
+                    let eb <i32> load_u8 <i32> add s <i32> add 4 i;
                     if:
                         or eq eb 101 eq eb 69
                         then:
@@ -1256,7 +1284,7 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
                             if:
                                 lt i n
                                 then:
-                                    let sb <i32> load_u8 add s add 4 i;
+                                    let sb <i32> load_u8 <i32> add s <i32> add 4 i;
                                     if:
                                         eq sb 45
                                         then:
@@ -1275,13 +1303,13 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
                             let mut exp_digits <i32> 0;
                             while and eq ok 2 lt i n:
                                 do:
-                                    let b <i32> load_u8 add s add 4 i;
+                                    let b <i32> load_u8 <i32> add s <i32> add 4 i;
                                     let d <i32> sub b 48;
                                     if:
                                         and ge d 0 le d 9
                                         then:
                                             set exp_digits 1;
-                                            set exp_val add mul exp_val 10 d;
+                                            set exp_val <i32> add <i32> mul exp_val 10 d;
                                             set i add i 1;
                                         else:
                                             set ok 0;
@@ -1310,17 +1338,17 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
                 else:
                     ();
 
-            let mut out <f64> f64_add int_part frac_part;
+            let mut out <f64> add int_part frac_part;
             let mut k <i32> 0;
             while and eq ok 2 lt k exp_val:
                 do:
                     if:
                         eq exp_neg 1
                         then:
-                            let next_out <f64> f64_div out ten;
+                            let next_out <f64> div out ten;
                             set out next_out;
                         else:
-                            let next_out <f64> f64_mul out ten;
+                            let next_out <f64> mul out ten;
                             set out next_out;
                     set k add k 1;
 
@@ -1330,7 +1358,8 @@ fn to_f64 <(str)*>Result<f64,i32>> (s):
                     if:
                         eq neg 1
                         then:
-                            let signed_out <f64> f64_neg out;
+                            let zero <f64> f64_convert_i32_s 0;
+                            let signed_out <f64> sub zero out;
                             set out_res Result::Ok<f64,i32> signed_out;
                         else:
                             set out_res Result::Ok<f64,i32> out;

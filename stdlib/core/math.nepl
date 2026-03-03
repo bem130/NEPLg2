@@ -20,7 +20,7 @@
 
 
 
-//: i32_add: i32 の加算（mod 2^32）
+//: add: i32 の加算（mod 2^32）
 //:
 //: [目的/もくてき]:
 //: - 2つの i32 を加算し、Wasm の i32 加算規則で結果を返します。
@@ -42,10 +42,10 @@
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 42 i32_add 40 2;
-//:     assert_eq_i32 0 i32_add -1 1;
+//:     assert_eq_i32 42 add 40 2;
+//:     assert_eq_i32 0 add -1 1;
 //: ```
-fn i32_add <(i32,i32)->i32> (a,b):
+fn add <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -53,13 +53,13 @@ fn i32_add <(i32,i32)->i32> (a,b):
         i32.add
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_add(i32 %a, i32 %b) {
+        define i32 @add(i32 %a, i32 %b) {
         entry:
             %0 = add i32 %a, %b
             ret i32 %0
         }
 
-//: i32_sub: i32 の減算（mod 2^32）
+//: sub: i32 の減算（mod 2^32）
 //:
 //: [目的/もくてき]:
 //: - 2つの i32 の差を計算します。
@@ -80,10 +80,10 @@ fn i32_add <(i32,i32)->i32> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 5 i32_sub 9 4;
-//:     assert_eq_i32 -5 i32_sub 4 9;
+//:     assert_eq_i32 5 sub 9 4;
+//:     assert_eq_i32 -5 sub 4 9;
 //: ```
-fn i32_sub <(i32,i32)->i32> (a,b):
+fn sub <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -91,13 +91,13 @@ fn i32_sub <(i32,i32)->i32> (a,b):
         i32.sub
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_sub(i32 %a, i32 %b) {
+        define i32 @sub(i32 %a, i32 %b) {
         entry:
             %0 = sub i32 %a, %b
             ret i32 %0
         }
 
-//: i32_mul: i32 の乗算（mod 2^32）
+//: mul: i32 の乗算（mod 2^32）
 //:
 //: [目的/もくてき]:
 //: - 2つの i32 の積を計算します。
@@ -118,10 +118,10 @@ fn i32_sub <(i32,i32)->i32> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 42 i32_mul 6 7;
-//:     assert_eq_i32 0 i32_mul 0 12345;
+//:     assert_eq_i32 42 mul 6 7;
+//:     assert_eq_i32 0 mul 0 12345;
 //: ```
-fn i32_mul <(i32,i32)->i32> (a,b):
+fn mul <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -129,13 +129,13 @@ fn i32_mul <(i32,i32)->i32> (a,b):
         i32.mul
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_mul(i32 %a, i32 %b) {
+        define i32 @mul(i32 %a, i32 %b) {
         entry:
             %0 = mul i32 %a, %b
             ret i32 %0
         }
 
-//: i32_div_s: i32 の符号付き除算
+//: div_s: i32 の符号付き除算
 //:
 //: [目的/もくてき]:
 //: - 符号付き整数として割り算を行います。
@@ -156,10 +156,10 @@ fn i32_mul <(i32,i32)->i32> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 -3 i32_div_s -9 3;
-//:     assert_eq_i32 -3 i32_div_s 10 -3;
+//:     assert_eq_i32 -3 div_s -9 3;
+//:     assert_eq_i32 -3 div_s 10 -3;
 //: ```
-fn i32_div_s <(i32,i32)->i32> (a,b):
+fn div_s <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -167,13 +167,13 @@ fn i32_div_s <(i32,i32)->i32> (a,b):
         i32.div_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_div_s(i32 %a, i32 %b) {
+        define i32 @div_s(i32 %a, i32 %b) {
         entry:
             %0 = sdiv i32 %a, %b
             ret i32 %0
         }
 
-//: i32_div_u: i32 の符号なし除算
+//: div_u: i32 の符号なし除算
 //:
 //: [目的/もくてき]:
 //: - 符号なし整数として割り算を行います。
@@ -194,10 +194,10 @@ fn i32_div_s <(i32,i32)->i32> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 3 i32_div_u 11 3;
-//:     assert_eq_i32 2147483647 i32_div_u -1 2;
+//:     assert_eq_i32 3 div_u 11 3;
+//:     assert_eq_i32 2147483647 div_u -1 2;
 //: ```
-fn i32_div_u <(i32,i32)->i32> (a,b):
+fn div_u <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -205,13 +205,13 @@ fn i32_div_u <(i32,i32)->i32> (a,b):
         i32.div_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_div_u(i32 %a, i32 %b) {
+        define i32 @div_u(i32 %a, i32 %b) {
         entry:
             %0 = udiv i32 %a, %b
             ret i32 %0
         }
 
-//: i32_rem_s: i32 の符号付き剰余
+//: rem_s: i32 の符号付き剰余
 //:
 //: [目的/もくてき]:
 //: - 符号付き除算の余りを計算します。
@@ -232,10 +232,10 @@ fn i32_div_u <(i32,i32)->i32> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 1 i32_rem_s 10 3;
-//:     assert_eq_i32 -1 i32_rem_s -10 3;
+//:     assert_eq_i32 1 rem_s 10 3;
+//:     assert_eq_i32 -1 rem_s -10 3;
 //: ```
-fn i32_rem_s <(i32,i32)->i32> (a,b):
+fn rem_s <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -243,13 +243,13 @@ fn i32_rem_s <(i32,i32)->i32> (a,b):
         i32.rem_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_rem_s(i32 %a, i32 %b) {
+        define i32 @rem_s(i32 %a, i32 %b) {
         entry:
             %0 = srem i32 %a, %b
             ret i32 %0
         }
 
-//: i32_rem_u: i32 の符号なし剰余
+//: rem_u: i32 の符号なし剰余
 //:
 //: [目的/もくてき]:
 //: - 符号なし除算の余りを計算します。
@@ -270,10 +270,10 @@ fn i32_rem_s <(i32,i32)->i32> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 2 i32_rem_u 11 3;
-//:     assert_eq_i32 5 i32_rem_u -1 10;
+//:     assert_eq_i32 2 rem_u 11 3;
+//:     assert_eq_i32 5 rem_u -1 10;
 //: ```
-fn i32_rem_u <(i32,i32)->i32> (a,b):
+fn rem_u <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -281,13 +281,13 @@ fn i32_rem_u <(i32,i32)->i32> (a,b):
         i32.rem_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_rem_u(i32 %a, i32 %b) {
+        define i32 @rem_u(i32 %a, i32 %b) {
         entry:
             %0 = urem i32 %a, %b
             ret i32 %0
         }
 
-//: i32_and: i32 のビット AND
+//: and: i32 のビット AND
 //:
 //: [目的/もくてき]:
 //: - i32 と i32 の各ビットに対して AND を取り、両方が 1 のビットだけを残します。
@@ -308,16 +308,16 @@ fn i32_rem_u <(i32,i32)->i32> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 2 i32_and 6 3;
-//:     assert_eq_i32 7 i32_or 6 3;
-//:     assert_eq_i32 5 i32_xor 6 3;
-//:     assert_eq_i32 8 i32_shl 1 3;
-//:     assert_eq_i32 -2 i32_shr_s -8 2;
-//:     assert_eq_i32 1073741822 i32_shr_u -8 2;
+//:     assert_eq_i32 2 and 6 3;
+//:     assert_eq_i32 7 or 6 3;
+//:     assert_eq_i32 5 xor 6 3;
+//:     assert_eq_i32 8 shl 1 3;
+//:     assert_eq_i32 -2 shr_s -8 2;
+//:     assert_eq_i32 1073741822 shr_u -8 2;
 //:     assert_eq_i32 2 i32_rotl 1 1;
 //:     assert_eq_i32 1 i32_rotr 2 1;
 //: ```
-fn i32_and <(i32,i32)->i32> (a,b):
+fn and <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -325,13 +325,13 @@ fn i32_and <(i32,i32)->i32> (a,b):
         i32.and
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_and(i32 %a, i32 %b) {
+        define i32 @and(i32 %a, i32 %b) {
         entry:
             %0 = and i32 %a, %b
             ret i32 %0
         }
 
-//: i32_or: i32 のビット OR
+//: or: i32 のビット OR
 //:
 //: [目的/もくてき]:
 //: - i32 と i32 の各ビットに対して OR を取り、どちらかが 1 のビットを立てます。
@@ -344,7 +344,7 @@ fn i32_and <(i32,i32)->i32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_or <(i32,i32)->i32> (a,b):
+fn or <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -352,13 +352,13 @@ fn i32_or <(i32,i32)->i32> (a,b):
         i32.or
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_or(i32 %a, i32 %b) {
+        define i32 @or(i32 %a, i32 %b) {
         entry:
             %0 = or i32 %a, %b
             ret i32 %0
         }
 
-//: i32_xor: i32 のビット XOR
+//: xor: i32 のビット XOR
 //:
 //: [目的/もくてき]:
 //: - i32 と i32 の各ビットに対して XOR を取り、異なるビットだけを 1 にします。
@@ -371,7 +371,7 @@ fn i32_or <(i32,i32)->i32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_xor <(i32,i32)->i32> (a,b):
+fn xor <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -379,13 +379,13 @@ fn i32_xor <(i32,i32)->i32> (a,b):
         i32.xor
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_xor(i32 %a, i32 %b) {
+        define i32 @xor(i32 %a, i32 %b) {
         entry:
             %0 = xor i32 %a, %b
             ret i32 %0
         }
 
-//: i32_shl: i32 の左シフト
+//: shl: i32 の左シフト
 //:
 //: [目的/もくてき]:
 //: - `a` のビット列を `b` だけ左にずらします。
@@ -398,7 +398,7 @@ fn i32_xor <(i32,i32)->i32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_shl <(i32,i32)->i32> (a,b):
+fn shl <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -406,13 +406,13 @@ fn i32_shl <(i32,i32)->i32> (a,b):
         i32.shl
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_shl(i32 %a, i32 %b) {
+        define i32 @shl(i32 %a, i32 %b) {
         entry:
             %0 = shl i32 %a, %b
             ret i32 %0
         }
 
-//: i32_shr_s: i32 の算術右シフト
+//: shr_s: i32 の算術右シフト
 //:
 //: [目的/もくてき]:
 //: - 符号を保ちながら `a` を右シフトします。
@@ -425,7 +425,7 @@ fn i32_shl <(i32,i32)->i32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_shr_s <(i32,i32)->i32> (a,b):
+fn shr_s <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -433,13 +433,13 @@ fn i32_shr_s <(i32,i32)->i32> (a,b):
         i32.shr_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_shr_s(i32 %a, i32 %b) {
+        define i32 @shr_s(i32 %a, i32 %b) {
         entry:
             %0 = ashr i32 %a, %b
             ret i32 %0
         }
 
-//: i32_shr_u: i32 の論理右シフト
+//: shr_u: i32 の論理右シフト
 //:
 //: [目的/もくてき]:
 //: - 上位を 0 で埋めながら `a` を右シフトします。
@@ -452,7 +452,7 @@ fn i32_shr_s <(i32,i32)->i32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_shr_u <(i32,i32)->i32> (a,b):
+fn shr_u <(i32,i32)->i32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -460,7 +460,7 @@ fn i32_shr_u <(i32,i32)->i32> (a,b):
         i32.shr_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_shr_u(i32 %a, i32 %b) {
+        define i32 @shr_u(i32 %a, i32 %b) {
         entry:
             %0 = lshr i32 %a, %b
             ret i32 %0
@@ -615,7 +615,7 @@ fn i32_popcnt <(i32)->i32> (a):
             ret i32 %0
         }
 
-//: i32_eq: i32 の等値比較
+//: eq: i32 の等値比較
 //:
 //: [目的/もくてき]:
 //: - 2つの i32 が等しいとき true、異なるとき false を返します。
@@ -636,18 +636,18 @@ fn i32_popcnt <(i32)->i32> (a):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert i32_eq 7 7;
-//:     assert i32_ne 7 8;
-//:     assert i32_lt_s -1 0;
-//:     assert i32_lt_u 0 -1;
-//:     assert i32_le_s 7 7;
-//:     assert i32_le_u 7 8;
-//:     assert i32_gt_s 9 3;
-//:     assert i32_gt_u -1 0;
-//:     assert i32_ge_s 9 9;
-//:     assert i32_ge_u -1 -1;
+//:     assert eq 7 7;
+//:     assert ne 7 8;
+//:     assert lt -1 0;
+//:     assert lt_u 0 -1;
+//:     assert le 7 7;
+//:     assert le_u 7 8;
+//:     assert gt 9 3;
+//:     assert gt_u -1 0;
+//:     assert ge 9 9;
+//:     assert ge_u -1 -1;
 //: ```
-fn i32_eq <(i32,i32)->bool> (a,b):
+fn eq <(i32,i32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -655,14 +655,14 @@ fn i32_eq <(i32,i32)->bool> (a,b):
         i32.eq
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_eq(i32 %a, i32 %b) {
+        define i32 @eq(i32 %a, i32 %b) {
         entry:
             %0 = icmp eq i32 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i32_ne: i32 の非等値比較
+//: ne: i32 の非等値比較
 //:
 //: [目的/もくてき]:
 //: - 2つの i32 が異なるとき true を返します。
@@ -675,7 +675,7 @@ fn i32_eq <(i32,i32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_ne <(i32,i32)->bool> (a,b):
+fn ne <(i32,i32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -683,14 +683,14 @@ fn i32_ne <(i32,i32)->bool> (a,b):
         i32.ne
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_ne(i32 %a, i32 %b) {
+        define i32 @ne(i32 %a, i32 %b) {
         entry:
             %0 = icmp ne i32 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i32_lt_s: i32 の符号付き小なり比較
+//: lt: i32 の符号付き小なり比較
 //:
 //: [目的/もくてき]:
 //: - i32 を符号付き整数として比較し、`a < b` を判定します。
@@ -703,7 +703,7 @@ fn i32_ne <(i32,i32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_lt_s <(i32,i32)->bool> (a,b):
+fn lt <(i32,i32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -711,14 +711,14 @@ fn i32_lt_s <(i32,i32)->bool> (a,b):
         i32.lt_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_lt_s(i32 %a, i32 %b) {
+        define i32 @lt(i32 %a, i32 %b) {
         entry:
             %0 = icmp slt i32 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i32_lt_u: i32 の符号なし小なり比較
+//: lt_u: i32 の符号なし小なり比較
 //:
 //: [目的/もくてき]:
 //: - i32 を符号なし整数として比較し、`a < b` を判定します。
@@ -731,7 +731,7 @@ fn i32_lt_s <(i32,i32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_lt_u <(i32,i32)->bool> (a,b):
+fn lt_u <(i32,i32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -739,14 +739,14 @@ fn i32_lt_u <(i32,i32)->bool> (a,b):
         i32.lt_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_lt_u(i32 %a, i32 %b) {
+        define i32 @lt_u(i32 %a, i32 %b) {
         entry:
             %0 = icmp ult i32 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i32_le_s: i32 の符号付き以下比較
+//: le: i32 の符号付き以下比較
 //:
 //: [目的/もくてき]:
 //: - i32 を符号付き整数として比較し、`a <= b` を判定します。
@@ -759,7 +759,7 @@ fn i32_lt_u <(i32,i32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_le_s <(i32,i32)->bool> (a,b):
+fn le <(i32,i32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -767,14 +767,14 @@ fn i32_le_s <(i32,i32)->bool> (a,b):
         i32.le_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_le_s(i32 %a, i32 %b) {
+        define i32 @le(i32 %a, i32 %b) {
         entry:
             %0 = icmp sle i32 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i32_le_u: i32 の符号なし以下比較
+//: le_u: i32 の符号なし以下比較
 //:
 //: [目的/もくてき]:
 //: - i32 を符号なし整数として比較し、`a <= b` を判定します。
@@ -787,7 +787,7 @@ fn i32_le_s <(i32,i32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_le_u <(i32,i32)->bool> (a,b):
+fn le_u <(i32,i32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -795,14 +795,14 @@ fn i32_le_u <(i32,i32)->bool> (a,b):
         i32.le_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_le_u(i32 %a, i32 %b) {
+        define i32 @le_u(i32 %a, i32 %b) {
         entry:
             %0 = icmp ule i32 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i32_gt_s: i32 の符号付き大なり比較
+//: gt: i32 の符号付き大なり比較
 //:
 //: [目的/もくてき]:
 //: - i32 を符号付き整数として比較し、`a > b` を判定します。
@@ -815,7 +815,7 @@ fn i32_le_u <(i32,i32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_gt_s <(i32,i32)->bool> (a,b):
+fn gt <(i32,i32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -823,14 +823,14 @@ fn i32_gt_s <(i32,i32)->bool> (a,b):
         i32.gt_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_gt_s(i32 %a, i32 %b) {
+        define i32 @gt(i32 %a, i32 %b) {
         entry:
             %0 = icmp sgt i32 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i32_gt_u: i32 の符号なし大なり比較
+//: gt_u: i32 の符号なし大なり比較
 //:
 //: [目的/もくてき]:
 //: - i32 を符号なし整数として比較し、`a > b` を判定します。
@@ -843,7 +843,7 @@ fn i32_gt_s <(i32,i32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_gt_u <(i32,i32)->bool> (a,b):
+fn gt_u <(i32,i32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -851,14 +851,14 @@ fn i32_gt_u <(i32,i32)->bool> (a,b):
         i32.gt_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_gt_u(i32 %a, i32 %b) {
+        define i32 @gt_u(i32 %a, i32 %b) {
         entry:
             %0 = icmp ugt i32 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i32_ge_s: i32 の符号付き以上比較
+//: ge: i32 の符号付き以上比較
 //:
 //: [目的/もくてき]:
 //: - i32 を符号付き整数として比較し、`a >= b` を判定します。
@@ -871,7 +871,7 @@ fn i32_gt_u <(i32,i32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_ge_s <(i32,i32)->bool> (a,b):
+fn ge <(i32,i32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -879,14 +879,14 @@ fn i32_ge_s <(i32,i32)->bool> (a,b):
         i32.ge_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_ge_s(i32 %a, i32 %b) {
+        define i32 @ge(i32 %a, i32 %b) {
         entry:
             %0 = icmp sge i32 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i32_ge_u: i32 の符号なし以上比較
+//: ge_u: i32 の符号なし以上比較
 //:
 //: [目的/もくてき]:
 //: - i32 を符号なし整数として比較し、`a >= b` を判定します。
@@ -899,7 +899,7 @@ fn i32_ge_s <(i32,i32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i32_ge_u <(i32,i32)->bool> (a,b):
+fn ge_u <(i32,i32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -907,7 +907,7 @@ fn i32_ge_u <(i32,i32)->bool> (a,b):
         i32.ge_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i32_ge_u(i32 %a, i32 %b) {
+        define i32 @ge_u(i32 %a, i32 %b) {
         entry:
             %0 = icmp uge i32 %a, %b
             %1 = zext i1 %0 to i32
@@ -1227,8 +1227,52 @@ fn u8_ge_u <(u8,u8)->bool> (a,b):
             ret i32 %0
         }
 
+//: add: u8 の加算（mod 2^8）
+fn add <(u8,u8)->u8> (a,b):
+    u8_add a b
 
-//: i64_add: i64 の加算（mod 2^64）
+//: sub: u8 の減算（mod 2^8）
+fn sub <(u8,u8)->u8> (a,b):
+    u8_sub a b
+
+//: mul: u8 の乗算（mod 2^8）
+fn mul <(u8,u8)->u8> (a,b):
+    u8_mul a b
+
+//: div_u: u8 の符号なし除算
+fn div_u <(u8,u8)->u8> (a,b):
+    u8_div_u a b
+
+//: rem_u: u8 の符号なし剰余
+fn rem_u <(u8,u8)->u8> (a,b):
+    u8_rem_u a b
+
+//: eq: u8 の等値比較
+fn eq <(u8,u8)->bool> (a,b):
+    u8_eq a b
+
+//: ne: u8 の非等値比較
+fn ne <(u8,u8)->bool> (a,b):
+    u8_ne a b
+
+//: lt_u: u8 の符号なし小なり比較
+fn lt_u <(u8,u8)->bool> (a,b):
+    u8_lt_u a b
+
+//: le_u: u8 の符号なし以下比較
+fn le_u <(u8,u8)->bool> (a,b):
+    u8_le_u a b
+
+//: gt_u: u8 の符号なし大なり比較
+fn gt_u <(u8,u8)->bool> (a,b):
+    u8_gt_u a b
+
+//: ge_u: u8 の符号なし以上比較
+fn ge_u <(u8,u8)->bool> (a,b):
+    u8_ge_u a b
+
+
+//: add: i64 の加算（mod 2^64）
 //:
 //: [目的/もくてき]:
 //: - i64 と i64 を加算します。
@@ -1251,12 +1295,12 @@ fn u8_ge_u <(u8,u8)->bool> (a,b):
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 40;
 //:     let b <i64> i64_extend_i32_u 2;
-//:     assert i64_eq i64_add a b i64_extend_i32_u 42;
+//:     assert eq add a b i64_extend_i32_u 42;
 //:     let a <i64> i64_extend_i32_u 0;
 //:     let b <i64> i64_extend_i32_u 7;
-//:     assert i64_eq i64_add a b b;
+//:     assert eq add a b b;
 //: ```
-fn i64_add <(i64,i64)->i64> (a,b):
+fn add <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1264,13 +1308,13 @@ fn i64_add <(i64,i64)->i64> (a,b):
         i64.add
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_add(i64 %a, i64 %b) {
+        define i64 @add(i64 %a, i64 %b) {
         entry:
             %0 = add i64 %a, %b
             ret i64 %0
         }
 
-//: i64_sub: i64 の減算（mod 2^64）
+//: sub: i64 の減算（mod 2^64）
 //:
 //: [目的/もくてき]:
 //: - i64 から i64 を減算します。
@@ -1293,12 +1337,12 @@ fn i64_add <(i64,i64)->i64> (a,b):
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 44;
 //:     let b <i64> i64_extend_i32_u 2;
-//:     assert i64_eq i64_sub a b i64_extend_i32_u 42;
+//:     assert eq sub a b i64_extend_i32_u 42;
 //:     let z <i64> i64_extend_i32_u 0;
 //:     let one <i64> i64_extend_i32_u 1;
-//:     assert i64_lt_s i64_sub z one z;
+//:     assert lt sub z one z;
 //: ```
-fn i64_sub <(i64,i64)->i64> (a,b):
+fn sub <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1306,13 +1350,13 @@ fn i64_sub <(i64,i64)->i64> (a,b):
         i64.sub
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_sub(i64 %a, i64 %b) {
+        define i64 @sub(i64 %a, i64 %b) {
         entry:
             %0 = sub i64 %a, %b
             ret i64 %0
         }
 
-//: i64_mul: i64 の乗算（mod 2^64）
+//: mul: i64 の乗算（mod 2^64）
 //:
 //: [目的/もくてき]:
 //: - i64 と i64 を乗算します。
@@ -1335,10 +1379,10 @@ fn i64_sub <(i64,i64)->i64> (a,b):
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 6;
 //:     let b <i64> i64_extend_i32_u 7;
-//:     assert i64_eq i64_mul a b i64_extend_i32_u 42;
-//:     assert i64_eq i64_mul i64_extend_i32_u 0 i64_extend_i32_u 999 i64_extend_i32_u 0;
+//:     assert eq mul a b i64_extend_i32_u 42;
+//:     assert eq mul i64_extend_i32_u 0 i64_extend_i32_u 999 i64_extend_i32_u 0;
 //: ```
-fn i64_mul <(i64,i64)->i64> (a,b):
+fn mul <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1346,13 +1390,13 @@ fn i64_mul <(i64,i64)->i64> (a,b):
         i64.mul
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_mul(i64 %a, i64 %b) {
+        define i64 @mul(i64 %a, i64 %b) {
         entry:
             %0 = mul i64 %a, %b
             ret i64 %0
         }
 
-//: i64_div_s: i64 の符号付き除算
+//: div_s: i64 の符号付き除算
 //:
 //: [目的/もくてき]:
 //: - i64 を符号付き整数として割り算します。
@@ -1378,12 +1422,12 @@ fn i64_mul <(i64,i64)->i64> (a,b):
 //:     let p9 <i64> i64_extend_i32_s 9;
 //:     let p3 <i64> i64_extend_i32_s 3;
 //:     let n3 <i64> i64_extend_i32_s -3;
-//:     let p <i64> i64_div_s n9 p3;
-//:     let q <i64> i64_div_s p9 n3;
-//:     assert i64_eq p i64_extend_i32_s -3;
-//:     assert i64_eq q i64_extend_i32_s -3;
+//:     let p <i64> div_s n9 p3;
+//:     let q <i64> div_s p9 n3;
+//:     assert eq p i64_extend_i32_s -3;
+//:     assert eq q i64_extend_i32_s -3;
 //: ```
-fn i64_div_s <(i64,i64)->i64> (a,b):
+fn div_s <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1391,13 +1435,13 @@ fn i64_div_s <(i64,i64)->i64> (a,b):
         i64.div_s
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_div_s(i64 %a, i64 %b) {
+        define i64 @div_s(i64 %a, i64 %b) {
         entry:
             %0 = sdiv i64 %a, %b
             ret i64 %0
         }
 
-//: i64_div_u: i64 の符号なし除算
+//: div_u: i64 の符号なし除算
 //:
 //: [目的/もくてき]:
 //: - i64 を符号なし整数として割り算します。
@@ -1420,12 +1464,12 @@ fn i64_div_s <(i64,i64)->i64> (a,b):
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 100;
 //:     let b <i64> i64_extend_i32_u 9;
-//:     assert i64_eq i64_div_u a b i64_extend_i32_u 11;
+//:     assert eq div_u a b i64_extend_i32_u 11;
 //:     let a <i64> i64_extend_i32_u 9;
 //:     let b <i64> i64_extend_i32_u 10;
-//:     assert i64_eq i64_div_u a b i64_extend_i32_u 0;
+//:     assert eq div_u a b i64_extend_i32_u 0;
 //: ```
-fn i64_div_u <(i64,i64)->i64> (a,b):
+fn div_u <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1433,13 +1477,13 @@ fn i64_div_u <(i64,i64)->i64> (a,b):
         i64.div_u
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_div_u(i64 %a, i64 %b) {
+        define i64 @div_u(i64 %a, i64 %b) {
         entry:
             %0 = udiv i64 %a, %b
             ret i64 %0
         }
 
-//: i64_rem_s: i64 の符号付き剰余
+//: rem_s: i64 の符号付き剰余
 //:
 //: [目的/もくてき]:
 //: - i64 の符号付き剰余（余り）を計算します。
@@ -1464,12 +1508,12 @@ fn i64_div_u <(i64,i64)->i64> (a,b):
 //:     let n10 <i64> i64_extend_i32_s -10;
 //:     let p10 <i64> i64_extend_i32_s 10;
 //:     let p3 <i64> i64_extend_i32_s 3;
-//:     let a <i64> i64_rem_s n10 p3;
-//:     let b <i64> i64_rem_s p10 p3;
-//:     assert i64_eq a i64_extend_i32_s -1;
-//:     assert i64_eq b i64_extend_i32_s 1;
+//:     let a <i64> rem_s n10 p3;
+//:     let b <i64> rem_s p10 p3;
+//:     assert eq a i64_extend_i32_s -1;
+//:     assert eq b i64_extend_i32_s 1;
 //: ```
-fn i64_rem_s <(i64,i64)->i64> (a,b):
+fn rem_s <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1477,13 +1521,13 @@ fn i64_rem_s <(i64,i64)->i64> (a,b):
         i64.rem_s
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_rem_s(i64 %a, i64 %b) {
+        define i64 @rem_s(i64 %a, i64 %b) {
         entry:
             %0 = srem i64 %a, %b
             ret i64 %0
         }
 
-//: i64_rem_u: i64 の符号なし剰余
+//: rem_u: i64 の符号なし剰余
 //:
 //: [目的/もくてき]:
 //: - i64 の符号なし剰余を計算します。
@@ -1506,12 +1550,12 @@ fn i64_rem_s <(i64,i64)->i64> (a,b):
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 100;
 //:     let b <i64> i64_extend_i32_u 9;
-//:     assert i64_eq i64_rem_u a b i64_extend_i32_u 1;
+//:     assert eq rem_u a b i64_extend_i32_u 1;
 //:     let a <i64> i64_extend_i32_u 9;
 //:     let b <i64> i64_extend_i32_u 10;
-//:     assert i64_eq i64_rem_u a b a;
+//:     assert eq rem_u a b a;
 //: ```
-fn i64_rem_u <(i64,i64)->i64> (a,b):
+fn rem_u <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1519,13 +1563,13 @@ fn i64_rem_u <(i64,i64)->i64> (a,b):
         i64.rem_u
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_rem_u(i64 %a, i64 %b) {
+        define i64 @rem_u(i64 %a, i64 %b) {
         entry:
             %0 = urem i64 %a, %b
             ret i64 %0
         }
 
-//: i64_and: i64 のビット AND
+//: and: i64 のビット AND
 //:
 //: [目的/もくてき]:
 //: - 2つの i64 の各ビットに AND を適用します。
@@ -1548,11 +1592,11 @@ fn i64_rem_u <(i64,i64)->i64> (a,b):
 //: fn main <()*>()> ():
 //:     let a <i64> i64_extend_i32_u 14;
 //:     let b <i64> i64_extend_i32_u 11;
-//:     assert i64_eq i64_and a b i64_extend_i32_u 10;
-//:     assert i64_eq i64_or a b i64_extend_i32_u 15;
-//:     assert i64_eq i64_xor a b i64_extend_i32_u 5;
+//:     assert eq and a b i64_extend_i32_u 10;
+//:     assert eq or a b i64_extend_i32_u 15;
+//:     assert eq xor a b i64_extend_i32_u 5;
 //: ```
-fn i64_and <(i64,i64)->i64> (a,b):
+fn and <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1560,13 +1604,13 @@ fn i64_and <(i64,i64)->i64> (a,b):
         i64.and
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_and(i64 %a, i64 %b) {
+        define i64 @and(i64 %a, i64 %b) {
         entry:
             %0 = and i64 %a, %b
             ret i64 %0
         }
 
-//: i64_or: i64 のビット OR
+//: or: i64 のビット OR
 //:
 //: [目的/もくてき]:
 //: - 2つの i64 の各ビットに OR を適用します。
@@ -1579,7 +1623,7 @@ fn i64_and <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_or <(i64,i64)->i64> (a,b):
+fn or <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1587,13 +1631,13 @@ fn i64_or <(i64,i64)->i64> (a,b):
         i64.or
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_or(i64 %a, i64 %b) {
+        define i64 @or(i64 %a, i64 %b) {
         entry:
             %0 = or i64 %a, %b
             ret i64 %0
         }
 
-//: i64_xor: i64 のビット XOR
+//: xor: i64 のビット XOR
 //:
 //: [目的/もくてき]:
 //: - 2つの i64 の各ビットに XOR を適用します。
@@ -1606,7 +1650,7 @@ fn i64_or <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_xor <(i64,i64)->i64> (a,b):
+fn xor <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1614,13 +1658,13 @@ fn i64_xor <(i64,i64)->i64> (a,b):
         i64.xor
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_xor(i64 %a, i64 %b) {
+        define i64 @xor(i64 %a, i64 %b) {
         entry:
             %0 = xor i64 %a, %b
             ret i64 %0
         }
 
-//: i64_shl: i64 の左シフト
+//: shl: i64 の左シフト
 //:
 //: [目的/もくてき]:
 //: - i64 のビット列を左へシフトします。
@@ -1633,7 +1677,7 @@ fn i64_xor <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_shl <(i64,i64)->i64> (a,b):
+fn shl <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1641,13 +1685,13 @@ fn i64_shl <(i64,i64)->i64> (a,b):
         i64.shl
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_shl(i64 %a, i64 %b) {
+        define i64 @shl(i64 %a, i64 %b) {
         entry:
             %0 = shl i64 %a, %b
             ret i64 %0
         }
 
-//: i64_shr_s: i64 の算術右シフト
+//: shr_s: i64 の算術右シフト
 //:
 //: [目的/もくてき]:
 //: - i64 を符号付き整数として右へシフトします。
@@ -1660,7 +1704,7 @@ fn i64_shl <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_shr_s <(i64,i64)->i64> (a,b):
+fn shr_s <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1668,13 +1712,13 @@ fn i64_shr_s <(i64,i64)->i64> (a,b):
         i64.shr_s
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_shr_s(i64 %a, i64 %b) {
+        define i64 @shr_s(i64 %a, i64 %b) {
         entry:
             %0 = ashr i64 %a, %b
             ret i64 %0
         }
 
-//: i64_shr_u: i64 の論理右シフト
+//: shr_u: i64 の論理右シフト
 //:
 //: [目的/もくてき]:
 //: - i64 を符号なし整数として右へシフトします。
@@ -1687,7 +1731,7 @@ fn i64_shr_s <(i64,i64)->i64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_shr_u <(i64,i64)->i64> (a,b):
+fn shr_u <(i64,i64)->i64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1695,7 +1739,7 @@ fn i64_shr_u <(i64,i64)->i64> (a,b):
         i64.shr_u
     #if[target=llvm]
     #llvmir:
-        define i64 @i64_shr_u(i64 %a, i64 %b) {
+        define i64 @shr_u(i64 %a, i64 %b) {
         entry:
             %0 = lshr i64 %a, %b
             ret i64 %0
@@ -1838,7 +1882,7 @@ fn i64_popcnt <(i64)->i64> (a):
             ret i64 %0
         }
 
-//: i64_eq: i64 の等値比較
+//: eq: i64 の等値比較
 //:
 //: [目的/もくてき]:
 //: - 2つの i64 が等しいかを判定します。
@@ -1863,12 +1907,12 @@ fn i64_popcnt <(i64)->i64> (a):
 //:     let b <i64> i64_extend_i32_s 1;
 //:     let c <i64> i64_extend_i32_s -2;
 //:     let d <i64> i64_extend_i32_s -1;
-//:     assert i64_eq a d;
-//:     assert i64_ne a b;
-//:     assert i64_lt_s c d;
-//:     assert i64_gt_u a b;
+//:     assert eq a d;
+//:     assert ne a b;
+//:     assert lt c d;
+//:     assert gt_u a b;
 //: ```
-fn i64_eq <(i64,i64)->bool> (a,b):
+fn eq <(i64,i64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1876,14 +1920,14 @@ fn i64_eq <(i64,i64)->bool> (a,b):
         i64.eq
     #if[target=llvm]
     #llvmir:
-        define i32 @i64_eq(i64 %a, i64 %b) {
+        define i32 @eq(i64 %a, i64 %b) {
         entry:
             %0 = icmp eq i64 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i64_ne: i64 の非等値比較
+//: ne: i64 の非等値比較
 //:
 //: [目的/もくてき]:
 //: - 2つの i64 が異なるかを判定します。
@@ -1892,11 +1936,11 @@ fn i64_eq <(i64,i64)->bool> (a,b):
 //: - wasm 命令 `i64.ne` を直接実行します。
 //:
 //: [注意/ちゅうい]:
-//: - `i64_eq` の否定と同値です。
+//: - `eq` の否定と同値です。
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_ne <(i64,i64)->bool> (a,b):
+fn ne <(i64,i64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1904,14 +1948,14 @@ fn i64_ne <(i64,i64)->bool> (a,b):
         i64.ne
     #if[target=llvm]
     #llvmir:
-        define i32 @i64_ne(i64 %a, i64 %b) {
+        define i32 @ne(i64 %a, i64 %b) {
         entry:
             %0 = icmp ne i64 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i64_lt_s: i64 の符号付き小なり比較
+//: lt: i64 の符号付き小なり比較
 //:
 //: [目的/もくてき]:
 //: - i64 を符号付き整数として `a < b` を判定します。
@@ -1924,7 +1968,7 @@ fn i64_ne <(i64,i64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_lt_s <(i64,i64)->bool> (a,b):
+fn lt <(i64,i64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1932,14 +1976,14 @@ fn i64_lt_s <(i64,i64)->bool> (a,b):
         i64.lt_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i64_lt_s(i64 %a, i64 %b) {
+        define i32 @lt(i64 %a, i64 %b) {
         entry:
             %0 = icmp slt i64 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i64_lt_u: i64 の符号なし小なり比較
+//: lt_u: i64 の符号なし小なり比較
 //:
 //: [目的/もくてき]:
 //: - i64 を符号なし整数として `a < b` を判定します。
@@ -1952,7 +1996,7 @@ fn i64_lt_s <(i64,i64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_lt_u <(i64,i64)->bool> (a,b):
+fn lt_u <(i64,i64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1960,14 +2004,14 @@ fn i64_lt_u <(i64,i64)->bool> (a,b):
         i64.lt_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i64_lt_u(i64 %a, i64 %b) {
+        define i32 @lt_u(i64 %a, i64 %b) {
         entry:
             %0 = icmp ult i64 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i64_le_s: i64 の符号付き以下比較
+//: le: i64 の符号付き以下比較
 //:
 //: [目的/もくてき]:
 //: - i64 を符号付き整数として `a <= b` を判定します。
@@ -1976,11 +2020,11 @@ fn i64_lt_u <(i64,i64)->bool> (a,b):
 //: - wasm 命令 `i64.le_s` を直接実行します。
 //:
 //: [注意/ちゅうい]:
-//: - `i64_lt_s` と `i64_eq` の和集合と同じ真理値になります。
+//: - `lt` と `eq` の和集合と同じ真理値になります。
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_le_s <(i64,i64)->bool> (a,b):
+fn le <(i64,i64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -1988,14 +2032,14 @@ fn i64_le_s <(i64,i64)->bool> (a,b):
         i64.le_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i64_le_s(i64 %a, i64 %b) {
+        define i32 @le(i64 %a, i64 %b) {
         entry:
             %0 = icmp sle i64 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i64_le_u: i64 の符号なし以下比較
+//: le_u: i64 の符号なし以下比較
 //:
 //: [目的/もくてき]:
 //: - i64 を符号なし整数として `a <= b` を判定します。
@@ -2008,7 +2052,7 @@ fn i64_le_s <(i64,i64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_le_u <(i64,i64)->bool> (a,b):
+fn le_u <(i64,i64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2016,14 +2060,14 @@ fn i64_le_u <(i64,i64)->bool> (a,b):
         i64.le_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i64_le_u(i64 %a, i64 %b) {
+        define i32 @le_u(i64 %a, i64 %b) {
         entry:
             %0 = icmp ule i64 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i64_gt_s: i64 の符号付き大なり比較
+//: gt: i64 の符号付き大なり比較
 //:
 //: [目的/もくてき]:
 //: - i64 を符号付き整数として `a > b` を判定します。
@@ -2036,7 +2080,7 @@ fn i64_le_u <(i64,i64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_gt_s <(i64,i64)->bool> (a,b):
+fn gt <(i64,i64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2044,14 +2088,14 @@ fn i64_gt_s <(i64,i64)->bool> (a,b):
         i64.gt_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i64_gt_s(i64 %a, i64 %b) {
+        define i32 @gt(i64 %a, i64 %b) {
         entry:
             %0 = icmp sgt i64 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i64_gt_u: i64 の符号なし大なり比較
+//: gt_u: i64 の符号なし大なり比較
 //:
 //: [目的/もくてき]:
 //: - i64 を符号なし整数として `a > b` を判定します。
@@ -2064,7 +2108,7 @@ fn i64_gt_s <(i64,i64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_gt_u <(i64,i64)->bool> (a,b):
+fn gt_u <(i64,i64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2072,14 +2116,14 @@ fn i64_gt_u <(i64,i64)->bool> (a,b):
         i64.gt_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i64_gt_u(i64 %a, i64 %b) {
+        define i32 @gt_u(i64 %a, i64 %b) {
         entry:
             %0 = icmp ugt i64 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i64_ge_s: i64 の符号付き以上比較
+//: ge: i64 の符号付き以上比較
 //:
 //: [目的/もくてき]:
 //: - i64 を符号付き整数として `a >= b` を判定します。
@@ -2088,11 +2132,11 @@ fn i64_gt_u <(i64,i64)->bool> (a,b):
 //: - wasm 命令 `i64.ge_s` を直接実行します。
 //:
 //: [注意/ちゅうい]:
-//: - `i64_gt_s` または `i64_eq` が真なら真になります。
+//: - `gt` または `eq` が真なら真になります。
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_ge_s <(i64,i64)->bool> (a,b):
+fn ge <(i64,i64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2100,14 +2144,14 @@ fn i64_ge_s <(i64,i64)->bool> (a,b):
         i64.ge_s
     #if[target=llvm]
     #llvmir:
-        define i32 @i64_ge_s(i64 %a, i64 %b) {
+        define i32 @ge(i64 %a, i64 %b) {
         entry:
             %0 = icmp sge i64 %a, %b
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
 
-//: i64_ge_u: i64 の符号なし以上比較
+//: ge_u: i64 の符号なし以上比較
 //:
 //: [目的/もくてき]:
 //: - i64 を符号なし整数として `a >= b` を判定します。
@@ -2116,11 +2160,11 @@ fn i64_ge_s <(i64,i64)->bool> (a,b):
 //: - wasm 命令 `i64.ge_u` を直接実行します。
 //:
 //: [注意/ちゅうい]:
-//: - `i64_gt_u` または `i64_eq` が真なら真になります。
+//: - `gt_u` または `eq` が真なら真になります。
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i64_ge_u <(i64,i64)->bool> (a,b):
+fn ge_u <(i64,i64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2128,7 +2172,7 @@ fn i64_ge_u <(i64,i64)->bool> (a,b):
         i64.ge_u
     #if[target=llvm]
     #llvmir:
-        define i32 @i64_ge_u(i64 %a, i64 %b) {
+        define i32 @ge_u(i64 %a, i64 %b) {
         entry:
             %0 = icmp uge i64 %a, %b
             %1 = zext i1 %0 to i32
@@ -2136,7 +2180,7 @@ fn i64_ge_u <(i64,i64)->bool> (a,b):
         }
 
 
-//: f32_add: f32 の加算
+//: add: f32 の加算
 //:
 //: [目的/もくてき]:
 //: - 2つの f32 を加算します。
@@ -2157,12 +2201,12 @@ fn i64_ge_u <(i64,i64)->bool> (a,b):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     let x <f32> f32_add 1.5 2.25;
-//:     let y <f32> f32_sub x 1.25;
-//:     assert f32_eq x 3.75;
-//:     assert f32_eq y 2.5;
+//:     let x <f32> add 1.5 2.25;
+//:     let y <f32> sub x 1.25;
+//:     assert eq x 3.75;
+//:     assert eq y 2.5;
 //: ```
-fn f32_add <(f32,f32)->f32> (a,b):
+fn add <(f32,f32)->f32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2170,13 +2214,13 @@ fn f32_add <(f32,f32)->f32> (a,b):
         f32.add
     #if[target=llvm]
     #llvmir:
-        define float @f32_add(float %a, float %b) {
+        define float @add(float %a, float %b) {
         entry:
             %0 = fadd float %a, %b
             ret float %0
         }
 
-//: f32_sub: f32 の減算
+//: sub: f32 の減算
 //:
 //: [目的/もくてき]:
 //: - 2つの f32 の差を計算します。
@@ -2189,7 +2233,7 @@ fn f32_add <(f32,f32)->f32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_sub <(f32,f32)->f32> (a,b):
+fn sub <(f32,f32)->f32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2197,13 +2241,13 @@ fn f32_sub <(f32,f32)->f32> (a,b):
         f32.sub
     #if[target=llvm]
     #llvmir:
-        define float @f32_sub(float %a, float %b) {
+        define float @sub(float %a, float %b) {
         entry:
             %0 = fsub float %a, %b
             ret float %0
         }
 
-//: f32_mul: f32 の乗算
+//: mul: f32 の乗算
 //:
 //: [目的/もくてき]:
 //: - 2つの f32 の積を計算します。
@@ -2216,7 +2260,7 @@ fn f32_sub <(f32,f32)->f32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_mul <(f32,f32)->f32> (a,b):
+fn mul <(f32,f32)->f32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2224,13 +2268,13 @@ fn f32_mul <(f32,f32)->f32> (a,b):
         f32.mul
     #if[target=llvm]
     #llvmir:
-        define float @f32_mul(float %a, float %b) {
+        define float @mul(float %a, float %b) {
         entry:
             %0 = fmul float %a, %b
             ret float %0
         }
 
-//: f32_div: f32 の除算
+//: div: f32 の除算
 //:
 //: [目的/もくてき]:
 //: - 2つの f32 の商を計算します。
@@ -2243,7 +2287,7 @@ fn f32_mul <(f32,f32)->f32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_div <(f32,f32)->f32> (a,b):
+fn div <(f32,f32)->f32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2251,7 +2295,7 @@ fn f32_div <(f32,f32)->f32> (a,b):
         f32.div
     #if[target=llvm]
     #llvmir:
-        define float @f32_div(float %a, float %b) {
+        define float @div(float %a, float %b) {
         entry:
             %0 = fdiv float %a, %b
             ret float %0
@@ -2313,7 +2357,7 @@ fn f32_abs <(f32)->f32> (a):
             ret float %0
         }
 
-//: f32_neg: f32 の符号反転
+//: neg: f32 の符号反転
 //:
 //: [目的/もくてき]:
 //: - f32 の符号を反転した値 `-a` を返します。
@@ -2326,14 +2370,14 @@ fn f32_abs <(f32)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_neg <(f32)->f32> (a):
+fn neg <(f32)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f32.neg
     #if[target=llvm]
     #llvmir:
-        define float @f32_neg(float %a) {
+        define float @neg(float %a) {
         entry:
             %0 = fneg float %a
             ret float %0
@@ -2524,7 +2568,7 @@ fn f32_copysign <(f32,f32)->f32> (a,b):
             ret float %0
         }
 
-//: f32_eq: f32 の等値比較
+//: eq: f32 の等値比較
 //:
 //: [目的/もくてき]:
 //: - 2つの f32 が等しいかを判定します。
@@ -2537,7 +2581,7 @@ fn f32_copysign <(f32,f32)->f32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_eq <(f32,f32)->bool> (a,b):
+fn eq <(f32,f32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2545,14 +2589,14 @@ fn f32_eq <(f32,f32)->bool> (a,b):
         f32.eq
     #if[target=llvm]
     #llvmir:
-        define i32 @f32_eq(float %a, float %b) {
+        define i32 @eq(float %a, float %b) {
         entry:
             %cmp = fcmp oeq float %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: f32_ne: f32 の非等値比較
+//: ne: f32 の非等値比較
 //:
 //: [目的/もくてき]:
 //: - 2つの f32 が異なるかを判定します。
@@ -2565,7 +2609,7 @@ fn f32_eq <(f32,f32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_ne <(f32,f32)->bool> (a,b):
+fn ne <(f32,f32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2573,14 +2617,14 @@ fn f32_ne <(f32,f32)->bool> (a,b):
         f32.ne
     #if[target=llvm]
     #llvmir:
-        define i32 @f32_ne(float %a, float %b) {
+        define i32 @ne(float %a, float %b) {
         entry:
             %cmp = fcmp une float %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: f32_lt: f32 の小なり比較
+//: lt: f32 の小なり比較
 //:
 //: [目的/もくてき]:
 //: - `a < b` を判定します。
@@ -2593,7 +2637,7 @@ fn f32_ne <(f32,f32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_lt <(f32,f32)->bool> (a,b):
+fn lt <(f32,f32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2601,14 +2645,14 @@ fn f32_lt <(f32,f32)->bool> (a,b):
         f32.lt
     #if[target=llvm]
     #llvmir:
-        define i32 @f32_lt(float %a, float %b) {
+        define i32 @lt(float %a, float %b) {
         entry:
             %cmp = fcmp olt float %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: f32_le: f32 の以下比較
+//: le: f32 の以下比較
 //:
 //: [目的/もくてき]:
 //: - `a <= b` を判定します。
@@ -2621,7 +2665,7 @@ fn f32_lt <(f32,f32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_le <(f32,f32)->bool> (a,b):
+fn le <(f32,f32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2629,14 +2673,14 @@ fn f32_le <(f32,f32)->bool> (a,b):
         f32.le
     #if[target=llvm]
     #llvmir:
-        define i32 @f32_le(float %a, float %b) {
+        define i32 @le(float %a, float %b) {
         entry:
             %cmp = fcmp ole float %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: f32_gt: f32 の大なり比較
+//: gt: f32 の大なり比較
 //:
 //: [目的/もくてき]:
 //: - `a > b` を判定します。
@@ -2649,7 +2693,7 @@ fn f32_le <(f32,f32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_gt <(f32,f32)->bool> (a,b):
+fn gt <(f32,f32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2657,14 +2701,14 @@ fn f32_gt <(f32,f32)->bool> (a,b):
         f32.gt
     #if[target=llvm]
     #llvmir:
-        define i32 @f32_gt(float %a, float %b) {
+        define i32 @gt(float %a, float %b) {
         entry:
             %cmp = fcmp ogt float %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: f32_ge: f32 の以上比較
+//: ge: f32 の以上比較
 //:
 //: [目的/もくてき]:
 //: - `a >= b` を判定します。
@@ -2677,7 +2721,7 @@ fn f32_gt <(f32,f32)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_ge <(f32,f32)->bool> (a,b):
+fn ge <(f32,f32)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2685,7 +2729,7 @@ fn f32_ge <(f32,f32)->bool> (a,b):
         f32.ge
     #if[target=llvm]
     #llvmir:
-        define i32 @f32_ge(float %a, float %b) {
+        define i32 @ge(float %a, float %b) {
         entry:
             %cmp = fcmp oge float %a, %b
             %0 = zext i1 %cmp to i32
@@ -2693,7 +2737,7 @@ fn f32_ge <(f32,f32)->bool> (a,b):
         }
 
 
-//: f64_add: f64 の加算
+//: add: f64 の加算
 //:
 //: [目的/もくてき]:
 //: - 2つの f64 を加算します。
@@ -2718,12 +2762,12 @@ fn f32_ge <(f32,f32)->bool> (a,b):
 //:     let two <f64> f64_convert_i32_s 2;
 //:     let three <f64> f64_convert_i32_s 3;
 //:     let six <f64> f64_convert_i32_s 6;
-//:     let x <f64> f64_add one two;
-//:     let y <f64> f64_mul x two;
-//:     assert f64_eq x three;
-//:     assert f64_eq y six;
+//:     let x <f64> add one two;
+//:     let y <f64> mul x two;
+//:     assert eq x three;
+//:     assert eq y six;
 //: ```
-fn f64_add <(f64,f64)->f64> (a,b):
+fn add <(f64,f64)->f64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2731,13 +2775,13 @@ fn f64_add <(f64,f64)->f64> (a,b):
         f64.add
     #if[target=llvm]
     #llvmir:
-        define double @f64_add(double %a, double %b) {
+        define double @add(double %a, double %b) {
         entry:
             %0 = fadd double %a, %b
             ret double %0
         }
 
-//: f64_sub: f64 の減算
+//: sub: f64 の減算
 //:
 //: [目的/もくてき]:
 //: - 2つの f64 の差を計算します。
@@ -2750,7 +2794,7 @@ fn f64_add <(f64,f64)->f64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_sub <(f64,f64)->f64> (a,b):
+fn sub <(f64,f64)->f64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2758,13 +2802,13 @@ fn f64_sub <(f64,f64)->f64> (a,b):
         f64.sub
     #if[target=llvm]
     #llvmir:
-        define double @f64_sub(double %a, double %b) {
+        define double @sub(double %a, double %b) {
         entry:
             %0 = fsub double %a, %b
             ret double %0
         }
 
-//: f64_mul: f64 の乗算
+//: mul: f64 の乗算
 //:
 //: [目的/もくてき]:
 //: - 2つの f64 の積を計算します。
@@ -2777,7 +2821,7 @@ fn f64_sub <(f64,f64)->f64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_mul <(f64,f64)->f64> (a,b):
+fn mul <(f64,f64)->f64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2785,13 +2829,13 @@ fn f64_mul <(f64,f64)->f64> (a,b):
         f64.mul
     #if[target=llvm]
     #llvmir:
-        define double @f64_mul(double %a, double %b) {
+        define double @mul(double %a, double %b) {
         entry:
             %0 = fmul double %a, %b
             ret double %0
         }
 
-//: f64_div: f64 の除算
+//: div: f64 の除算
 //:
 //: [目的/もくてき]:
 //: - 2つの f64 の商を計算します。
@@ -2804,7 +2848,7 @@ fn f64_mul <(f64,f64)->f64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_div <(f64,f64)->f64> (a,b):
+fn div <(f64,f64)->f64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2812,7 +2856,7 @@ fn f64_div <(f64,f64)->f64> (a,b):
         f64.div
     #if[target=llvm]
     #llvmir:
-        define double @f64_div(double %a, double %b) {
+        define double @div(double %a, double %b) {
         entry:
             %0 = fdiv double %a, %b
             ret double %0
@@ -2874,7 +2918,7 @@ fn f64_abs <(f64)->f64> (a):
             ret double %0
         }
 
-//: f64_neg: f64 の符号反転
+//: neg: f64 の符号反転
 //:
 //: [目的/もくてき]:
 //: - f64 の符号を反転した値 `-a` を返します。
@@ -2887,14 +2931,14 @@ fn f64_abs <(f64)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_neg <(f64)->f64> (a):
+fn neg <(f64)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
         f64.neg
     #if[target=llvm]
     #llvmir:
-        define double @f64_neg(double %a) {
+        define double @neg(double %a) {
         entry:
             %0 = fneg double %a
             ret double %0
@@ -3085,7 +3129,7 @@ fn f64_copysign <(f64,f64)->f64> (a,b):
             ret double %0
         }
 
-//: f64_eq: f64 の等値比較
+//: eq: f64 の等値比較
 //:
 //: [目的/もくてき]:
 //: - 2つの f64 が等しいかを判定します。
@@ -3098,7 +3142,7 @@ fn f64_copysign <(f64,f64)->f64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_eq <(f64,f64)->bool> (a,b):
+fn eq <(f64,f64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3106,14 +3150,14 @@ fn f64_eq <(f64,f64)->bool> (a,b):
         f64.eq
     #if[target=llvm]
     #llvmir:
-        define i32 @f64_eq(double %a, double %b) {
+        define i32 @eq(double %a, double %b) {
         entry:
             %cmp = fcmp oeq double %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: f64_ne: f64 の非等値比較
+//: ne: f64 の非等値比較
 //:
 //: [目的/もくてき]:
 //: - 2つの f64 が異なるかを判定します。
@@ -3126,7 +3170,7 @@ fn f64_eq <(f64,f64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_ne <(f64,f64)->bool> (a,b):
+fn ne <(f64,f64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3134,14 +3178,14 @@ fn f64_ne <(f64,f64)->bool> (a,b):
         f64.ne
     #if[target=llvm]
     #llvmir:
-        define i32 @f64_ne(double %a, double %b) {
+        define i32 @ne(double %a, double %b) {
         entry:
             %cmp = fcmp une double %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: f64_lt: f64 の小なり比較
+//: lt: f64 の小なり比較
 //:
 //: [目的/もくてき]:
 //: - `a < b` を判定します。
@@ -3154,7 +3198,7 @@ fn f64_ne <(f64,f64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_lt <(f64,f64)->bool> (a,b):
+fn lt <(f64,f64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3162,14 +3206,14 @@ fn f64_lt <(f64,f64)->bool> (a,b):
         f64.lt
     #if[target=llvm]
     #llvmir:
-        define i32 @f64_lt(double %a, double %b) {
+        define i32 @lt(double %a, double %b) {
         entry:
             %cmp = fcmp olt double %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: f64_le: f64 の以下比較
+//: le: f64 の以下比較
 //:
 //: [目的/もくてき]:
 //: - `a <= b` を判定します。
@@ -3182,7 +3226,7 @@ fn f64_lt <(f64,f64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_le <(f64,f64)->bool> (a,b):
+fn le <(f64,f64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3190,14 +3234,14 @@ fn f64_le <(f64,f64)->bool> (a,b):
         f64.le
     #if[target=llvm]
     #llvmir:
-        define i32 @f64_le(double %a, double %b) {
+        define i32 @le(double %a, double %b) {
         entry:
             %cmp = fcmp ole double %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: f64_gt: f64 の大なり比較
+//: gt: f64 の大なり比較
 //:
 //: [目的/もくてき]:
 //: - `a > b` を判定します。
@@ -3210,7 +3254,7 @@ fn f64_le <(f64,f64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_gt <(f64,f64)->bool> (a,b):
+fn gt <(f64,f64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3218,14 +3262,14 @@ fn f64_gt <(f64,f64)->bool> (a,b):
         f64.gt
     #if[target=llvm]
     #llvmir:
-        define i32 @f64_gt(double %a, double %b) {
+        define i32 @gt(double %a, double %b) {
         entry:
             %cmp = fcmp ogt double %a, %b
             %0 = zext i1 %cmp to i32
             ret i32 %0
         }
 
-//: f64_ge: f64 の以上比較
+//: ge: f64 の以上比較
 //:
 //: [目的/もくてき]:
 //: - `a >= b` を判定します。
@@ -3238,7 +3282,7 @@ fn f64_gt <(f64,f64)->bool> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_ge <(f64,f64)->bool> (a,b):
+fn ge <(f64,f64)->bool> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3246,7 +3290,7 @@ fn f64_ge <(f64,f64)->bool> (a,b):
         f64.ge
     #if[target=llvm]
     #llvmir:
-        define i32 @f64_ge(double %a, double %b) {
+        define i32 @ge(double %a, double %b) {
         entry:
             %cmp = fcmp oge double %a, %b
             %0 = zext i1 %cmp to i32
@@ -3332,9 +3376,9 @@ fn i32_extend_i16_s <(i32)->i32> (a):
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let v <i64> i64_extend_i32_s -1;
-//:     assert i64_lt_s v i64_extend_i32_u 0;
+//:     assert lt v i64_extend_i32_u 0;
 //:     let v <i64> i64_extend_i32_s 123;
-//:     assert i64_eq v i64_extend_i32_u 123;
+//:     assert eq v i64_extend_i32_u 123;
 //: ```
 fn i64_extend_i32_s <(i32)->i64> (a):
     #if[target=wasm]
@@ -3371,9 +3415,9 @@ fn i64_extend_i32_s <(i32)->i64> (a):
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
 //:     let v <i64> i64_extend_i32_u -1;
-//:     assert i64_gt_u v i64_extend_i32_u 0;
+//:     assert gt_u v i64_extend_i32_u 0;
 //:     let v <i64> i64_extend_i32_u 1;
-//:     assert i64_eq v i64_extend_i32_u 1;
+//:     assert eq v i64_extend_i32_u 1;
 //: ```
 fn i64_extend_i32_u <(i32)->i64> (a):
     #if[target=wasm]
@@ -4203,87 +4247,6 @@ fn i64_reinterpret_f64 <(f64)->i64> (a):
         }
 
 
-//: add: i32 の加算
-//:
-//: [目的/もくてき]:
-//: - i32 と i32 を加算します。
-//:
-//: [実装/じっそう]:
-//: - wasm は `i32.add`、llvm は `add i32` を使います。
-//:
-//: [注意/ちゅうい]:
-//: - オーバーフロー時は 32-bit でラップします。
-//:
-//: [計算量/けいさんりょう]:
-//: - O(1)
-fn add <(i32,i32)->i32> (a,b):
-    #if[target=wasm]
-    #wasm:
-        local.get $a
-        local.get $b
-        i32.add
-    #if[target=llvm]
-    #llvmir:
-        define i32 @add(i32 %a, i32 %b) {
-        entry:
-            %0 = add i32 %a, %b
-            ret i32 %0
-        }
-
-//: sub: i32 の減算
-//:
-//: [目的/もくてき]:
-//: - i32 から i32 を減算します。
-//:
-//: [実装/じっそう]:
-//: - wasm は `i32.sub`、llvm は `sub i32` を使います。
-//:
-//: [注意/ちゅうい]:
-//: - オーバーフロー時は 32-bit でラップします。
-//:
-//: [計算量/けいさんりょう]:
-//: - O(1)
-fn sub <(i32,i32)->i32> (a,b):
-    #if[target=wasm]
-    #wasm:
-        local.get $a
-        local.get $b
-        i32.sub
-    #if[target=llvm]
-    #llvmir:
-        define i32 @sub(i32 %a, i32 %b) {
-        entry:
-            %0 = sub i32 %a, %b
-            ret i32 %0
-        }
-
-//: mul: i32 の乗算
-//:
-//: [目的/もくてき]:
-//: - i32 と i32 の積を計算します。
-//:
-//: [実装/じっそう]:
-//: - wasm は `i32.mul`、llvm は `mul i32` を使います。
-//:
-//: [注意/ちゅうい]:
-//: - オーバーフロー時は 32-bit でラップします。
-//:
-//: [計算量/けいさんりょう]:
-//: - O(1)
-fn mul <(i32,i32)->i32> (a,b):
-    #if[target=wasm]
-    #wasm:
-        local.get $a
-        local.get $b
-        i32.mul
-    #if[target=llvm]
-    #llvmir:
-        define i32 @mul(i32 %a, i32 %b) {
-        entry:
-            %0 = mul i32 %a, %b
-            ret i32 %0
-        }
-
 //: div_s: i32 の符号付き除算
 //:
 //: [目的/もくてき]:
@@ -4311,6 +4274,7 @@ fn div_s <(i32,i32)->i32> (a,b):
             ret i32 %0
         }
 
+
 //: mod_s: i32 の符号付き剰余
 //:
 //: [目的/もくてき]:
@@ -4337,6 +4301,7 @@ fn mod_s <(i32,i32)->i32> (a,b):
             %0 = srem i32 %a, %b
             ret i32 %0
         }
+
 
 //: lt: i32 の小なり比較
 //:
@@ -4366,6 +4331,7 @@ fn lt <(i32,i32)->bool> (a,b):
             ret i32 %1
         }
 
+
 //: eq: i32 の等値比較
 //:
 //: [目的/もくてき]:
@@ -4393,6 +4359,7 @@ fn eq <(i32,i32)->bool> (a,b):
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
+
 
 //: ne: i32 の非等値比較
 //:
@@ -4422,6 +4389,7 @@ fn ne <(i32,i32)->bool> (a,b):
             ret i32 %1
         }
 
+
 //: le: i32 の以下比較
 //:
 //: [目的/もくてき]:
@@ -4449,6 +4417,7 @@ fn le <(i32,i32)->bool> (a,b):
             %1 = zext i1 %0 to i32
             ret i32 %1
         }
+
 
 //: gt: i32 の大なり比較
 //:
@@ -4478,6 +4447,7 @@ fn gt <(i32,i32)->bool> (a,b):
             ret i32 %1
         }
 
+
 //: ge: i32 の以上比較
 //:
 //: [目的/もくてき]:
@@ -4506,6 +4476,7 @@ fn ge <(i32,i32)->bool> (a,b):
             ret i32 %1
         }
 
+
 //: and: bool の論理積
 //:
 //: [目的/もくてき]:
@@ -4533,6 +4504,7 @@ fn and <(bool,bool)->bool> (a,b):
             ret i32 %0
         }
 
+
 //: or: bool の論理和
 //:
 //: [目的/もくてき]:
@@ -4559,6 +4531,7 @@ fn or <(bool,bool)->bool> (a,b):
             %0 = or i32 %a, %b
             ret i32 %0
         }
+
 
 //: not: bool の否定
 //:
@@ -4612,178 +4585,274 @@ fn not <(bool)->bool> (a):
 
 //: u32_add: u32 の加算（mod 2^32）
 fn u32_add <(i32,i32)->i32> (a, b):
-    i32_add a b
+    add a b
 
 //: u32_sub: u32 の減算（mod 2^32）
 fn u32_sub <(i32,i32)->i32> (a, b):
-    i32_sub a b
+    sub a b
 
 //: u32_mul: u32 の乗算（mod 2^32）
 fn u32_mul <(i32,i32)->i32> (a, b):
-    i32_mul a b
+    mul a b
 
 //: u32_div: u32 の除算
 fn u32_div <(i32,i32)->i32> (a, b):
-    i32_div_u a b
+    div_u a b
 
 //: u32_rem: u32 の剰余
 fn u32_rem <(i32,i32)->i32> (a, b):
-    i32_rem_u a b
+    rem_u a b
 
 //: u32_lt: u32 の大小比較（a < b）
 fn u32_lt <(i32,i32)->bool> (a, b):
-    i32_lt_u a b
+    lt_u a b
 
 //: u32_le: u32 の大小比較（a <= b）
 fn u32_le <(i32,i32)->bool> (a, b):
-    i32_le_u a b
+    le_u a b
 
 //: u32_gt: u32 の大小比較（a > b）
 fn u32_gt <(i32,i32)->bool> (a, b):
-    i32_gt_u a b
+    gt_u a b
 
 //: u32_ge: u32 の大小比較（a >= b）
 fn u32_ge <(i32,i32)->bool> (a, b):
-    i32_ge_u a b
+    ge_u a b
 
 //: u64_add: u64 の加算（mod 2^64）
 fn u64_add <(i64,i64)->i64> (a, b):
-    i64_add a b
+    add a b
 
 //: u64_sub: u64 の減算（mod 2^64）
 fn u64_sub <(i64,i64)->i64> (a, b):
-    i64_sub a b
+    sub a b
 
 //: u64_mul: u64 の乗算（mod 2^64）
 fn u64_mul <(i64,i64)->i64> (a, b):
-    i64_mul a b
+    mul a b
 
 //: u64_div: u64 の除算
 fn u64_div <(i64,i64)->i64> (a, b):
-    i64_div_u a b
+    div_u a b
 
 //: u64_rem: u64 の剰余
 fn u64_rem <(i64,i64)->i64> (a, b):
-    i64_rem_u a b
+    rem_u a b
 
 //: u64_lt: u64 の大小比較（a < b）
 fn u64_lt <(i64,i64)->bool> (a, b):
-    i64_lt_u a b
+    lt_u a b
 
 //: u64_le: u64 の大小比較（a <= b）
 fn u64_le <(i64,i64)->bool> (a, b):
-    i64_le_u a b
+    le_u a b
 
 //: u64_gt: u64 の大小比較（a > b）
 fn u64_gt <(i64,i64)->bool> (a, b):
-    i64_gt_u a b
+    gt_u a b
 
 //: u64_ge: u64 の大小比較（a >= b）
 fn u64_ge <(i64,i64)->bool> (a, b):
-    i64_ge_u a b
+    ge_u a b
 
-//: U128: u128 相当（上位/下位 64-bit）
-struct U128:
+//: u128: u128 相当（上位/下位 64-bit）
+struct u128:
     hi <i64>
     lo <i64>
 
 //: u128_new: hi/lo から u128 値を構築する
-fn u128_new <(i64,i64)->U128> (hi, lo):
-    U128 hi lo
+fn u128_new <(i64,i64)->u128> (hi, lo):
+    u128 hi lo
 
 //: u128_from_u64: u64 値から u128 値を作る
-fn u128_from_u64 <(i64)->U128> (v):
-    U128 i64_extend_i32_u 0 v
+fn u128_from_u64 <(i64)->u128> (v):
+    u128 i64_extend_i32_u 0 v
 
 //: u128_add: u128 の加算（mod 2^128）
-fn u128_add <(U128,U128)->U128> (a, b):
+fn u128_add <(u128,u128)->u128> (a, b):
     let a_hi <i64> get a "hi";
     let a_lo <i64> get a "lo";
     let b_hi <i64> get b "hi";
     let b_lo <i64> get b "lo";
-    let lo <i64> i64_add a_lo b_lo;
-    let carry <i64> if i64_lt_u lo a_lo:
+    let lo <i64> add a_lo b_lo;
+    let carry <i64> if lt_u lo a_lo:
         then i64_extend_i32_u 1
         else i64_extend_i32_u 0;
-    U128 i64_add i64_add a_hi b_hi carry lo
+    let hi0 <i64> add a_hi b_hi;
+    let hi <i64> add hi0 carry;
+    u128 hi lo
 
 //: u128_sub: u128 の減算（mod 2^128）
-fn u128_sub <(U128,U128)->U128> (a, b):
+fn u128_sub <(u128,u128)->u128> (a, b):
     let a_hi <i64> get a "hi";
     let a_lo <i64> get a "lo";
     let b_hi <i64> get b "hi";
     let b_lo <i64> get b "lo";
-    let lo <i64> i64_sub a_lo b_lo;
-    let borrow <i64> if i64_lt_u a_lo b_lo:
+    let lo <i64> sub a_lo b_lo;
+    let borrow <i64> if lt_u a_lo b_lo:
         then i64_extend_i32_u 1
         else i64_extend_i32_u 0;
-    U128 i64_sub i64_sub a_hi b_hi borrow lo
+    let hi0 <i64> sub a_hi b_hi;
+    let hi <i64> sub hi0 borrow;
+    u128 hi lo
 
 //: u128_lt: u128 の大小比較（a < b）
-fn u128_lt <(U128,U128)->bool> (a, b):
+fn u128_lt <(u128,u128)->bool> (a, b):
     let a_hi <i64> get a "hi";
     let b_hi <i64> get b "hi";
     let a_lo <i64> get a "lo";
     let b_lo <i64> get b "lo";
-    if i64_lt_u a_hi b_hi:
+    if lt_u a_hi b_hi:
         true
     else:
-        if i64_gt_u a_hi b_hi:
+        if gt_u a_hi b_hi:
             false
         else:
-            i64_lt_u a_lo b_lo
+            lt_u a_lo b_lo
 
-//: I128: i128 相当（上位/下位 64-bit, 2 の補数）
-struct I128:
+//: i128: i128 相当（上位/下位 64-bit, 2 の補数）
+struct i128:
     hi <i64>
     lo <i64>
 
 //: i128_new: hi/lo から i128 値を構築する
-fn i128_new <(i64,i64)->I128> (hi, lo):
-    I128 hi lo
+fn i128_new <(i64,i64)->i128> (hi, lo):
+    i128 hi lo
 
 //: i128_from_i64: i64 値を符号拡張して i128 に変換する
-fn i128_from_i64 <(i64)->I128> (v):
-    let hi <i64> if i64_lt_s v i64_extend_i32_u 0:
+fn i128_from_i64 <(i64)->i128> (v):
+    let hi <i64> if lt v i64_extend_i32_u 0:
         then i64_extend_i32_s -1
         else i64_extend_i32_u 0;
-    I128 hi v
+    i128 hi v
 
 //: i128_add: i128 の加算（mod 2^128）
-fn i128_add <(I128,I128)->I128> (a, b):
+fn i128_add <(i128,i128)->i128> (a, b):
     let a_hi <i64> get a "hi";
     let a_lo <i64> get a "lo";
     let b_hi <i64> get b "hi";
     let b_lo <i64> get b "lo";
-    let lo <i64> i64_add a_lo b_lo;
-    let carry <i64> if i64_lt_u lo a_lo:
+    let lo <i64> add a_lo b_lo;
+    let carry <i64> if lt_u lo a_lo:
         then i64_extend_i32_u 1
         else i64_extend_i32_u 0;
-    I128 i64_add i64_add a_hi b_hi carry lo
+    let hi0 <i64> add a_hi b_hi;
+    let hi <i64> add hi0 carry;
+    i128 hi lo
 
 //: i128_sub: i128 の減算（mod 2^128）
-fn i128_sub <(I128,I128)->I128> (a, b):
+fn i128_sub <(i128,i128)->i128> (a, b):
     let a_hi <i64> get a "hi";
     let a_lo <i64> get a "lo";
     let b_hi <i64> get b "hi";
     let b_lo <i64> get b "lo";
-    let lo <i64> i64_sub a_lo b_lo;
-    let borrow <i64> if i64_lt_u a_lo b_lo:
+    let lo <i64> sub a_lo b_lo;
+    let borrow <i64> if lt_u a_lo b_lo:
         then i64_extend_i32_u 1
         else i64_extend_i32_u 0;
-    I128 i64_sub i64_sub a_hi b_hi borrow lo
+    let hi0 <i64> sub a_hi b_hi;
+    let hi <i64> sub hi0 borrow;
+    i128 hi lo
+
+//: u64_mul_wide: u64 × u64 の 128-bit 積を返す
+//:
+//: [目的/もくてき]:
+//: - 64-bit 乗算の上位 64-bit と下位 64-bit を同時に求めます。
+//:
+//: [実装/じっそう]:
+//: - 入力を 32-bit 上位/下位に分割し、部分積を合成します。
+//: - 途中の加算では `lt_u` でキャリーを検出します。
+//:
+//: [注意/ちゅうい]:
+//: - 符号なし演算として扱います。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(1)
+fn u64_mul_wide <(i64,i64)->u128> (a, b):
+    let mask32 <i64> i64_extend_i32_u -1;
+    let sh32 <i64> i64_extend_i32_u 32;
+
+    let a0 <i64> and a mask32;
+    let a1 <i64> shr_u a sh32;
+    let b0 <i64> and b mask32;
+    let b1 <i64> shr_u b sh32;
+
+    let p0 <i64> mul a0 b0;
+    let p1 <i64> mul a0 b1;
+    let p2 <i64> mul a1 b0;
+    let p3 <i64> mul a1 b1;
+
+    let mid <i64> add p1 p2;
+    let carry_mid <i64> if lt_u mid p1:
+        then i64_extend_i32_u 1
+        else i64_extend_i32_u 0;
+
+    let lo_add <i64> shl mid sh32;
+    let lo <i64> add p0 lo_add;
+    let carry_lo <i64> if lt_u lo p0:
+        then i64_extend_i32_u 1
+        else i64_extend_i32_u 0;
+
+    let mid_hi <i64> shr_u mid sh32;
+    let hi0 <i64> add p3 mid_hi;
+    let carry_hi <i64> shl carry_mid sh32;
+    let hi1 <i64> add hi0 carry_hi;
+    let hi <i64> add hi1 carry_lo;
+    u128 hi lo
+
+//: i128_mul: i128 の乗算（mod 2^128）
+//:
+//: [目的/もくてき]:
+//: - i128 同士の積の下位 128-bit を返します。
+//:
+//: [実装/じっそう]:
+//: - `a = a_hi*2^64 + a_lo`, `b = b_hi*2^64 + b_lo` とみなし、
+//:   `a_lo*b_lo` の 128-bit 積と交差項 `a_hi*b_lo`, `a_lo*b_hi` を合成します。
+//:
+//: [注意/ちゅうい]:
+//: - 2 の補数表現の mod 2^128 乗算です（オーバーフローはラップ）。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(1)
+fn i128_mul <(i128,i128)->i128> (a, b):
+    let a_hi <i64> get a "hi";
+    let a_lo <i64> get a "lo";
+    let b_hi <i64> get b "hi";
+    let b_lo <i64> get b "lo";
+
+    let lo_wide <u128> u64_mul_wide a_lo b_lo;
+    let lo <i64> get lo_wide "lo";
+    let lo_hi <i64> get lo_wide "hi";
+
+    let cross1 <i64> mul a_hi b_lo;
+    let cross2 <i64> mul a_lo b_hi;
+    let cross <i64> add cross1 cross2;
+    let hi <i64> add lo_hi cross;
+    i128 hi lo
+
+//: add: i128 の加算
+fn add <(i128,i128)->i128> (a, b):
+    i128_add a b
+
+//: sub: i128 の減算
+fn sub <(i128,i128)->i128> (a, b):
+    i128_sub a b
+
+//: mul: i128 の乗算
+fn mul <(i128,i128)->i128> (a, b):
+    i128_mul a b
 
 //: i128_lt: i128 の大小比較（a < b）
-fn i128_lt <(I128,I128)->bool> (a, b):
+fn i128_lt <(i128,i128)->bool> (a, b):
     let a_hi <i64> get a "hi";
     let b_hi <i64> get b "hi";
     let a_lo <i64> get a "lo";
     let b_lo <i64> get b "lo";
-    if i64_lt_s a_hi b_hi:
+    if lt a_hi b_hi:
         true
     else:
-        if i64_gt_s a_hi b_hi:
+        if gt a_hi b_hi:
             false
         else:
-            i64_lt_u a_lo b_lo
+            lt_u a_lo b_lo
 

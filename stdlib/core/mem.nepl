@@ -135,7 +135,8 @@ fn mem_grow <(i32)*>i32> (pages):
 //: - O(1)
 fn align8 <(i32)->i32> (n):
     let t <i32> add n 7
-    mul div_s t 8 8
+    let q <i32> div_s t 8
+    mul q 8
 
 //: alloc: ヒープから領域を確保する
 //:
@@ -593,7 +594,7 @@ fn fill_i32 <(i32,i32,i32)*>()> (ptr, count, value):
     let mut i <i32> 0;
     while lt i count:
         do:
-            store_i32 add ptr mul i 4 value;
+            store_i32 <i32> add ptr <i32> mul i 4 value;
             set i add i 1;
 
 //: size_of: 型のサイズを取得する
