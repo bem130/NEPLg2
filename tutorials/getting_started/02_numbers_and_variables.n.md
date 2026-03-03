@@ -1,7 +1,7 @@
 # [数値/すうち]と[変数/へんすう]
 
 NEPLg2 では演算も前置記法で書きます。
-`core/math` を import すると `add` や `i32_add` などを利用できます。
+`core/math` を import すると `add` や `add` などを利用できます。
 
 ## 前置記法の基本
 
@@ -18,7 +18,7 @@ fn main <()*> ()> ():
     assert_eq_i32 6 add 1 5
     assert_eq_i32 5 sub 8 3
     assert_eq_i32 42 mul 6 7
-    assert_eq_i32 4 i32_div_s 9 2
+    assert_eq_i32 4 div_s 9 2
     test_checked "prefix arithmetic"
 ```
 
@@ -44,8 +44,12 @@ neplg2:test
 #import "std/test" as *
 
 fn main <()*> ()> ():
-    let a <i32> mul add 2 3 sub 10 4
-    let b <i32> sub mul 5 add 1 1 3
+    let left_a <i32> add <i32> 2 <i32> 3
+    let right_a <i32> sub <i32> 10 <i32> 4
+    let a <i32> mul left_a right_a
+    let inner_b <i32> add <i32> 1 <i32> 1
+    let left_b <i32> mul <i32> 5 inner_b
+    let b <i32> sub left_b <i32> 3
     assert_eq_i32 30 a
     assert_eq_i32 7 b
     test_checked "prefix composition without precedence"
@@ -110,7 +114,7 @@ neplg2:test
 
 fn main <()*> ()> ():
     let x <i32> 2147483647
-    let y <i32> i32_add x 1
+    let y <i32> add x 1
     assert_eq_i32 -2147483648 y
     test_checked "overflow"
 ```

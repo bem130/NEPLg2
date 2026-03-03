@@ -5170,3 +5170,17 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md -i tests/math.n.md -i tests/typeannot.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-scope-no-stdlib.json -j 1`
   - 結果: `19/19 pass`
+
+# 2026-03-03 作業メモ (tutorial: 数値章の曖昧オーバーロード対策)
+- 目的:
+  - `math` のオーバーロード拡張（u8 系統合）により、チュートリアルの短い数値式で発生した曖昧解決を解消する。
+- 根本原因:
+  - 小さい整数リテラルだけで構成された合成式が、`i32`/`u8` の候補で曖昧化した。
+- 修正:
+  - `tutorials/getting_started/02_numbers_and_variables.n.md`
+    - 複合式を中間 `let` に分解し、曖昧なリテラルに `<i32>` 注釈を付与。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+    - 二分探索の `mid` 計算を `sum`/`mv_off`/`mv_ptr` へ分解して型解決を安定化。
+- 検証:
+  - `node nodesrc/tests.js -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/03_functions.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-tutorial-math-scope.json -j 1`
+  - 結果: `14/14 pass`

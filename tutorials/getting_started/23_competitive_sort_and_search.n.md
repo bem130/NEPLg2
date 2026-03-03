@@ -149,8 +149,11 @@ fn lower_bound_i32_bin <(i32,i32,i32)*>i32> (data, len, x):
     let mut hi <i32> len;
     while lt lo hi:
         do:
-            let mid <i32> i32_div_s add lo hi 2;
-            let mv <i32> load_i32 add data mul mid 4;
+            let sum <i32> add lo hi;
+            let mid <i32> div_s sum 2;
+            let mv_off <i32> mul mid 4;
+            let mv_ptr <i32> add data mv_off;
+            let mv <i32> load_i32 mv_ptr;
             if lt mv x:
                 then set lo add mid 1
                 else set hi mid;
