@@ -154,6 +154,82 @@ function collectVfsSources(entrySource, testFile) {
     return vfs;
 }
 
+function toPosixPath(p) {
+    return String(p).replace(/\\/g, '/');
+}
+
+function walkFiles(root) {
+    const out = [];
+    function rec(cur) {
+        const ents = fs.readdirSync(cur, { withFileTypes: true });
+        for (const e of ents) {
+            const p = path.join(cur, e.name);
+            if (e.isDirectory()) rec(p);
+            else if (e.isFile()) out.push(p);
+        }
+    }
+    rec(root);
+    return out;
+}
+
+function loadStdlibVfsFromFs(stdlibRootDir = path.resolve(process.cwd(), 'stdlib')) {
+    const root = path.resolve(stdlibRootDir);
+    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+        return {};
+    }
+    const out = {};
+    for (const f of walkFiles(root)) {
+        if (!f.endsWith('.nepl')) continue;
+        const rel = toPosixPath(path.relative(root, f));
+        out[`/stdlib/${rel}`] = fs.readFileSync(f, 'utf8');
+    }
+    return out;
+}
+
+function compileWithFsStdlib(api, source, vfs, profile = 'debug') {
+    const stdlibVfs = loadStdlibVfsFromFs();
+    if (typeof api.compile_source_with_vfs_stdlib_and_profile === 'function') {
+        return withConsoleSuppressed(() =>
+            api.compile_source_with_vfs_stdlib_and_profile(
+                '/virtual/entry.nepl',
+                source,
+                vfs,
+                stdlibVfs,
+                profile,
+            )
+        );
+    }
+    if (typeof api.compile_source_with_vfs_and_stdlib === 'function') {
+        return withConsoleSuppressed(() =>
+            api.compile_source_with_vfs_and_stdlib(
+                '/virtual/entry.nepl',
+                source,
+                vfs,
+                stdlibVfs,
+            )
+        );
+    }
+    if (typeof api.compile_source_with_vfs_and_profile === 'function') {
+        return withConsoleSuppressed(() =>
+            api.compile_source_with_vfs_and_profile(
+                '/virtual/entry.nepl',
+                source,
+                { ...stdlibVfs, ...vfs },
+                profile,
+            )
+        );
+    }
+    if (typeof api.compile_source_with_vfs === 'function') {
+        return withConsoleSuppressed(() =>
+            api.compile_source_with_vfs('/virtual/entry.nepl', source, { ...stdlibVfs, ...vfs })
+        );
+    }
+    if (typeof api.compile_source_with_profile === 'function') {
+        return withConsoleSuppressed(() => api.compile_source_with_profile(source, profile));
+    }
+    return withConsoleSuppressed(() => api.compile_source(source));
+}
+
 function withConsoleSuppressed(fn) {
     const origLog = console.log;
     const origInfo = console.info;
@@ -205,27 +281,7 @@ async function runSingle(req, preloaded) {
         let compileError = null;
         try {
             const vfs = collectVfsSources(source, req.file);
-            if (Object.keys(vfs).length > 0) {
-                if (typeof api.compile_source_with_vfs_and_profile === 'function') {
-                    wasmU8 = withConsoleSuppressed(() =>
-                        api.compile_source_with_vfs_and_profile('/virtual/entry.nepl', source, vfs, 'debug')
-                    );
-                } else if (typeof api.compile_source_with_vfs === 'function') {
-                    wasmU8 = withConsoleSuppressed(() =>
-                        api.compile_source_with_vfs('/virtual/entry.nepl', source, vfs)
-                    );
-                } else {
-                    wasmU8 = withConsoleSuppressed(() => api.compile_source(source));
-                }
-            } else {
-                if (typeof api.compile_source_with_profile === 'function') {
-                    wasmU8 = withConsoleSuppressed(() =>
-                        api.compile_source_with_profile(source, 'debug')
-                    );
-                } else {
-                    wasmU8 = withConsoleSuppressed(() => api.compile_source(source));
-                }
-            }
+            wasmU8 = compileWithFsStdlib(api, source, vfs, 'debug');
         } catch (e) {
             compileError = String(e?.message || e);
         }

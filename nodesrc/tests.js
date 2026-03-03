@@ -882,6 +882,11 @@ function collectResolvedDistDirs(results) {
     return Array.from(dirs).sort();
 }
 
+function printStdlibBuildMessage() {
+    console.log('[nodesrc/tests] 固定メッセージ: stdlib のみの修正時は trunk build 不要です。');
+    console.log('[nodesrc/tests] 固定メッセージ: Rust 側（nepl-core/nepl-web/nepl-cli）を修正した場合は trunk build 後に tests を実行してください。');
+}
+
 async function main() {
     const {
         help,
@@ -901,6 +906,7 @@ async function main() {
         changedOnly,
         changedBase,
     } = parseArgs(process.argv.slice(2));
+    printStdlibBuildMessage();
     if (help || (!changedOnly && inputs.length === 0) || !outPath) {
         console.log('Usage: node nodesrc/tests.js -i <dir_or_file> [-i ...] -o <out.json> [--changed] [--changed-base <gitRef>] [--dist <distDirHint>] [-j N] [--runner wasm|llvm|all] [--llvm-all] [--assert-io] [--strict-dual] [--llvm-compile-only] [--no-stdlib|--with-stdlib] [--no-tree|--with-tree]');
         process.exit(help ? 0 : 2);
