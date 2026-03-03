@@ -96,7 +96,7 @@ fn scanner_new <()*>Result<Scanner,str>> ():
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_skip_ws <(i32)*>()> (sc):
+fn scanner_skip_ws_handle <(i32)*>()> (sc):
     let buf <i32> load_i32 sc;
     let len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
@@ -197,8 +197,8 @@ fn scanner_skip_ws <(i32)*>()> (sc):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_is_eof <(i32)*>bool> (sc):
-    scanner_skip_ws sc;
+fn scanner_is_eof_handle <(i32)*>bool> (sc):
+    scanner_skip_ws_handle sc;
     let len <i32> load_i32 add sc 4;
     let p <i32> load_i32 add sc 8;
     ge p len
@@ -227,8 +227,8 @@ fn scanner_is_eof <(i32)*>bool> (sc):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_skip_token <(i32)*>()> (sc):
-    scanner_skip_ws sc;
+fn scanner_skip_token_handle <(i32)*>()> (sc):
+    scanner_skip_ws_handle sc;
     let buf <i32> load_i32 sc;
     let len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
@@ -293,8 +293,8 @@ fn scanner_skip_token <(i32)*>()> (sc):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_read_token <(i32)*>str> (sc):
-    scanner_skip_ws sc;
+fn scanner_read_token_handle <(i32)*>str> (sc):
+    scanner_skip_ws_handle sc;
     let buf <i32> load_i32 sc;
     let len <i32> load_i32 add sc 4;
     let start <i32> load_i32 add sc 8;
@@ -378,8 +378,8 @@ fn scanner_read_token <(i32)*>str> (sc):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_read_i32 <(i32)*>i32> (sc):
-    scanner_skip_ws sc;
+fn scanner_read_i32_handle <(i32)*>i32> (sc):
+    scanner_skip_ws_handle sc;
     let buf <i32> load_i32 sc;
     let len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
@@ -446,8 +446,8 @@ fn scanner_read_i32 <(i32)*>i32> (sc):
 //:
 //: 計算量:
 //: - O(桁数)
-fn scanner_read_u64 <(i32)*>i64> (sc):
-    scanner_skip_ws sc;
+fn scanner_read_u64_handle <(i32)*>i64> (sc):
+    scanner_skip_ws_handle sc;
     let buf <i32> load_i32 sc;
     let len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
@@ -508,8 +508,8 @@ fn scanner_read_u64 <(i32)*>i64> (sc):
 //:
 //: 計算量:
 //: - O(桁数)
-fn scanner_read_i64 <(i32)*>i64> (sc):
-    scanner_skip_ws sc;
+fn scanner_read_i64_handle <(i32)*>i64> (sc):
+    scanner_skip_ws_handle sc;
     let buf <i32> load_i32 sc;
     let len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
@@ -586,8 +586,8 @@ fn scanner_read_i64 <(i32)*>i64> (sc):
 //:
 //: 計算量:
 //: - O(桁数)
-fn scanner_read_f64 <(i32)*>f64> (sc):
-    scanner_skip_ws sc;
+fn scanner_read_f64_handle <(i32)*>f64> (sc):
+    scanner_skip_ws_handle sc;
     let buf <i32> load_i32 sc;
     let buf_len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
@@ -766,8 +766,8 @@ fn scanner_read_f64 <(i32)*>f64> (sc):
 //:
 //: 計算量:
 //: - O(桁数)
-fn scanner_read_f32 <(i32)*>f32> (sc):
-    let v64 <f64> scanner_read_f64 sc;
+fn scanner_read_f32_handle <(i32)*>f32> (sc):
+    let v64 <f64> scanner_read_f64_handle sc;
     <f32> cast v64
 
 //: scanner_read_vec_i64: n 個の i64 値を読み込む
@@ -781,12 +781,12 @@ fn scanner_read_f32 <(i32)*>f32> (sc):
 //: [計算量/けいさんりょう]:
 //: - O(n * 桁数)
 //:
-fn scanner_read_vec_i64 <(i32, i32)*>Vec<i64>> (sc, n):
+fn scanner_read_vec_i64_handle <(i32, i32)*>Vec<i64>> (sc, n):
     let mut v <Vec<i64>> vec_new<i64>;
     let mut i <i32> 0;
     while lt i n:
         do:
-            let x <i64> scanner_read_i64 sc;
+            let x <i64> scanner_read_i64_handle sc;
             set v vec_push<i64> v x;
             set i add i 1;
     v
@@ -811,12 +811,12 @@ fn scanner_read_vec_i64 <(i32, i32)*>Vec<i64>> (sc, n):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_read_vec_i32 <(i32, i32)*>Vec<i32>> (sc, n):
+fn scanner_read_vec_i32_handle <(i32, i32)*>Vec<i32>> (sc, n):
     let mut v <Vec<i32>> vec_new<i32>;
     let mut i <i32> 0;
     while lt i n:
         do:
-            let x <i32> scanner_read_i32 sc;
+            let x <i32> scanner_read_i32_handle sc;
             set v vec_push<i32> v x;
             set i add i 1;
     v
@@ -841,12 +841,12 @@ fn scanner_read_vec_i32 <(i32, i32)*>Vec<i32>> (sc, n):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_read_matrix_i32 <(i32, i32, i32)*>Vec<Vec<i32>>> (sc, h, w):
+fn scanner_read_matrix_i32_handle <(i32, i32, i32)*>Vec<Vec<i32>>> (sc, h, w):
     let mut res <Vec<Vec<i32>>> vec_new<Vec<i32>>;
     let mut i <i32> 0;
     while lt i h:
         do:
-            let row <Vec<i32>> scanner_read_vec_i32 sc w;
+            let row <Vec<i32>> scanner_read_vec_i32_handle sc w;
             set res vec_push<Vec<i32>> res row;
             set i add i 1;
     res
@@ -879,13 +879,13 @@ fn scanner_read_matrix_i32 <(i32, i32, i32)*>Vec<Vec<i32>>> (sc, h, w):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_read_all_i32 <(i32)*>Vec<i32>> (sc):
+fn scanner_read_all_i32_handle <(i32)*>Vec<i32>> (sc):
     let mut out <Vec<i32>> vec_new<i32>;
     let mut done <i32> 0;
 
     while eq done 0:
         do:
-            scanner_skip_ws sc;
+            scanner_skip_ws_handle sc;
             let buf <i32> load_i32 sc;
             let len <i32> load_i32 add sc 4;
             let p <i32> load_i32 add sc 8;
@@ -899,10 +899,10 @@ fn scanner_read_all_i32 <(i32)*>Vec<i32>> (sc):
                     if:
                         or eq b 45 and ge b 48 le b 57
                         then:
-                            let x <i32> scanner_read_i32 sc;
+                            let x <i32> scanner_read_i32_handle sc;
                             set out vec_push<i32> out x;
                         else:
-                            scanner_skip_token sc;
+                            scanner_skip_token_handle sc;
                             ();
 
     out
@@ -1030,9 +1030,9 @@ struct NDRHInput:
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_read_na_i32 <(i32)*>NAInput> (sc):
-    let n <i32> scanner_read_i32 sc;
-    let a <Vec<i32>> scanner_read_vec_i32 sc n;
+fn scanner_read_na_i32_handle <(i32)*>NAInput> (sc):
+    let n <i32> scanner_read_i32_handle sc;
+    let a <Vec<i32>> scanner_read_vec_i32_handle sc n;
     NAInput n a
 
 //: scanner_read_interval_queries_i32: (N, Q, left[1..Q], right[1..Q]) を読み込む
@@ -1055,9 +1055,9 @@ fn scanner_read_na_i32 <(i32)*>NAInput> (sc):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_read_interval_queries_i32 <(i32)*>IntervalQueriesInput> (sc):
-    let n <i32> scanner_read_i32 sc;
-    let q <i32> scanner_read_i32 sc;
+fn scanner_read_interval_queries_i32_handle <(i32)*>IntervalQueriesInput> (sc):
+    let n <i32> scanner_read_i32_handle sc;
+    let q <i32> scanner_read_i32_handle sc;
 
     let mut left <Vec<i32>> vec_new<i32>;
     let mut right <Vec<i32>> vec_new<i32>;
@@ -1065,8 +1065,8 @@ fn scanner_read_interval_queries_i32 <(i32)*>IntervalQueriesInput> (sc):
     let mut i <i32> 0;
     while lt i q:
         do:
-            let l <i32> scanner_read_i32 sc;
-            let r <i32> scanner_read_i32 sc;
+            let l <i32> scanner_read_i32_handle sc;
+            let r <i32> scanner_read_i32_handle sc;
             set left vec_push<i32> left l;
             set right vec_push<i32> right r;
             set i add i 1;
@@ -1099,9 +1099,9 @@ fn scanner_read_interval_queries_i32 <(i32)*>IntervalQueriesInput> (sc):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_read_query_tuples_i32 <(i32, i32)*>QueryTuplesInput> (sc, k):
-    let n <i32> scanner_read_i32 sc;
-    let q <i32> scanner_read_i32 sc;
+fn scanner_read_query_tuples_i32_handle <(i32, i32)*>QueryTuplesInput> (sc, k):
+    let n <i32> scanner_read_i32_handle sc;
+    let q <i32> scanner_read_i32_handle sc;
 
     let mut cols <Vec<Vec<i32>>> vec_new<Vec<i32>>;
 
@@ -1117,7 +1117,7 @@ fn scanner_read_query_tuples_i32 <(i32, i32)*>QueryTuplesInput> (sc, k):
             let mut c <i32> 0;
             while lt c k:
                 do:
-                    let x <i32> scanner_read_i32 sc;
+                    let x <i32> scanner_read_i32_handle sc;
 
                     let col <Vec<i32>> unwrap<Vec<i32>> vec_get<Vec<i32>> cols c;
                     let new_col <Vec<i32>> vec_push<i32> col x;
@@ -1171,60 +1171,60 @@ fn query_tuples_col_i32 <(QueryTuplesInput, i32)->Vec<i32>> (t, c):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_read_ndrh_i32 <(i32)*>NDRHInput> (sc):
-    let n <i32> scanner_read_i32 sc;
-    let d <i32> scanner_read_i32 sc;
-    let r <i32> scanner_read_i32 sc;
-    let h <Vec<i32>> scanner_read_vec_i32 sc n;
+fn scanner_read_ndrh_i32_handle <(i32)*>NDRHInput> (sc):
+    let n <i32> scanner_read_i32_handle sc;
+    let d <i32> scanner_read_i32_handle sc;
+    let r <i32> scanner_read_i32_handle sc;
+    let h <Vec<i32>> scanner_read_vec_i32_handle sc n;
     NDRHInput n d r h
 
 fn scanner_skip_ws <(Scanner)*>()> (sc):
-    scanner_skip_ws mem_ptr_addr get sc "raw"
+    scanner_skip_ws_handle mem_ptr_addr get sc "raw"
 
 fn scanner_is_eof <(Scanner)*>bool> (sc):
-    scanner_is_eof mem_ptr_addr get sc "raw"
+    scanner_is_eof_handle mem_ptr_addr get sc "raw"
 
 fn scanner_skip_token <(Scanner)*>()> (sc):
-    scanner_skip_token mem_ptr_addr get sc "raw"
+    scanner_skip_token_handle mem_ptr_addr get sc "raw"
 
 fn scanner_read_token <(Scanner)*>str> (sc):
-    scanner_read_token mem_ptr_addr get sc "raw"
+    scanner_read_token_handle mem_ptr_addr get sc "raw"
 
 fn scanner_read_i32 <(Scanner)*>i32> (sc):
-    scanner_read_i32 mem_ptr_addr get sc "raw"
+    scanner_read_i32_handle mem_ptr_addr get sc "raw"
 
 fn scanner_read_u64 <(Scanner)*>i64> (sc):
-    scanner_read_u64 mem_ptr_addr get sc "raw"
+    scanner_read_u64_handle mem_ptr_addr get sc "raw"
 
 fn scanner_read_i64 <(Scanner)*>i64> (sc):
-    scanner_read_i64 mem_ptr_addr get sc "raw"
+    scanner_read_i64_handle mem_ptr_addr get sc "raw"
 
 fn scanner_read_f64 <(Scanner)*>f64> (sc):
-    scanner_read_f64 mem_ptr_addr get sc "raw"
+    scanner_read_f64_handle mem_ptr_addr get sc "raw"
 
 fn scanner_read_f32 <(Scanner)*>f32> (sc):
-    scanner_read_f32 mem_ptr_addr get sc "raw"
+    scanner_read_f32_handle mem_ptr_addr get sc "raw"
 
 fn scanner_read_vec_i64 <(Scanner, i32)*>Vec<i64>> (sc, n):
-    scanner_read_vec_i64 mem_ptr_addr get sc "raw" n
+    scanner_read_vec_i64_handle mem_ptr_addr get sc "raw" n
 
 fn scanner_read_vec_i32 <(Scanner, i32)*>Vec<i32>> (sc, n):
-    scanner_read_vec_i32 mem_ptr_addr get sc "raw" n
+    scanner_read_vec_i32_handle mem_ptr_addr get sc "raw" n
 
 fn scanner_read_matrix_i32 <(Scanner, i32, i32)*>Vec<Vec<i32>>> (sc, h, w):
-    scanner_read_matrix_i32 mem_ptr_addr get sc "raw" h w
+    scanner_read_matrix_i32_handle mem_ptr_addr get sc "raw" h w
 
 fn scanner_read_all_i32 <(Scanner)*>Vec<i32>> (sc):
-    scanner_read_all_i32 mem_ptr_addr get sc "raw"
+    scanner_read_all_i32_handle mem_ptr_addr get sc "raw"
 
 fn scanner_read_na_i32 <(Scanner)*>NAInput> (sc):
-    scanner_read_na_i32 mem_ptr_addr get sc "raw"
+    scanner_read_na_i32_handle mem_ptr_addr get sc "raw"
 
 fn scanner_read_interval_queries_i32 <(Scanner)*>IntervalQueriesInput> (sc):
-    scanner_read_interval_queries_i32 mem_ptr_addr get sc "raw"
+    scanner_read_interval_queries_i32_handle mem_ptr_addr get sc "raw"
 
 fn scanner_read_query_tuples_i32 <(Scanner, i32)*>QueryTuplesInput> (sc, k):
-    scanner_read_query_tuples_i32 mem_ptr_addr get sc "raw" k
+    scanner_read_query_tuples_i32_handle mem_ptr_addr get sc "raw" k
 
 fn scanner_read_ndrh_i32 <(Scanner)*>NDRHInput> (sc):
-    scanner_read_ndrh_i32 mem_ptr_addr get sc "raw"
+    scanner_read_ndrh_i32_handle mem_ptr_addr get sc "raw"

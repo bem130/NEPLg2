@@ -6052,3 +6052,24 @@
   - `node nodesrc/tests.js -i stdlib/kp/kpgraph.nepl -o /tmp/kpgraph_focus.json -j 16` -> `223/223 pass`
   - `node nodesrc/tests.js -i tests/math.n.md -i tests/shadowing.n.md -o /tmp/math_shadow_after_fix.json -j 16` -> `254/254 pass`
   - `node nodesrc/tests.js -i tests -o /tmp/tests-current.json -j 16` -> `718/718 pass`
+# 2026-03-04 作業メモ (フェーズD進行: kpread/kpwrite の i32 公開オーバーロード分離)
+
+- 目的:
+  - `scanner_read_i32(sc_handle: i32)` / `writer_write_i32(w_handle: i32, ...)` の公開面露出を縮小し、利用者が `Scanner` / `Writer` を使う設計に統一する。
+- 根本原因:
+  - 同名で `i32` 受け取り版と `Scanner/Writer` 版を公開していると、安全型APIへ移行しても生ハンドル経路へ簡単に戻れてしまい、設計の一貫性が崩れる。
+  - 既存のオーバーロード解決は動作していても、公開面に unsafe 経路が残ること自体が再発要因になる。
+- 修正:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_*` の `i32` 受け取り実装を `scanner_*_handle` へ改名。
+    - 公開 `scanner_*` (`Scanner` 受け取り) から `*_handle` を呼ぶ構成へ変更。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_*` の `i32` 受け取り実装を `writer_*_handle` へ改名。
+    - 公開 `writer_*` (`Writer` 受け取り) から `*_handle` を呼ぶ構成へ変更。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -i examples/kp_fizzbuzz.nepl --no-tree -o /tmp/tests-kp-handle-split.json -j 15` -> `230/230 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kp-handle-split.json -j 15` -> `729/729 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kp-handle-split.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread/kpwrite` の公開名は `Scanner/Writer` 版を中心に整理された。
+  - 次段で `core/mem` 側の `*_raw` 段階縮退（`Result` 一本化）を進める。
