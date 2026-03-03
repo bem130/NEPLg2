@@ -156,10 +156,10 @@ fn fd_read <(i32,i32,i32,i32)*>i32> (_fd,iovs,iovs_len,nread_ptr):
 //:     print "sample";
 //: ```
 fn noshadow print <(str)*>()> (s):
-    let iov <i32> alloc 8;
+    let iov <i32> alloc_raw 8;
     store_i32 iov add s 4;
     store_i32 add iov 4 load_i32 s;
-    let nwritten <i32> alloc 4;
+    let nwritten <i32> alloc_raw 4;
     store_i32 nwritten 0;
     let _errno <i32> fd_write 1 iov 1 nwritten;
     ()
@@ -198,12 +198,12 @@ fn noshadow print <(str)*>()> (s):
 //: ```
 fn read_all <()*>str> ():
     let cap <i32> 4096;
-    let out <i32> alloc add 4 cap;
-    let iov <i32> alloc 8;
+    let out <i32> alloc_raw add 4 cap;
+    let iov <i32> alloc_raw 8;
     store_i32 iov add out 4;
     store_i32 add iov 4 cap;
 
-    let nread <i32> alloc 4;
+    let nread <i32> alloc_raw 4;
     store_i32 nread 0;
     let errno <i32> fd_read 0 iov 1 nread;
 
@@ -251,9 +251,9 @@ fn read_all <()*>str> ():
 //: ```
 fn noshadow read_line <()*>str> ():
     let cap <i32> 1024;
-    let out <i32> alloc add 4 cap;
-    let iov <i32> alloc 8;
-    let nread <i32> alloc 4;
+    let out <i32> alloc_raw add 4 cap;
+    let iov <i32> alloc_raw 8;
+    let nread <i32> alloc_raw 4;
     let mut len <i32> 0;
     let mut done <i32> 0;
 
@@ -364,7 +364,7 @@ fn noshadow print_i32 <(i32)*>()> (v):
         if:
             eq v 0
             then:
-                let out0 <i32> alloc 5;
+                let out0 <i32> alloc_raw 5;
                 store_i32 out0 1;
                 store_u8 add out0 4 48;
                 out0
@@ -373,12 +373,12 @@ fn noshadow print_i32 <(i32)*>()> (v):
                     cond:
                         lt v 0
                     then:
-                        let outn <i32> alloc 5;
+                        let outn <i32> alloc_raw 5;
                         store_i32 outn 1;
                         store_u8 add outn 4 48;
                         outn
                     else:
-                        let scratch <i32> alloc 16;
+                        let scratch <i32> alloc_raw 16;
                         let mut idx <i32> 0;
                         let mut n <i32> v;
 
@@ -389,7 +389,7 @@ fn noshadow print_i32 <(i32)*>()> (v):
                                 set idx add idx 1;
                                 set n div_s n 10;
 
-                        let out <i32> alloc add 4 idx;
+                        let out <i32> alloc_raw add 4 idx;
                         store_i32 out idx;
 
                         let mut i <i32> 0;

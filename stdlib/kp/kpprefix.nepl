@@ -42,7 +42,7 @@
 //: prefix_build_i32: `data[0..n)` の累積和配列 `pref[0..n]` を作る
 fn prefix_build_i32 <(i32,i32)*>i32> (data, n):
     let pref_len <i32> add n 1;
-    let pref <i32> alloc mul pref_len 4;
+    let pref <i32> alloc_raw mul pref_len 4;
     store_i32 pref 0;
     let mut i <i32> 0;
     while lt i n:

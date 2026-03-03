@@ -162,12 +162,12 @@ fn render_nodes <(Vec<Node>)->str> (nodes):
                     set sb sb_append sb escape_html get cb "code";
                     set sb sb_append sb "</code></pre>";
                 Node::Section sec:
-                    let sec_mem <i32> alloc size_of<NestSection>;
+                    let sec_mem <i32> alloc_raw size_of<NestSection>;
                     store<NestSection> sec_mem sec;
                     let sec_level <i32> get load<NestSection> sec_mem "level";
                     let sec_heading <Heading> get load<NestSection> sec_mem "heading";
                     let sec_children <Vec<Node>> get load<NestSection> sec_mem "children";
-                    let heading_mem <i32> alloc size_of<Heading>;
+                    let heading_mem <i32> alloc_raw size_of<Heading>;
                     store<Heading> heading_mem sec_heading;
                     let heading_level <i32> get load<Heading> heading_mem "level";
                     let heading_inlines <Vec<Inline>> get load<Heading> heading_mem "inlines";

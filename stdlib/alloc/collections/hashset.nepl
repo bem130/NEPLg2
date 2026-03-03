@@ -81,7 +81,7 @@ fn hashset_contains_loop <(i32,i32,i32,i32,i32,i32)->bool> (entries, entry_size,
 fn hashset_new <()*>Result<HashSet, Diag>> ():
     let cap <i32> 16
     let entry_size <i32> 8
-    let entries <i32> alloc mul cap entry_size
+    let entries <i32> alloc_raw mul cap entry_size
     if:
         eq entries 0
         then:
@@ -94,11 +94,11 @@ fn hashset_new <()*>Result<HashSet, Diag>> ():
                     let ptr <i32> add entries off
                     store_i32 ptr 0
                     set i add i 1
-            let header <i32> alloc 12
+            let header <i32> alloc_raw 12
             if:
                 eq header 0
                 then:
-                    dealloc entries mul cap entry_size
+                    dealloc_raw entries mul cap entry_size
                     diag_err<HashSet> diag_out_of_memory "hashset_new(header)"
                 else:
                     store_i32 header 0
@@ -271,8 +271,8 @@ fn hashset_free <(HashSet)*>()> (hs):
     let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
-    dealloc entries mul cap 8
-    dealloc hdr 12
+    dealloc_raw entries mul cap 8
+    dealloc_raw hdr 12
 
 //: new: `hashset_new` の短縮名
 //:
@@ -373,7 +373,7 @@ fn hashset_str_contains_loop <(i32,i32,i32,i32,i32,str)->bool> (entries, entry_s
 fn hashset_str_new <()*>Result<HashSetStr, Diag>> ():
     let cap <i32> 16
     let entry_size <i32> 8
-    let entries <i32> alloc mul cap entry_size
+    let entries <i32> alloc_raw mul cap entry_size
     if:
         eq entries 0
         then:
@@ -386,11 +386,11 @@ fn hashset_str_new <()*>Result<HashSetStr, Diag>> ():
                     let entry <i32> add entries entry_off
                     store_i32 entry 0
                     set i add i 1
-            let header <i32> alloc 12
+            let header <i32> alloc_raw 12
             if:
                 eq header 0
                 then:
-                    dealloc entries mul cap entry_size
+                    dealloc_raw entries mul cap entry_size
                     diag_err<HashSetStr> diag_out_of_memory "hashset_str_new(header)"
                 else:
                     store_i32 header 0
@@ -563,5 +563,5 @@ fn hashset_str_free <(HashSetStr)*>()> (hs):
     let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
-    dealloc entries mul cap 8
-    dealloc hdr 12
+    dealloc_raw entries mul cap 8
+    dealloc_raw hdr 12

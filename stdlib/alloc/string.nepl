@@ -98,7 +98,7 @@ fn concat <(str,str)->str> (a,b):
     let la <i32> load_i32 a;
     let lb <i32> load_i32 b;
     let total <i32> add la lb;
-    let out <i32> alloc <i32> add 4 total;
+    let out <i32> alloc_raw <i32> add 4 total;
     store_i32 out total;
     let mut i <i32> 0;
     while lt i la:
@@ -305,7 +305,7 @@ fn sb_build <(StringBuilder)->str> (sb):
             let part <str> load<str> <i32> add parts_data <i32> mul idx0 size_of<str>;
             set total <i32> add total load_i32 part;
             set idx0 <i32> add idx0 1;
-    let out <i32> alloc <i32> add 4 total;
+    let out <i32> alloc_raw <i32> add 4 total;
     store_i32 out total;
     let mut idx <i32> 0;
     let mut dst <i32> 0;
@@ -597,7 +597,7 @@ fn str_slice <(str,i32,i32)->str> (s, start, end):
         then set e0 len
         else ()
     let out_len <i32> sub e0 s0;
-    let out <i32> alloc <i32> add 4 out_len;
+    let out <i32> alloc_raw <i32> add 4 out_len;
     store_i32 out out_len;
     let mut i <i32> 0;
     while lt i out_len:
@@ -797,7 +797,7 @@ fn from_i32 <(i32)->str> (x):
     if:
         eq x 0
         then:
-            let out0 <i32> alloc 5;
+            let out0 <i32> alloc_raw 5;
             store_i32 out0 1;
             store_u8 add out0 4 48;    // '0'
             out0
@@ -806,12 +806,12 @@ fn from_i32 <(i32)->str> (x):
                 cond:
                     lt x 0
                 then:
-                    let outn <i32> alloc 5;
+                    let outn <i32> alloc_raw 5;
                     store_i32 outn 1;
                     store_u8 add outn 4 48;
                     outn
                 else:
-                    let scratch <i32> alloc 16;
+                    let scratch <i32> alloc_raw 16;
                     let mut idx <i32> 0;
                     let mut n <i32> x;
 
@@ -822,7 +822,7 @@ fn from_i32 <(i32)->str> (x):
                             set idx add idx 1;
                             set n div_s n 10;
 
-                    let out <i32> alloc add 4 idx;
+                    let out <i32> alloc_raw add 4 idx;
                     store_i32 out idx;
 
                     let mut i <i32> 0;
@@ -944,12 +944,12 @@ fn from_i64 <(i64)->str> (x):
     if:
         eq x <i64> cast 0
         then:
-            let out0 <i32> alloc 5;
+            let out0 <i32> alloc_raw 5;
             store_i32 out0 1;
             store_u8 add out0 4 48;
             out0
         else:
-            let scratch <i32> alloc 32;
+            let scratch <i32> alloc_raw 32;
             let mut idx <i32> 0;
             let mut n <i64> x;
             let ten <i64> cast 10;
@@ -969,7 +969,7 @@ fn from_i64 <(i64)->str> (x):
 
             let neg <bool> lt x <i64> cast 0;
             let out_len <i32> if neg add idx 1 idx;
-            let out <i32> alloc add 4 out_len;
+            let out <i32> alloc_raw add 4 out_len;
             store_i32 out out_len;
 
             let mut dst <i32> 0;
@@ -1122,7 +1122,7 @@ fn from_f64 <(f64)->str> (x):
                     ();
             set sb sb_append sb int_s;
 
-            let scratch <i32> alloc 6;
+            let scratch <i32> alloc_raw 6;
             let mut k <i32> 0;
             while lt k 6:
                 do:
@@ -1154,7 +1154,7 @@ fn from_f64 <(f64)->str> (x):
             if:
                 gt trim 0
                 then:
-                    let frac_s <i32> alloc add 4 trim;
+                    let frac_s <i32> alloc_raw add 4 trim;
                     store_i32 frac_s trim;
                     let mut i <i32> 0;
                     while lt i trim:

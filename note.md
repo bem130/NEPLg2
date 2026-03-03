@@ -1,3 +1,26 @@
+# 2026-03-04 作業メモ (フェーズD進行: stdlib の生メモリ呼び出しを `*_raw` へ段階移行)
+
+- 目的:
+  - `mem` の公開名切替前に、stdlib 側の生アロケータ呼び出しを `alloc_raw/dealloc_raw/realloc_raw` に寄せる。
+- 変更:
+  - `stdlib/alloc/collections/{btreemap,btreeset,hashmap,hashset,list,ringbuffer,stack,vec/sort}.nepl`
+  - `stdlib/alloc/{diag/error,string}.nepl`
+  - `stdlib/kp/{kpdsu,kpfenwick,kpgraph,kpprefix,kpread_core}.nepl`
+  - `stdlib/nm/{parser,html_gen}.nepl`
+  - `stdlib/platforms/wasix/tui.nepl`
+  - `stdlib/std/{env/cliarg,fs,stdio}.nepl`
+  - 上記で `alloc/dealloc/realloc` の生呼び出しを `*_raw` に置換（`core/mem` の公開名依存を分離）。
+- 切り分け:
+  - 一括置換後、`tests/capacity_stack.n.md::doctest#3` で OOB を再現。
+  - 原因切り分けで `vec.nepl` の `realloc_raw` 置換時のみ再現することを確認したため、`vec.nepl` 本体は現時点では `realloc` 呼び出しを維持して回避。
+  - この差分は `todo.md` に未解決課題として追記。
+- テスト:
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-raw-migration-wide2.json -j 15` -> `725/725 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-raw-migration-wide.json -j 15` -> `262/262 pass`
+- 状況:
+  - stdlib の大部分は `*_raw` 呼び出しへ移行済み。
+  - 残件は `vec.nepl` の `realloc_raw` 移行に伴う OOB 原因の根本修正。
+
 # 2026-03-04 作業メモ (フェーズD進行: `kpread/kpwrite` の生メモリ呼び出しを `*_raw` へ移行)
 
 - 目的:

@@ -189,7 +189,7 @@ fn list_nil <.T> <()->List<.T>> ():
 fn list_cons <.T> <(.T,List<.T>)->List<.T>> (head, tail):
     let tail_ptr <i32> field::get tail "ptr"
     let node_size <i32> add size_of<.T> 4
-    let node <i32> alloc node_size
+    let node <i32> alloc_raw node_size
     store<.T> node head
     store_i32 add node size_of<.T> tail_ptr
     List node
@@ -450,7 +450,7 @@ fn list_free <.T> <(List<.T>)->()> (lst):
         do:
             set cur block:
                 let next <i32> load_i32 add cur size_of<.T>;
-                dealloc cur node_size;
+                dealloc_raw cur node_size;
                 next
 
 //: list_reverse: リストを逆順にする

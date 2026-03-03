@@ -23,6 +23,7 @@
 - `_safe` 接尾辞を廃止し、安全APIを標準名へ統一する。
 - 生ポインタ前提APIは段階的に `*_raw` へ隔離し、最終的に公開面から削除する。
 - trait 境界（`MemReadable<T>`, `MemWritable<T>`, `RegionOwned`）を導入可能な箇所から適用。
+- `vec` の `realloc_raw` 利用で再現する OOB (`tests/capacity_stack.n.md::doctest#3`) の根本原因を特定し、解消後に `vec` も `*_raw` 呼び出しへ移行する。
 - 完了条件:
   - `mem/kpread/kpwrite` の公開APIが Result/Option 前提で統一。
   - 既存 examples/tests/tutorials が新APIへ更新済み。

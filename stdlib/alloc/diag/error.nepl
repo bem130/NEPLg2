@@ -496,7 +496,7 @@ fn callsite_span <()->Span> ():
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn error_alloc <(ErrorKind,str,Option<Span>)->Error> (kind, msg, sp):
-    let p <i32> alloc 24;
+    let p <i32> alloc_raw 24;
     if:
         cond:
             eq p 0

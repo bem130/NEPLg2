@@ -37,7 +37,7 @@
 //: fenwick_new: 長さ `n` の Fenwick Tree を作る
 fn fenwick_new <(i32)*>i32> (n):
     let bit_len <i32> add n 1;
-    let bit <i32> alloc mul bit_len 4;
+    let bit <i32> alloc_raw mul bit_len 4;
     let mut i <i32> 0;
     while lt i bit_len:
         do:
@@ -45,7 +45,7 @@ fn fenwick_new <(i32)*>i32> (n):
             let ptr <i32> add bit off;
             store_i32 ptr 0;
             set i add i 1;
-    let f <i32> alloc 8;
+    let f <i32> alloc_raw 8;
     store_i32 f n;
     store_i32 add f 4 bit;
     f
@@ -56,8 +56,8 @@ fn fenwick_free <(i32)*>()> (f):
     let bit <i32> load_i32 add f 4;
     let bit_len <i32> add n 1;
     let bytes <i32> mul bit_len 4;
-    dealloc bit bytes;
-    dealloc f 8
+    dealloc_raw bit bytes;
+    dealloc_raw f 8
 
 //: fenwick_add: `idx` に `delta` を加算する
 fn fenwick_add <(i32,i32,i32)*>()> (f, idx, delta):

@@ -45,14 +45,14 @@
 //: - (24 bytes allocated for safety)
 
 fn get_tty_state <()*>i32> ():
-    let ptr <i32> alloc 24;
+    let ptr <i32> alloc_raw 24;
     let errno <i32> wasix_tty_get ptr;
     if:
         eq errno 0
         then:
             ptr
         else:
-            dealloc ptr 24;
+            dealloc_raw ptr 24;
             0
 
 fn set_tty_state <(i32)*>i32> (ptr):
@@ -85,7 +85,7 @@ fn enter_raw_mode <()*>i32> ():
     if:
         ne state 0
         then:
-            let old_state <i32> alloc 24;
+            let old_state <i32> alloc_raw 24;
             // Copy state to old_state
             let mut i <i32> 0;
             while lt i 24:
@@ -96,13 +96,13 @@ fn enter_raw_mode <()*>i32> ():
             set_echo state false;
             set_line_buffered state false;
             let errno <i32> set_tty_state state;
-            dealloc state 24;
+            dealloc_raw state 24;
             if:
                 eq errno 0
                 then:
                     old_state
                 else:
-                    dealloc old_state 24;
+                    dealloc_raw old_state 24;
                     0
         else:
             0
@@ -116,7 +116,7 @@ fn restore_mode <(i32)*>i32> (old_state):
         ne old_state 0
         then:
             let errno <i32> set_tty_state old_state;
-            dealloc old_state 24;
+            dealloc_raw old_state 24;
             errno
         else:
             -1
@@ -132,7 +132,7 @@ fn get_terminal_size <()*>.Pair> ():
         then:
             let c <i32> get_cols state;
             let r <i32> get_rows state;
-            dealloc state 24;
+            dealloc_raw state 24;
             Tuple:
                 c
                 r
@@ -685,8 +685,8 @@ fn hyperlink_text <(str,str)*>str> (url, text):
 //: [注意/ちゅうい]:
 //: - 返り値は `buffer_free` で解放してください。
 fn buffer_new <(i32,i32)*>i32> (cols, rows):
-    let curr <i32> alloc mul rows 4;
-    let prev <i32> alloc mul rows 4;
+    let curr <i32> alloc_raw mul rows 4;
+    let prev <i32> alloc_raw mul rows 4;
     let mut i <i32> 0;
     while lt i rows:
         do:
@@ -694,7 +694,7 @@ fn buffer_new <(i32,i32)*>i32> (cols, rows):
             store_i32 add curr off "";
             store_i32 add prev off "";
             set i add i 1;
-    let b <i32> alloc 16;
+    let b <i32> alloc_raw 16;
     store_i32 b cols;
     store_i32 add b 4 rows;
     store_i32 add b 8 curr;
@@ -709,9 +709,9 @@ fn buffer_free <(i32)*>()> (b):
     let rows <i32> load_i32 add b 4;
     let curr <i32> load_i32 add b 8;
     let prev <i32> load_i32 add b 12;
-    dealloc curr mul rows 4;
-    dealloc prev mul rows 4;
-    dealloc b 16;
+    dealloc_raw curr mul rows 4;
+    dealloc_raw prev mul rows 4;
+    dealloc_raw b 16;
     ()
 
 //: buffer_set_line: row(1-origin) の行文字列を設定する

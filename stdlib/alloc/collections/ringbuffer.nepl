@@ -33,17 +33,17 @@ fn ringbuffer_new <.T> <()*>Result<RingBuffer<.T>, Diag>> ():
 fn ringbuffer_with_capacity <.T> <(i32)*>Result<RingBuffer<.T>, Diag>> (initial_cap):
     let cap <i32> if lt initial_cap 1 1 initial_cap
     let data_size <i32> mul cap size_of<.T>
-    let data <i32> alloc data_size
+    let data <i32> alloc_raw data_size
     if:
         eq data 0
         then:
             diag_err<RingBuffer<.T>> diag_out_of_memory "ringbuffer_with_capacity(data)"
         else:
-            let hdr <i32> alloc 16
+            let hdr <i32> alloc_raw 16
             if:
                 eq hdr 0
                 then:
-                    dealloc data data_size
+                    dealloc_raw data data_size
                     diag_err<RingBuffer<.T>> diag_out_of_memory "ringbuffer_with_capacity(header)"
                 else:
                     store_i32 hdr 0
@@ -73,7 +73,7 @@ fn ringbuffer_push_back <.T> <(RingBuffer<.T>, .T)*>Result<RingBuffer<.T>, Diag>
         then:
             let new_cap <i32> mul cap 2
             let new_size <i32> mul new_cap size_of<.T>
-            let new_data <i32> alloc new_size
+            let new_data <i32> alloc_raw new_size
             if:
                 eq new_data 0
                 then:
@@ -87,7 +87,7 @@ fn ringbuffer_push_back <.T> <(RingBuffer<.T>, .T)*>Result<RingBuffer<.T>, Diag>
                             let dst_off <i32> mul i size_of<.T>
                             store<.T> add new_data dst_off load<.T> add data src_off
                             set i add i 1
-                    dealloc data mul cap size_of<.T>
+                    dealloc_raw data mul cap size_of<.T>
                     store_i32 add hdr 4 new_cap
                     store_i32 add hdr 8 0
                     store_i32 add hdr 12 new_data
@@ -143,8 +143,8 @@ fn ringbuffer_free <.T> <(RingBuffer<.T>)*>()> (rb):
     let hdr <i32> get rb "hdr"
     let cap <i32> load_i32 add hdr 4
     let data <i32> load_i32 add hdr 12
-    dealloc data mul cap size_of<.T>
-    dealloc hdr 16
+    dealloc_raw data mul cap size_of<.T>
+    dealloc_raw hdr 16
 
 fn push_back <.T> <(RingBuffer<.T>, .T)*>Result<RingBuffer<.T>, Diag>> (rb, item):
     ringbuffer_push_back<.T> rb item

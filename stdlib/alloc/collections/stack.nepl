@@ -138,17 +138,17 @@ struct Stack<.T>:
 //: ```
 fn stack_new <.T> <()->Result<Stack<.T>, Diag>> ():
     let cap <i32> 8
-    let header <i32> alloc 12
+    let header <i32> alloc_raw 12
     if:
         eq header 0
         then:
             diag_err<Stack<.T>> diag_out_of_memory "stack_new(header)"
         else:
-            let data <i32> alloc mul cap size_of<.T>
+            let data <i32> alloc_raw mul cap size_of<.T>
             if:
                 eq data 0
                 then:
-                    dealloc header 12
+                    dealloc_raw header 12
                     diag_err<Stack<.T>> diag_out_of_memory "stack_new(data)"
                 else:
                     store_i32 header 0
@@ -197,11 +197,11 @@ fn stack_push <.T> <(Stack<.T>,.T)->Result<Stack<.T>, Diag>> (stk, item):
         eq len cap
         then:
             let new_cap <i32> mul cap 2
-            let new_data <i32> realloc data mul cap size_of<.T> mul new_cap size_of<.T>
+            let new_data <i32> realloc_raw data mul cap size_of<.T> mul new_cap size_of<.T>
             if:
                 eq new_data 0
                 then:
-                    diag_err<Stack<.T>> diag_out_of_memory "stack_push(realloc)"
+                    diag_err<Stack<.T>> diag_out_of_memory "stack_push(realloc_raw)"
                 else:
                     store_i32 add header 4 new_cap
                     store_i32 add header 8 new_data
@@ -445,8 +445,8 @@ fn stack_free <.T> <(Stack<.T>)->()> (stk):
     let header <i32> get stk "hdr"
     let cap <i32> load_i32 add header 4
     let data <i32> load_i32 add header 8
-    dealloc data mul cap size_of<.T>
-    dealloc header 12
+    dealloc_raw data mul cap size_of<.T>
+    dealloc_raw header 12
 
 fn stack_pop_keep <.T> <(Stack<.T>)->Option<.T>> (stk):
     stack_pop<.T> stk
