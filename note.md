@@ -9,6 +9,19 @@
   - まだ仕様段階で、`TypeCtx/move_check/typecheck` への反映は未着手。
   - 実装タスクは `todo.md` の「8. メモリ安全コンパイラ機構の導入」で追跡する。
 
+# 2026-03-03 作業メモ (move/effect 精査結果: 現行実装との差分)
+- 精査対象:
+  - `nepl-core/src/typecheck.rs`
+  - `nepl-core/src/builtins.rs`
+  - `nepl-core/src/types.rs`
+- 差分:
+  - `check_function` で `is_entry` 時に `current_effect = Impure` を強制している。
+  - builtins の `alloc/realloc/dealloc` が `Effect::Impure` 登録になっている。
+  - `TypeCtx::is_copy` が `Struct/Enum` を一律 `false` としている。
+- 判断:
+  - いずれも `doc/move_effect_spec.md` の再設計仕様と不一致。
+  - 先に仕様を固定し、実装は上流から段階的に修正する（entry特例 -> builtins effect -> is_copy拡張）。
+
 # 2026-03-03 作業メモ (move/effect 再設計仕様の文書化)
 - 目的:
   - `move` と `pure/impure` の責務分離を明文化し、`mem/kpread/kpwrite` の安全API移行を設計レベルで固定する。
