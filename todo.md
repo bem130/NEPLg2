@@ -7,10 +7,7 @@
 - 旧API互換は維持しない。公開APIは安全版へ一本化する。
 
 フェーズA: effect規則のコンパイラ反映
-- `nepl-core/src/builtins.rs`
-  - `alloc/realloc/dealloc` の effect を `Pure` に変更。
 - `nepl-core/src/typecheck.rs`
-  - `entry` 強制 `Impure` 特例を削除し、宣言シグネチャどおりに判定。
   - intrinsic / raw target body (`#wasm` / `#llvmir`) の effect 判定を一元テーブル化。
   - I/O 系命令のみ pure 文脈で拒否する。
 - 完了条件:

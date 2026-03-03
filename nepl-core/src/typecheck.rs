@@ -4668,7 +4668,7 @@ impl<'a> BlockChecker<'a> {
             self.diagnostics.push(Diagnostic::error(
                 "pure context cannot call impure function",
                 func.expr.span,
-            ));
+            ).with_id(DiagnosticId::TypePureCallsImpureFunction));
             return None;
         }
 
@@ -5326,7 +5326,7 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             "pure context cannot call impure function",
                             func.expr.span,
-                        ));
+                        ).with_id(DiagnosticId::TypePureCallsImpureFunction));
                         return None;
                     }
 
@@ -5590,7 +5590,7 @@ impl<'a> BlockChecker<'a> {
                                 self.diagnostics.push(Diagnostic::error(
                                     "pure context cannot call impure function",
                                     func.expr.span,
-                                ));
+                                ).with_id(DiagnosticId::TypePureCallsImpureFunction));
                                 return None;
                             }
                             let resolved_result = self.ctx.resolve_id(result);

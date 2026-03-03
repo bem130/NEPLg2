@@ -81,6 +81,8 @@ pub enum DiagnosticId {
     TypeAtRequiresCallable = 3023,
     /// 変数に型引数は適用できない。
     TypeVariableTypeArgsNotAllowed = 3024,
+    /// pure 文脈から impure 関数を呼んだ。
+    TypePureCallsImpureFunction = 3025,
     /// 代入時の型不一致。
     TypeAssignmentTypeMismatch = 3036,
     /// 代入対象の変数が未定義。
@@ -154,6 +156,7 @@ impl DiagnosticId {
             3022 => Some(DiagnosticId::TypeArgumentTypeMismatch),
             3023 => Some(DiagnosticId::TypeAtRequiresCallable),
             3024 => Some(DiagnosticId::TypeVariableTypeArgsNotAllowed),
+            3025 => Some(DiagnosticId::TypePureCallsImpureFunction),
             3036 => Some(DiagnosticId::TypeAssignmentTypeMismatch),
             3037 => Some(DiagnosticId::TypeAssignmentUndefinedVariable),
             3038 => Some(DiagnosticId::TypeIfArityMismatch),
@@ -223,6 +226,9 @@ impl DiagnosticId {
             }
             DiagnosticId::TypeVariableTypeArgsNotAllowed => {
                 "type arguments are not allowed for variables"
+            }
+            DiagnosticId::TypePureCallsImpureFunction => {
+                "pure context cannot call impure function"
             }
             DiagnosticId::TypeAssignmentTypeMismatch => "type mismatch in assignment",
             DiagnosticId::TypeAssignmentUndefinedVariable => {

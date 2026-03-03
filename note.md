@@ -1,3 +1,24 @@
+# 2026-03-04 作業メモ (2026-03-03 フェーズA再開: effect診断IDと回帰追加)
+- 目的:
+  - `todo.md` の 2026-03-03 計画フェーズAを再開し、pure/impure 判定の診断固定を進める。
+- 実装:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D3025 TypePureCallsImpureFunction` を追加。
+  - `nepl-core/src/typecheck.rs`
+    - 「pure context cannot call impure function」の全発生箇所に `D3025` を付与。
+  - `tests/move_effect.n.md` を新規追加。
+    - pure からメモリ操作を呼べるケース（成功）
+    - pure から impure 関数呼び出し拒否（`diag_id: 3025`）
+    - ローカル `set` が pure のまま使えるケース（成功）
+    - グローバル `set` が impure になるケース（`diag_id: 3025`）
+  - `todo.md`
+    - 完了済み項目（`builtins` のメモリ系 Pure 化、entry 強制 Impure 特例の削除）をフェーズAから削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md -i tests/typeannot.n.md --no-tree -o /tmp/tests-move-effect-overload-typeannot.json -j 15` -> `256/256 pass`
+- 次:
+  - フェーズA残件の「intrinsic / raw target body の effect 一元判定」を実装する。
+
 # 2026-03-04 作業メモ (オーバーロード修正の完了と 2026-03-03 計画への復帰)
 - 目的:
   - オーバーロード解決の不安定箇所（関数値引数・pipe 併用・型注釈混在）を根本修正し、`todo.md` の `2026-03-03 move/effect/memory` 実装へ復帰する。
