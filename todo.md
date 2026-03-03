@@ -20,7 +20,8 @@
   - OOB/UAF/double free が `Result::Err` またはコンパイルエラーで表現される。
 
 フェーズD: stdlib移行（mem/kpread/kpwrite 優先）
-- `_safe` を標準名に統一し、旧 unsafe/生API を削除。
+- `_safe` 接尾辞を廃止し、安全APIを標準名へ統一する。
+- 生ポインタ前提APIは段階的に `*_raw` へ隔離し、最終的に公開面から削除する。
 - trait 境界（`MemReadable<T>`, `MemWritable<T>`, `RegionOwned`）を導入可能な箇所から適用。
 - 完了条件:
   - `mem/kpread/kpwrite` の公開APIが Result/Option 前提で統一。
@@ -75,7 +76,8 @@
 - `collections` 配下の既存データ構造を新配置に合わせて改修する。
 
 7. move/effect 再設計の実装反映
-- `mem/kpread/kpwrite` を `_safe` なしの安全APIへ一本化し、`_raw` を最終削除する。
+- `mem` の `*_safe` 命名を廃止し、Result/Option ベースAPIを標準名へ移行する。
+- `kpread/kpwrite` の `_raw` 完全削除（`mem` 側の移行完了後）を行う。
 - move/effect 回帰テストを拡張し、`move_check` と整合する失敗パターン（分岐合流/再借用/二重解放）を追加する。
 
 8. メモリ安全コンパイラ機構の導入

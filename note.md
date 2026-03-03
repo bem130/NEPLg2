@@ -1,3 +1,23 @@
+# 2026-03-04 作業メモ (フェーズD進行: `core/mem` の `_safe` 命名除去)
+
+- 目的:
+  - `core/mem` の安全ラッパAPIから `_safe` 接尾辞を除去し、命名規約を次段移行しやすい形へ揃える。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `alloc_safe` -> `alloc_result`
+    - `realloc_safe` -> `realloc_result`
+    - `dealloc_safe` -> `dealloc_result`
+    - 関連ドキュメントコメント内の関数名・注意事項を更新。
+  - `todo.md`
+    - フェーズDの文言を、`_safe` 統一方針から「`_safe` 接尾辞廃止＋安全API標準名化」へ更新。
+    - `move/effect` 反映項目を、`mem` 側と `kpread/kpwrite` 側の残件に分割して明記。
+- テスト:
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-after-mem-safe-rename.json -j 15` -> `723/723 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-mem-safe-rename.json -j 15` -> `262/262 pass`
+- 状況:
+  - `_safe` 命名除去は `core/mem` で着手済み。
+  - 次段は API 本体を Result/Option 標準名へ寄せるため、`alloc/realloc/dealloc` の生ポインタAPI整理（`*_raw` 隔離）に進む。
+
 # 2026-03-04 作業メモ (フェーズD進行: kpread/kpwrite の `_raw` 名整理完了)
 
 - 目的:
