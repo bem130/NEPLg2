@@ -5104,3 +5104,23 @@
 - 検証:
   - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-cast-prefixless.json -j 1`
     - `2/2 pass`
+
+# 2026-03-03 作業メモ (math: u32/u64/u128/i128 API のprefix縮退)
+- 目的:
+  - `型名_` prefix 廃止方針に合わせ、`u32_/u64_/u128_/i128_` 公開API名を削減する。
+- 実装:
+  - `stdlib/core/math.nepl`
+    - `u32_*` / `u64_*` 公開関数群を削除。
+    - `u128`:
+      - `u128_new` -> `new <(i64,i64)->u128>`
+      - `u128_from_u64` -> `to_u128`
+      - `u128_add/sub/lt` -> `add/sub/lt` オーバーロード
+    - `i128`:
+      - `i128_new` -> `new <(i64,i64)->i128>`
+      - `i128_from_i64` -> `to_i128`
+      - `i128_add/sub/mul/lt` -> `add/sub/mul/lt` オーバーロード
+    - `u64_mul_wide` -> `mul_wide` に変更。
+    - `f32_*/f64_*` の基本演算名を `sqrt/abs/ceil/floor/trunc/nearest/min/max/copysign` のオーバーロード名に統一。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/math.n.md -i stdlib/tests/cast.n.md --runner wasm --assert-io --no-stdlib --no-tree -o /tmp/tests-math-cast-prefixless-v3.json -j 1`
+    - `2/2 pass`

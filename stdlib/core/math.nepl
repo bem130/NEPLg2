@@ -2389,7 +2389,7 @@ fn div <(f32,f32)->f32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_sqrt <(f32)->f32> (a):
+fn sqrt <(f32)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2416,7 +2416,7 @@ fn f32_sqrt <(f32)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_abs <(f32)->f32> (a):
+fn abs <(f32)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2470,7 +2470,7 @@ fn neg <(f32)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_ceil <(f32)->f32> (a):
+fn ceil <(f32)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2496,7 +2496,7 @@ fn f32_ceil <(f32)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_floor <(f32)->f32> (a):
+fn floor <(f32)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2522,7 +2522,7 @@ fn f32_floor <(f32)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_trunc <(f32)->f32> (a):
+fn trunc <(f32)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2548,7 +2548,7 @@ fn f32_trunc <(f32)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_nearest <(f32)->f32> (a):
+fn nearest <(f32)->f32> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2574,7 +2574,7 @@ fn f32_nearest <(f32)->f32> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_min <(f32,f32)->f32> (a,b):
+fn min <(f32,f32)->f32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2601,7 +2601,7 @@ fn f32_min <(f32,f32)->f32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_max <(f32,f32)->f32> (a,b):
+fn max <(f32,f32)->f32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2628,7 +2628,7 @@ fn f32_max <(f32,f32)->f32> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f32_copysign <(f32,f32)->f32> (a,b):
+fn copysign <(f32,f32)->f32> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2950,7 +2950,7 @@ fn div <(f64,f64)->f64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_sqrt <(f64)->f64> (a):
+fn sqrt <(f64)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -2977,7 +2977,7 @@ fn f64_sqrt <(f64)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_abs <(f64)->f64> (a):
+fn abs <(f64)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3031,7 +3031,7 @@ fn neg <(f64)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_ceil <(f64)->f64> (a):
+fn ceil <(f64)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3057,7 +3057,7 @@ fn f64_ceil <(f64)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_floor <(f64)->f64> (a):
+fn floor <(f64)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3083,7 +3083,7 @@ fn f64_floor <(f64)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_trunc <(f64)->f64> (a):
+fn trunc <(f64)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3109,7 +3109,7 @@ fn f64_trunc <(f64)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_nearest <(f64)->f64> (a):
+fn nearest <(f64)->f64> (a):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3135,7 +3135,7 @@ fn f64_nearest <(f64)->f64> (a):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_min <(f64,f64)->f64> (a,b):
+fn min <(f64,f64)->f64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3162,7 +3162,7 @@ fn f64_min <(f64,f64)->f64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_max <(f64,f64)->f64> (a,b):
+fn max <(f64,f64)->f64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -3189,7 +3189,7 @@ fn f64_max <(f64,f64)->f64> (a,b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn f64_copysign <(f64,f64)->f64> (a,b):
+fn copysign <(f64,f64)->f64> (a,b):
     #if[target=wasm]
     #wasm:
         local.get $a
@@ -4364,11 +4364,6 @@ fn promote <(f32)->f64> (a):
 fn demote <(f64)->f32> (a):
     f32_demote_f64 a
 
-//: to_i128: i64 から拡張整数を構築する
-fn to_i128 <(i64)->i128> (v):
-    i128_from_i64 v
-
-
 //: and: bool の論理積
 //:
 //: [目的/もくてき]:
@@ -4458,7 +4453,7 @@ fn not <(bool)->bool> (a):
 //: - WASM ネイティブの `i32/i64` を土台に、符号なし整数および 128-bit 相当の基本演算を提供します。
 //:
 //: [実装/じっそう]:
-//: - `u32/u64` は既存の unsigned 命令ラッパを再公開します。
+//: - `u32/u64` は `add/sub/mul/div_u/rem_u` と `lt_u/le_u/gt_u/ge_u` を使います。
 //: - `u128/i128` は `i64` 2 ワード（上位/下位）で構成し、加減算と比較を実装します。
 //:
 //: [注意/ちゅうい]:
@@ -4471,97 +4466,25 @@ fn not <(bool)->bool> (a):
 //:| #import "core/test" as *
 //:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 3 u32_add 1 2;
-//:     assert u64_lt i64_extend_i32_u 9 i64_extend_i32_u 10;
+//:     assert_eq_i32 3 add 1 2;
+//:     assert lt_u <i64> cast 9 <i64> cast 10;
 //: ```
-
-//: u32_add: u32 の加算（mod 2^32）
-fn u32_add <(i32,i32)->i32> (a, b):
-    add a b
-
-//: u32_sub: u32 の減算（mod 2^32）
-fn u32_sub <(i32,i32)->i32> (a, b):
-    sub a b
-
-//: u32_mul: u32 の乗算（mod 2^32）
-fn u32_mul <(i32,i32)->i32> (a, b):
-    mul a b
-
-//: u32_div: u32 の除算
-fn u32_div <(i32,i32)->i32> (a, b):
-    div_u a b
-
-//: u32_rem: u32 の剰余
-fn u32_rem <(i32,i32)->i32> (a, b):
-    rem_u a b
-
-//: u32_lt: u32 の大小比較（a < b）
-fn u32_lt <(i32,i32)->bool> (a, b):
-    lt_u a b
-
-//: u32_le: u32 の大小比較（a <= b）
-fn u32_le <(i32,i32)->bool> (a, b):
-    le_u a b
-
-//: u32_gt: u32 の大小比較（a > b）
-fn u32_gt <(i32,i32)->bool> (a, b):
-    gt_u a b
-
-//: u32_ge: u32 の大小比較（a >= b）
-fn u32_ge <(i32,i32)->bool> (a, b):
-    ge_u a b
-
-//: u64_add: u64 の加算（mod 2^64）
-fn u64_add <(i64,i64)->i64> (a, b):
-    add a b
-
-//: u64_sub: u64 の減算（mod 2^64）
-fn u64_sub <(i64,i64)->i64> (a, b):
-    sub a b
-
-//: u64_mul: u64 の乗算（mod 2^64）
-fn u64_mul <(i64,i64)->i64> (a, b):
-    mul a b
-
-//: u64_div: u64 の除算
-fn u64_div <(i64,i64)->i64> (a, b):
-    div_u a b
-
-//: u64_rem: u64 の剰余
-fn u64_rem <(i64,i64)->i64> (a, b):
-    rem_u a b
-
-//: u64_lt: u64 の大小比較（a < b）
-fn u64_lt <(i64,i64)->bool> (a, b):
-    lt_u a b
-
-//: u64_le: u64 の大小比較（a <= b）
-fn u64_le <(i64,i64)->bool> (a, b):
-    le_u a b
-
-//: u64_gt: u64 の大小比較（a > b）
-fn u64_gt <(i64,i64)->bool> (a, b):
-    gt_u a b
-
-//: u64_ge: u64 の大小比較（a >= b）
-fn u64_ge <(i64,i64)->bool> (a, b):
-    ge_u a b
 
 //: u128: u128 相当（上位/下位 64-bit）
 struct u128:
     hi <i64>
     lo <i64>
 
-//: u128_new: hi/lo から u128 値を構築する
-fn u128_new <(i64,i64)->u128> (hi, lo):
+//: new: hi/lo から u128 値を構築する
+fn new <(i64,i64)->u128> (hi, lo):
     u128 hi lo
 
-//: u128_from_u64: u64 値から u128 値を作る
-fn u128_from_u64 <(i64)->u128> (v):
+//: to_u128: u64 値から u128 値を作る
+fn to_u128 <(i64)->u128> (v):
     u128 <i64> cast 0 v
 
-//: u128_add: u128 の加算（mod 2^128）
-fn u128_add <(u128,u128)->u128> (a, b):
+//: add: u128 の加算（mod 2^128）
+fn add <(u128,u128)->u128> (a, b):
     let a_hi <i64> get a "hi";
     let a_lo <i64> get a "lo";
     let b_hi <i64> get b "hi";
@@ -4574,8 +4497,8 @@ fn u128_add <(u128,u128)->u128> (a, b):
     let hi <i64> add hi0 carry;
     u128 hi lo
 
-//: u128_sub: u128 の減算（mod 2^128）
-fn u128_sub <(u128,u128)->u128> (a, b):
+//: sub: u128 の減算（mod 2^128）
+fn sub <(u128,u128)->u128> (a, b):
     let a_hi <i64> get a "hi";
     let a_lo <i64> get a "lo";
     let b_hi <i64> get b "hi";
@@ -4588,8 +4511,8 @@ fn u128_sub <(u128,u128)->u128> (a, b):
     let hi <i64> sub hi0 borrow;
     u128 hi lo
 
-//: u128_lt: u128 の大小比較（a < b）
-fn u128_lt <(u128,u128)->bool> (a, b):
+//: lt: u128 の大小比較（a < b）
+fn lt <(u128,u128)->bool> (a, b):
     let a_hi <i64> get a "hi";
     let b_hi <i64> get b "hi";
     let a_lo <i64> get a "lo";
@@ -4607,19 +4530,19 @@ struct i128:
     hi <i64>
     lo <i64>
 
-//: i128_new: hi/lo から i128 値を構築する
-fn i128_new <(i64,i64)->i128> (hi, lo):
+//: new: hi/lo から i128 値を構築する
+fn new <(i64,i64)->i128> (hi, lo):
     i128 hi lo
 
-//: i128_from_i64: i64 値を符号拡張して i128 に変換する
-fn i128_from_i64 <(i64)->i128> (v):
+//: to_i128: i64 値を符号拡張して i128 に変換する
+fn to_i128 <(i64)->i128> (v):
     let hi <i64> if lt v <i64> cast 0:
         then <i64> cast -1
         else <i64> cast 0;
     i128 hi v
 
-//: i128_add: i128 の加算（mod 2^128）
-fn i128_add <(i128,i128)->i128> (a, b):
+//: add: i128 の加算（mod 2^128）
+fn add <(i128,i128)->i128> (a, b):
     let a_hi <i64> get a "hi";
     let a_lo <i64> get a "lo";
     let b_hi <i64> get b "hi";
@@ -4632,8 +4555,8 @@ fn i128_add <(i128,i128)->i128> (a, b):
     let hi <i64> add hi0 carry;
     i128 hi lo
 
-//: i128_sub: i128 の減算（mod 2^128）
-fn i128_sub <(i128,i128)->i128> (a, b):
+//: sub: i128 の減算（mod 2^128）
+fn sub <(i128,i128)->i128> (a, b):
     let a_hi <i64> get a "hi";
     let a_lo <i64> get a "lo";
     let b_hi <i64> get b "hi";
@@ -4646,7 +4569,7 @@ fn i128_sub <(i128,i128)->i128> (a, b):
     let hi <i64> sub hi0 borrow;
     i128 hi lo
 
-//: u64_mul_wide: u64 × u64 の 128-bit 積を返す
+//: mul_wide: u64 × u64 の 128-bit 積を返す
 //:
 //: [目的/もくてき]:
 //: - 64-bit 乗算の上位 64-bit と下位 64-bit を同時に求めます。
@@ -4660,7 +4583,7 @@ fn i128_sub <(i128,i128)->i128> (a, b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn u64_mul_wide <(i64,i64)->u128> (a, b):
+fn mul_wide <(i64,i64)->u128> (a, b):
     let mask32 <i64> cast -1;
     let sh32 <i64> cast 32;
 
@@ -4692,7 +4615,7 @@ fn u64_mul_wide <(i64,i64)->u128> (a, b):
     let hi <i64> add hi1 carry_lo;
     u128 hi lo
 
-//: i128_mul: i128 の乗算（mod 2^128）
+//: mul: i128 の乗算（mod 2^128）
 //:
 //: [目的/もくてき]:
 //: - i128 同士の積の下位 128-bit を返します。
@@ -4706,13 +4629,13 @@ fn u64_mul_wide <(i64,i64)->u128> (a, b):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
-fn i128_mul <(i128,i128)->i128> (a, b):
+fn mul <(i128,i128)->i128> (a, b):
     let a_hi <i64> get a "hi";
     let a_lo <i64> get a "lo";
     let b_hi <i64> get b "hi";
     let b_lo <i64> get b "lo";
 
-    let lo_wide <u128> u64_mul_wide a_lo b_lo;
+    let lo_wide <u128> mul_wide a_lo b_lo;
     let lo <i64> get lo_wide "lo";
     let lo_hi <i64> get lo_wide "hi";
 
@@ -4722,20 +4645,8 @@ fn i128_mul <(i128,i128)->i128> (a, b):
     let hi <i64> add lo_hi cross;
     i128 hi lo
 
-//: add: i128 の加算
-fn add <(i128,i128)->i128> (a, b):
-    i128_add a b
-
-//: sub: i128 の減算
-fn sub <(i128,i128)->i128> (a, b):
-    i128_sub a b
-
-//: mul: i128 の乗算
-fn mul <(i128,i128)->i128> (a, b):
-    i128_mul a b
-
-//: i128_lt: i128 の大小比較（a < b）
-fn i128_lt <(i128,i128)->bool> (a, b):
+//: lt: i128 の大小比較（a < b）
+fn lt <(i128,i128)->bool> (a, b):
     let a_hi <i64> get a "hi";
     let b_hi <i64> get b "hi";
     let a_lo <i64> get a "lo";
