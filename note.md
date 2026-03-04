@@ -1,3 +1,47 @@
+# 2026-03-04 作業メモ (上流修正: codegen_wasm 診断IDの明示化)
+
+- 目的:
+  - `todo.md` 残件だった `codegen_*.rs` の主要診断を `diag_id` で固定し、codegen 失敗の分類を文言依存から切り離す。
+- 根本原因:
+  - `codegen_wasm.rs` の `Diagnostic::error(...)` は ID 未付与で、codegen フェーズ失敗を安定的に特定できなかった。
+- 変更:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D4001..D4015` を追加:
+      - `CodegenWasmUnsupportedExternSignature`
+      - `CodegenWasmUnsupportedFunctionSignature`
+      - `CodegenWasmMissingReturnValue`
+      - `CodegenWasmRawLineParseError`
+      - `CodegenWasmLlvmIrBodyNotSupported`
+      - `CodegenWasmStringLiteralNotFound`
+      - `CodegenWasmUnknownVariable`
+      - `CodegenWasmUnknownFunctionValue`
+      - `CodegenWasmUnknownFunction`
+      - `CodegenWasmMissingIndirectSignature`
+      - `CodegenWasmUnsupportedIndirectSignature`
+      - `CodegenWasmUnknownIntrinsic`
+      - `CodegenWasmUnsupportedEnumPayloadType`
+      - `CodegenWasmUnsupportedStructFieldType`
+      - `CodegenWasmUnsupportedTupleElementType`
+  - `nepl-core/src/codegen_wasm.rs`
+    - 主要 codegen エラー発生点に `with_id(...)` を付与。
+    - 追加対象:
+      - extern/function シグネチャ lower 失敗
+      - missing return
+      - raw wasm parse 失敗
+      - wasm backend での llvm ir body
+      - unknown variable/function/function value
+      - indirect call signature 問題
+      - unknown codegen intrinsic
+      - enum/struct/tuple の unsupported payload/field/element 型
+  - `tests/neplg2.n.md`
+    - `wasm_rejects_llvmir_body_with_diag_id` を追加（`diag_id: 4005`）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/neplg2.n.md -i tests/functions.n.md -i tests/selfhost_req.n.md --no-tree -o /tmp/tests-codegen-diag-subset.json -j 15` -> `276/276 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-codegen-diagid.json -j 15` -> `798/798 pass`
+- 状況:
+  - `todo.md` の診断ID残件（codegen 主要診断）は完了。
+
 # 2026-03-04 作業メモ (上流修正: typecheck の module/impl 定義時診断IDを明示化)
 
 - 目的:

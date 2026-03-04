@@ -211,6 +211,36 @@ pub enum DiagnosticId {
     TypeImplMissingTraitMethod = 3091,
     /// entry 関数が未定義または曖昧。
     TypeEntryFunctionMissingOrAmbiguous = 3092,
+    /// WASM backend が extern シグネチャを lower できない。
+    CodegenWasmUnsupportedExternSignature = 4001,
+    /// WASM backend が関数シグネチャを lower できない。
+    CodegenWasmUnsupportedFunctionSignature = 4002,
+    /// 戻り値必須関数が値を返さない。
+    CodegenWasmMissingReturnValue = 4003,
+    /// `#wasm` 生命令の解析に失敗。
+    CodegenWasmRawLineParseError = 4004,
+    /// WASM backend で `#llvmir` 本体を受理。
+    CodegenWasmLlvmIrBodyNotSupported = 4005,
+    /// lower 対象の文字列リテラルがテーブルに存在しない。
+    CodegenWasmStringLiteralNotFound = 4006,
+    /// codegen 時に未知の変数参照。
+    CodegenWasmUnknownVariable = 4007,
+    /// codegen 時に未知の関数値参照。
+    CodegenWasmUnknownFunctionValue = 4008,
+    /// codegen 時に未知の関数呼び出し。
+    CodegenWasmUnknownFunction = 4009,
+    /// 間接呼び出し用のシグネチャが type section に存在しない。
+    CodegenWasmMissingIndirectSignature = 4010,
+    /// 間接呼び出しシグネチャが WASM で未対応。
+    CodegenWasmUnsupportedIndirectSignature = 4011,
+    /// codegen intrinsic が未定義。
+    CodegenWasmUnknownIntrinsic = 4012,
+    /// enum payload 型が WASM lower 非対応。
+    CodegenWasmUnsupportedEnumPayloadType = 4013,
+    /// struct field 型が WASM lower 非対応。
+    CodegenWasmUnsupportedStructFieldType = 4014,
+    /// tuple element 型が WASM lower 非対応。
+    CodegenWasmUnsupportedTupleElementType = 4015,
 }
 
 impl DiagnosticId {
@@ -323,6 +353,21 @@ impl DiagnosticId {
             3090 => Some(DiagnosticId::TypeImplMethodSignatureMismatch),
             3091 => Some(DiagnosticId::TypeImplMissingTraitMethod),
             3092 => Some(DiagnosticId::TypeEntryFunctionMissingOrAmbiguous),
+            4001 => Some(DiagnosticId::CodegenWasmUnsupportedExternSignature),
+            4002 => Some(DiagnosticId::CodegenWasmUnsupportedFunctionSignature),
+            4003 => Some(DiagnosticId::CodegenWasmMissingReturnValue),
+            4004 => Some(DiagnosticId::CodegenWasmRawLineParseError),
+            4005 => Some(DiagnosticId::CodegenWasmLlvmIrBodyNotSupported),
+            4006 => Some(DiagnosticId::CodegenWasmStringLiteralNotFound),
+            4007 => Some(DiagnosticId::CodegenWasmUnknownVariable),
+            4008 => Some(DiagnosticId::CodegenWasmUnknownFunctionValue),
+            4009 => Some(DiagnosticId::CodegenWasmUnknownFunction),
+            4010 => Some(DiagnosticId::CodegenWasmMissingIndirectSignature),
+            4011 => Some(DiagnosticId::CodegenWasmUnsupportedIndirectSignature),
+            4012 => Some(DiagnosticId::CodegenWasmUnknownIntrinsic),
+            4013 => Some(DiagnosticId::CodegenWasmUnsupportedEnumPayloadType),
+            4014 => Some(DiagnosticId::CodegenWasmUnsupportedStructFieldType),
+            4015 => Some(DiagnosticId::CodegenWasmUnsupportedTupleElementType),
             _ => None,
         }
     }
@@ -514,6 +559,41 @@ impl DiagnosticId {
             DiagnosticId::TypeImplMissingTraitMethod => "missing required trait method in impl",
             DiagnosticId::TypeEntryFunctionMissingOrAmbiguous => {
                 "entry function is missing or ambiguous"
+            }
+            DiagnosticId::CodegenWasmUnsupportedExternSignature => {
+                "unsupported extern signature for wasm"
+            }
+            DiagnosticId::CodegenWasmUnsupportedFunctionSignature => {
+                "unsupported function signature for wasm"
+            }
+            DiagnosticId::CodegenWasmMissingReturnValue => {
+                "function expected to return value"
+            }
+            DiagnosticId::CodegenWasmRawLineParseError => "invalid raw wasm line",
+            DiagnosticId::CodegenWasmLlvmIrBodyNotSupported => {
+                "llvm ir block cannot be compiled by wasm backend"
+            }
+            DiagnosticId::CodegenWasmStringLiteralNotFound => {
+                "string literal not found during codegen"
+            }
+            DiagnosticId::CodegenWasmUnknownVariable => "unknown variable",
+            DiagnosticId::CodegenWasmUnknownFunctionValue => "unknown function value",
+            DiagnosticId::CodegenWasmUnknownFunction => "unknown function",
+            DiagnosticId::CodegenWasmMissingIndirectSignature => {
+                "missing wasm signature for indirect call"
+            }
+            DiagnosticId::CodegenWasmUnsupportedIndirectSignature => {
+                "unsupported indirect call signature for wasm"
+            }
+            DiagnosticId::CodegenWasmUnknownIntrinsic => "unknown codegen intrinsic",
+            DiagnosticId::CodegenWasmUnsupportedEnumPayloadType => {
+                "unsupported enum payload type"
+            }
+            DiagnosticId::CodegenWasmUnsupportedStructFieldType => {
+                "unsupported struct field type for codegen"
+            }
+            DiagnosticId::CodegenWasmUnsupportedTupleElementType => {
+                "unsupported tuple element type for codegen"
             }
         }
     }

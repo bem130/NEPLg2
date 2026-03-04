@@ -494,6 +494,23 @@ fn main <()->i32> ():
     Foo
 ```
 
+## wasm_rejects_llvmir_body_with_diag_id
+
+neplg2:test[compile_fail]
+diag_id: 4005
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn main <()->i32> ():
+    #llvmir:
+        define i32 @main() {
+        entry:
+            ret i32 1
+        }
+```
+
 ## wasm_cannot_use_stdio
 
 以前は単なる `neplg2:test` で、実際には「コンパイルできてしまう」場合に検知できませんでした。
