@@ -37,15 +37,15 @@
 
 //: dsu_new: `n` 頂点の DSU を作る
 fn dsu_new <(i32)*>i32> (n):
-    let parent <i32> alloc mul n 4;
-    let size <i32> alloc mul n 4;
+    let parent <i32> alloc_raw mul n 4;
+    let size <i32> alloc_raw mul n 4;
     let mut i <i32> 0;
     while lt i n:
         do:
             store_i32 add parent mul i 4 i;
             store_i32 add size mul i 4 1;
             set i add i 1;
-    let d <i32> alloc 12;
+    let d <i32> alloc_raw 12;
     store_i32 d n;
     store_i32 add d 4 parent;
     store_i32 add d 8 size;
@@ -56,9 +56,9 @@ fn dsu_free <(i32)*>()> (d):
     let n <i32> load_i32 d;
     let parent <i32> load_i32 add d 4;
     let size <i32> load_i32 add d 8;
-    dealloc parent mul n 4;
-    dealloc size mul n 4;
-    dealloc d 12
+    dealloc_raw parent mul n 4;
+    dealloc_raw size mul n 4;
+    dealloc_raw d 12
 
 //: dsu_find: 要素 `x` の代表元を返す
 fn dsu_find <(i32,i32)*>i32> (d, x):

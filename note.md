@@ -1,3 +1,757 @@
+# 2026-03-04 作業メモ (上流修正: codegen_wasm 診断IDの明示化)
+
+- 目的:
+  - `todo.md` 残件だった `codegen_*.rs` の主要診断を `diag_id` で固定し、codegen 失敗の分類を文言依存から切り離す。
+- 根本原因:
+  - `codegen_wasm.rs` の `Diagnostic::error(...)` は ID 未付与で、codegen フェーズ失敗を安定的に特定できなかった。
+- 変更:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D4001..D4015` を追加:
+      - `CodegenWasmUnsupportedExternSignature`
+      - `CodegenWasmUnsupportedFunctionSignature`
+      - `CodegenWasmMissingReturnValue`
+      - `CodegenWasmRawLineParseError`
+      - `CodegenWasmLlvmIrBodyNotSupported`
+      - `CodegenWasmStringLiteralNotFound`
+      - `CodegenWasmUnknownVariable`
+      - `CodegenWasmUnknownFunctionValue`
+      - `CodegenWasmUnknownFunction`
+      - `CodegenWasmMissingIndirectSignature`
+      - `CodegenWasmUnsupportedIndirectSignature`
+      - `CodegenWasmUnknownIntrinsic`
+      - `CodegenWasmUnsupportedEnumPayloadType`
+      - `CodegenWasmUnsupportedStructFieldType`
+      - `CodegenWasmUnsupportedTupleElementType`
+  - `nepl-core/src/codegen_wasm.rs`
+    - 主要 codegen エラー発生点に `with_id(...)` を付与。
+    - 追加対象:
+      - extern/function シグネチャ lower 失敗
+      - missing return
+      - raw wasm parse 失敗
+      - wasm backend での llvm ir body
+      - unknown variable/function/function value
+      - indirect call signature 問題
+      - unknown codegen intrinsic
+      - enum/struct/tuple の unsupported payload/field/element 型
+  - `tests/neplg2.n.md`
+    - `wasm_rejects_llvmir_body_with_diag_id` を追加（`diag_id: 4005`）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/neplg2.n.md -i tests/functions.n.md -i tests/selfhost_req.n.md --no-tree -o /tmp/tests-codegen-diag-subset.json -j 15` -> `276/276 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-codegen-diagid.json -j 15` -> `798/798 pass`
+- 状況:
+  - `todo.md` の診断ID残件（codegen 主要診断）は完了。
+
+# 2026-03-04 作業メモ (上流修正: typecheck の module/impl 定義時診断IDを明示化)
+
+- 目的:
+  - `todo.md` 残件だった `typecheck.rs` 上流（module/impl 定義フェーズ）の未付与診断を `diag_id` で固定し、文言依存を除去する。
+- 根本原因:
+  - 定義登録/impl 検証フェーズは `Diagnostic::error(...)` のまま残っており、同種エラーでも ID が不安定だった。
+  - そのため `compile_fail` の失敗理由が文言変更で揺れる状態だった。
+- 変更:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D3073..D3092` を追加:
+      - `TypeUnknownTraitBound`
+      - `TypeWasiImportTargetMismatch`
+      - `TypeExternSignatureMustBeFunction`
+      - `TypeItemNameConflict`
+      - `TypeEnumTypeParamBoundsUnsupported`
+      - `TypeStructTypeParamBoundsUnsupported`
+      - `TypeTraitTypeParamsUnsupported`
+      - `TypeTraitMethodTypeParamsUnsupported`
+      - `TypeInherentImplUnsupported`
+      - `TypeImplTypeParamsUnsupported`
+      - `TypeUnknownTrait`
+      - `TypeImplTargetMustBeConcrete`
+      - `TypeFunctionSignatureMustBeFunction`
+      - `TypeAliasTargetNotFound`
+      - `TypeFunctionSignatureOverloadNotFound`
+      - `TypeDuplicateImplMethod`
+      - `TypeImplMethodNotFoundInTrait`
+      - `TypeImplMethodSignatureMismatch`
+      - `TypeImplMissingTraitMethod`
+      - `TypeEntryFunctionMissingOrAmbiguous`
+  - `nepl-core/src/typecheck.rs`
+    - 上流定義フェーズ（enum/struct/trait/impl/alias/entry）の未付与エラーへ `with_id(...)` を付与。
+    - `check_function` 冒頭の signature/arity 検証にも ID を付与。
+  - `tests/neplg2.n.md`
+    - 既存 `compile_fail` に `diag_id` を追加:
+      - `pipe_target_missing_after_annotation_is_error` -> `3016`
+      - `wasi_import_rejected_on_wasm_target` -> `3074`
+      - `name_conflict_enum_fn_is_error` -> `3076`
+      - `trait_bound_missing_impl_is_error` -> `3069`
+      - `trait_method_arity_mismatch_is_error` -> `3068`
+      - `unknown_trait_bound_is_error` -> `3073`
+  - `tests/functions.n.md`
+    - `function_alias_target_not_found`（`diag_id: 3086`）を追加。
+  - `tests/selfhost_req.n.md`
+    - `test_req_trait_extensions` に `diag_id: 3081` を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/neplg2.n.md -i tests/functions.n.md -i tests/selfhost_req.n.md --no-tree -o /tmp/tests-typecheck-item-diag-subset.json -j 15` -> `275/275 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-typecheck-item-diagid.json -j 15` -> `797/797 pass`
+- 状況:
+  - `typecheck.rs` の上流定義フェーズ診断ID付与は完了。
+  - 次段は `todo.md` 残件どおり `codegen_*.rs` の主要診断ID明示化。
+
+# 2026-03-04 作業メモ (上流修正: lexer 診断IDの明示化と回帰追加)
+
+- 目的:
+  - `lexer.rs` の未付与エラーに診断IDを付け、`compile_fail + diag_id` で固定検証できる状態にする。
+- 根本原因:
+  - `unknown token/directive` 以外の字句エラーは `with_id` 未付与で、失敗分類が文言依存になっていた。
+- 変更:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D1203..D1209` を追加:
+      - `LexerIndentTabsNotAllowed`
+      - `LexerExpectedIndentedBlock`
+      - `LexerInvalidPubDirectivePrefix`
+      - `LexerIndentWidthMismatch`
+      - `LexerIndentLevelMismatch`
+      - `LexerInvalidStringEscape`
+      - `LexerUnterminatedStringLiteral`
+  - `nepl-core/src/lexer.rs`
+    - タブインデント、`#wasm/#llvmir` 後インデント不足、`pub` 接頭辞誤用、
+      インデント幅不一致/階層不一致、invalid escape、unterminated string に `with_id` を付与。
+  - `tests/lexer_diag.n.md`
+    - 新規追加（3ケース）:
+      - invalid escape -> `diag_id: 1208`
+      - unterminated string -> `diag_id: 1209`
+      - invalid `pub` prefix -> `diag_id: 1205`
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/lexer_diag.n.md --no-tree -o /tmp/tests-lexer-diag.json -j 15` -> `207/207 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-lexer-diagid-extend.json -j 15` -> `796/796 pass`
+- 状況:
+  - parser + lexer + typecheck（主要経路）の診断ID固定化が進行。
+  - 次段は `typecheck` 上流（module/impl 定義時）と `codegen_*.rs` の残未付与診断を整理する。
+
+# 2026-03-04 作業メモ (上流修正: overload/trait/pipe の診断ID拡張)
+
+- 目的:
+  - `typecheck` の未付与エラー（特に overload/trait method/pipe/arity 周辺）を診断IDで固定化し、`compile_fail` 回帰を安定化する。
+- 根本原因:
+  - 同一カテゴリの型検査失敗で `with_id` 未付与経路が残り、文言変更に弱い状態だった。
+  - trait 経由呼び出しの失敗（未知メソッド・境界未充足など）が `diag_id` で識別できなかった。
+- 変更:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D3066..D3072` を追加:
+      - `TypeTraitMethodTypeArgsNotSupported`
+      - `TypeTraitMethodNotFound`
+      - `TypeArgumentArityMismatch`
+      - `TypeTraitBoundUnsatisfied`
+      - `TypeInvalidDeref`
+      - `TypeAssignmentArityMismatch`
+      - `TypeCallReductionLimitExceeded`
+  - `nepl-core/src/typecheck.rs`
+    - 以下の診断に `with_id` を付与:
+      - `pipe has no target` -> `D3013`
+      - trait method への型引数未対応 -> `D3066`
+      - trait method 不在 -> `D3067`
+      - overload の型引数不一致 -> `D3021`
+      - 引数個数不一致（関数/constructor/trait method receiver）-> `D3068`
+      - trait 境界未充足 -> `D3069`
+      - assignment 個数不一致 -> `D3071`
+      - field assignment 型不一致 -> `D3036`
+      - 非参照型 deref -> `D3070`
+      - call reduction 反復上限超過 -> `D3072`
+  - `tests/overload.n.md`
+    - `compile_fail + diag_id` を3ケース追加:
+      - trait method 型引数未対応 (`3066`)
+      - trait method 不在 (`3067`)
+      - trait 境界未充足 (`3069`)
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md --no-tree -o /tmp/tests-overload-diagid-extend.json -j 15` -> `244/244 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-typecheck-diagid-extend.json -j 15` -> `793/793 pass`
+- 状況:
+  - `D3006`（no matching overload）と field access（`D3011`）は診断経路を分離したまま維持。
+  - 次段は `todo.md` の診断ID拡張残件（lexer + typecheck上流の未付与領域）を継続する。
+
+# 2026-03-04 作業メモ (上流修正: typecheck の noshadow/shadow 診断IDを明示化)
+
+- 目的:
+  - `typecheck` の `noshadow` / `non-shadowable` 系エラーを診断生成点で固定し、回帰を `diag_id` で検証可能にする。
+- 根本原因:
+  - 同一カテゴリの shadow 関連エラーに `with_id` 未付与経路が残り、文言依存の判定になっていた。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `cannot shadow non-shadowable ...` 系を `TypeNoShadowViolation (D3014)` へ統一。
+    - `noshadow declaration ... conflicts ...` 系を `TypeNoShadowConflict (D3015)` へ統一。
+    - 関数/関数alias/ローカル let の各経路で secondary label 付き診断にも同IDを付与。
+  - `tests/shadowing.n.md`
+    - `compile_fail` 4ケースに `diag_id: 3014` を追加して固定化。
+- 検証:
+  - `node nodesrc/tests.js -i tests/shadowing.n.md -i tests/move_effect.n.md --no-tree -o /tmp/tests-shadowing-moveeffect-diagid.json -j 15` -> `248/248 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-shadow-diagid.json -j 15` -> `790/790 pass`
+- 状況:
+  - shadow/noshadow の主要経路は `diag_id` 固定化済み。
+  - 次段は `typecheck` の残未付与カテゴリ（undefined/overload/pipe/pure-impure）へ拡張する。
+
+# 2026-03-04 作業メモ (上流修正: typecheck field-access 診断IDの明示化)
+
+- 目的:
+  - `typecheck.rs` の field access 系エラーを診断生成点で `DiagnosticId` 固定し、`compile_fail` を ID で安定検証できるようにする。
+- 根本原因:
+  - `core/field::get` / `put` 経由の失敗は、型検査フェーズで発生するにもかかわらず、`with_id` なしの `Diagnostic::error` が残っていた。
+  - 文言のみ依存だと、エラーテキスト調整時に回帰検出が不安定になる。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `resolve_field_access_with_mode` 配下の field 参照失敗（範囲外/フィールド不存在/非複合型）に
+      `TypeInvalidFieldAccess (D3011)` を明示付与。
+  - `tests/move_effect.n.md`
+    - `core/field` の不正アクセスを `compile_fail + diag_id: 3011` で固定するケースを追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md --no-tree -o /tmp/tests-move_effect-check.json -j 15` -> `221/221 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-typecheck-field-diagid.json -j 15` -> `790/790 pass`
+- 状況:
+  - field access 系は `D3011` で明示化完了。
+  - 次段は `typecheck` の未付与領域（shadow / overload / pipe / undefined 系）を順次明示化する。
+
+# 2026-03-04 作業メモ (上流修正: parser 診断IDの未付与箇所を明示化)
+
+- 目的:
+  - `todo.md` の「診断IDの明示付与（parser/typecheck/resolve）」を上流から進め、`parser.rs` の未付与診断を生成点で固定する。
+- 根本原因:
+  - `Diagnostic::error(...)` が `with_id` なしで残っており、同種エラーでもIDが安定しない経路があった。
+  - 文言依存のままだと `compile_fail` の回帰固定が不十分になる。
+- 変更:
+  - `nepl-core/src/parser.rs`
+    - 再帰上限/無進捗回復/marker配置/mlstr/#externシグネチャ/型パラメータ解析などの未付与診断へ `with_id` を付与。
+    - 付与IDは既存の Parser 系 (`ParserExpectedToken`, `ParserUnexpectedToken`, `ParserExpectedIdentifier`, `ParserInvalidTypeExpr`, `ParserInvalidExternSignature`) を利用。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-parser-diagid.json -j 15` -> `789/789 pass`
+- 状況:
+  - parser の `Diagnostic::error` は診断生成点で ID 明示化済み。
+  - 次段は `typecheck.rs` の未付与診断へ同方針を展開する。
+
+# 2026-03-04 作業メモ (上流テスト整備: `tests/move_check.n.md` の skip 解除)
+
+- 目的:
+  - `move_check` 系 `.n.md` の上流回帰を `skip` 依存から外し、診断ID付き compile_fail で固定化する。
+- 変更:
+  - `tests/move_check.n.md`
+    - `move_simple_ok` を実コード化（`ret: 0`）。
+    - `move_use_after_move` を `compile_fail + diag_id: 3053` に変更。
+    - `move_in_branch` を `compile_fail + diag_id: 3054` に変更。
+    - `move_in_loop` を `compile_fail + diag_id: 3065` に変更。
+- 根本原因:
+  - 旧 Rust テスト移植時に `skip` が残っており、分岐合流/ループ再利用の move 回帰が CI で検出不能だった。
+  - 診断IDで失敗理由を固定しないと、文言揺れで意図しない回帰を見落とす。
+- 検証:
+  - `node nodesrc/tests.js -i tests/move_check.n.md --no-tree -o /tmp/tests-move-check-nmd.json -j 15` -> `217/217 pass`
+- 状況:
+  - `move_check.n.md` の先頭4ケースは実行型になり、`skip` は除去済み。
+  - 次段で `todo.md` の診断ID未付与領域（parser/typecheck/resolve）を継続する。
+
+# 2026-03-04 作業メモ (フェーズD進行: Scanner/Writer の直接利用へ下流移行)
+
+- 目的:
+  - `kpread/kpwrite` 公開APIの安全型利用を下流へ浸透させ、生ハンドル由来の中間束縛を減らす。
+- 変更:
+  - `tests/kp.n.md`
+  - `tests/kp_i64.n.md`
+  - `tests/stdin.n.md`
+  - `tutorials/getting_started/22_competitive_io_and_arith.n.md`
+  - `tutorials/getting_started/24_competitive_dp_basics.n.md`
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+  - `tutorials/getting_started/27_competitive_algorithms_catalog.n.md`
+  - `examples/kp_fizzbuzz.nepl`
+  - それぞれ `let sc_obj <Scanner> unwrap_ok scanner_new; let sc <Scanner> sc_obj;` を
+    `let sc <Scanner> unwrap_ok scanner_new;` へ統一。
+  - カタログ内の `sc_handle` も削除し、`Scanner` を直接渡す形へ統一。
+- 根本原因:
+  - 公開APIが安全型で整っていても、下流コードに旧来の二段束縛が残ると、生ハンドル前提へ戻しやすくなる。
+  - 先に利用側の書き方を揃えることで、次段の公開面整理（ハンドル版隔離）を安全に進められる。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md --no-tree -o /tmp/tests-kp-typed-usage.json -j 15` -> `225/225 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-scanner-writer-typed-direct.json -j 15` -> `729/729 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-scanner-writer-typed-direct.json -j 15` -> `262/262 pass`
+- 状況:
+  - 下流の主要利用箇所は `Scanner/Writer` 直接利用へ移行済み。
+- 次段で `kpread/kpwrite` の i32 ハンドル受け取りオーバーロードの公開面整理を継続する。
+
+# 2026-03-04 作業メモ (上流修正: move_check 診断IDの明示化)
+
+- 目的:
+  - `move_check` が生成する主要エラーに `diag_id` を付与し、`compile_fail` を診断IDで固定検証できる状態にする。
+- 根本原因:
+  - move/borrow 系エラーは文言一致に依存しており、将来の文言調整でテストが壊れやすかった。
+  - `todo.md` の「診断IDの明示付与」を満たすには、診断生成点（`move_check.rs`）で enum を直接指定する必要があった。
+- 変更:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `3051..3065` の move/borrow 系 `DiagnosticId` を追加。
+    - `from_u32` / `message` に新IDを追加。
+  - `nepl-core/src/passes/move_check.rs`
+    - `Diagnostic::error(...)` に `with_id(...)` を付与。
+    - 対象: use/move/borrow/assign/drop/loop合流の主要診断。
+  - `tests/move_effect.n.md`
+    - 既存 compile_fail 2件に `diag_id` を追加（shared borrow move / move後再利用）。
+    - 新規 compile_fail 2件を追加（move後borrow=3063、分岐後potentially moved=3054）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md --no-tree -o /tmp/tests-move-effect-diagid.json -j 15` -> `220/220 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-move-diagid.json -j 15` -> `789/789 pass`
+- 状況:
+  - move/borrow系の `compile_fail + diag_id` 基盤が上流で確立。
+  - 次段は `todo.md` の診断ID未適用領域（parser/typecheck/resolveの残り）へ拡張する。
+
+# 2026-03-04 作業メモ (フェーズD進行: `scanner_new` / `writer_new` の曖昧オーバーロード根治)
+
+- 目的:
+  - `unwrap_ok scanner_new` / `unwrap_ok writer_new` で発生した `D3005 ambiguous overload` を、戻り値型のみで分岐する nullary オーバーロード設計から解消する。
+- 根本原因:
+  - `scanner_new` / `writer_new` に `Result<i32,str>` 版と `Result<Scanner/Writer,str>` 版を同名で共存させたため、引数0の呼び出しで文脈不足時に戻り値型だけでは選択不能になっていた。
+  - その曖昧性が `kp` doctest / `tests` / `tutorials` の `unwrap_ok scanner_new` 系呼び出しに波及し、下流で連鎖的に型不一致を誘発していた。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new <()*>Result<i32,str>>` を `scanner_new_handle <()*>Result<i32,str>>` に改名。
+    - 公開 `scanner_new` は `Result<Scanner,str>` のみを提供。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new <()*>Result<i32,str>>` を `writer_new_handle <()*>Result<i32,str>>` に改名。
+    - 公開 `writer_new` は `Result<Writer,str>` のみを提供。
+  - `tests/overload.n.md`
+    - 追加した zero-arg `Result` ケースのシグネチャ/式を修正し、pure 文脈で正しく検証できる状態へ調整。
+- 検証:
+  - `node nodesrc/tests.js -i tests/overload.n.md --no-tree -o /tmp/tests-overload-zeroarg-result.json -j 15` -> `241/241 pass`
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpread-kpwrite-new-overload.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-kpread-overload-unify.json -j 15` -> `729/729 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-kpread-overload-unify.json -j 15` -> `262/262 pass`
+- 状況:
+  - `new` 系の公開 API で「戻り値型のみ差分」の曖昧性を除去。
+  - フェーズDの安全API統一路線（公開面は安全型、ハンドル版は内部名に隔離）に整合。
+
+# 2026-03-04 作業メモ (フェーズD進行: `kpread` の `_raw` 依存を同名オーバーロードへ整理)
+
+- 目的:
+  - `kpread` の `scanner_*_raw` 命名を段階縮退し、`i32` ハンドル版と `Scanner` 版を同名オーバーロードとして統一する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_raw` を除く `scanner_*_raw` を `scanner_*` へ改名。
+    - `i32` 受け取り実装と `Scanner` 受け取り実装を同名で共存させる構成に変更。
+    - 既存ラッパは同名オーバーロードの `i32` 版を呼び出すように更新。
+- 根本原因:
+  - `_raw` 接尾辞分岐が API 読み取りコストを上げ、実際には型だけで区別できる箇所まで命名差分を持っていた。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpread-kpwrite-overload-unify.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-kpread-overload-unify.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-kpread-overload-unify.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread` は `scanner_new_raw` を除いて `_raw` 接尾辞なしで運用可能な状態になった。
+  - 次段は `scanner_new_raw` の扱い（戻り値型依存の曖昧性解消設計）を上流設計と合わせて検討する。
+
+# 2026-03-04 作業メモ (フェーズD進行: `kpwrite` の `_raw` 依存を同名オーバーロードへ整理)
+
+- 目的:
+  - `kpwrite` 内部で分離していた `*_raw` 群を、`i32` ハンドル版と `Writer` 版の同名オーバーロードで統一し、公開面の命名を簡潔化する。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_raw` を除き、`writer_*_raw` を `writer_*` へ改名。
+    - `i32` 受け取り実装と `Writer` 受け取り実装を同名で共存させる形に変更。
+    - 既存の `Writer` 版からは同名の `i32` 版を呼ぶように整理。
+- 根本原因:
+  - `_raw` 接尾辞を前提にラッパ層が増え、API 仕様の読み取りコストが上がっていた。
+  - 既存のオーバーロード機構で十分に区別可能な箇所まで命名分岐していた。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpwrite-overload-unify.json -j 15` -> `226/226 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-kpwrite-overload-unify.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-kpwrite-overload-unify.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpwrite` は `writer_new_raw` を除いて `_raw` 接尾辞なしで運用可能な状態になった。
+  - 次段で `kpread` 側も同方針で段階整理する。
+
+# 2026-03-04 作業メモ (フェーズD進行: `alloc` 安全API標準名化の回帰復旧)
+
+- 目的:
+  - `core/mem` の `alloc/realloc/dealloc` を `Result` 返却へ標準名化した変更に対して、下流の `kp`/tests/tutorials の破損を上流原因から復旧する。
+- 変更:
+  - `stdlib/kp/kpprefix.nepl`
+    - doctest の `alloc/dealloc` を `alloc_raw/dealloc_raw` へ更新。
+  - `stdlib/kp/kpsearch.nepl`
+    - doctest の `alloc/dealloc` を `alloc_raw/dealloc_raw` へ更新。
+  - `tests/capacity_stack.n.md`
+  - `tests/sort.n.md`
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+  - `examples/tui_editor/editor_fs.nepl`
+    - 置換ミスで壊れていた `#import "alloc_raw/...` を `#import "alloc/...` へ復旧。
+- 根本原因:
+  - 生メモリAPI移行の一括置換時に、関数呼び出しだけでなく import パス文字列まで `alloc_raw` に書き換わっていた。
+  - `alloc` が `Result` 返却になった後も、`kp` doctest の一部が `i32` 前提の旧記述を保持していた。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/core/mem.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/memory_safety.n.md -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md --no-tree -o /tmp/tests-mem-kp-safe-api-switch.json -j 15` -> `233/233 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-mem-kp-safe-api-switch-r2.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-mem-kp-safe-api-switch-r2.json -j 15` -> `262/262 pass`
+- 状況:
+  - `alloc` 安全API標準名化の現行差分は、`tests + stdlib + tutorials` で回帰通過。
+  - 次段は `todo.md` のフェーズD残件（公開面からの raw 露出整理）を継続する。
+
+# 2026-03-04 作業メモ (フェーズD進行: vec の `alloc/realloc/dealloc` を `*_raw` へ直接移行)
+
+- 目的:
+  - `vec` だけ残っていた `alloc/realloc/dealloc` 呼び出しを `*_raw` に統一し、メモリAPI移行の停滞要因を解消する。
+- 変更:
+  - `stdlib/alloc/collections/vec.nepl`
+    - `alloc` -> `alloc_raw`
+    - `realloc` -> `realloc_raw`
+    - `dealloc` -> `dealloc_raw`
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/vec.nepl -i stdlib/tests/vec.n.md -i tests/capacity_stack.n.md -i tests/pipe_collections.n.md --no-tree -o /tmp/tests-vec-raw-direct.json -j 15` -> `236/236 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-vec-raw-direct.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-vec-raw-direct.json -j 15` -> `262/262 pass`
+- 状況:
+  - 以前 `todo.md` に残していた `vec` の `realloc_raw` OOB 再現は現行系で再現せず、移行を完了できた。
+
+# 2026-03-04 作業メモ (上流修正: codegen の alloc helper 解決を `*_raw` 優先へ統一)
+
+- 目的:
+  - `alloc/dealloc/realloc` の同名安全オーバーロード導入時に、codegen 側が誤った helper を解決して再帰・スタックオーバーフローへ落ちる根本原因を上流で除去する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - 内部確保 helper 解決を `alloc_raw` 優先、`alloc` フォールバックへ変更。
+  - `nepl-core/src/codegen_llvm.rs`
+    - runtime helper 解決関数 `resolve_runtime_helper_symbol` を追加。
+    - `alloc/dealloc/realloc` 到達関数追加で `*_raw` 優先、旧名フォールバックへ変更。
+    - `resolve_alloc_symbol` を `alloc_raw` 優先に変更。
+    - entry lower 時の fallback allocator 判定を `alloc_raw` 優先探索に変更。
+    - `resolve_symbol_name` は map の実キー参照を返す実装に変更。
+  - `nepl-core/src/monomorphize.rs`
+    - runtime helper 保持対象を `alloc_raw/dealloc_raw/realloc_raw` 優先に変更（旧名フォールバック）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-overload-memory-after-core-helper-fix.json -j 15` -> `244/244 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-core-helper-fix.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-core-helper-fix.json -j 15` -> `262/262 pass`
+- 状況:
+  - 上流（codegen/monomorphize）の helper 解決経路が `*_raw` 優先で揃ったため、次段の `core/mem` 安全API標準名化を再開できる状態になった。
+
+# 2026-03-04 作業メモ (調査: alloc 同名オーバーロードの衝突と差し戻し)
+
+- 事象:
+  - `core/mem` に `alloc/realloc/dealloc` の `MemPtr` 安全オーバーロードを追加すると、
+    `stdlib/core/option.nepl::doctest#3` / `stdlib/core/result.nepl::doctest#4` などで
+    `Maximum call stack size exceeded` が発生。
+- 原因:
+  - コンパイラ生成コード側が `alloc : (i32)->i32` を暗黙前提としており、
+    同名オーバーロード追加で実行時経路が崩れる。
+- 対応:
+  - `alloc/realloc/dealloc` の `MemPtr` 同名オーバーロードは一旦差し戻し。
+  - `load/store` の `MemPtr` 同名オーバーロードは維持。
+  - 追加した `tests/memory_safety.n.md` の `alloc<...>` ケースは削除。
+- テスト:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety-after-alloc-overload-revert.json -j 15` -> `213/213 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-mem-overload-revert.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-mem-overload-revert2.json -j 15` -> `262/262 pass`
+- 次対応:
+  - `alloc` 系の標準名安全化は、コンパイラ側の暗黙依存を先に解消してから再導入する。
+
+# 2026-03-04 作業メモ (フェーズD進行: core/mem の MemPtr load/store を標準名オーバーロード化)
+
+- 目的:
+  - `*_ptr` 接尾辞依存を減らし、`MemPtr` 利用時は標準名 `load_i32/store_i32/load_u8/store_u8` で書けるようにする。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `load_i32/store_i32/load_u8/store_u8` に `MemPtr` 引数版のオーバーロードを追加。
+    - 旧 `load_i32_ptr/store_i32_ptr/load_u8_ptr/store_u8_ptr` は互換エイリアス化。
+    - `MemPtr` オーバーロードは無効ポインタ時に `Option::None` / `Result::Err` を返す。
+- テスト:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-mem-overload-loadstore.json -j 15` -> `218/218 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-mem-loadstore-overload.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-mem-loadstore-overload.json -j 15` -> `262/262 pass`
+- 状況:
+  - `MemPtr` 利用コードは標準名で安全な load/store を呼べる状態になった。
+  - 次段は `alloc/realloc/dealloc` 側の公開名安全化を継続する。
+
+# 2026-03-04 作業メモ (フェーズD進行: kpread_core 解放経路の Result 化)
+
+- 目的:
+  - `kpread_core` の初期化失敗時巻き戻しで `dealloc_raw` 直呼びを減らし、失敗処理を `Result` へ寄せる。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `nread` 確保失敗時、`iov/buf` の解放を `dealloc_result` ベースへ変更。
+    - `realloc` 失敗時、`iov/nread_ptr/buf` の解放を `dealloc_result` ベースへ変更。
+    - `scanner` ヘッダ確保失敗時と成功後の一時領域解放も `dealloc_result` ベースへ変更。
+    - 解放失敗は巻き戻し処理を止めず吸収する方針で統一。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kp-core-dealloc-result.json -j 15` -> `228/228 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kpreadcore-dealloc-result.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kpreadcore-dealloc-result.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread_core` 初期化失敗時の解放経路は `Result` 系APIに寄せられた。
+  - 次段で `core/mem` 公開名の安全API標準化を継続する。
+
+# 2026-03-04 作業メモ (フェーズD進行: kpwrite 初期化の根本整理)
+
+- 目的:
+  - `kpwrite` 初期化を `0` センチネル分岐から外し、`Result` ベースで確保失敗と巻き戻しを一元化する。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_handle_raw` を削除。
+    - `writer_alloc_buf` を追加し、`4096 -> 1024 -> 256` の段階確保を `Result<WriterBuf,str>` で返すように変更。
+    - `writer_try_free` を追加し、初期化途中の失敗時に解放失敗を吸収して巻き戻せるように変更。
+    - `writer_new_raw` は `alloc_result/dealloc_result` 前提の `match` 連鎖へ置換し、確保失敗時の返却理由を段階別に固定。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpwrite-result-init-refine.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kpwrite-resultrefine.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kpwrite-resultrefine.json -j 15` -> `262/262 pass`
+- 状況:
+  - `writer_new_raw` の失敗表現は `Result` へ収束し、センチネル `0` 依存の分岐を初期化経路から除去できた。
+  - 次段は `todo.md` フェーズDの主課題（`core/mem` 公開APIの安全名統一）を継続する。
+
+# 2026-03-04 作業メモ (フェーズD進行: kpwrite 初期化経路の Result 化)
+
+- 目的:
+  - `kpwrite` の初期化経路を `Result` 経路へ揃え、`kpread` と同じ失敗表現に統一する。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - 旧 `writer_new_raw`（`i32`返却）本体を `writer_new_handle_raw` へ分離。
+    - 新 `writer_new_raw` を `Result<i32,str>` 返却へ変更。
+    - `writer_new` は `writer_new_raw` の `Result` を `Writer` へ持ち上げる実装へ変更。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpwrite-result-init.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kpwrite-result.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kpwrite-result.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread/kpwrite` の初期化公開経路はどちらも `Result` ベースで統一済み。
+  - 次段は `todo.md` フェーズD残件として、`mem` 側公開名の安全API標準化を進める。
+
+# 2026-03-04 作業メモ (フェーズD進行: kpread_core の初期化を Result ベース化)
+
+- 目的:
+  - `kpread` 初期化経路の失敗表現を `0` センチネル依存から `Result` へ寄せる。
+  - メモリ確保失敗時の分岐を型で扱えるようにし、段階的な安全API標準化を進める。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `scanner_new_impl_i` を `scanner_new_impl` へ改名。
+    - 戻り値を `i32` から `Result<i32,str>` へ変更。
+    - `alloc_result/realloc_result` を使って確保失敗を `Err` 化。
+    - 後始末（解放）は既存レイアウト維持のため `dealloc_raw` を継続使用。
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_raw` を `Result<i32,str>` 返却へ変更。
+    - `scanner_new` は `scanner_new_raw` の `Result` をそのまま `Scanner` へ持ち上げる形に変更。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md --no-tree -o /tmp/tests-kpread-result-init.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kpreadcore-result.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kpreadcore-result.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread` の初期化経路は `Result` ベースに移行済み。
+  - 次段で `kpwrite` 初期化経路も同じ方針に揃える。
+
+# 2026-03-04 作業メモ (フェーズD進行: `*_new_raw` 名統一と todo 未完了整理)
+
+- 目的:
+  - `kpread/kpwrite` の内部初期化関数名を `*_raw` に統一し、公開入口を `scanner_new` / `writer_new` に寄せる。
+  - `todo.md` から完了済みのテスト追加項目を削除し、未完了のみを保持する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_i32` -> `scanner_new_raw`。
+    - `scanner_new` からの呼び出し先を更新。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_i32` -> `writer_new_raw`。
+    - `writer_new` からの呼び出し先を更新。
+  - `todo.md`
+    - フェーズEの完了済み小項目（`tests/move_effect.n.md` 追加、`tests/overload.n.md`/`tests/kp*.n.md` 更新）を削除。
+    - 項目8の完了済み小項目（`tests/memory_safety.n.md` 追加）を削除。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kp-newraw-rename.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-newraw-rename.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-newraw-rename.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread/kpwrite` の内部初期化関数名が `*_raw` で揃った。
+  - 次段はフェーズD残件として、`mem` 公開面の安全API標準名化（`Result/Option` 前提）を進める。
+
+# 2026-03-04 作業メモ (フェーズD進行: kpread の raw 実装名分離)
+
+- 目的:
+  - `kpread` の内部 `i32` ハンドル実装と公開 `Scanner` API を明確に分離し、公開面の型安全性を上げる。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `i32` 受け取り実装を `scanner_*_raw` へ改名。
+    - `Scanner` 受け取り公開関数は既存名を維持し、内部で `*_raw` を呼び出す形へ変更。
+    - 対象: `skip_ws/is_eof/skip_token/read_token/read_i32/read_i64/read_u64/read_f32/read_f64/read_vec/read_matrix/read_all/read_*input` 一式。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -i examples/kp_fizzbuzz.nepl --no-tree -o /tmp/tests-kp-raw-split-both.json -j 15` -> `230/230 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kpread-split.json -j 15` -> `727/727 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kpread-split.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread/kpwrite` ともに「公開 API = Scanner/Writer 型」「内部実装 = *_raw」へ分離済み。
+  - 次段は `todo.md` 2026-03-03 フェーズDの残件（`mem` 公開面の `_safe` 廃止と `_raw` 最終削除）へ進む。
+
+# 2026-03-04 作業メモ (フェーズD進行: kpwrite の raw 実装名分離)
+
+- 目的:
+  - `kpwrite` の内部 `i32` ハンドル実装と公開 `Writer` API を明確に分離し、公開面の型安全性を上げる。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `i32` 受け取り実装を `writer_*_raw` へ改名。
+    - `Writer` 受け取り公開関数は既存名を維持し、内部で `*_raw` を呼び出す形へ変更。
+    - 対象: `free/flush/ensure/put_u8/writeln/write_*` 一式。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md --no-tree -o /tmp/tests-kpwrite-raw-split.json -j 15` -> `226/226 pass`
+- 状況:
+  - `kpwrite` は「公開 API = Writer 型」「内部実装 = *_raw」へ分離完了。
+  - 次段で `kpread` も同方針に揃える。
+
+# 2026-03-04 作業メモ (overload テスト拡充: 注釈混在ケースの追加)
+
+- 目的:
+  - `overload` 回帰に、型注釈の混在パターン（ブロック注釈・関数呼び出し注釈・パイプ・関数リテラル）を追加する。
+- 変更:
+  - `tests/overload.n.md`
+    - `overload_mixed_annotations_block_call_pipe_lambda` を追加。
+    - `overload_pipe_annotations_with_mixed_cast_i32_i64_i128` を追加。
+- 切り分け:
+  - 初版では `pipe requires a value on the stack (D3013)` と `ambiguous overload (D3005)` を再現。
+  - 解析結果:
+    - `let ...:` の引数ブロック直後に `|>` を直接接続する形は現行仕様では式境界が分かれる。
+    - `|> <i64> cast` は「関数値への注釈」として解釈され、戻り値注釈にはならず曖昧化する。
+  - テストは仕様に整合する形へ修正:
+    - ブロック注釈は `base` に束縛してから通常呼び出しで連結。
+    - cast は `seed` を明示変換した後に pipe で加算を実施。
+- テスト:
+  - `node nodesrc/tests.js -i tests/overload.n.md --no-tree -o /tmp/tests-overload-after-fix2.json -j 15` -> `239/239 pass`
+
+# 2026-03-04 作業メモ (フェーズD進行: stdlib の生メモリ呼び出しを `*_raw` へ段階移行)
+
+- 目的:
+  - `mem` の公開名切替前に、stdlib 側の生アロケータ呼び出しを `alloc_raw/dealloc_raw/realloc_raw` に寄せる。
+- 変更:
+  - `stdlib/alloc/collections/{btreemap,btreeset,hashmap,hashset,list,ringbuffer,stack,vec/sort}.nepl`
+  - `stdlib/alloc/{diag/error,string}.nepl`
+  - `stdlib/kp/{kpdsu,kpfenwick,kpgraph,kpprefix,kpread_core}.nepl`
+  - `stdlib/nm/{parser,html_gen}.nepl`
+  - `stdlib/platforms/wasix/tui.nepl`
+  - `stdlib/std/{env/cliarg,fs,stdio}.nepl`
+  - 上記で `alloc/dealloc/realloc` の生呼び出しを `*_raw` に置換（`core/mem` の公開名依存を分離）。
+- 切り分け:
+  - 一括置換後、`tests/capacity_stack.n.md::doctest#3` で OOB を再現。
+  - 原因切り分けで `vec.nepl` の `realloc_raw` 置換時のみ再現することを確認したため、`vec.nepl` 本体は現時点では `realloc` 呼び出しを維持して回避。
+  - この差分は `todo.md` に未解決課題として追記。
+- テスト:
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-raw-migration-wide2.json -j 15` -> `725/725 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-raw-migration-wide.json -j 15` -> `262/262 pass`
+- 状況:
+  - stdlib の大部分は `*_raw` 呼び出しへ移行済み。
+  - 残件は `vec.nepl` の `realloc_raw` 移行に伴う OOB 原因の根本修正。
+
+# 2026-03-04 作業メモ (フェーズD進行: `kpread/kpwrite` の生メモリ呼び出しを `*_raw` へ移行)
+
+- 目的:
+  - `core/mem` の `*_raw` 分離に合わせ、`kpread/kpwrite` 側の生アロケータ呼び出しを明示化する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - 文字列トークン生成時の確保を `alloc` から `alloc_raw` へ変更。
+  - `stdlib/kp/kpwrite.nepl`
+    - writer 初期化/解放の `alloc`/`dealloc` 呼び出しを `alloc_raw`/`dealloc_raw` へ変更。
+    - ドキュメントコメントの文言を実装に合わせて調整（「ヒープ確保なし」）。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-mem-raw-callsite-migration.json -j 15` -> `229/229 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-after-kp-memraw-migration-full.json -j 15` -> `725/725 pass`
+- 状況:
+  - `mem` の生アロケータ利用箇所は `kpread/kpwrite` で `*_raw` へ追従済み。
+  - 次段は `alloc/realloc/dealloc` 公開名を Result/Option 安全APIへ切り替える準備として、残り呼び出し箇所を段階移行する。
+
+# 2026-03-04 作業メモ (フェーズD進行: `core/mem` に `*_raw` 隔離を導入)
+
+- 目的:
+  - 生ポインタAPIを段階的に分離し、次段の安全API標準名化に備える。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - 生API本体を `alloc_raw` / `realloc_raw` / `dealloc_raw` へ改名。
+    - `alloc` / `realloc` / `dealloc` は `*_raw` への委譲エイリアスへ変更。
+    - `alloc_result` / `realloc_result` / `dealloc_result` と `alloc_ptr` 系は `*_raw` を直接呼ぶように変更。
+- テスト:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety-after-raw-alias.json -j 15` -> `213/213 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-mem-raw-alias.json -j 15` -> `725/725 pass`
+- 状況:
+  - `mem` 側で「生API本体」と「公開名」を分離できた。
+  - 次段は `alloc/realloc/dealloc` 公開名を安全APIへ切り替える際の呼び出し側移行（stdlib/tests/tutorials）に着手できる状態。
+
+# 2026-03-04 作業メモ (フェーズE前進: `mem_result` 系APIの回帰テスト追加)
+
+- 目的:
+  - `core/mem` の `alloc_result/realloc_result/dealloc_result` 命名変更をテストで固定する。
+- 変更:
+  - `tests/memory_safety.n.md`
+    - `alloc_result/dealloc_result` の正常系テストを追加。
+    - `dealloc_result` の無効引数 `Err` 返却テストを追加。
+- テスト:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety-after-result-rename.json -j 15` -> `213/213 pass`
+- 状況:
+  - `core/mem` の `_safe` 命名除去分について、命名変更後の最小回帰を固定した。
+
+# 2026-03-04 作業メモ (フェーズD進行: `core/mem` の `_safe` 命名除去)
+
+- 目的:
+  - `core/mem` の安全ラッパAPIから `_safe` 接尾辞を除去し、命名規約を次段移行しやすい形へ揃える。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `alloc_safe` -> `alloc_result`
+    - `realloc_safe` -> `realloc_result`
+    - `dealloc_safe` -> `dealloc_result`
+    - 関連ドキュメントコメント内の関数名・注意事項を更新。
+  - `todo.md`
+    - フェーズDの文言を、`_safe` 統一方針から「`_safe` 接尾辞廃止＋安全API標準名化」へ更新。
+    - `move/effect` 反映項目を、`mem` 側と `kpread/kpwrite` 側の残件に分割して明記。
+- テスト:
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-after-mem-safe-rename.json -j 15` -> `723/723 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-mem-safe-rename.json -j 15` -> `262/262 pass`
+- 状況:
+  - `_safe` 命名除去は `core/mem` で着手済み。
+  - 次段は API 本体を Result/Option 標準名へ寄せるため、`alloc/realloc/dealloc` の生ポインタAPI整理（`*_raw` 隔離）に進む。
+
+# 2026-03-04 作業メモ (フェーズD進行: kpread/kpwrite の `_raw` 名整理完了)
+
+- 目的:
+  - `kpread/kpwrite` で残っていた `_raw` 接尾辞の公開名を整理し、通常API名へ統一する。
+  - 変更後の全体回帰を `tests + stdlib + tutorials` で確認する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_raw` を `scanner_new_i32` へ変更。
+    - `scanner_skip_ws_raw` / `scanner_is_eof_raw` / `scanner_skip_token_raw` / `scanner_read_*_raw` を `scanner_*` へ統一。
+    - ドキュメントコメント中の関数名記述も実体に合わせて更新。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_raw` を `writer_new_i32` へ変更。
+    - `writer_write_*_raw` / `writer_writeln_raw` / `writer_flush_raw` / `writer_free_raw` を `writer_*` へ統一。
+    - ドキュメントコメント中の関数名記述も実体に合わせて更新。
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl --no-stdlib --no-tree -o /tmp/tests-kpread-kpwrite-no-raw.json -j 15` -> `5/5 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-full-after-kp-overload-unify.json -j 15` -> `781/781 pass`
+- 状況:
+  - `kpread/kpwrite` から `_raw` 接尾辞は解消済み。
+  - `todo.md` の `_safe/_raw` 最終整理は `mem.nepl` 側（`alloc_safe/realloc_safe/dealloc_safe`）が残件。
+
+# 2026-03-04 作業メモ (フェーズD進行: Scanner/Writer API一本化とハンドル露出除去)
+
+- 目的:
+  - `kpread/kpwrite` の公開APIから `scanner_handle/writer_handle` を除去し、`Scanner`/`Writer` 型APIへ一本化する。
+  - `Scanner` 呼び出しが move で破綻する根本原因（コンパイラの非Copy特例）を上流で修正する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - 生ハンドル実装を `*_raw` 名へ分離。
+    - 公開関数は `Scanner` 引数の通常名（`scanner_read_i32` など）に統一。
+    - `scanner_handle` 相当の公開関数を削除し、内部でのみ `mem_ptr_addr get sc "raw"` を使用。
+  - `stdlib/kp/kpwrite.nepl`
+    - 生ハンドル実装を `*_raw` 名へ分離。
+    - 公開関数は `Writer` 引数の通常名（`writer_write_i32` など）に統一。
+    - `writer_handle` 相当の公開関数を削除し、内部でのみ `mem_ptr_addr get w "raw"` を使用。
+  - 依存箇所の移行:
+    - `tests/kp.n.md`, `tests/kp_i64.n.md`, `tests/stdin.n.md`
+    - `tutorials/getting_started/22_*.n.md`, `24_*.n.md`, `25_*.n.md`, `27_*.n.md`
+    - `examples/kp_fizzbuzz.nepl`
+    - `stdlib/kp/kpgraph.nepl`（`dense_graph_read_undirected_1indexed` を `Scanner` 受け取りへ変更）
+  - 上流修正:
+    - `nepl-core/src/types.rs` の明示非Copy判定から `Scanner` を除外（`RegionToken`/`Writer` は維持）。
+- テスト:
+  - `NO_COLOR=false trunk build` -> pass
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpgraph.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -i examples/kp_fizzbuzz.nepl --no-tree -o /tmp/tests-kp-api-unify.json -j 15` -> `231/231 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-full-after-kp-api-unify.json -j 15` -> `781/781 pass`
+- 状況:
+  - `kpread/kpwrite` の公開APIは `Scanner`/`Writer` 型ベースに揃った。
+  - 次段は `todo.md` フェーズDの残件（`_safe` 廃止と `_raw` 最終削除、trait 境界導入）を進める。
+
 # 2026-03-04 作業メモ (フェーズD前進: ptr安全APIの _safe 依存切り離し)
 
 - 目的:
@@ -5572,3 +6326,125 @@
   - `node nodesrc/tests.js -i stdlib/kp/kpgraph.nepl -o /tmp/kpgraph_focus.json -j 16` -> `223/223 pass`
   - `node nodesrc/tests.js -i tests/math.n.md -i tests/shadowing.n.md -o /tmp/math_shadow_after_fix.json -j 16` -> `254/254 pass`
   - `node nodesrc/tests.js -i tests -o /tmp/tests-current.json -j 16` -> `718/718 pass`
+# 2026-03-04 作業メモ (フェーズD進行: kpread/kpwrite の i32 公開オーバーロード分離)
+
+- 目的:
+  - `scanner_read_i32(sc_handle: i32)` / `writer_write_i32(w_handle: i32, ...)` の公開面露出を縮小し、利用者が `Scanner` / `Writer` を使う設計に統一する。
+- 根本原因:
+  - 同名で `i32` 受け取り版と `Scanner/Writer` 版を公開していると、安全型APIへ移行しても生ハンドル経路へ簡単に戻れてしまい、設計の一貫性が崩れる。
+  - 既存のオーバーロード解決は動作していても、公開面に unsafe 経路が残ること自体が再発要因になる。
+- 修正:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_*` の `i32` 受け取り実装を `scanner_*_handle` へ改名。
+    - 公開 `scanner_*` (`Scanner` 受け取り) から `*_handle` を呼ぶ構成へ変更。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_*` の `i32` 受け取り実装を `writer_*_handle` へ改名。
+    - 公開 `writer_*` (`Writer` 受け取り) から `*_handle` を呼ぶ構成へ変更。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -i examples/kp_fizzbuzz.nepl --no-tree -o /tmp/tests-kp-handle-split.json -j 15` -> `230/230 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kp-handle-split.json -j 15` -> `729/729 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kp-handle-split.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread/kpwrite` の公開名は `Scanner/Writer` 版を中心に整理された。
+  - 次段で `core/mem` 側の `*_raw` 段階縮退（`Result` 一本化）を進める。
+# 2026-03-04 作業メモ (フェーズD進行: kpread/kpwrite の raw 呼び出し除去)
+
+- 目的:
+  - `kpread/kpwrite` 実装内部に残っていた `alloc_raw/dealloc_raw` 直呼びを `Result` 系APIへ寄せ、失敗時挙動を型で扱えるようにする。
+- 根本原因:
+  - `scanner_read_token` は `alloc_raw` 失敗時（0返却）を考慮しておらず、ヘッダ書き込みで未定義動作になり得た。
+  - `writer_free` は `dealloc_raw` 直呼びで、解放失敗を吸収する一貫した経路がなかった。
+- 修正:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_read_token_handle` の文字列確保を `alloc` + `Result` 分岐へ変更。
+    - 確保失敗時はカーソルだけ進めて `""` を返す動作に統一。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_free_handle` の解放を `writer_try_free` 経由へ変更（`dealloc` の `Err` 吸収）。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/stdin.n.md -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -i examples/kp_fizzbuzz.nepl --no-tree -o /tmp/tests-kp-safe-mem-no-raw.json -j 15` -> `230/230 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-kp-no-raw.json -j 15` -> `729/729 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-kp-no-raw.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kpread/kpwrite` から `alloc_raw/dealloc_raw/realloc_raw` の直接使用は除去済み。
+  - 次段は `core/mem` 側で `*_raw` の公開縮退方針（完全削除タイミング）を整理する。
+# 2026-03-04 作業メモ (フェーズD進行: tests/tutorials の alloc_safe 化)
+
+- 目的:
+  - `core/mem` の安全API標準化方針に合わせ、`tests/tutorials` での `alloc_raw/dealloc_raw` 直接使用を段階的に削減する。
+- 事前棚卸し:
+  - `rg` で repo 全体の `alloc_raw/dealloc_raw/realloc_raw` 呼び出しを分類し、`nm/std/collections` に広範囲の残存があることを確認。
+  - 今回は影響が大きく回帰しやすい `tests/kp.n.md` と `tutorials/getting_started/{23,25,26}` を先行移行対象に選定。
+- 修正:
+  - `tests/kp.n.md`
+    - `alloc_raw/dealloc_raw` を `unwrap_ok alloc/dealloc` へ置換。
+    - 必要なスニペットに `#import "core/result" as *` を追加。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+  - `tutorials/getting_started/26_competitive_graph_bfs.n.md`
+    - 同様に `alloc_raw/dealloc_raw` を `unwrap_ok alloc/dealloc` へ置換し、`core/result` import を追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/26_competitive_graph_bfs.n.md --no-tree -o /tmp/tests-safe-alloc-docs-scope.json -j 15` -> `217/217 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-current-full-after-safe-alloc-docs.json -j 15` -> `729/729 pass`
+  - `node nodesrc/tests.js -i tutorials --no-tree -o /tmp/tests-tutorials-after-safe-alloc-docs.json -j 15` -> `262/262 pass`
+- 状況:
+  - `kp` 系テスト/チュートリアルの主要サンプルは安全API経路へ移行済み。
+  - 次段は棚卸し済み残件（`stdlib/std`, `stdlib/nm`, `stdlib/alloc/collections`）を上流影響の小さい順に移行する。
+
+# 2026-03-04 作業メモ (move_check: 一時借用の寿命誤判定を根本修正)
+
+- 目的:
+  - `stdlib` doctest で発生していた `D3051 cannot move out of shared borrowed value` / `D3053 use of moved value` の連鎖を、場当たり対応ではなく move_check の借用寿命モデル修正で解消する。
+- 根本原因:
+  - `passes/move_check.rs` が `#intrinsic load/store` のアドレス評価を永続借用として扱っていた。
+  - `get`/`load` のような読み取りで生成される借用は式評価中のみ有効なはずだが、関数末尾まで `BorrowedShared` が残り、後続の同一値利用を誤って拒否していた。
+- 修正:
+  - `nepl-core/src/passes/move_check.rs`
+    - `check_temporary_borrow` を追加。
+    - `#intrinsic load/store` のアドレス評価を永続借用ではなく一時借用として検証するよう変更。
+    - 永続借用状態更新が必要な `AddrOf` は従来どおり `check_borrow` を使用。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/move_check.n.md -i tests/kp.n.md -i tests/kp_i64.n.md --no-tree -o /tmp/tests-copy-move-targeted-after-temp-borrow.json -j 15` -> `245/245 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-temp-borrow-fix.json -j 15` -> `799/799 pass`
+- 補足:
+  - 「copy 情報のハードコード削減」は継続課題。`TypeCtx::is_copy` の全面移行は move/effect 設計と同時に段階実施する（仕様書と todo の順序を優先）。
+# 2026-03-04 作業メモ (trait 設計の再確認と上流修正)
+
+- 目的:
+  - `plan.md` と `doc/move_effect_spec.md` に整合する形で、trait 実装整合の判定を安定化する。
+  - Rust/Haskell の設計論点（契約、制約、coherence）を NEPLg2 向けに整理し、実装方針を固定する。
+
+- 実施:
+  - `nepl-core/src/typecheck.rs`
+    - impl メソッド署名の trait 整合判定を文字列比較から構造型同値（`ctx.same_type`）へ変更。
+  - `doc/trait_system_design.md` を新規作成。
+    - NEPLg2 における trait の役割（interface/type-class/メモリ能力）を定義。
+    - coherence、オーバーロード整合、ハードコード最小化方針、拡張順序を明文化。
+  - `todo.md`
+    - フェーズ `B2`（trait 設計の実装反映）を追加。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-trait-design-targeted.json -j 15` -> `276/276 pass`
+
+- 差分認識:
+  - 依然として `Copy/Clone` 能力接続には最小限の trait 名参照が残っている。
+  - 次段で `todo.md` フェーズB2に従い、能力テーブル化して名前分岐を縮小する。
+
+# 2026-03-04 作業メモ (trait能力判定の集約)
+
+- 目的:
+  - `Copy/Clone` の判定分岐を局所化し、`typecheck.rs` 全体に散在していた文字列比較を集約する。
+
+- 実施:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitSemantics` を追加し、trait 宣言から `copy_trait_name` / `clone_trait_name` を検出する流れへ変更。
+    - `Copy` / `Clone` 参照箇所（impl 収集、clone 前提検査、reject 適用、final impl 生成）を `trait_semantics` 経由へ統一。
+    - 直接の `Some(\"Copy\")` / `Some(\"Clone\")` 比較を除去。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-trait-semantics-targeted.json -j 15` -> `276/276 pass`
+
+- 次段:
+  - `todo.md` フェーズB2の残件として、能力判定の外部定義化（コンパイラ内部固定名のさらなる縮小）を設計する。

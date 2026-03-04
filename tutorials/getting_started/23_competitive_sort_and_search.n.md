@@ -40,6 +40,7 @@ stdout: "1 1 4\n"
 | #target wasi
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "core/mem" as *
 #import "std/stdio" as *
 
@@ -61,7 +62,7 @@ fn lower_bound_i32 <(i32,i32,i32)*>i32> (data, len, x):
 |
 fn main <()*>()> ():
     let len <i32> 4;
-    let data <i32> alloc mul len 4;
+    let data <i32> unwrap_ok alloc mul len 4;
     store_i32 add data 0 1;
     store_i32 add data 4 3;
     store_i32 add data 8 3;
@@ -73,7 +74,7 @@ fn main <()*>()> ():
     print " ";
     println_i32 lower_bound_i32 data len 8;
 
-    dealloc data mul len 4;
+    unwrap_ok dealloc data mul len 4;
 ```
 
 ## 二分探索版 `lower_bound`（本番向け）
@@ -89,6 +90,7 @@ stdout: "1 1 4\n"
 | #target wasi
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "core/mem" as *
 #import "std/stdio" as *
 
@@ -109,7 +111,7 @@ fn lower_bound_i32_bin <(i32,i32,i32)*>i32> (data, len, x):
 |
 fn main <()*>()> ():
     let len <i32> 4;
-    let data <i32> alloc mul len 4;
+    let data <i32> unwrap_ok alloc mul len 4;
     store_i32 add data 0 1;
     store_i32 add data 4 3;
     store_i32 add data 8 3;
@@ -121,5 +123,5 @@ fn main <()*>()> ():
     print " ";
     println_i32 lower_bound_i32_bin data len 8;
 
-    dealloc data mul len 4
+    unwrap_ok dealloc data mul len 4
 ```

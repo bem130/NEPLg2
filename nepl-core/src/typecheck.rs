@@ -14,6 +14,7 @@ use crate::builtins::BuiltinKind;
 use crate::compiler::{BuildProfile, CompileTarget};
 use crate::diagnostic::Diagnostic;
 use crate::diagnostic_ids::DiagnosticId;
+use crate::effects::{intrinsic_effect, raw_body_effect};
 use crate::hir::*;
 use crate::span::Span;
 use crate::types::{EnumVariantInfo, TypeCtx, TypeId, TypeKind};
@@ -91,6 +92,39 @@ struct TraitInfo {
     span: Span,
 }
 
+#[derive(Debug, Clone, Default)]
+struct TraitSemantics {
+    copy_trait_name: Option<String>,
+    clone_trait_name: Option<String>,
+}
+
+impl TraitSemantics {
+    fn detect(traits: &BTreeMap<String, TraitInfo>, ctx: &TypeCtx) -> Self {
+        let copy_trait_name =
+            detect_capability_trait(traits, ctx, "Copy", "copy_mark");
+        let clone_trait_name =
+            detect_capability_trait(traits, ctx, "Clone", "clone");
+        Self {
+            copy_trait_name,
+            clone_trait_name,
+        }
+    }
+
+    fn is_copy_trait(&self, trait_name: Option<&str>) -> bool {
+        match (&self.copy_trait_name, trait_name) {
+            (Some(expected), Some(actual)) => expected == actual,
+            _ => false,
+        }
+    }
+
+    fn is_clone_trait(&self, trait_name: Option<&str>) -> bool {
+        match (&self.clone_trait_name, trait_name) {
+            (Some(expected), Some(actual)) => expected == actual,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct ImplInfo {
     doc: Option<String>,
@@ -103,6 +137,50 @@ struct ImplInfo {
 enum FieldIdx {
     Index(usize),
     Name(String),
+}
+
+fn detect_capability_trait(
+    traits: &BTreeMap<String, TraitInfo>,
+    ctx: &TypeCtx,
+    preferred_trait_name: &str,
+    required_method_name: &str,
+) -> Option<String> {
+    if let Some(info) = traits.get(preferred_trait_name) {
+        if trait_has_unary_self_to_self_method(info, ctx, required_method_name) {
+            return Some(preferred_trait_name.to_string());
+        }
+    }
+    for (name, info) in traits {
+        if trait_has_unary_self_to_self_method(info, ctx, required_method_name) {
+            return Some(name.clone());
+        }
+    }
+    None
+}
+
+fn trait_has_unary_self_to_self_method(
+    info: &TraitInfo,
+    ctx: &TypeCtx,
+    method_name: &str,
+) -> bool {
+    let Some(sig) = info.methods.get(method_name).copied() else {
+        return false;
+    };
+    let resolved = ctx.resolve_id(sig);
+    match ctx.get(resolved) {
+        TypeKind::Function {
+            params,
+            result,
+            type_params,
+            ..
+        } => {
+            type_params.is_empty()
+                && params.len() == 1
+                && ctx.same_type(params[0], info.self_ty)
+                && ctx.same_type(result, info.self_ty)
+        }
+        _ => false,
+    }
 }
 
 fn collect_type_params(
@@ -121,10 +199,10 @@ fn collect_type_params(
         let mut bounds = Vec::new();
         for b in &p.bounds {
             if !traits.contains_key(b) {
-                diags.push(Diagnostic::error(
-                    format!("unknown trait bound '{}'", b),
-                    p.name.span,
-                ));
+                diags.push(
+                    Diagnostic::error(format!("unknown trait bound '{}'", b), p.name.span)
+                        .with_id(DiagnosticId::TypeUnknownTraitBound),
+                );
             } else {
                 bounds.push(b.clone());
             }
@@ -152,8 +230,9 @@ pub fn typecheck(
     let mut structs: BTreeMap<String, StructInfo> = BTreeMap::new();
     let mut traits: BTreeMap<String, TraitInfo> = BTreeMap::new();
     let mut impls: Vec<ImplInfo> = Vec::new();
-    let mut rejected_copy_targets: BTreeSet<TypeId> = BTreeSet::new();
+    let mut rejected_copy_targets: Vec<TypeId> = Vec::new();
     let mut pending_copy_clone_checks: Vec<(TypeId, Span)> = Vec::new();
+    let mut duplicate_impl_spans: BTreeSet<(u32, u32, u32)> = BTreeSet::new();
 
     let mut entry = None;
     let mut externs: Vec<HirExtern> = Vec::new();
@@ -193,10 +272,10 @@ pub fn typecheck(
             if matches!(target, CompileTarget::Wasm | CompileTarget::Llvm)
                 && m == "wasi_snapshot_preview1"
             {
-                diagnostics.push(Diagnostic::error(
-                    "WASI import is only allowed for #target wasi",
-                    *span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("WASI import is only allowed for #target wasi", *span)
+                        .with_id(DiagnosticId::TypeWasiImportTargetMismatch),
+                );
                 return;
             }
             let ty = type_from_expr(&mut ctx, &mut label_env, signature);
@@ -234,10 +313,10 @@ pub fn typecheck(
                     span: *span,
                 });
             } else {
-                diagnostics.push(Diagnostic::error(
-                    "extern signature must be a function type",
-                    *span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("extern signature must be a function type", *span)
+                        .with_id(DiagnosticId::TypeExternSignatureMustBeFunction),
+                );
             }
         }
     };
@@ -291,18 +370,21 @@ pub fn typecheck(
                     continue;
                 }
                 if env.lookup_any_defined(&e.name.name).is_some() || structs.contains_key(&e.name.name) {
-                    diagnostics.push(Diagnostic::error(
-                        "name already used by another item",
-                        e.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("name already used by another item", e.name.span)
+                            .with_id(DiagnosticId::TypeItemNameConflict),
+                    );
                     continue;
                 }
                 for p in &e.type_params {
                     if !p.bounds.is_empty() {
-                        diagnostics.push(Diagnostic::error(
-                            "enum type parameter bounds are not supported yet",
-                            p.name.span,
-                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                "enum type parameter bounds are not supported yet",
+                                p.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeEnumTypeParamBoundsUnsupported),
+                        );
                     }
                 }
                 let mut e_labels = LabelEnv::new();
@@ -400,18 +482,21 @@ pub fn typecheck(
                     continue;
                 }
                 if env.lookup_any_defined(&s.name.name).is_some() || enums.contains_key(&s.name.name) {
-                    diagnostics.push(Diagnostic::error(
-                        "name already used by another item",
-                        s.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("name already used by another item", s.name.span)
+                            .with_id(DiagnosticId::TypeItemNameConflict),
+                    );
                     continue;
                 }
                 for p in &s.type_params {
                     if !p.bounds.is_empty() {
-                        diagnostics.push(Diagnostic::error(
-                            "struct type parameter bounds are not supported yet",
-                            p.name.span,
-                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                "struct type parameter bounds are not supported yet",
+                                p.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeStructTypeParamBoundsUnsupported),
+                        );
                     }
                 }
                 let mut s_labels = LabelEnv::new();
@@ -480,20 +565,26 @@ pub fn typecheck(
                 let (tps, _bounds_vec, _bounds_map) =
                     collect_type_params(&mut ctx, &mut f_labels, &t.type_params, &traits, &mut diagnostics);
                 if !t.type_params.is_empty() {
-                    diagnostics.push(Diagnostic::error(
-                        "trait type parameters are not supported yet",
-                        t.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(
+                            "trait type parameters are not supported yet",
+                            t.name.span,
+                        )
+                        .with_id(DiagnosticId::TypeTraitTypeParamsUnsupported),
+                    );
                 }
                 let self_ty = ctx.fresh_var(Some(String::from("Self")));
                 f_labels.insert(String::from("Self"), self_ty);
                 let mut methods = BTreeMap::new();
                 for m in &t.methods {
                     if !m.type_params.is_empty() {
-                        diagnostics.push(Diagnostic::error(
-                            "trait methods cannot have type parameters yet",
-                            m.name.span,
-                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                "trait methods cannot have type parameters yet",
+                                m.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeTraitMethodTypeParamsUnsupported),
+                        );
                         continue;
                     }
                     let sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
@@ -550,6 +641,8 @@ pub fn typecheck(
         }
     }
 
+    let trait_semantics = TraitSemantics::detect(&traits, &ctx);
+
     // Process Impls separately or in the same loop?
     // Doing it here simplifies pending_if logic.
     pending_if = None;
@@ -567,17 +660,17 @@ pub fn typecheck(
         }
         if let Stmt::Impl(i) = item {
             if i.trait_name.is_none() {
-                diagnostics.push(Diagnostic::error(
-                    "inherent impl is not supported yet",
-                    i.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("inherent impl is not supported yet", i.span)
+                        .with_id(DiagnosticId::TypeInherentImplUnsupported),
+                );
                 continue;
             }
             if !i.type_params.is_empty() {
-                diagnostics.push(Diagnostic::error(
-                    "impl type parameters are not supported yet",
-                    i.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("impl type parameters are not supported yet", i.span)
+                        .with_id(DiagnosticId::TypeImplTypeParamsUnsupported),
+                );
                 continue;
             }
             let mut f_labels = LabelEnv::new();
@@ -588,22 +681,22 @@ pub fn typecheck(
             let trait_name = i.trait_name.as_ref().map(|tn| tn.name.clone());
             if let Some(tn) = &trait_name {
                 if !traits.contains_key(tn) {
-                    diagnostics.push(Diagnostic::error(
-                        format!("unknown trait '{}'", tn),
-                        i.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(format!("unknown trait '{}'", tn), i.span)
+                            .with_id(DiagnosticId::TypeUnknownTrait),
+                    );
                     continue;
                 }
             }
             if type_contains_unbound_var(&ctx, target_ty) {
-                diagnostics.push(Diagnostic::error(
-                    "impl target type must be concrete",
-                    i.target_ty.span(),
-                ));
+                diagnostics.push(
+                    Diagnostic::error("impl target type must be concrete", i.target_ty.span())
+                        .with_id(DiagnosticId::TypeImplTargetMustBeConcrete),
+                );
                 continue;
             }
-            if trait_name.as_deref() == Some("Copy") {
-                if !ctx.is_copy(target_ty) {
+            if trait_semantics.is_copy_trait(trait_name.as_deref()) {
+                if !ctx.is_copy_eligible(target_ty) {
                     diagnostics.push(
                         Diagnostic::error(
                             "copy impl target type is not copyable",
@@ -611,10 +704,24 @@ pub fn typecheck(
                         )
                         .with_id(DiagnosticId::TypeCopyImplTargetNotCopy),
                     );
-                    rejected_copy_targets.insert(ctx.resolve_id(target_ty));
+                    push_unique_type(&ctx, &mut rejected_copy_targets, target_ty);
                     continue;
                 }
                 pending_copy_clone_checks.push((target_ty, i.span));
+            }
+            if impls.iter().any(|imp| {
+                imp.trait_name.as_deref() == trait_name.as_deref()
+                    && ctx.same_type(imp.target_ty, target_ty)
+            }) {
+                diagnostics.push(
+                    Diagnostic::error(
+                        "duplicate impl for same trait and target type",
+                        i.span,
+                    )
+                    .with_id(DiagnosticId::TypeDuplicateImplForTraitTarget),
+                );
+                duplicate_impl_spans.insert((i.span.file_id.0, i.span.start, i.span.end));
+                continue;
             }
 
             let mut methods = BTreeMap::new();
@@ -631,10 +738,9 @@ pub fn typecheck(
         }
     }
     for (target_ty, span) in pending_copy_clone_checks {
-        let resolved_target = ctx.resolve_id(target_ty);
         let has_clone_impl = impls.iter().any(|imp| {
-            imp.trait_name.as_deref() == Some("Clone")
-                && ctx.resolve_id(imp.target_ty) == resolved_target
+            trait_semantics.is_clone_trait(imp.trait_name.as_deref())
+                && ctx.same_type(imp.target_ty, target_ty)
         });
         if !has_clone_impl {
             diagnostics.push(
@@ -644,15 +750,20 @@ pub fn typecheck(
                 )
                 .with_id(DiagnosticId::TypeCopyImplRequiresClone),
             );
-            rejected_copy_targets.insert(resolved_target);
+            push_unique_type(&ctx, &mut rejected_copy_targets, target_ty);
         }
     }
     impls.retain(|imp| {
-        if imp.trait_name.as_deref() != Some("Copy") {
+        if !trait_semantics.is_copy_trait(imp.trait_name.as_deref()) {
             return true;
         }
-        !rejected_copy_targets.contains(&ctx.resolve_id(imp.target_ty))
+        !contains_same_type(&ctx, &rejected_copy_targets, imp.target_ty)
     });
+    for imp in impls.iter() {
+        if trait_semantics.is_copy_trait(imp.trait_name.as_deref()) {
+            ctx.register_copy_impl_target(imp.target_ty);
+        }
+    }
     for (name, info) in structs.iter() {
         let func_ty = ctx.function(
             info.type_params.clone(),
@@ -725,17 +836,17 @@ pub fn typecheck(
             } = ctx.get(ty)
             {
                 if env.lookup_value(&f.name.name).is_some() {
-                    diagnostics.push(Diagnostic::error(
-                        "name already used by another item",
-                        f.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("name already used by another item", f.name.span)
+                            .with_id(DiagnosticId::TypeItemNameConflict),
+                    );
                     continue;
                 }
                 if enums.contains_key(&f.name.name) || structs.contains_key(&f.name.name) {
-                    diagnostics.push(Diagnostic::error(
-                        "name already used by another item",
-                        f.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("name already used by another item", f.name.span)
+                            .with_id(DiagnosticId::TypeItemNameConflict),
+                    );
                     continue;
                 }
                 if crate::log::is_verbose() {
@@ -761,18 +872,22 @@ pub fn typecheck(
                         if let Some(conflict) =
                             find_nonshadow_same_signature_func(&env, &f.name.name, ty, &ctx)
                         {
-                            diagnostics.push(Diagnostic::error(
-                                format!(
-                                    "cannot shadow non-shadowable function '{}' with same signature",
-                                    f.name.name
-                                ),
-                                f.name.span,
-                            ));
+                            diagnostics.push(
+                                Diagnostic::error(
+                                    format!(
+                                        "cannot shadow non-shadowable function '{}' with same signature",
+                                        f.name.name
+                                    ),
+                                    f.name.span,
+                                )
+                                .with_id(DiagnosticId::TypeNoShadowViolation),
+                            );
                             diagnostics.push(
                                 Diagnostic::error(
                                     "non-shadowable function declaration is here",
                                     conflict.span,
                                 )
+                                .with_id(DiagnosticId::TypeNoShadowViolation)
                                 .with_secondary_label(
                                     f.name.span,
                                     Some("shadow attempt".into()),
@@ -782,15 +897,19 @@ pub fn typecheck(
                         }
                         // 関数同名はオーバーロードとして扱う（異なるシグネチャは許可）。
                     } else {
-                    diagnostics.push(Diagnostic::error(
-                        format!(
-                            "cannot shadow non-shadowable symbol '{}'",
-                            f.name.name
-                        ),
-                        f.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(
+                            format!(
+                                "cannot shadow non-shadowable symbol '{}'",
+                                f.name.name
+                            ),
+                            f.name.span,
+                        )
+                        .with_id(DiagnosticId::TypeNoShadowViolation),
+                    );
                     diagnostics.push(
                         Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                            .with_id(DiagnosticId::TypeNoShadowViolation)
                             .with_secondary_label(f.name.span, Some("shadow attempt".into())),
                     );
                     continue;
@@ -803,13 +922,16 @@ pub fn typecheck(
                         .any(|b| !is_callable_binding(b))
                         || find_same_signature_func(&env, &f.name.name, ty, &ctx).is_some())
                 {
-                    diagnostics.push(Diagnostic::error(
-                        format!(
-                            "noshadow declaration '{}' conflicts with existing symbol",
-                            f.name.name
-                        ),
-                        f.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(
+                            format!(
+                                "noshadow declaration '{}' conflicts with existing symbol",
+                                f.name.name
+                            ),
+                            f.name.span,
+                        )
+                        .with_id(DiagnosticId::TypeNoShadowConflict),
+                    );
                     continue;
                 }
                 env.remove_duplicate_func(&f.name.name, ty, &ctx);
@@ -832,28 +954,28 @@ pub fn typecheck(
                     },
                 });
             } else {
-                diagnostics.push(Diagnostic::error(
-                    "function signature must be a function type",
-                    f.name.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("function signature must be a function type", f.name.span)
+                        .with_id(DiagnosticId::TypeFunctionSignatureMustBeFunction),
+                );
             }
         }
     }
 
     for alias in &fn_aliases {
         if enums.contains_key(&alias.name.name) || structs.contains_key(&alias.name.name) {
-            diagnostics.push(Diagnostic::error(
-                "name already used by another item",
-                alias.name.span,
-            ));
+            diagnostics.push(
+                Diagnostic::error("name already used by another item", alias.name.span)
+                    .with_id(DiagnosticId::TypeItemNameConflict),
+            );
             continue;
         }
         let targets = env.lookup_all_callables(&alias.target.name);
         if targets.is_empty() {
-            diagnostics.push(Diagnostic::error(
-                "alias target not found",
-                alias.target.span,
-            ));
+            diagnostics.push(
+                Diagnostic::error("alias target not found", alias.target.span)
+                    .with_id(DiagnosticId::TypeAliasTargetNotFound),
+            );
             continue;
         }
         let mut target_infos = Vec::new();
@@ -895,10 +1017,10 @@ pub fn typecheck(
                 );
             }
             if env.lookup_value(&alias.name.name).is_some() {
-                diagnostics.push(Diagnostic::error(
-                    "name already used by another item",
-                    alias.name.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("name already used by another item", alias.name.span)
+                        .with_id(DiagnosticId::TypeItemNameConflict),
+                );
                 break;
             }
             if let Some(blocked) = shadow_blocked_by_nonshadow(&env, &alias.name.name) {
@@ -906,18 +1028,22 @@ pub fn typecheck(
                     if let Some(conflict) =
                         find_nonshadow_same_signature_func(&env, &alias.name.name, ty, &ctx)
                     {
-                        diagnostics.push(Diagnostic::error(
-                            format!(
-                                "cannot shadow non-shadowable function alias '{}' with same signature",
-                                alias.name.name
-                            ),
-                            alias.name.span,
-                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                format!(
+                                    "cannot shadow non-shadowable function alias '{}' with same signature",
+                                    alias.name.name
+                                ),
+                                alias.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeNoShadowViolation),
+                        );
                         diagnostics.push(
                             Diagnostic::error(
                                 "non-shadowable function declaration is here",
                                 conflict.span,
                             )
+                            .with_id(DiagnosticId::TypeNoShadowViolation)
                             .with_secondary_label(
                                 alias.name.span,
                                 Some("shadow attempt".into()),
@@ -927,15 +1053,19 @@ pub fn typecheck(
                     }
                     // 関数同名はオーバーロードとして扱う（異なるシグネチャは許可）。
                 } else {
-                diagnostics.push(Diagnostic::error(
-                    format!(
-                        "cannot shadow non-shadowable symbol '{}'",
-                        alias.name.name
-                    ),
-                    alias.name.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error(
+                        format!(
+                            "cannot shadow non-shadowable symbol '{}'",
+                            alias.name.name
+                        ),
+                        alias.name.span,
+                    )
+                    .with_id(DiagnosticId::TypeNoShadowViolation),
+                );
                 diagnostics.push(
                     Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                        .with_id(DiagnosticId::TypeNoShadowViolation)
                         .with_secondary_label(alias.name.span, Some("shadow attempt".into())),
                 );
                 break;
@@ -948,13 +1078,16 @@ pub fn typecheck(
                     .any(|b| !is_callable_binding(b))
                     || find_same_signature_func(&env, &alias.name.name, ty, &ctx).is_some())
             {
-                diagnostics.push(Diagnostic::error(
-                    format!(
-                        "noshadow declaration '{}' conflicts with existing symbol",
-                        alias.name.name
-                    ),
-                    alias.name.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error(
+                        format!(
+                            "noshadow declaration '{}' conflicts with existing symbol",
+                            alias.name.name
+                        ),
+                        alias.name.span,
+                    )
+                    .with_id(DiagnosticId::TypeNoShadowConflict),
+                );
                 break;
             }
             env.remove_duplicate_func(&alias.name.name, ty, &ctx);
@@ -1020,10 +1153,13 @@ pub fn typecheck(
                     match matched {
                         Some(ty) => ty,
                         None => {
-                            diagnostics.push(Diagnostic::error(
-                                "function signature does not match any overload",
-                                f.name.span,
-                            ));
+                            diagnostics.push(
+                                Diagnostic::error(
+                                    "function signature does not match any overload",
+                                    f.name.span,
+                                )
+                                .with_id(DiagnosticId::TypeFunctionSignatureOverloadNotFound),
+                            );
                             continue;
                         }
                     }
@@ -1094,31 +1230,35 @@ pub fn typecheck(
             continue;
         }
         if let Stmt::Impl(i) = item {
+            let impl_key = (i.span.file_id.0, i.span.start, i.span.end);
+            if duplicate_impl_spans.contains(&impl_key) {
+                continue;
+            }
             let trait_name = match &i.trait_name {
                 Some(tn) => tn.name.clone(),
                 None => {
-                    diagnostics.push(Diagnostic::error(
-                        "inherent impl is not supported yet",
-                        i.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("inherent impl is not supported yet", i.span)
+                            .with_id(DiagnosticId::TypeInherentImplUnsupported),
+                    );
                     continue;
                 }
             };
             let trait_info = match traits.get(&trait_name) {
                 Some(info) => info,
                 None => {
-                    diagnostics.push(Diagnostic::error(
-                        format!("unknown trait '{}'", trait_name),
-                        i.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(format!("unknown trait '{}'", trait_name), i.span)
+                            .with_id(DiagnosticId::TypeUnknownTrait),
+                    );
                     continue;
                 }
             };
             if !i.type_params.is_empty() {
-                diagnostics.push(Diagnostic::error(
-                    "impl type parameters are not supported yet",
-                    i.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("impl type parameters are not supported yet", i.span)
+                        .with_id(DiagnosticId::TypeImplTypeParamsUnsupported),
+                );
                 continue;
             }
 
@@ -1128,15 +1268,14 @@ pub fn typecheck(
                 collect_type_params(&mut ctx, &mut f_labels, &i.type_params, &traits, &mut diagnostics);
             let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
             if type_contains_unbound_var(&ctx, target_ty) {
-                diagnostics.push(Diagnostic::error(
-                    "impl target type must be concrete",
-                    i.target_ty.span(),
-                ));
+                diagnostics.push(
+                    Diagnostic::error("impl target type must be concrete", i.target_ty.span())
+                        .with_id(DiagnosticId::TypeImplTargetMustBeConcrete),
+                );
                 continue;
             }
-            if trait_name == "Copy" {
-                let resolved_target = ctx.resolve_id(target_ty);
-                if rejected_copy_targets.contains(&resolved_target) {
+            if trait_semantics.is_copy_trait(Some(trait_name.as_str())) {
+                if contains_same_type(&ctx, &rejected_copy_targets, target_ty) {
                     continue;
                 }
             }
@@ -1146,26 +1285,35 @@ pub fn typecheck(
             let mut seen_methods = BTreeSet::new();
             for m in &i.methods {
                 if !seen_methods.insert(m.name.name.clone()) {
-                    diagnostics.push(Diagnostic::error(
-                        "duplicate method in impl",
-                        m.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("duplicate method in impl", m.name.span)
+                            .with_id(DiagnosticId::TypeDuplicateImplMethod),
+                    );
                     continue;
                 }
                 if !m.type_params.is_empty() {
-                    diagnostics.push(Diagnostic::error(
-                        "impl methods cannot have type parameters yet",
-                        m.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(
+                            "impl methods cannot have type parameters yet",
+                            m.name.span,
+                        )
+                        .with_id(DiagnosticId::TypeTraitMethodTypeParamsUnsupported),
+                    );
                     continue;
                 }
                 let trait_sig = match trait_info.methods.get(&m.name.name) {
                     Some(sig) => *sig,
                     None => {
-                        diagnostics.push(Diagnostic::error(
-                            format!("method '{}' not found in trait '{}'", m.name.name, trait_name),
-                            m.name.span,
-                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                format!(
+                                    "method '{}' not found in trait '{}'",
+                                    m.name.name, trait_name
+                                ),
+                                m.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeImplMethodNotFoundInTrait),
+                        );
                         continue;
                     }
                 };
@@ -1173,11 +1321,11 @@ pub fn typecheck(
                 mapping.insert(ctx.resolve_id(trait_info.self_ty), ctx.resolve_id(target_ty));
                 let expected_sig = ctx.substitute(trait_sig, &mapping);
                 let actual_sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
-                if !type_signature_matches(&ctx, expected_sig, actual_sig) {
-                    diagnostics.push(Diagnostic::error(
-                        "impl method signature does not match trait",
-                        m.name.span,
-                    ));
+                if !ctx.same_type(expected_sig, actual_sig) {
+                    diagnostics.push(
+                        Diagnostic::error("impl method signature does not match trait", m.name.span)
+                            .with_id(DiagnosticId::TypeImplMethodSignatureMismatch),
+                    );
                     continue;
                 }
                 let mut nested_functions = Vec::new();
@@ -1220,10 +1368,13 @@ pub fn typecheck(
 
             for trait_method in trait_info.methods.keys() {
                 if !seen_methods.contains(trait_method) {
-                    diagnostics.push(Diagnostic::error(
-                        format!("missing method '{}' for trait '{}'", trait_method, trait_name),
-                        i.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(
+                            format!("missing method '{}' for trait '{}'", trait_method, trait_name),
+                            i.span,
+                        )
+                        .with_id(DiagnosticId::TypeImplMissingTraitMethod),
+                    );
                 }
             }
 
@@ -1255,10 +1406,10 @@ pub fn typecheck(
         if func_symbols.len() == 1 {
             Some(func_symbols.remove(0))
         } else {
-            diagnostics.push(Diagnostic::error(
-                "entry function is missing or ambiguous",
-                Span::dummy(),
-            ));
+            diagnostics.push(
+                Diagnostic::error("entry function is missing or ambiguous", Span::dummy())
+                    .with_id(DiagnosticId::TypeEntryFunctionMissingOrAmbiguous),
+            );
             None
         }
     } else {
@@ -1322,18 +1473,18 @@ fn check_function(
             ..
         } => (params, result, effect),
         _ => {
-            diags.push(Diagnostic::error(
-                "function signature must be a function type",
-                f.name.span,
-            ));
+            diags.push(
+                Diagnostic::error("function signature must be a function type", f.name.span)
+                    .with_id(DiagnosticId::TypeFunctionSignatureMustBeFunction),
+            );
             return Err(diags);
         }
     };
     if params_ty.len() != captured_params.len() + f.params.len() {
-        diags.push(Diagnostic::error(
-            "parameter count mismatch with signature",
-            f.name.span,
-        ));
+        diags.push(
+            Diagnostic::error("parameter count mismatch with signature", f.name.span)
+                .with_id(DiagnosticId::TypeArgumentArityMismatch),
+        );
         return Err(diags);
     }
 
@@ -2030,10 +2181,9 @@ impl<'a> BlockChecker<'a> {
         if !self.is_concrete_type(ty) {
             return self.type_param_has_bound(ty, trait_name);
         }
-        let ty_name = self.ctx.type_to_string(self.ctx.resolve_id(ty));
         self.impls.iter().any(|imp| {
             imp.trait_name.as_deref() == Some(trait_name)
-                && self.ctx.type_to_string(self.ctx.resolve_id(imp.target_ty)) == ty_name
+                && self.ctx.same_type(imp.target_ty, ty)
         })
     }
 
@@ -2064,12 +2214,15 @@ impl<'a> BlockChecker<'a> {
                     if i < fields.len() {
                         Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                     } else {
-                        if emit_diagnostics {
-                            self.diagnostics.push(Diagnostic::error(
-                                format!("struct index out of bounds: {}", i),
-                                span,
-                            ));
-                        }
+                                        if emit_diagnostics {
+                                            self.diagnostics.push(
+                                                Diagnostic::error(
+                                                    format!("struct index out of bounds: {}", i),
+                                                    span,
+                                                )
+                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                            );
+                                        }
                         None
                     }
                 }
@@ -2077,12 +2230,15 @@ impl<'a> BlockChecker<'a> {
                     if let Some(i) = field_names.iter().position(|n| *n == name) {
                         Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                     } else {
-                        if emit_diagnostics {
-                            self.diagnostics.push(Diagnostic::error(
-                                format!("struct has no field {}", name),
-                                span,
-                            ));
-                        }
+                                        if emit_diagnostics {
+                                            self.diagnostics.push(
+                                                Diagnostic::error(
+                                                    format!("struct has no field {}", name),
+                                                    span,
+                                                )
+                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                            );
+                                        }
                         None
                     }
                 }
@@ -2092,12 +2248,15 @@ impl<'a> BlockChecker<'a> {
                     if i < items.len() {
                         Some((items[i], composite_field_offset_bytes(self.ctx, &items, i)))
                     } else {
-                        if emit_diagnostics {
-                            self.diagnostics.push(Diagnostic::error(
-                                format!("tuple index out of bounds: {}", i),
-                                span,
-                            ));
-                        }
+                                        if emit_diagnostics {
+                                            self.diagnostics.push(
+                                                Diagnostic::error(
+                                                    format!("tuple index out of bounds: {}", i),
+                                                    span,
+                                                )
+                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                            );
+                                        }
                         None
                     }
                 }
@@ -2107,19 +2266,25 @@ impl<'a> BlockChecker<'a> {
                             Some((items[i], composite_field_offset_bytes(self.ctx, &items, i)))
                         } else {
                             if emit_diagnostics {
-                                self.diagnostics.push(Diagnostic::error(
-                                    format!("tuple index out of bounds: {}", i),
-                                    span,
-                                ));
+                                self.diagnostics.push(
+                                    Diagnostic::error(
+                                        format!("tuple index out of bounds: {}", i),
+                                        span,
+                                    )
+                                    .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                );
                             }
                             None
                         }
                     } else {
                         if emit_diagnostics {
-                            self.diagnostics.push(Diagnostic::error(
-                                format!("invalid tuple field access: {}", name),
-                                span,
-                            ));
+                            self.diagnostics.push(
+                                Diagnostic::error(
+                                    format!("invalid tuple field access: {}", name),
+                                    span,
+                                )
+                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                            );
                         }
                         None
                     }
@@ -2151,10 +2316,13 @@ impl<'a> BlockChecker<'a> {
                                     ))
                                 } else {
                                     if emit_diagnostics {
-                                        self.diagnostics.push(Diagnostic::error(
-                                            format!("generic struct index out of bounds: {}", i),
-                                            span,
-                                        ));
+                                        self.diagnostics.push(
+                                            Diagnostic::error(
+                                                format!("generic struct index out of bounds: {}", i),
+                                                span,
+                                            )
+                                            .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                        );
                                     }
                                     None
                                 }
@@ -2167,10 +2335,13 @@ impl<'a> BlockChecker<'a> {
                                     ))
                                 } else {
                                     if emit_diagnostics {
-                                        self.diagnostics.push(Diagnostic::error(
-                                            format!("generic struct has no field {}", name),
-                                            span,
-                                        ));
+                                        self.diagnostics.push(
+                                            Diagnostic::error(
+                                                format!("generic struct has no field {}", name),
+                                                span,
+                                            )
+                                            .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                        );
                                     }
                                     None
                                 }
@@ -2199,10 +2370,13 @@ impl<'a> BlockChecker<'a> {
                                         ))
                                     } else {
                                         if emit_diagnostics {
-                                            self.diagnostics.push(Diagnostic::error(
-                                                format!("generic struct index out of bounds: {}", i),
-                                                span,
-                                            ));
+                                            self.diagnostics.push(
+                                                Diagnostic::error(
+                                                    format!("generic struct index out of bounds: {}", i),
+                                                    span,
+                                                )
+                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                            );
                                         }
                                         None
                                     }
@@ -2215,10 +2389,13 @@ impl<'a> BlockChecker<'a> {
                                         ))
                                     } else {
                                         if emit_diagnostics {
-                                            self.diagnostics.push(Diagnostic::error(
-                                                format!("generic struct has no field {}", name),
-                                                span,
-                                            ));
+                                            self.diagnostics.push(
+                                                Diagnostic::error(
+                                                    format!("generic struct has no field {}", name),
+                                                    span,
+                                                )
+                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                            );
                                         }
                                         None
                                     }
@@ -2226,16 +2403,20 @@ impl<'a> BlockChecker<'a> {
                             }
                         } else {
                             if emit_diagnostics {
-                                self.diagnostics
-                                    .push(Diagnostic::error("cannot access field on this type", span));
+                                self.diagnostics.push(
+                                    Diagnostic::error("cannot access field on this type", span)
+                                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                );
                             }
                             None
                         }
                     }
                     _ => {
                         if emit_diagnostics {
-                            self.diagnostics
-                                .push(Diagnostic::error("cannot access field on this type", span));
+                            self.diagnostics.push(
+                                Diagnostic::error("cannot access field on this type", span)
+                                    .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                            );
                         }
                         None
                     }
@@ -2251,10 +2432,13 @@ impl<'a> BlockChecker<'a> {
                                 Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                             } else {
                                 if emit_diagnostics {
-                                    self.diagnostics.push(Diagnostic::error(
-                                        format!("struct index out of bounds: {}", i),
-                                        span,
-                                    ));
+                                    self.diagnostics.push(
+                                        Diagnostic::error(
+                                            format!("struct index out of bounds: {}", i),
+                                            span,
+                                        )
+                                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                    );
                                 }
                                 None
                             }
@@ -2264,10 +2448,13 @@ impl<'a> BlockChecker<'a> {
                                 Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                             } else {
                                 if emit_diagnostics {
-                                    self.diagnostics.push(Diagnostic::error(
-                                        format!("struct has no field {}", name),
-                                        span,
-                                    ));
+                                    self.diagnostics.push(
+                                        Diagnostic::error(
+                                            format!("struct has no field {}", name),
+                                            span,
+                                        )
+                                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                                    );
                                 }
                                 None
                             }
@@ -2275,20 +2462,26 @@ impl<'a> BlockChecker<'a> {
                     }
                 } else {
                     if emit_diagnostics {
-                        self.diagnostics.push(Diagnostic::error(
-                            "cannot access field on this type",
-                            span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "cannot access field on this type",
+                                span,
+                            )
+                            .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                        );
                     }
                     None
                 }
             }
             _ => {
                 if emit_diagnostics {
-                    self.diagnostics.push(Diagnostic::error(
-                        "cannot access field on non-composite type",
-                        span,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "cannot access field on non-composite type",
+                            span,
+                        )
+                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                    );
                 }
                 None
             }
@@ -2320,24 +2513,31 @@ impl<'a> BlockChecker<'a> {
                 })) = items.first()
                 {
                     if let Some(blocked) = shadow_blocked_by_nonshadow(self.env, &name.name) {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!("cannot shadow non-shadowable symbol '{}'", name.name),
-                            name.span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                format!("cannot shadow non-shadowable symbol '{}'", name.name),
+                                name.span,
+                            )
+                            .with_id(DiagnosticId::TypeNoShadowViolation),
+                        );
                         self.diagnostics.push(
                             Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                                .with_id(DiagnosticId::TypeNoShadowViolation)
                                 .with_secondary_label(name.span, Some("shadow attempt".into())),
                         );
                         continue;
                     }
                     if *no_shadow && self.env.lookup_any(&name.name).is_some() {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!(
-                                "noshadow declaration '{}' conflicts with existing symbol",
-                                name.name
-                            ),
-                            name.span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                format!(
+                                    "noshadow declaration '{}' conflicts with existing symbol",
+                                    name.name
+                                ),
+                                name.span,
+                            )
+                            .with_id(DiagnosticId::TypeNoShadowConflict),
+                        );
                         continue;
                     }
                     let ty = self.ctx.fresh_var(None);
@@ -2388,18 +2588,22 @@ impl<'a> BlockChecker<'a> {
                                 ty,
                                 self.ctx,
                             ) {
-                                self.diagnostics.push(Diagnostic::error(
-                                    format!(
-                                        "cannot shadow non-shadowable function '{}' with same signature",
-                                        f.name.name
-                                    ),
-                                    f.name.span,
-                                ));
+                                self.diagnostics.push(
+                                    Diagnostic::error(
+                                        format!(
+                                            "cannot shadow non-shadowable function '{}' with same signature",
+                                            f.name.name
+                                        ),
+                                        f.name.span,
+                                    )
+                                    .with_id(DiagnosticId::TypeNoShadowViolation),
+                                );
                                 self.diagnostics.push(
                                     Diagnostic::error(
                                         "non-shadowable function declaration is here",
                                         conflict.span,
                                     )
+                                    .with_id(DiagnosticId::TypeNoShadowViolation)
                                     .with_secondary_label(
                                         f.name.span,
                                         Some("shadow attempt".into()),
@@ -2409,12 +2613,16 @@ impl<'a> BlockChecker<'a> {
                             }
                             // 関数同名はオーバーロードとして扱う（異なるシグネチャは許可）。
                         } else {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!("cannot shadow non-shadowable symbol '{}'", f.name.name),
-                            f.name.span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                format!("cannot shadow non-shadowable symbol '{}'", f.name.name),
+                                f.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeNoShadowViolation),
+                        );
                         self.diagnostics.push(
                             Diagnostic::error("non-shadowable declaration is here", blocked.span)
+                                .with_id(DiagnosticId::TypeNoShadowViolation)
                                 .with_secondary_label(f.name.span, Some("shadow attempt".into())),
                         );
                         continue;
@@ -2429,13 +2637,16 @@ impl<'a> BlockChecker<'a> {
                             || find_same_signature_func(self.env, &f.name.name, ty, self.ctx)
                                 .is_some())
                     {
-                        self.diagnostics.push(Diagnostic::error(
-                            format!(
-                                "noshadow declaration '{}' conflicts with existing symbol",
-                                f.name.name
-                            ),
-                            f.name.span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                format!(
+                                    "noshadow declaration '{}' conflicts with existing symbol",
+                                    f.name.name
+                                ),
+                                f.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeNoShadowConflict),
+                        );
                         continue;
                     }
                     if !captures.is_empty() {
@@ -3258,7 +3469,7 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             "type arguments are not supported for trait methods yet",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeTraitMethodTypeArgsNotSupported));
                                         return None;
                                     }
                                     if let Some(sig) = trait_info.methods.get(method_name) {
@@ -3286,7 +3497,7 @@ impl<'a> BlockChecker<'a> {
                                                 method_name, trait_name
                                             ),
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeTraitMethodNotFound));
                                         return None;
                                     }
                                 } else {
@@ -4012,7 +4223,10 @@ impl<'a> BlockChecker<'a> {
 
         if pipe_pending.is_some() {
             self.diagnostics
-                .push(Diagnostic::error("pipe has no target", expr.span));
+                .push(
+                    Diagnostic::error("pipe has no target", expr.span)
+                        .with_id(DiagnosticId::TypePipeError),
+                );
         }
 
         let leading_let = matches!(
@@ -4174,7 +4388,7 @@ impl<'a> BlockChecker<'a> {
                 self.diagnostics.push(Diagnostic::error(
                     "reduce_calls exceeded maximum iterations (possible infinite loop)",
                     Span::dummy(),
-                ));
+                ).with_id(DiagnosticId::TypeCallReductionLimitExceeded));
                 break;
             }
             dump!("reduce_calls: stack=[{}]", stack.iter().map(|e| match &e.expr.kind { HirExprKind::Var(n) => n.clone(), _ => "<expr>".to_string() }).collect::<Vec<_>>().join(","));
@@ -4352,7 +4566,7 @@ impl<'a> BlockChecker<'a> {
                 self.diagnostics.push(Diagnostic::error(
                     "reduce_calls_guarded exceeded maximum iterations (possible infinite loop)",
                     Span::dummy(),
-                ));
+                ).with_id(DiagnosticId::TypeCallReductionLimitExceeded));
                 break;
             }
             dump!("reduce_calls_guarded: stack=[{}]", stack.iter().map(|e| match &e.expr.kind { HirExprKind::Var(n) => n.clone(), _ => "<expr>".to_string() }).collect::<Vec<_>>().join(","));
@@ -4755,24 +4969,24 @@ impl<'a> BlockChecker<'a> {
         }
 
         // Assignment operators
-        if let Some(assign) = func.assign {
-            if args.len() != 1 {
-                self.diagnostics.push(Diagnostic::error(
-                    "assignment expects one argument",
-                    func.expr.span,
-                ));
-                return None;
-            }
+            if let Some(assign) = func.assign {
+                if args.len() != 1 {
+                    self.diagnostics.push(Diagnostic::error(
+                        "assignment expects one argument",
+                        func.expr.span,
+                    ).with_id(DiagnosticId::TypeAssignmentArityMismatch));
+                    return None;
+                }
             // Handle field store first since it doesn't need variable lookup
             if let AssignKind::Store(addr) = assign {
-                if !params.is_empty() {
-                    if let Err(_) = self.ctx.unify(params[0], args[0].ty) {
-                        self.diagnostics.push(Diagnostic::error(
-                            "type mismatch in field assignment",
-                            func.expr.span,
-                        ));
+                    if !params.is_empty() {
+                        if let Err(_) = self.ctx.unify(params[0], args[0].ty) {
+                            self.diagnostics.push(Diagnostic::error(
+                                "type mismatch in field assignment",
+                                func.expr.span,
+                            ).with_id(DiagnosticId::TypeAssignmentTypeMismatch));
+                        }
                     }
-                }
                 return Some(StackEntry {
                     ty: self.ctx.unit(),
                     expr: HirExpr {
@@ -4815,7 +5029,7 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             format!("cannot dereference non-reference type: {}", self.ctx.type_to_string(arg_ty)),
                             args[0].expr.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeInvalidDeref));
                         self.ctx.never()
                     }
                 };
@@ -5346,7 +5560,7 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "type arguments do not match overload",
                                 func.expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypeOverloadTypeArgsMismatch));
                             return None;
                         }
                         let mut mapping = BTreeMap::new();
@@ -5392,7 +5606,7 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             "argument count mismatch",
                             func.expr.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                         return None;
                     }
                     for (arg, param_ty) in args.iter().zip(user_params.iter()) {
@@ -5437,7 +5651,7 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             format!("type does not satisfy trait bound '{}'", b),
                                             func.expr.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
                                     }
                                 }
                             }
@@ -5452,14 +5666,14 @@ impl<'a> BlockChecker<'a> {
                                     self.diagnostics.push(Diagnostic::error(
                                         "constructor expects one argument",
                                         func.expr.span,
-                                    ));
+                                    ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                                     return None;
                                 }
                                 if c_params.is_empty() && !args.is_empty() {
                                     self.diagnostics.push(Diagnostic::error(
                                         "constructor takes no arguments",
                                         func.expr.span,
-                                    ));
+                                    ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                                     return None;
                                 }
                                 let payload_expr = if c_params.len() == 1 {
@@ -5500,7 +5714,7 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "struct constructor arity mismatch",
                                 func.expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                             return None;
                         }
                         let applied_ty = if resolved_args.is_empty() {
@@ -5652,7 +5866,7 @@ impl<'a> BlockChecker<'a> {
                                 self.diagnostics.push(Diagnostic::error(
                                     "trait method call requires receiver argument",
                                     func.expr.span,
-                                ));
+                                ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                                 return None;
                             }
                             let self_ty = self.ctx.resolve_id(args[0].ty);
@@ -5663,7 +5877,7 @@ impl<'a> BlockChecker<'a> {
                                         trait_name
                                     ),
                                     func.expr.span,
-                                ));
+                                ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
                                 return None;
                             }
                             if matches!(self.current_effect, Effect::Pure)
@@ -6248,83 +6462,6 @@ fn function_type_param_count(ctx: &TypeCtx, ty: TypeId) -> usize {
     }
 }
 
-const IMPURE_IO_EFFECT_MARKERS: &[&str] = &[
-    "fd_read",
-    "fd_write",
-    "path_open",
-    "path_create_directory",
-    "path_filestat_get",
-    "path_filestat_set_times",
-    "path_link",
-    "path_readlink",
-    "path_remove_directory",
-    "path_rename",
-    "path_symlink",
-    "path_unlink_file",
-    "fd_advise",
-    "fd_allocate",
-    "fd_close",
-    "fd_datasync",
-    "fd_fdstat_get",
-    "fd_fdstat_set_flags",
-    "fd_fdstat_set_rights",
-    "fd_filestat_get",
-    "fd_filestat_set_size",
-    "fd_filestat_set_times",
-    "fd_pread",
-    "fd_prestat_get",
-    "fd_prestat_dir_name",
-    "fd_pwrite",
-    "fd_readdir",
-    "fd_renumber",
-    "fd_seek",
-    "fd_sync",
-    "fd_tell",
-    "poll_oneoff",
-    "proc_exit",
-    "proc_raise",
-    "sched_yield",
-    "random_get",
-    "sock_accept",
-    "sock_recv",
-    "sock_send",
-    "sock_shutdown",
-    "clock_time_get",
-    "clock_res_get",
-    "args_get",
-    "args_sizes_get",
-    "environ_get",
-    "environ_sizes_get",
-];
-
-fn marker_is_impure_io(text: &str) -> bool {
-    IMPURE_IO_EFFECT_MARKERS.iter().any(|m| text.contains(m))
-}
-
-fn intrinsic_effect(name: &str) -> Effect {
-    if IMPURE_IO_EFFECT_MARKERS.iter().any(|m| *m == name) {
-        Effect::Impure
-    } else {
-        Effect::Pure
-    }
-}
-
-fn raw_lines_effect(lines: &[String]) -> Effect {
-    if lines.iter().any(|line| marker_is_impure_io(line)) {
-        Effect::Impure
-    } else {
-        Effect::Pure
-    }
-}
-
-fn raw_body_effect(body: &HirBody) -> Effect {
-    match body {
-        HirBody::Wasm(w) => raw_lines_effect(&w.lines),
-        HirBody::LlvmIr(l) => raw_lines_effect(&l.lines),
-        HirBody::Block(_) => Effect::Pure,
-    }
-}
-
 type LabelEnv = BTreeMap<String, TypeId>;
 
 #[derive(Debug)]
@@ -6529,8 +6666,14 @@ fn function_signature_string(ctx: &TypeCtx, ty: TypeId) -> String {
     }
 }
 
-fn type_signature_matches(ctx: &TypeCtx, a: TypeId, b: TypeId) -> bool {
-    function_signature_string(ctx, a) == function_signature_string(ctx, b)
+fn contains_same_type(ctx: &TypeCtx, list: &[TypeId], ty: TypeId) -> bool {
+    list.iter().any(|t| ctx.same_type(*t, ty))
+}
+
+fn push_unique_type(ctx: &TypeCtx, list: &mut Vec<TypeId>, ty: TypeId) {
+    if !contains_same_type(ctx, list, ty) {
+        list.push(ctx.resolve_id(ty));
+    }
 }
 
 fn type_contains_unbound_var(ctx: &TypeCtx, ty: TypeId) -> bool {

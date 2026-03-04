@@ -436,7 +436,7 @@ ret: 1234
 #import "core/math" as *
 
 fn main <()->i32> ():
-    let p <i32> alloc 16;
+    let p <i32> alloc_raw 16;
     store_i32 add p 0 4;
     store_i32 add p 4 1;
     store_i32 add p 8 3;
@@ -447,7 +447,7 @@ fn main <()->i32> ():
     let b2 <bool> eq load_i32 add p 8 3;
     let b3 <bool> eq load_i32 add p 12 4;
     let ok <bool> and b0 and b1 and b2 b3;
-    dealloc p 16;
+    dealloc_raw p 16;
     if ok 1234 0
 ```
 
@@ -464,7 +464,7 @@ ret: 2234
 #import "core/math" as *
 
 fn main <()->i32> ():
-    let p <i32> alloc 20;
+    let p <i32> alloc_raw 20;
     store_i32 add p 0 3;
     store_i32 add p 4 1;
     store_i32 add p 8 3;
@@ -477,7 +477,7 @@ fn main <()->i32> ():
     let b3 <bool> eq load_i32 add p 12 3;
     let b4 <bool> eq load_i32 add p 16 3;
     let ok <bool> and b0 and b1 and b2 and b3 b4;
-    dealloc p 20;
+    dealloc_raw p 20;
     if ok 2234 0
 ```
 
@@ -494,7 +494,7 @@ ret: 3234
 #import "core/math" as *
 
 fn main <()->i32> ():
-    let p <i32> alloc 20;
+    let p <i32> alloc_raw 20;
     store_i32 add p 0 -2;
     store_i32 add p 4 5;
     store_i32 add p 8 0;
@@ -507,7 +507,7 @@ fn main <()->i32> ():
     let b3 <bool> eq load_i32 add p 12 3;
     let b4 <bool> eq load_i32 add p 16 5;
     let ok <bool> and b0 and b1 and b2 and b3 b4;
-    dealloc p 20;
+    dealloc_raw p 20;
     if ok 3234 0
 ```
 
@@ -524,9 +524,9 @@ ret: 4234
 #import "core/math" as *
 
 fn main <()->i32> ():
-    let p <i32> alloc 4;
+    let p <i32> alloc_raw 4;
     sort_i32 p 0;
-    dealloc p 4;
+    dealloc_raw p 4;
     4234
 ```
 
@@ -543,10 +543,10 @@ ret: 5234
 #import "core/math" as *
 
 fn main <()->i32> ():
-    let p <i32> alloc 4;
+    let p <i32> alloc_raw 4;
     store_i32 p 7;
     sort_i32 p 1;
     let ok <bool> eq load_i32 p 7;
-    dealloc p 4;
+    dealloc_raw p 4;
     if ok 5234 0
 ```

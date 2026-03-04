@@ -45,7 +45,7 @@ struct HashMap<.V>:
 fn hashmap_new <.V> <()*>Result<HashMap<.V>, Diag>> ():
     let cap <i32> 16
     let entry_size <i32> add 8 size_of<.V>
-    let entries <i32> alloc mul cap entry_size
+    let entries <i32> alloc_raw mul cap entry_size
     if:
         eq entries 0
         then:
@@ -58,11 +58,11 @@ fn hashmap_new <.V> <()*>Result<HashMap<.V>, Diag>> ():
                     let ptr <i32> add entries off
                     store_i32 ptr 0
                     set i add i 1
-            let header <i32> alloc 12
+            let header <i32> alloc_raw 12
             if:
                 eq header 0
                 then:
-                    dealloc entries mul cap entry_size
+                    dealloc_raw entries mul cap entry_size
                     diag_err<HashMap<.V>> diag_out_of_memory "hashmap_new(header)"
                 else:
                     store_i32 header 0
@@ -295,8 +295,8 @@ fn hashmap_free <.V> <(HashMap<.V>)*>()> (hm):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    dealloc entries mul cap entry_size
-    dealloc hdr 12
+    dealloc_raw entries mul cap entry_size
+    dealloc_raw hdr 12
 
 //: new: `hashmap_new` の短縮名
 //:
@@ -367,7 +367,7 @@ struct HashMapStr<.V>:
 fn hashmap_str_new <.V> <()*>Result<HashMapStr<.V>, Diag>> ():
     let cap <i32> 16
     let entry_size <i32> add 8 size_of<.V>
-    let entries <i32> alloc mul cap entry_size
+    let entries <i32> alloc_raw mul cap entry_size
     if:
         eq entries 0
         then:
@@ -380,11 +380,11 @@ fn hashmap_str_new <.V> <()*>Result<HashMapStr<.V>, Diag>> ():
                     let entry <i32> add entries entry_off
                     store_i32 entry 0
                     set i add i 1
-            let header <i32> alloc 12
+            let header <i32> alloc_raw 12
             if:
                 eq header 0
                 then:
-                    dealloc entries mul cap entry_size
+                    dealloc_raw entries mul cap entry_size
                     diag_err<HashMapStr<.V>> diag_out_of_memory "hashmap_str_new(header)"
                 else:
                     store_i32 header 0
@@ -617,8 +617,8 @@ fn hashmap_str_free <.V> <(HashMapStr<.V>)*>()> (hm):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    dealloc entries mul cap entry_size
-    dealloc hdr 12
+    dealloc_raw entries mul cap entry_size
+    dealloc_raw hdr 12
 
 //: get: `hashmap_str_get` の短縮名
 //:

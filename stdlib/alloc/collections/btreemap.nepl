@@ -71,9 +71,9 @@ struct BTreeMap<.V>:
 //: - 本体処理に準じます。
 fn btreemap_new <.V> <()*>BTreeMap<.V>> ():
     let cap <i32> 8
-    let keys <i32> alloc mul cap 4
-    let vals <i32> alloc mul cap size_of<.V>
-    let header <i32> alloc 16
+    let keys <i32> alloc_raw mul cap 4
+    let vals <i32> alloc_raw mul cap size_of<.V>
+    let header <i32> alloc_raw 16
     store_i32 header 0
     store_i32 add header 4 cap
     store_i32 add header 8 keys
@@ -331,8 +331,8 @@ fn btreemap_insert <.V> <(BTreeMap<.V>,i32,.V)*>BTreeMap<.V>> (hm, key, val):
                 eq len cap
                 then:
                     let new_cap <i32> mul cap 2
-                    set keys realloc keys mul cap 4 mul new_cap 4
-                    set vals realloc vals mul cap size_of<.V> mul new_cap size_of<.V>
+                    set keys realloc_raw keys mul cap 4 mul new_cap 4
+                    set vals realloc_raw vals mul cap size_of<.V> mul new_cap size_of<.V>
                     set cap new_cap
                     store_i32 add hdr 4 cap
                     store_i32 add hdr 8 keys
@@ -462,6 +462,6 @@ fn btreemap_free <.V> <(BTreeMap<.V>)*>()> (hm):
     let cap <i32> load_i32 add hdr 4
     let keys <i32> load_i32 add hdr 8
     let vals <i32> load_i32 add hdr 12
-    dealloc keys mul cap 4
-    dealloc vals mul cap size_of<.V>
-    dealloc hdr 16
+    dealloc_raw keys mul cap 4
+    dealloc_raw vals mul cap size_of<.V>
+    dealloc_raw hdr 16

@@ -130,7 +130,7 @@ struct Vec<.T>:
 //: ```
 fn vec_new <.T> <()->Vec<.T>> ():
     let cap <i32> 8
-    let data <i32> alloc mul cap size_of<.T>
+    let data <i32> alloc_raw mul cap size_of<.T>
     Vec<.T> 0 cap data
 
 //: vec_with_capacity: 指定容量で Vec を作る
@@ -159,7 +159,7 @@ fn vec_new <.T> <()->Vec<.T>> ():
 //:     if eq vec_cap<i32> v 16 0 1
 //: ```
 fn vec_with_capacity <.T> <(i32)->Vec<.T>> (cap):
-    let data <i32> alloc mul cap size_of<.T>
+    let data <i32> alloc_raw mul cap size_of<.T>
     Vec<.T> 0 cap data
 
 //: vec_len: 長さを返す
@@ -345,7 +345,7 @@ fn vec_push <.T> <(Vec<.T>,.T)->Vec<.T>> (v, item):
         eq v_len v_cap
         then:
             let grown_cap <i32> mul v_cap 2
-            let grown_data <i32> realloc v_data mul v_cap size_of<.T> mul grown_cap size_of<.T>
+            let grown_data <i32> realloc_raw v_data mul v_cap size_of<.T> mul grown_cap size_of<.T>
             let write_off <i32> mul v_len size_of<.T>
             store<.T> add grown_data write_off item
             Vec<.T> add v_len 1 grown_cap grown_data
@@ -548,7 +548,7 @@ fn vec_clear <.T> <(Vec<.T>)->Vec<.T>> (v):
 fn vec_free <.T> <(Vec<.T>)->()> (v):
     let v_cap <i32> get v "cap"
     let v_data <i32> get v "data"
-    dealloc v_data mul v_cap size_of<.T>
+    dealloc_raw v_data mul v_cap size_of<.T>
 
 //: new: vec_new の短縮エイリアス
 fn new vec_new;

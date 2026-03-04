@@ -36,7 +36,7 @@
 
 #if[target=llvm]
 fn __fs_copy_to_cstr <(i32,i32)*>i32> (src_ptr, src_len):
-    let dst <i32> alloc add src_len 1;
+    let dst <i32> alloc_raw add src_len 1;
     let mut i <i32> 0;
     while lt i src_len:
         do:
@@ -145,7 +145,7 @@ fn wasi_fd_close <(i32)*>i32> (fd):
 //:     fs_open_read "sample";
 //: ```
 fn fs_open_read <(str)*>Result<i32,i32>> (path):
-    let fd_out <i32> alloc 4;
+    let fd_out <i32> alloc_raw 4;
     store_i32 fd_out 0;
     let path_ptr <i32> add path 4;
     let path_len <i32> load_i32 path;
@@ -190,11 +190,11 @@ fn fs_open_read <(str)*>Result<i32,i32>> (path):
 fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
     let mut buf <Vec<u8>> vec_new<u8>;
     let cap <i32> 256;
-    let tmp <i32> alloc cap;
-    let iov <i32> alloc 8;
+    let tmp <i32> alloc_raw cap;
+    let iov <i32> alloc_raw 8;
     store_i32 iov tmp;
     store_i32 add iov 4 cap;
-    let nread <i32> alloc 4;
+    let nread <i32> alloc_raw 4;
     let mut done <i32> 0;
     let mut err <i32> 0;
 
@@ -258,7 +258,7 @@ fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
 //: ```
 fn fs_bytes_to_string <(Vec<u8>)*>str> (buf):
     let len <i32> buf.len;
-    let out <i32> alloc add 4 len;
+    let out <i32> alloc_raw add 4 len;
     store_i32 out len;
     let data <i32> buf.data;
     let mut i <i32> 0;

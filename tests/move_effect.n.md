@@ -12,10 +12,10 @@ ret: 123
 #import "core/mem" as *
 
 fn compute <()->i32> ():
-    let p <i32> alloc 4
+    let p <i32> alloc_raw 4
     store_i32 p 123
     let v <i32> load_i32 p
-    dealloc p 4
+    dealloc_raw p 4
     v
 
 fn main <()->i32> ():
@@ -192,6 +192,7 @@ fn main <()->i32> ():
 ## 非Copy値の shared borrow 中 move は拒否
 
 neplg2:test[compile_fail]
+diag_id: 3051
 ```neplg2
 #entry main
 #indent 4
@@ -242,7 +243,7 @@ trait Copy:
         x
 
 struct RegionToken:
-    raw <i32>
+    raw <(i32)->i32>
 
 impl Copy for RegionToken:
     fn copy_mark <(RegionToken)->RegionToken> (x):
@@ -300,22 +301,136 @@ fn main <()->i32> ():
     0
 ```
 
+## 同一 trait と同一対象型への impl 重複は拒否
+
+neplg2:test[compile_fail]
+diag_id: 3093
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Mark:
+    fn mark <(Self)->Self> (x):
+        x
+
+impl Mark for i32:
+    fn mark <(i32)->i32> (x):
+        x
+
+impl Mark for i32:
+    fn mark <(i32)->i32> (x):
+        x
+```
+
 ## RegionToken は非Copyとして move 後再利用不可
 
 neplg2:test[compile_fail]
+diag_id: 3053
 ```neplg2
 #entry main
 #indent 4
 #target core
 
 struct RegionToken:
-    raw <i32>
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
 
 fn consume <(RegionToken)->i32> (_t):
     1
 
 fn main <()->i32> ():
-    let t <RegionToken> RegionToken 1
+    let t <RegionToken> RegionToken @token_id
     consume t
     consume t
+```
+
+## move 後の borrow は拒否
+
+neplg2:test[compile_fail]
+diag_id: 3063
+```neplg2
+#entry main
+#indent 4
+#target core
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn consume <(RegionToken)->i32> (_t):
+    1
+
+fn main <()->i32> ():
+    let t <RegionToken> RegionToken @token_id
+    consume t
+    let r &t
+    0
+```
+
+## 分岐で move された可能性のある値の使用は拒否
+
+neplg2:test[compile_fail]
+diag_id: 3054
+```neplg2
+#entry main
+#indent 4
+#target core
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn consume <(RegionToken)->i32> (_t):
+    1
+
+fn main <()->i32> ():
+    let t <RegionToken> RegionToken @token_id
+    if true:
+        then:
+            consume t
+        else:
+            0
+    consume t
+```
+
+## 非複合型への field access は拒否
+
+neplg2:test[compile_fail]
+diag_id: 3011
+```neplg2
+#entry main
+#indent 4
+#target core
+
+#import "core/field" as *
+
+fn main <()->i32> ():
+    let v <i32> get 1 0
+    v
+```
+
+## Writer は非Copyとして move 後再利用不可
+
+neplg2:test[compile_fail]
+diag_id: 3053
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "core/result" as *
+#import "kp/kpwrite" as *
+
+fn main <()*>i32> ():
+    let w <Writer> unwrap_ok writer_new
+    let w2 <Writer> w
+    writer_flush w
+    0
 ```

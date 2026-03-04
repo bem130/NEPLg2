@@ -3,42 +3,97 @@
 このファイルは Rust テスト `move_check.rs` を .n.md 形式へ機械的に移植したものです。移植が難しい（複数ファイルや Rust 専用 API を使う）テストは `skip` として残しています。
 ## move_simple_ok
 
-neplg2:test[skip]
+neplg2:test
+ret: 0
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn main <()->i32> ():
+    let t <RegionToken> RegionToken @token_id
+    let u <RegionToken> t
     0
 ```
 
 ## move_use_after_move
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
+diag_id: 3053
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn main <()->i32> ():
+    let t <RegionToken> RegionToken @token_id
+    let u <RegionToken> t
+    let v <RegionToken> t
     0
 ```
 
 ## move_in_branch
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
+diag_id: 3054
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
-    0
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn consume <(RegionToken)->i32> (_t):
+    1
+
+fn main <()->i32> ():
+    let t <RegionToken> RegionToken @token_id
+    if true:
+        then:
+            consume t
+        else:
+            0
+    consume t
 ```
 
 ## move_in_loop
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
+diag_id: 3065
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
-    0
+#target core
+
+#import "core/math" as *
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn consume <(RegionToken)->i32> (_t):
+    1
+
+fn main <()->i32> ():
+    let t <RegionToken> RegionToken @token_id
+    let mut i <i32> 0
+    while lt i 1:
+        do:
+            consume t
+            set i add i 1
+    consume t
 ```
 
 ## move_reassign_non_copy

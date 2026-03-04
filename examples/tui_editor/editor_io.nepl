@@ -7,10 +7,10 @@
 #import "core/mem" as *
 
 fn input_new <(i32)*>i32> (cap):
-    let ctx <i32> alloc 16;
-    let buf <i32> alloc cap;
-    let iov <i32> alloc 8;
-    let nread <i32> alloc 4;
+    let ctx <i32> alloc_raw 16;
+    let buf <i32> alloc_raw cap;
+    let iov <i32> alloc_raw 8;
+    let nread <i32> alloc_raw 4;
     store_i32 ctx buf;
     store_i32 add ctx 4 iov;
     store_i32 add ctx 8 nread;
@@ -52,8 +52,8 @@ fn input_free <(i32)*>()> (ctx):
     let iov <i32> load_i32 add ctx 4;
     let nread <i32> load_i32 add ctx 8;
     let cap <i32> load_i32 add ctx 12;
-    dealloc buf cap;
-    dealloc iov 8;
-    dealloc nread 4;
-    dealloc ctx 16;
+    dealloc_raw buf cap;
+    dealloc_raw iov 8;
+    dealloc_raw nread 4;
+    dealloc_raw ctx 16;
     ()

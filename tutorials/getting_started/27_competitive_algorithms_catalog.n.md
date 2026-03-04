@@ -18,9 +18,8 @@
 #import "kp/kpread" as *
 #import "core/result" as *
 let sc <Scanner> unwrap_ok scanner_new;
-let sc_handle <i32> scanner_handle sc;
-let a <i32> scanner_read_i32 sc_handle;
-let b <i32> scanner_read_i32 sc_handle;
+let a <i32> scanner_read_i32 sc;
+let b <i32> scanner_read_i32 sc;
 ```
 
 ## 2. 高速出力（空白区切り）

@@ -15,6 +15,7 @@ extern crate std;
 
 pub mod diagnostic;
 pub mod diagnostic_ids;
+pub mod effects;
 pub mod error;
 pub mod span;
 

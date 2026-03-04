@@ -135,6 +135,63 @@ fn main <()->i32> ():
     0
 ```
 
+## overload_zero_arg_result_selected_by_expected_type
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/result" as *
+#import "core/math" as *
+
+fn build <()->Result<i32,str>> ():
+    Result::Ok 9
+
+fn build <()->Result<bool,str>> ():
+    Result::Ok true
+
+fn main <()->i32> ():
+    let a <Result<i32,str>> build;
+    let b <Result<bool,str>> build;
+
+    let ok_a <bool>:
+        match a:
+            Result::Ok v:
+                eq v 9
+            Result::Err _e:
+                false
+    let ok_b <bool>:
+        match b:
+            Result::Ok v:
+                v
+            Result::Err _e:
+                false
+    if and ok_a ok_b 1 0
+```
+
+## overload_zero_arg_result_ambiguous_without_expected_type
+
+neplg2:test[compile_fail]
+diag_id: 3005
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/result" as *
+
+fn build <()*>Result<i32,str>> ():
+    Result::Ok 1
+
+fn build <()*>Result<bool,str>> ():
+    Result::Ok true
+
+fn main <()->i32> ():
+    let x build
+    0
+```
+
 ## overload_len_for_string_and_vec
 
 neplg2:test
@@ -721,4 +778,113 @@ fn make_bool <()->bool> ():
 
 fn main <()->i32> ():
     if make_bool make_i32 0
+```
+
+## overload_mixed_annotations_block_call_pipe_lambda
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn pick <(i32)->i32> (v):
+    v
+
+fn pick <(i32)->bool> (v):
+    ne v 0
+
+fn apply_i32 <((i32)->i32,i32)->i32> (f, x):
+    f x
+
+fn main <()->i32> ():
+    let inc <(i32)->i32> (x):
+        add x 1
+
+    let base <i32>:
+        <i32> block:
+            apply_i32 inc 6
+    let v <i32> add base 3;
+
+    let ok_pick <bool> <bool> pick 1;
+    if and ok_pick eq v 10 1 0
+```
+
+## overload_pipe_annotations_with_mixed_cast_i32_i64_i128
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+#import "core/cast" as *
+
+fn main <()->i32> ():
+    let seed <i64> <i64> cast 5;
+    let v64 <i64>:
+        seed
+        |> add <i64> cast 7;
+
+    let v128 <i128> <i128> cast v64;
+    let back <i32> <i32> cast v128;
+    if eq back 12 1 0
+```
+
+## overload_trait_method_type_args_not_supported
+
+neplg2:test[compile_fail]
+diag_id: 3066
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        0
+
+fn main <()->i32> ():
+    Show::show<i32> 1
+```
+
+## overload_trait_method_not_found
+
+neplg2:test[compile_fail]
+diag_id: 3067
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        0
+
+fn main <()->i32> ():
+    Show::missing 1
+```
+
+## overload_trait_bound_unsatisfied
+
+neplg2:test[compile_fail]
+diag_id: 3069
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        x
+
+impl Show for i32:
+    fn show <(i32)->i32> (x):
+        x
+
+fn main <()->i32> ():
+    Show::show true
 ```

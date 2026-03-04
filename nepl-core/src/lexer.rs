@@ -225,7 +225,7 @@ impl LexState {
                     self.diagnostics.push(Diagnostic::error(
                         "tabs are not allowed for indentation",
                         span,
-                    ));
+                    ).with_id(DiagnosticId::LexerIndentTabsNotAllowed));
                     width += self.indent_unit;
                     idx += 1;
                 }
@@ -262,7 +262,7 @@ impl LexState {
                 self.diagnostics.push(Diagnostic::error(
                     "expected indented block after #wasm",
                     span,
-                ));
+                ).with_id(DiagnosticId::LexerExpectedIndentedBlock));
             } else {
                 self.wasm_base = Some(expected);
                 in_wasm = true;
@@ -276,7 +276,7 @@ impl LexState {
                 self.diagnostics.push(Diagnostic::error(
                     "expected indented block after #llvmir",
                     span,
-                ));
+                ).with_id(DiagnosticId::LexerExpectedIndentedBlock));
             } else {
                 self.llvmir_base = Some(expected);
                 in_llvmir = true;
@@ -319,7 +319,7 @@ impl LexState {
                             self.diagnostics.push(Diagnostic::error(
                                 "pub prefix is only allowed for #import",
                                 span,
-                            ));
+                            ).with_id(DiagnosticId::LexerInvalidPubDirectivePrefix));
                             directive_text = Some(after_pub_trim.to_string());
                         }
                     }
@@ -399,7 +399,7 @@ impl LexState {
                 self.diagnostics.push(Diagnostic::error(
                     "indentation is not aligned to #indent width",
                     span,
-                ));
+                ).with_id(DiagnosticId::LexerIndentWidthMismatch));
             }
             self.indent_stack.push(indent);
             self.push_token(TokenKind::Indent, line_start, line_start);
@@ -416,7 +416,7 @@ impl LexState {
                 self.diagnostics.push(Diagnostic::error(
                     "indentation level does not match any previous indent",
                     span,
-                ));
+                ).with_id(DiagnosticId::LexerIndentLevelMismatch));
                 self.indent_stack.push(indent);
             }
         }
@@ -783,7 +783,7 @@ impl LexState {
                                             (offset + i) as u32,
                                             (offset + i + 2) as u32,
                                         ),
-                                    ));
+                                    ).with_id(DiagnosticId::LexerInvalidStringEscape));
                                     buf.push('x');
                                     i += 2;
                                     continue;
@@ -803,7 +803,7 @@ impl LexState {
                                                 (offset + i) as u32,
                                                 (offset + i + 2) as u32,
                                             ),
-                                        ));
+                                        ).with_id(DiagnosticId::LexerInvalidStringEscape));
                                         other as char
                                     }
                                 };
@@ -826,7 +826,7 @@ impl LexState {
                         self.diagnostics.push(Diagnostic::error(
                             "unterminated string literal",
                             Span::new(self.file_id, (offset + start) as u32, (offset + i) as u32),
-                        ));
+                        ).with_id(DiagnosticId::LexerUnterminatedStringLiteral));
                     }
                 }
                 b'0'..=b'9' => {

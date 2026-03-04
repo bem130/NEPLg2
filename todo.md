@@ -10,6 +10,15 @@
 - 完了条件:
   - 分岐/ループ合流時の move 誤判定が解消される。
   - token の二重消費/解放後利用が検出される。
+  - `Copy` 判定の名前ハードコードを廃止し、trait 実装情報に基づく判定へ移行される。
+
+フェーズB2: trait 設計の実装反映（coherence/能力trait）
+- `doc/trait_system_design.md` を正として実装する。
+- trait 実装整合チェック（シグネチャ一致・重複 impl）を `same_type` ベースで統一する。
+- `Copy/Clone` の能力判定を能力テーブル化し、型名ハードコードを完全撤廃する。
+- 完了条件:
+  - trait 契約判定に文字列比較が残らない。
+  - `tests/overload.n.md` の trait ケースで診断が安定する。
 
 フェーズC: メモリ安全型モデル導入
 - `core/mem` に `MemPtr<T>` / `RegionToken` モデルを導入。
@@ -20,19 +29,14 @@
   - OOB/UAF/double free が `Result::Err` またはコンパイルエラーで表現される。
 
 フェーズD: stdlib移行（mem/kpread/kpwrite 優先）
-- `_safe` を標準名に統一し、旧 unsafe/生API を削除。
-- `Scanner` / `Writer` のハンドル露出を隠蔽し、型安全APIへ一本化。
+- `_safe` 接尾辞を廃止し、安全APIを標準名へ統一する。
+- 生ポインタ前提APIは段階的に `*_raw` へ隔離し、最終的に公開面から削除する。
 - trait 境界（`MemReadable<T>`, `MemWritable<T>`, `RegionOwned`）を導入可能な箇所から適用。
 - 完了条件:
   - `mem/kpread/kpwrite` の公開APIが Result/Option 前提で統一。
   - 既存 examples/tests/tutorials が新APIへ更新済み。
 
 フェーズE: テスト・診断の固定化
-- 追加:
-  - `tests/move_effect.n.md`
-- 更新:
-  - `tests/overload.n.md`（型注釈/オーバーロード/effect混在）
-  - `tests/kp*.n.md`（Scanner/Writer 新API）
 - `compile_fail` は `diag_id` を必須化する。
 - 完了条件:
   - 仕様に対応する回帰テストが揃い、失敗理由が診断IDで固定される。
@@ -52,11 +56,6 @@
 1. 高階関数・call_indirect
 - capture あり関数値は closure conversion の設計を確定して段階導入する。
 
-2. 診断IDの明示付与（nepl-core全域）
-- `parser.rs` で開始した `with_id(DiagnosticId::...)` 明示付与を、`lexer.rs` / `typecheck.rs` / `resolve.rs` / `codegen_*.rs` の主要診断へ拡張する。
-- `Diagnostic::error` 側の推測付与は使わず、診断生成側で enum を直接指定する。
-- parser/typecheck/name-resolution/overload 系の compile_fail テストに `diag_id` を追加し、ID一致を固定化する。
-
 3. Web Playground / tests.html 強化
 - VSCode 拡張予定の情報（名前解決/型情報/式範囲/定義ジャンプ候補）を Playground で表示する。
 - `web/tests.html` の詳細展開時にソースと解析結果（AST/resolve/semantics）を併記する。
@@ -69,7 +68,6 @@
 5. stdlib の段階的リファクタリング（言語仕様安定後）
 - `stdlib/kp` のドキュメントコメント/ドキュメントテスト形式を基準に、他 stdlib へ統一展開する。
 - 複雑データ処理の箇所を中心に改行 `|>` パイプを活用し、可読性とメモリ安全性を両立する。
-- `mem/kpread/kpwrite` の安全API移行の残課題として、`*_handle` / `mem_ptr_addr` を公開APIから隠蔽し、`Result/Option` のみで利用できる設計へ完成させる。
 
 6. LLVM IR target 追加（nepl-cli 限定）
 
@@ -77,7 +75,8 @@
 - `collections` 配下の既存データ構造を新配置に合わせて改修する。
 
 7. move/effect 再設計の実装反映
-- `mem/kpread/kpwrite` を `_safe` なしの安全APIへ一本化し、`_raw` を最終削除する。
+- `mem` の `*_safe` 命名を廃止し、Result/Option ベースAPIを標準名へ移行する。
+- `kpread/kpwrite` の `_raw` 完全削除（`mem` 側の移行完了後）を行う。
 - move/effect 回帰テストを拡張し、`move_check` と整合する失敗パターン（分岐合流/再借用/二重解放）を追加する。
 
 8. メモリ安全コンパイラ機構の導入
@@ -85,7 +84,6 @@
 - `load/store` での境界チェック挿入と、証明可能ケースのチェック削除を実装する。
 - move_check に token 消費検査（解放後アクセス/二重解放検出）を導入する。
 - `MemReadable<T>`, `MemWritable<T>`, `RegionOwned` の trait 境界でメモリ能力を型検査する。
-- `tests/memory_safety.n.md` を追加し、diag_id を含めて検証する。
 
 ---
 ### 以下編集禁止

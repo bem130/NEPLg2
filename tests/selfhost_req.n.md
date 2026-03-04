@@ -168,6 +168,7 @@ fn main <()*>i32> ():
 ## test_req_trait_extensions
 
 neplg2:test[compile_fail]
+diag_id: 3081
 ```neplg2
 
 #entry main

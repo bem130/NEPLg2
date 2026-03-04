@@ -965,9 +965,9 @@ fn sort_merge <.T: Ord> <(Vec<.T>)->()> (v):
         then ()
         else:
             let bytes <i32> mul n size_of<.T>
-            let buf <i32> alloc bytes
+            let buf <i32> alloc_raw bytes
             sort_merge_range_data<.T> data_ptr buf 0 n;
-            dealloc buf bytes;
+            dealloc_raw buf bytes;
             ()
 
 //: sort_slice_quick: 生ポインタ配列を quick sort で並べ替える
@@ -1092,9 +1092,9 @@ fn sort_merge_ret <.T: Ord> <(Vec<.T>)->Vec<.T>> (v):
         then ()
         else:
             let bytes <i32> mul n size_of<.T>
-            let buf <i32> alloc bytes
+            let buf <i32> alloc_raw bytes
             sort_merge_range_data<.T> data_ptr buf 0 n;
-            dealloc buf bytes;
+            dealloc_raw buf bytes;
             ()
     Vec<.T> n cap data_ptr
 

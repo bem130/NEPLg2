@@ -747,7 +747,7 @@ fn parse_inlines <(str)->Vec<Inline>> (s):
 //: ```
 pub fn parse_markdown <(str)->Document> (input):
     let lines <Vec<str>> str_split input "\n";
-    let lines_mem <i32> alloc size_of<Vec<str>>;
+    let lines_mem <i32> alloc_raw size_of<Vec<str>>;
     store<Vec<str>> lines_mem lines;
     let nlines <i32> get load<Vec<str>> lines_mem "len";
 
@@ -815,7 +815,7 @@ pub fn parse_markdown <(str)->Document> (input):
                                                                                     ()
                                                                                 else:
                                                                                     let pr <ParaRes> parse_paragraph lines_mem nlines j;
-                                                                                    let pr_mem <i32> alloc size_of<ParaRes>;
+                                                                                    let pr_mem <i32> alloc_raw size_of<ParaRes>;
                                                                                     store<ParaRes> pr_mem pr;
                                                                                     let pr_inlines <Vec<Inline>> get load<ParaRes> pr_mem "inlines";
                                                                                     let pr_next_i <i32> get load<ParaRes> pr_mem "next_i";
@@ -829,7 +829,7 @@ pub fn parse_markdown <(str)->Document> (input):
                                                 Option::None:
                                                     // Paragraph
                                                     let pr <ParaRes> parse_paragraph lines_mem nlines i;
-                                                    let pr_mem <i32> alloc size_of<ParaRes>;
+                                                    let pr_mem <i32> alloc_raw size_of<ParaRes>;
                                                     store<ParaRes> pr_mem pr;
                                                     let pr_inlines <Vec<Inline>> get load<ParaRes> pr_mem "inlines";
                                                     let pr_next_i <i32> get load<ParaRes> pr_mem "next_i";
@@ -979,12 +979,12 @@ fn node_to_json <(Node)->str> (node):
             set sb sb_append sb "}";
             sb_build sb
         Node::Section sec:
-            let sec_mem <i32> alloc size_of<NestSection>;
+            let sec_mem <i32> alloc_raw size_of<NestSection>;
             store<NestSection> sec_mem sec;
             let sec_level <i32> get load<NestSection> sec_mem "level";
             let sec_heading <Heading> get load<NestSection> sec_mem "heading";
             let sec_children <Vec<Node>> get load<NestSection> sec_mem "children";
-            let heading_mem <i32> alloc size_of<Heading>;
+            let heading_mem <i32> alloc_raw size_of<Heading>;
             store<Heading> heading_mem sec_heading;
             let heading_level <i32> get load<Heading> heading_mem "level";
             let heading_inlines <Vec<Inline>> get load<Heading> heading_mem "inlines";

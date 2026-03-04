@@ -22,7 +22,7 @@ fn wasi_right_fd_write <()*>i64> ():
 fn open_with_candidates <(str,i32,i64)*>i32> (path, oflags, rights):
     let pptr <i32> add path 4;
     let plen <i32> len path;
-    let fd_out <i32> alloc 4;
+    let fd_out <i32> alloc_raw 4;
     let mut fd <i32> -1;
     let mut cand <i32> 3;
     let mut done <bool> false;
@@ -47,10 +47,10 @@ fn save_to_file <(str,str)*>bool> (path, content):
         then:
             false
         else:
-            let iov <i32> alloc 8;
+            let iov <i32> alloc_raw 8;
             store_i32 iov add content 4;
             store_i32 add iov 4 len content;
-            let nw <i32> alloc 4;
+            let nw <i32> alloc_raw 4;
             store_i32 nw 0;
             let errno1 <i32> wasi_fd_write fd iov 1 nw;
             let _ <i32> wasi_fd_close fd;
@@ -65,11 +65,11 @@ fn read_from_file_or <(str,str)*>str> (path, fallback):
             fallback
         else:
             let cap <i32> 4096;
-            let buf <i32> alloc cap;
-            let iov <i32> alloc 8;
+            let buf <i32> alloc_raw cap;
+            let iov <i32> alloc_raw 8;
             store_i32 iov buf;
             store_i32 add iov 4 cap;
-            let nr <i32> alloc 4;
+            let nr <i32> alloc_raw 4;
             store_i32 nr 0;
             let errno1 <i32> wasi_fd_read fd iov 1 nr;
             let _ <i32> wasi_fd_close fd;
@@ -84,7 +84,7 @@ fn read_from_file_or <(str,str)*>str> (path, fallback):
                         then:
                             ""
                         else:
-                            let out <i32> alloc add 4 n;
+                            let out <i32> alloc_raw add 4 n;
                             store_i32 out n;
                             let mut i <i32> 0;
                             let out_ptr <i32> add out 4;

@@ -93,13 +93,16 @@ impl Parser {
     /// 再帰的な文解析の深さを制限して、暴走を必ず停止させる。
     fn enter_parse_context(&mut self, kind: &str, span: Span) -> bool {
         if self.depth >= MAX_PARSE_RECURSION_DEPTH {
-            self.diagnostics.push(Diagnostic::error(
-                alloc::format!(
-                    "parser recursion limit exceeded while parsing {} (limit={})",
-                    kind, MAX_PARSE_RECURSION_DEPTH
-                ),
-                span,
-            ));
+            self.diagnostics.push(
+                Diagnostic::error(
+                    alloc::format!(
+                        "parser recursion limit exceeded while parsing {} (limit={})",
+                        kind, MAX_PARSE_RECURSION_DEPTH
+                    ),
+                    span,
+                )
+                .with_id(DiagnosticId::ParserUnexpectedToken),
+            );
             return false;
         }
         self.depth += 1;
@@ -240,10 +243,13 @@ impl Parser {
                 no_progress_steps += 1;
                 if no_progress_steps >= MAX_NO_PROGRESS_STEPS {
                     let sp = self.peek_span().unwrap_or(start_span);
-                    self.diagnostics.push(Diagnostic::error(
-                        "parser made no progress while parsing block; recovering",
-                        sp,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "parser made no progress while parsing block; recovering",
+                            sp,
+                        )
+                        .with_id(DiagnosticId::ParserUnexpectedToken),
+                    );
                     if self.is_eof() {
                         break;
                     }
@@ -1171,10 +1177,13 @@ impl Parser {
                     span: kw_span,
                 }), // Approximation
                 _ => {
-                    self.diagnostics.push(Diagnostic::error(
-                        "expected trait name before 'for'",
-                        kw_span,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "expected trait name before 'for'",
+                            kw_span,
+                        )
+                        .with_id(DiagnosticId::ParserExpectedIdentifier),
+                    );
                     None
                 }
             };
@@ -1225,10 +1234,13 @@ impl Parser {
                 no_progress_steps += 1;
                 if no_progress_steps >= MAX_NO_PROGRESS_STEPS {
                     let sp = self.peek_span().unwrap_or(start_span);
-                    self.diagnostics.push(Diagnostic::error(
-                        "parser made no progress while parsing expression; recovering",
-                        sp,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "parser made no progress while parsing expression; recovering",
+                            sp,
+                        )
+                        .with_id(DiagnosticId::ParserUnexpectedToken),
+                    );
                     if self.is_eof() {
                         break;
                     }
@@ -1491,10 +1503,13 @@ impl Parser {
                         }
                         _ => {
                             let sp = self.peek_span().unwrap_or(kw_span);
-                            self.diagnostics.push(Diagnostic::error(
-                                "expected string literal for intrinsic name",
-                                sp,
-                            ));
+                            self.diagnostics.push(
+                                Diagnostic::error(
+                                    "expected string literal for intrinsic name",
+                                    sp,
+                                )
+                                .with_id(DiagnosticId::ParserExpectedToken),
+                            );
                             return None;
                         }
                     };
@@ -1518,10 +1533,13 @@ impl Parser {
                         self.next().unwrap().span
                     } else {
                         let sp = self.peek_span().unwrap_or(kw_span);
-                        self.diagnostics.push(Diagnostic::error(
-                            "expected '(' after intrinsic name/res",
-                            sp,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "expected '(' after intrinsic name/res",
+                                sp,
+                            )
+                            .with_id(DiagnosticId::ParserExpectedToken),
+                        );
                         return None;
                     };
 
@@ -1570,10 +1588,13 @@ impl Parser {
                             self.parse_block_after_colon()?
                         } else {
                             let err_span = self.peek_span().unwrap_or(span);
-                            self.diagnostics.push(Diagnostic::error(
-                                "block: requires newline after ':' (only whitespace/comment is allowed)",
-                                err_span,
-                            ));
+                            self.diagnostics.push(
+                                Diagnostic::error(
+                                    "block: requires newline after ':' (only whitespace/comment is allowed)",
+                                    err_span,
+                                )
+                                .with_id(DiagnosticId::ParserExpectedToken),
+                            );
                             self.parse_single_line_block(err_span)?
                         };
                         let bspan = block.span;
@@ -1684,10 +1705,13 @@ impl Parser {
                 saw_comma = true;
                 if self.check(&TokenKind::RParen) {
                     let sp = self.peek_span().unwrap_or_else(Span::dummy);
-                    self.diagnostics.push(Diagnostic::error(
-                        "trailing comma is not allowed in parenthesized expression",
-                        sp,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "trailing comma is not allowed in parenthesized expression",
+                            sp,
+                        )
+                        .with_id(DiagnosticId::ParserUnexpectedToken),
+                    );
                     let rp = self.next().unwrap().span;
                     let span = lp_span.join(rp).unwrap_or(lp_span);
                     return Some((elems, span, saw_comma));
@@ -1720,10 +1744,13 @@ impl Parser {
 
         let (elems, paren_span, saw_comma) = self.parse_tuple_items(lp)?;
         if saw_comma {
-            self.diagnostics.push(Diagnostic::error(
-                "legacy tuple literal '(...)' is removed; use 'Tuple:'",
-                paren_span,
-            ));
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "legacy tuple literal '(...)' is removed; use 'Tuple:'",
+                    paren_span,
+                )
+                .with_id(DiagnosticId::ParserUnexpectedToken),
+            );
             return Some(Vec::new());
         }
 
@@ -1752,10 +1779,13 @@ impl Parser {
                 no_progress_steps += 1;
                 if no_progress_steps >= MAX_NO_PROGRESS_STEPS {
                     let sp = self.peek_span().unwrap_or(start_span);
-                    self.diagnostics.push(Diagnostic::error(
-                        "parser made no progress while parsing tuple expression; recovering",
-                        sp,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "parser made no progress while parsing tuple expression; recovering",
+                            sp,
+                        )
+                        .with_id(DiagnosticId::ParserUnexpectedToken),
+                    );
                     if self.is_eof() {
                         break;
                     }
@@ -2014,10 +2044,13 @@ impl Parser {
                             self.parse_block_after_colon()?
                         } else {
                             let err_span = self.peek_span().unwrap_or(span);
-                            self.diagnostics.push(Diagnostic::error(
-                                "block: requires newline after ':' (only whitespace/comment is allowed)",
-                                err_span,
-                            ));
+                            self.diagnostics.push(
+                                Diagnostic::error(
+                                    "block: requires newline after ':' (only whitespace/comment is allowed)",
+                                    err_span,
+                                )
+                                .with_id(DiagnosticId::ParserExpectedToken),
+                            );
                             self.parse_single_line_block(err_span)?
                         };
                         let bspan = block.span;
@@ -2118,10 +2151,13 @@ impl Parser {
                 no_progress_steps += 1;
                 if no_progress_steps >= MAX_NO_PROGRESS_STEPS {
                     let sp = self.peek_span().unwrap_or(start_span);
-                    self.diagnostics.push(Diagnostic::error(
-                        "parser made no progress while parsing match scrutinee; recovering",
-                        sp,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "parser made no progress while parsing match scrutinee; recovering",
+                            sp,
+                        )
+                        .with_id(DiagnosticId::ParserUnexpectedToken),
+                    );
                     if self.is_eof() {
                         break;
                     }
@@ -2250,10 +2286,10 @@ impl Parser {
                 }
                 _ => {
                     let span = self.peek_span().unwrap_or_else(Span::dummy);
-                    self.diagnostics.push(Diagnostic::error(
-                        "unexpected token in expression",
-                        span,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error("unexpected token in expression", span)
+                            .with_id(DiagnosticId::ParserUnexpectedToken),
+                    );
                     self.next();
                 }
             }
@@ -3002,10 +3038,13 @@ impl Parser {
                 }
                 if let Some((name, span)) = self.expect_ident() {
                     if !has_dot {
-                        self.diagnostics.push(Diagnostic::error(
-                            "type parameter must be written as .T",
-                            span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "type parameter must be written as .T",
+                                span,
+                            )
+                            .with_id(DiagnosticId::ParserInvalidTypeExpr),
+                        );
                     }
                     let mut bounds = Vec::new();
                     if self.consume_if(&TokenKind::Colon) {
@@ -3013,16 +3052,20 @@ impl Parser {
                             bounds.push(bound);
                         } else {
                             let sp = self.peek_span().unwrap_or(span);
-                            self.diagnostics
-                                .push(Diagnostic::error("expected trait name after ':'", sp));
+                            self.diagnostics.push(
+                                Diagnostic::error("expected trait name after ':'", sp)
+                                    .with_id(DiagnosticId::ParserExpectedIdentifier),
+                            );
                         }
                         while self.consume_if(&TokenKind::Ampersand) {
                             if let Some((bound, _bspan)) = self.parse_path_ident() {
                                 bounds.push(bound);
                             } else {
                                 let sp = self.peek_span().unwrap_or(span);
-                                self.diagnostics
-                                    .push(Diagnostic::error("expected trait name after '&'", sp));
+                                self.diagnostics.push(
+                                    Diagnostic::error("expected trait name after '&'", sp)
+                                        .with_id(DiagnosticId::ParserExpectedIdentifier),
+                                );
                                 break;
                             }
                         }
@@ -3151,10 +3194,13 @@ impl Parser {
                             effect: eff_copy,
                         })
                     } else if saw_comma || params.len() > 1 {
-                        self.diagnostics.push(Diagnostic::error(
-                            "legacy tuple type '(T1, T2, ...)' is removed; use inferred tuple type from 'Tuple:' value",
-                            lp_span,
-                        ));
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "legacy tuple type '(T1, T2, ...)' is removed; use inferred tuple type from 'Tuple:' value",
+                                lp_span,
+                            )
+                            .with_id(DiagnosticId::ParserUnexpectedToken),
+                        );
                         // Keep Tuple node for parser recovery so downstream can continue analysis.
                         Some(TypeExpr::Tuple(params))
                     } else {
@@ -3200,10 +3246,13 @@ impl Parser {
             break;
         }
         if is_mut && no_shadow {
-            self.diagnostics.push(Diagnostic::error(
-                "noshadow cannot be used with let mut",
-                let_span,
-            ));
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "noshadow cannot be used with let mut",
+                    let_span,
+                )
+                .with_id(DiagnosticId::ParserUnexpectedToken),
+            );
         }
         (is_mut, no_shadow)
     }
@@ -3655,18 +3704,24 @@ impl Parser {
                 }
                 Some(TokenKind::Newline) => {
                     let err_span = self.next().map(|t| t.span).unwrap_or(span);
-                    self.diagnostics.push(Diagnostic::error(
-                        "mlstr lines must start with '##:'",
-                        err_span,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "mlstr lines must start with '##:'",
+                            err_span,
+                        )
+                        .with_id(DiagnosticId::ParserUnexpectedToken),
+                    );
                 }
                 Some(TokenKind::Dedent) | Some(TokenKind::Eof) => break,
                 Some(_) => {
                     let err_span = self.peek_span().unwrap_or(span);
-                    self.diagnostics.push(Diagnostic::error(
-                        "mlstr lines must start with '##:'",
-                        err_span,
-                    ));
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "mlstr lines must start with '##:'",
+                            err_span,
+                        )
+                        .with_id(DiagnosticId::ParserUnexpectedToken),
+                    );
                     while let Some(kind) = self.peek_kind() {
                         if matches!(kind, TokenKind::Newline | TokenKind::Dedent | TokenKind::Eof)
                         {
@@ -3681,10 +3736,13 @@ impl Parser {
         }
         self.consume_if(&TokenKind::Dedent);
         if !saw_mlstr_line {
-            self.diagnostics.push(Diagnostic::error(
-                "mlstr requires at least one '##:' line",
-                span,
-            ));
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "mlstr requires at least one '##:' line",
+                    span,
+                )
+                .with_id(DiagnosticId::ParserExpectedToken),
+            );
         }
         Some(text)
     }
@@ -3763,7 +3821,10 @@ fn parse_type_expr_str(s: &str, span: Span, diags: &mut Vec<Diagnostic>) -> Opti
     // Very small parser for signatures like <(i32,i32)->i32>
     let trimmed = s.trim();
     if !trimmed.starts_with('<') || !trimmed.ends_with('>') {
-        diags.push(Diagnostic::error("invalid type signature in #extern", span));
+        diags.push(
+            Diagnostic::error("invalid type signature in #extern", span)
+                .with_id(DiagnosticId::ParserInvalidExternSignature),
+        );
         return None;
     }
     let inner = &trimmed[1..trimmed.len() - 1];
@@ -3773,7 +3834,10 @@ fn parse_type_expr_str(s: &str, span: Span, diags: &mut Vec<Diagnostic>) -> Opti
     } else if let Some(idx) = inner.find("->") {
         (Effect::Pure, idx)
     } else {
-        diags.push(Diagnostic::error("missing -> or *> in signature", span));
+        diags.push(
+            Diagnostic::error("missing -> or *> in signature", span)
+                .with_id(DiagnosticId::ParserInvalidExternSignature),
+        );
         return None;
     };
     let (eff, split_idx) = effect;
@@ -3822,7 +3886,10 @@ fn simple_type_atom(t: &str, span: Span, diags: &mut Vec<Diagnostic>) -> Option<
             Some(TypeExpr::Named(t.to_string()))
         }
         _ => {
-            diags.push(Diagnostic::error("unknown type in signature", span));
+            diags.push(
+                Diagnostic::error("unknown type in signature", span)
+                    .with_id(DiagnosticId::ParserInvalidExternSignature),
+            );
             None
         }
     }

@@ -19,6 +19,7 @@ use wasm_encoder::{
 };
 
 use crate::diagnostic::Diagnostic;
+use crate::diagnostic_ids::DiagnosticId;
 use crate::hir::*;
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
@@ -201,10 +202,10 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
                 sig.1,
             ));
         } else {
-            diags.push(Diagnostic::error(
-                "unsupported extern signature for wasm",
-                ext.span,
-            ));
+            diags.push(
+                Diagnostic::error("unsupported extern signature for wasm", ext.span)
+                    .with_id(DiagnosticId::CodegenWasmUnsupportedExternSignature),
+            );
         }
     }
 
@@ -229,10 +230,10 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
                     f.params.iter().map(|p| ctx.get(p.ty)).collect::<Vec<_>>()
                 );
             }
-            diags.push(Diagnostic::error(
-                "unsupported function signature for wasm",
-                f.span,
-            ));
+            diags.push(
+                Diagnostic::error("unsupported function signature for wasm", f.span)
+                    .with_id(DiagnosticId::CodegenWasmUnsupportedFunctionSignature),
+            );
         }
     }
 
@@ -784,7 +785,8 @@ fn find_runtime_helper_index(name_map: &BTreeMap<String, u32>, base: &str) -> Op
 }
 
 fn find_alloc_index(name_map: &BTreeMap<String, u32>) -> Option<u32> {
-    find_runtime_helper_index(name_map, "alloc")
+    find_runtime_helper_index(name_map, "alloc_raw")
+        .or_else(|| find_runtime_helper_index(name_map, "alloc"))
 }
 
 fn emit_inline_alloc(locals: &mut LocalMap, insts: &mut Vec<Instruction<'static>>) {
@@ -903,10 +905,10 @@ fn lower_user(
             );
             let expected = valtype(&ctx.get(func.result));
             if expected.is_some() && produced.flatten().is_none() {
-                diags.push(Diagnostic::error(
-                    "function expected to return value",
-                    func.span,
-                ));
+                diags.push(
+                    Diagnostic::error("function expected to return value", func.span)
+                        .with_id(DiagnosticId::CodegenWasmMissingReturnValue),
+                );
                 // Dump the HIR for this function to aid debugging of
                 // missing-return problems. This is only emitted when the
                 // error occurs so it doesn't clutter normal output.
@@ -930,7 +932,10 @@ fn lower_user(
             for line in &wb.lines {
                 match parse_wasm_line(line, &locals) {
                     Ok(mut v) => insts.append(&mut v),
-                    Err(msg) => diags.push(Diagnostic::error(msg, func.span)),
+                    Err(msg) => diags.push(
+                        Diagnostic::error(msg, func.span)
+                            .with_id(DiagnosticId::CodegenWasmRawLineParseError),
+                    ),
                 }
             }
             if diags.is_empty() {
@@ -940,10 +945,10 @@ fn lower_user(
             }
         }
         HirBody::LlvmIr(_) => {
-            diags.push(Diagnostic::error(
-                "llvm ir block cannot be compiled by wasm backend",
-                func.span,
-            ));
+            diags.push(
+                Diagnostic::error("llvm ir block cannot be compiled by wasm backend", func.span)
+                    .with_id(DiagnosticId::CodegenWasmLlvmIrBodyNotSupported),
+            );
         }
     }
 
@@ -1038,10 +1043,10 @@ fn gen_expr(
                 insts.push(Instruction::I32Const(off as i32));
                 Some(ValType::I32)
             } else {
-                diags.push(Diagnostic::error(
-                    "string literal not found during codegen",
-                    expr.span,
-                ));
+                diags.push(
+                    Diagnostic::error("string literal not found during codegen", expr.span)
+                        .with_id(DiagnosticId::CodegenWasmStringLiteralNotFound),
+                );
                 None
             }
         }
@@ -1058,10 +1063,10 @@ fn gen_expr(
                 insts.push(Instruction::I32Const(fidx as i32));
                 Some(ValType::I32)
             } else {
-                diags.push(Diagnostic::error(
-                    format!("unknown variable {}", name),
-                    expr.span,
-                ));
+                diags.push(
+                    Diagnostic::error(format!("unknown variable {}", name), expr.span)
+                        .with_id(DiagnosticId::CodegenWasmUnknownVariable),
+                );
                 None
             }
         }
@@ -1070,10 +1075,10 @@ fn gen_expr(
                 insts.push(Instruction::I32Const(fidx as i32));
                 Some(ValType::I32)
             } else {
-                diags.push(Diagnostic::error(
-                    format!("unknown function value {}", name),
-                    expr.span,
-                ));
+                diags.push(
+                    Diagnostic::error(format!("unknown function value {}", name), expr.span)
+                        .with_id(DiagnosticId::CodegenWasmUnknownFunctionValue),
+                );
                 None
             }
         }
@@ -1096,10 +1101,10 @@ fn gen_expr(
                         s
                     }
                 };
-                diags.push(Diagnostic::error(
-                    format!("unknown function {missing}"),
-                    expr.span,
-                ));
+                diags.push(
+                    Diagnostic::error(format!("unknown function {missing}"), expr.span)
+                        .with_id(DiagnosticId::CodegenWasmUnknownFunction),
+                );
             }
             valtype(&ctx.get(expr.ty))
         }
@@ -1120,16 +1125,16 @@ fn gen_expr(
                         table_index: 0,
                     });
                 } else {
-                    diags.push(Diagnostic::error(
-                        "missing wasm signature for indirect call",
-                        expr.span,
-                    ));
+                    diags.push(
+                        Diagnostic::error("missing wasm signature for indirect call", expr.span)
+                            .with_id(DiagnosticId::CodegenWasmMissingIndirectSignature),
+                    );
                 }
             } else {
-                diags.push(Diagnostic::error(
-                    "unsupported indirect call signature for wasm",
-                    expr.span,
-                ));
+                diags.push(
+                    Diagnostic::error("unsupported indirect call signature for wasm", expr.span)
+                        .with_id(DiagnosticId::CodegenWasmUnsupportedIndirectSignature),
+                );
             }
             valtype(&ctx.get(expr.ty))
         }
@@ -1390,7 +1395,10 @@ fn gen_expr(
                 insts.push(Instruction::Unreachable);
                 None
             } else {
-                diags.push(Diagnostic::error("unknown codegen intrinsic", expr.span));
+                diags.push(
+                    Diagnostic::error("unknown codegen intrinsic", expr.span)
+                        .with_id(DiagnosticId::CodegenWasmUnknownIntrinsic),
+                );
                 None
             }
         }
@@ -1448,10 +1456,12 @@ fn gen_expr(
                                 memory_index: 0,
                             })),
                             _ => {
-                                diags.push(Diagnostic::error(
-                                    "unsupported enum payload type",
-                                    expr.span,
-                                ));
+                                diags.push(
+                                    Diagnostic::error("unsupported enum payload type", expr.span)
+                                        .with_id(
+                                            DiagnosticId::CodegenWasmUnsupportedEnumPayloadType,
+                                        ),
+                                );
                                 return None;
                             }
                         }
@@ -1532,10 +1542,13 @@ fn gen_expr(
                                 }))
                             }
                             _ => {
-                                diags.push(Diagnostic::error(
-                                    "unsupported struct field type for codegen",
-                                    expr.span,
-                                ));
+                                diags.push(
+                                    Diagnostic::error(
+                                        "unsupported struct field type for codegen",
+                                        expr.span,
+                                    )
+                                    .with_id(DiagnosticId::CodegenWasmUnsupportedStructFieldType),
+                                );
                                 return None;
                             }
                         }
@@ -1619,10 +1632,13 @@ fn gen_expr(
                                 }))
                             }
                             _ => {
-                                diags.push(Diagnostic::error(
-                                    "unsupported tuple element type for codegen",
-                                    expr.span,
-                                ));
+                                diags.push(
+                                    Diagnostic::error(
+                                        "unsupported tuple element type for codegen",
+                                        expr.span,
+                                    )
+                                    .with_id(DiagnosticId::CodegenWasmUnsupportedTupleElementType),
+                                );
                                 return None;
                             }
                         }
@@ -1711,10 +1727,12 @@ fn gen_expr(
                                     align: 3,
                                     memory_index: 0,
                                 })),
-                                _ => diags.push(Diagnostic::error(
-                                    "unsupported enum payload type",
-                                    arm.body.span,
-                                )),
+                                _ => diags.push(
+                                    Diagnostic::error("unsupported enum payload type", arm.body.span)
+                                        .with_id(
+                                            DiagnosticId::CodegenWasmUnsupportedEnumPayloadType,
+                                        ),
+                                ),
                             }
                             insts.push(Instruction::LocalSet(lidx));
                         }
@@ -1751,7 +1769,10 @@ fn gen_expr(
                     insts.push(Instruction::LocalSet(idx));
                 }
             } else {
-                diags.push(Diagnostic::error("unknown variable", expr.span));
+                diags.push(
+                    Diagnostic::error("unknown variable", expr.span)
+                        .with_id(DiagnosticId::CodegenWasmUnknownVariable),
+                );
             }
             None
         }

@@ -25,7 +25,7 @@
 //:| #import "std/stdio" as *
 //: fn main <()*> ()> ():
 //:     let n <i32> 5;
-//:     let data <i32> alloc mul n 4;
+//:     let data <i32> alloc_raw mul n 4;
 //:     store_i32 add data 0 1;
 //:     store_i32 add data 4 2;
 //:     store_i32 add data 8 3;
@@ -35,14 +35,14 @@
 //:     print_i32 prefix_range_sum_i32 pref 0 3;
 //:     print " ";
 //:     println_i32 prefix_range_sum_i32 pref 1 5;
-//:     dealloc pref mul add n 1 4;
-//:     dealloc data mul n 4
+//:     dealloc_raw pref mul add n 1 4;
+//:     dealloc_raw data mul n 4
 //: ```
 
 //: prefix_build_i32: `data[0..n)` の累積和配列 `pref[0..n]` を作る
 fn prefix_build_i32 <(i32,i32)*>i32> (data, n):
     let pref_len <i32> add n 1;
-    let pref <i32> alloc mul pref_len 4;
+    let pref <i32> alloc_raw mul pref_len 4;
     store_i32 pref 0;
     let mut i <i32> 0;
     while lt i n:

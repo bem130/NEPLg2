@@ -74,3 +74,49 @@ fn main <()->i32> ():
         Result::Ok _:
             0
 ```
+
+## alloc/dealloc の基本動作
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "core/mem" as *
+#import "core/result" as *
+
+fn main <()->i32> ():
+    match alloc 8:
+        Result::Err _e:
+            0
+        Result::Ok p:
+            store_i32 p 77
+            let ok <i32> if eq load_i32 p 77 1 0
+            match dealloc p 8:
+                Result::Err _e:
+                    0
+                Result::Ok _:
+                    ok
+```
+
+## dealloc は無効引数を Err で返す
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "core/mem" as *
+#import "core/result" as *
+
+fn main <()->i32> ():
+    match dealloc 0 4:
+        Result::Err _e:
+            1
+        Result::Ok _:
+            0
+```

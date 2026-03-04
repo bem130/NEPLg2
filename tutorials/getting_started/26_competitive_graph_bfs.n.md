@@ -16,6 +16,7 @@ stdout: "0 1 2 3\n"
 |
 #import "core/mem" as *
 #import "core/math" as *
+#import "core/result" as *
 #import "std/stdio" as *
 
 fn bfs_line4 <(i32)*>()> (dist):
@@ -26,7 +27,7 @@ fn bfs_line4 <(i32)*>()> (dist):
     store_i32 add dist 12 -1;
 
     // キュー（最大 4 要素）
-    let q <i32> alloc 16;
+    let q <i32> unwrap_ok alloc 16;
     let mut head <i32> 0;
     let mut tail <i32> 0;
 
@@ -67,10 +68,10 @@ fn bfs_line4 <(i32)*>()> (dist):
                         else ();
                 else ();
 
-    dealloc q 16
+    unwrap_ok dealloc q 16
 |
 fn main <()*> ()> ():
-    let dist <i32> alloc 16;
+    let dist <i32> unwrap_ok alloc 16;
     bfs_line4 dist;
     print_i32 load_i32 add dist 0;
     print " ";
@@ -79,7 +80,7 @@ fn main <()*> ()> ():
     print_i32 load_i32 add dist 8;
     print " ";
     println_i32 load_i32 add dist 12;
-    dealloc dist 16
+    unwrap_ok dealloc dist 16
 ```
 
 ## BFS 実装時のチェックリスト

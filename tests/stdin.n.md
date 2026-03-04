@@ -84,8 +84,7 @@ stdout: "1\n3\n"
 #import "std/stdio" as *
 
 fn main <()*> ()> ():
-    let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <i32> scanner_handle sc_obj;
+    let sc <Scanner> unwrap_ok scanner_new;
     let a <i32> scanner_read_i32 sc;
     let b <i32> scanner_read_i32 sc;
     println_i32 a;

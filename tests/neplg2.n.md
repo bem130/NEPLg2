@@ -54,6 +54,7 @@ fn main <() -> ()> ():
 ## pure_cannot_call_impure
 
 neplg2:test[compile_fail]
+diag_id: 3016
 ```neplg2
 
 #entry main
@@ -464,6 +465,7 @@ fn main <()->i32> ():
 ターゲットを `#target core` と明示し、`compile_fail` として扱います。
 
 neplg2:test[compile_fail]
+diag_id: 3074
 ```neplg2
 #entry main
 #indent 4
@@ -476,6 +478,7 @@ fn main <()->()> ():
 ## name_conflict_enum_fn_is_error
 
 neplg2:test[compile_fail]
+diag_id: 3076
 ```neplg2
 
 #entry main
@@ -489,6 +492,23 @@ fn Foo <()->i32> ():
 
 fn main <()->i32> ():
     Foo
+```
+
+## wasm_rejects_llvmir_body_with_diag_id
+
+neplg2:test[compile_fail]
+diag_id: 4005
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn main <()->i32> ():
+    #llvmir:
+        define i32 @main() {
+        entry:
+            ret i32 1
+        }
 ```
 
 ## wasm_cannot_use_stdio
@@ -567,6 +587,7 @@ fn main <()* >i32> ():
 ## non_exhaustive_match_is_error
 
 neplg2:test[compile_fail]
+diag_id: 3069
 ```neplg2
 
 #entry main
@@ -735,6 +756,7 @@ fn main <()->i32> ():
 ## trait_bound_missing_impl_is_error
 
 neplg2:test[compile_fail]
+diag_id: 3068
 ```neplg2
 
 #entry main
@@ -754,6 +776,7 @@ fn main <()->i32> ():
 ## trait_method_arity_mismatch_is_error
 
 neplg2:test[compile_fail]
+diag_id: 3073
 ```neplg2
 
 #entry main

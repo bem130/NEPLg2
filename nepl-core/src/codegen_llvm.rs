@@ -496,9 +496,14 @@ fn try_lower_entry_from_hir(
     let mut reachable = collect_reachable_functions(&hir, resolved_entry.as_str());
     extend_reachable_with_runtime_helpers(&mut reachable, &hir, &sigs);
     let reachable_set: BTreeSet<String> = reachable.iter().cloned().collect();
-    let fallback_alloc_symbol = resolve_symbol_name(&sigs, "alloc", &[LlTy::I32], LlTy::I32)
-        .is_none()
-        .then_some("__nepl_fallback_alloc");
+    let fallback_alloc_symbol = resolve_runtime_helper_symbol(
+        &sigs,
+        &["alloc_raw", "alloc"],
+        &[LlTy::I32],
+        LlTy::I32,
+    )
+    .is_none()
+    .then_some("__nepl_fallback_alloc");
     let memory_global = if fallback_alloc_symbol.is_some() {
         emit_fallback_linear_memory_runtime(out);
         "@__nepl_fallback_mem"
@@ -959,15 +964,25 @@ fn extend_reachable_with_runtime_helpers(
     };
     push_root(
         &mut helper_roots,
-        resolve_symbol_name(sigs, "alloc", &[LlTy::I32], LlTy::I32),
+        resolve_runtime_helper_symbol(sigs, &["alloc_raw", "alloc"], &[LlTy::I32], LlTy::I32),
     );
     push_root(
         &mut helper_roots,
-        resolve_symbol_name(sigs, "dealloc", &[LlTy::I32, LlTy::I32], LlTy::Void),
+        resolve_runtime_helper_symbol(
+            sigs,
+            &["dealloc_raw", "dealloc"],
+            &[LlTy::I32, LlTy::I32],
+            LlTy::Void,
+        ),
     );
     push_root(
         &mut helper_roots,
-        resolve_symbol_name(sigs, "realloc", &[LlTy::I32, LlTy::I32, LlTy::I32], LlTy::I32),
+        resolve_runtime_helper_symbol(
+            sigs,
+            &["realloc_raw", "realloc"],
+            &[LlTy::I32, LlTy::I32, LlTy::I32],
+            LlTy::I32,
+        ),
     );
     push_root(
         &mut helper_roots,
@@ -2452,22 +2467,36 @@ fn llvm_f32_literal(v: f32) -> String {
 }
 
 fn resolve_alloc_symbol(ctx: &LowerCtx<'_>) -> Option<String> {
-    resolve_symbol_name(ctx.sigs, "alloc", &[LlTy::I32], LlTy::I32)
+    resolve_runtime_helper_symbol(ctx.sigs, &["alloc_raw", "alloc"], &[LlTy::I32], LlTy::I32)
         .map(String::from)
         .or_else(|| ctx.fallback_alloc_symbol.map(String::from))
 }
 
+fn resolve_runtime_helper_symbol<'a>(
+    sigs: &'a BTreeMap<String, FnSig>,
+    preferred_names: &[&str],
+    params: &[LlTy],
+    ret: LlTy,
+) -> Option<&'a str> {
+    for preferred in preferred_names {
+        if let Some(name) = resolve_symbol_name(sigs, preferred, params, ret) {
+            return Some(name);
+        }
+    }
+    None
+}
+
 fn resolve_symbol_name<'a>(
     sigs: &'a BTreeMap<String, FnSig>,
-    preferred: &'a str,
+    preferred: &str,
     params: &[LlTy],
     ret: LlTy,
 ) -> Option<&'a str> {
     let signature_matches = |sig: &FnSig| sig.ret == ret && sig.params.as_slice() == params;
 
-    if let Some(sig) = sigs.get(preferred) {
+    if let Some((name, sig)) = sigs.get_key_value(preferred) {
         if signature_matches(sig) {
-            return Some(preferred);
+            return Some(name.as_str());
         }
     }
 

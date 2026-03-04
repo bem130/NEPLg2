@@ -39,8 +39,7 @@ fn ways <(i32)*>i64> (n):
             b
 |
 fn main <()*> ()> ():
-    let sc_obj <Scanner> unwrap_ok scanner_new;
-    let sc <i32> scanner_handle sc_obj;
+    let sc <Scanner> unwrap_ok scanner_new;
     let n <i32> scanner_read_i32 sc;
     let ans <i64> ways n;
     let mut w <Writer> unwrap_ok writer_new;
