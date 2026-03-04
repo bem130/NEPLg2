@@ -1,3 +1,56 @@
+# 2026-03-04 作業メモ (上流修正: typecheck の module/impl 定義時診断IDを明示化)
+
+- 目的:
+  - `todo.md` 残件だった `typecheck.rs` 上流（module/impl 定義フェーズ）の未付与診断を `diag_id` で固定し、文言依存を除去する。
+- 根本原因:
+  - 定義登録/impl 検証フェーズは `Diagnostic::error(...)` のまま残っており、同種エラーでも ID が不安定だった。
+  - そのため `compile_fail` の失敗理由が文言変更で揺れる状態だった。
+- 変更:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D3073..D3092` を追加:
+      - `TypeUnknownTraitBound`
+      - `TypeWasiImportTargetMismatch`
+      - `TypeExternSignatureMustBeFunction`
+      - `TypeItemNameConflict`
+      - `TypeEnumTypeParamBoundsUnsupported`
+      - `TypeStructTypeParamBoundsUnsupported`
+      - `TypeTraitTypeParamsUnsupported`
+      - `TypeTraitMethodTypeParamsUnsupported`
+      - `TypeInherentImplUnsupported`
+      - `TypeImplTypeParamsUnsupported`
+      - `TypeUnknownTrait`
+      - `TypeImplTargetMustBeConcrete`
+      - `TypeFunctionSignatureMustBeFunction`
+      - `TypeAliasTargetNotFound`
+      - `TypeFunctionSignatureOverloadNotFound`
+      - `TypeDuplicateImplMethod`
+      - `TypeImplMethodNotFoundInTrait`
+      - `TypeImplMethodSignatureMismatch`
+      - `TypeImplMissingTraitMethod`
+      - `TypeEntryFunctionMissingOrAmbiguous`
+  - `nepl-core/src/typecheck.rs`
+    - 上流定義フェーズ（enum/struct/trait/impl/alias/entry）の未付与エラーへ `with_id(...)` を付与。
+    - `check_function` 冒頭の signature/arity 検証にも ID を付与。
+  - `tests/neplg2.n.md`
+    - 既存 `compile_fail` に `diag_id` を追加:
+      - `pipe_target_missing_after_annotation_is_error` -> `3016`
+      - `wasi_import_rejected_on_wasm_target` -> `3074`
+      - `name_conflict_enum_fn_is_error` -> `3076`
+      - `trait_bound_missing_impl_is_error` -> `3069`
+      - `trait_method_arity_mismatch_is_error` -> `3068`
+      - `unknown_trait_bound_is_error` -> `3073`
+  - `tests/functions.n.md`
+    - `function_alias_target_not_found`（`diag_id: 3086`）を追加。
+  - `tests/selfhost_req.n.md`
+    - `test_req_trait_extensions` に `diag_id: 3081` を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/neplg2.n.md -i tests/functions.n.md -i tests/selfhost_req.n.md --no-tree -o /tmp/tests-typecheck-item-diag-subset.json -j 15` -> `275/275 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-typecheck-item-diagid.json -j 15` -> `797/797 pass`
+- 状況:
+  - `typecheck.rs` の上流定義フェーズ診断ID付与は完了。
+  - 次段は `todo.md` 残件どおり `codegen_*.rs` の主要診断ID明示化。
+
 # 2026-03-04 作業メモ (上流修正: lexer 診断IDの明示化と回帰追加)
 
 - 目的:

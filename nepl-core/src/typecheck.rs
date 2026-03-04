@@ -121,10 +121,10 @@ fn collect_type_params(
         let mut bounds = Vec::new();
         for b in &p.bounds {
             if !traits.contains_key(b) {
-                diags.push(Diagnostic::error(
-                    format!("unknown trait bound '{}'", b),
-                    p.name.span,
-                ));
+                diags.push(
+                    Diagnostic::error(format!("unknown trait bound '{}'", b), p.name.span)
+                        .with_id(DiagnosticId::TypeUnknownTraitBound),
+                );
             } else {
                 bounds.push(b.clone());
             }
@@ -193,10 +193,10 @@ pub fn typecheck(
             if matches!(target, CompileTarget::Wasm | CompileTarget::Llvm)
                 && m == "wasi_snapshot_preview1"
             {
-                diagnostics.push(Diagnostic::error(
-                    "WASI import is only allowed for #target wasi",
-                    *span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("WASI import is only allowed for #target wasi", *span)
+                        .with_id(DiagnosticId::TypeWasiImportTargetMismatch),
+                );
                 return;
             }
             let ty = type_from_expr(&mut ctx, &mut label_env, signature);
@@ -234,10 +234,10 @@ pub fn typecheck(
                     span: *span,
                 });
             } else {
-                diagnostics.push(Diagnostic::error(
-                    "extern signature must be a function type",
-                    *span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("extern signature must be a function type", *span)
+                        .with_id(DiagnosticId::TypeExternSignatureMustBeFunction),
+                );
             }
         }
     };
@@ -291,18 +291,21 @@ pub fn typecheck(
                     continue;
                 }
                 if env.lookup_any_defined(&e.name.name).is_some() || structs.contains_key(&e.name.name) {
-                    diagnostics.push(Diagnostic::error(
-                        "name already used by another item",
-                        e.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("name already used by another item", e.name.span)
+                            .with_id(DiagnosticId::TypeItemNameConflict),
+                    );
                     continue;
                 }
                 for p in &e.type_params {
                     if !p.bounds.is_empty() {
-                        diagnostics.push(Diagnostic::error(
-                            "enum type parameter bounds are not supported yet",
-                            p.name.span,
-                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                "enum type parameter bounds are not supported yet",
+                                p.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeEnumTypeParamBoundsUnsupported),
+                        );
                     }
                 }
                 let mut e_labels = LabelEnv::new();
@@ -400,18 +403,21 @@ pub fn typecheck(
                     continue;
                 }
                 if env.lookup_any_defined(&s.name.name).is_some() || enums.contains_key(&s.name.name) {
-                    diagnostics.push(Diagnostic::error(
-                        "name already used by another item",
-                        s.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("name already used by another item", s.name.span)
+                            .with_id(DiagnosticId::TypeItemNameConflict),
+                    );
                     continue;
                 }
                 for p in &s.type_params {
                     if !p.bounds.is_empty() {
-                        diagnostics.push(Diagnostic::error(
-                            "struct type parameter bounds are not supported yet",
-                            p.name.span,
-                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                "struct type parameter bounds are not supported yet",
+                                p.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeStructTypeParamBoundsUnsupported),
+                        );
                     }
                 }
                 let mut s_labels = LabelEnv::new();
@@ -480,20 +486,26 @@ pub fn typecheck(
                 let (tps, _bounds_vec, _bounds_map) =
                     collect_type_params(&mut ctx, &mut f_labels, &t.type_params, &traits, &mut diagnostics);
                 if !t.type_params.is_empty() {
-                    diagnostics.push(Diagnostic::error(
-                        "trait type parameters are not supported yet",
-                        t.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(
+                            "trait type parameters are not supported yet",
+                            t.name.span,
+                        )
+                        .with_id(DiagnosticId::TypeTraitTypeParamsUnsupported),
+                    );
                 }
                 let self_ty = ctx.fresh_var(Some(String::from("Self")));
                 f_labels.insert(String::from("Self"), self_ty);
                 let mut methods = BTreeMap::new();
                 for m in &t.methods {
                     if !m.type_params.is_empty() {
-                        diagnostics.push(Diagnostic::error(
-                            "trait methods cannot have type parameters yet",
-                            m.name.span,
-                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                "trait methods cannot have type parameters yet",
+                                m.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeTraitMethodTypeParamsUnsupported),
+                        );
                         continue;
                     }
                     let sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
@@ -567,17 +579,17 @@ pub fn typecheck(
         }
         if let Stmt::Impl(i) = item {
             if i.trait_name.is_none() {
-                diagnostics.push(Diagnostic::error(
-                    "inherent impl is not supported yet",
-                    i.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("inherent impl is not supported yet", i.span)
+                        .with_id(DiagnosticId::TypeInherentImplUnsupported),
+                );
                 continue;
             }
             if !i.type_params.is_empty() {
-                diagnostics.push(Diagnostic::error(
-                    "impl type parameters are not supported yet",
-                    i.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("impl type parameters are not supported yet", i.span)
+                        .with_id(DiagnosticId::TypeImplTypeParamsUnsupported),
+                );
                 continue;
             }
             let mut f_labels = LabelEnv::new();
@@ -588,18 +600,18 @@ pub fn typecheck(
             let trait_name = i.trait_name.as_ref().map(|tn| tn.name.clone());
             if let Some(tn) = &trait_name {
                 if !traits.contains_key(tn) {
-                    diagnostics.push(Diagnostic::error(
-                        format!("unknown trait '{}'", tn),
-                        i.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(format!("unknown trait '{}'", tn), i.span)
+                            .with_id(DiagnosticId::TypeUnknownTrait),
+                    );
                     continue;
                 }
             }
             if type_contains_unbound_var(&ctx, target_ty) {
-                diagnostics.push(Diagnostic::error(
-                    "impl target type must be concrete",
-                    i.target_ty.span(),
-                ));
+                diagnostics.push(
+                    Diagnostic::error("impl target type must be concrete", i.target_ty.span())
+                        .with_id(DiagnosticId::TypeImplTargetMustBeConcrete),
+                );
                 continue;
             }
             if trait_name.as_deref() == Some("Copy") {
@@ -725,17 +737,17 @@ pub fn typecheck(
             } = ctx.get(ty)
             {
                 if env.lookup_value(&f.name.name).is_some() {
-                    diagnostics.push(Diagnostic::error(
-                        "name already used by another item",
-                        f.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("name already used by another item", f.name.span)
+                            .with_id(DiagnosticId::TypeItemNameConflict),
+                    );
                     continue;
                 }
                 if enums.contains_key(&f.name.name) || structs.contains_key(&f.name.name) {
-                    diagnostics.push(Diagnostic::error(
-                        "name already used by another item",
-                        f.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("name already used by another item", f.name.span)
+                            .with_id(DiagnosticId::TypeItemNameConflict),
+                    );
                     continue;
                 }
                 if crate::log::is_verbose() {
@@ -843,28 +855,28 @@ pub fn typecheck(
                     },
                 });
             } else {
-                diagnostics.push(Diagnostic::error(
-                    "function signature must be a function type",
-                    f.name.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("function signature must be a function type", f.name.span)
+                        .with_id(DiagnosticId::TypeFunctionSignatureMustBeFunction),
+                );
             }
         }
     }
 
     for alias in &fn_aliases {
         if enums.contains_key(&alias.name.name) || structs.contains_key(&alias.name.name) {
-            diagnostics.push(Diagnostic::error(
-                "name already used by another item",
-                alias.name.span,
-            ));
+            diagnostics.push(
+                Diagnostic::error("name already used by another item", alias.name.span)
+                    .with_id(DiagnosticId::TypeItemNameConflict),
+            );
             continue;
         }
         let targets = env.lookup_all_callables(&alias.target.name);
         if targets.is_empty() {
-            diagnostics.push(Diagnostic::error(
-                "alias target not found",
-                alias.target.span,
-            ));
+            diagnostics.push(
+                Diagnostic::error("alias target not found", alias.target.span)
+                    .with_id(DiagnosticId::TypeAliasTargetNotFound),
+            );
             continue;
         }
         let mut target_infos = Vec::new();
@@ -906,10 +918,10 @@ pub fn typecheck(
                 );
             }
             if env.lookup_value(&alias.name.name).is_some() {
-                diagnostics.push(Diagnostic::error(
-                    "name already used by another item",
-                    alias.name.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("name already used by another item", alias.name.span)
+                        .with_id(DiagnosticId::TypeItemNameConflict),
+                );
                 break;
             }
             if let Some(blocked) = shadow_blocked_by_nonshadow(&env, &alias.name.name) {
@@ -1042,10 +1054,13 @@ pub fn typecheck(
                     match matched {
                         Some(ty) => ty,
                         None => {
-                            diagnostics.push(Diagnostic::error(
-                                "function signature does not match any overload",
-                                f.name.span,
-                            ));
+                            diagnostics.push(
+                                Diagnostic::error(
+                                    "function signature does not match any overload",
+                                    f.name.span,
+                                )
+                                .with_id(DiagnosticId::TypeFunctionSignatureOverloadNotFound),
+                            );
                             continue;
                         }
                     }
@@ -1119,28 +1134,28 @@ pub fn typecheck(
             let trait_name = match &i.trait_name {
                 Some(tn) => tn.name.clone(),
                 None => {
-                    diagnostics.push(Diagnostic::error(
-                        "inherent impl is not supported yet",
-                        i.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("inherent impl is not supported yet", i.span)
+                            .with_id(DiagnosticId::TypeInherentImplUnsupported),
+                    );
                     continue;
                 }
             };
             let trait_info = match traits.get(&trait_name) {
                 Some(info) => info,
                 None => {
-                    diagnostics.push(Diagnostic::error(
-                        format!("unknown trait '{}'", trait_name),
-                        i.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(format!("unknown trait '{}'", trait_name), i.span)
+                            .with_id(DiagnosticId::TypeUnknownTrait),
+                    );
                     continue;
                 }
             };
             if !i.type_params.is_empty() {
-                diagnostics.push(Diagnostic::error(
-                    "impl type parameters are not supported yet",
-                    i.span,
-                ));
+                diagnostics.push(
+                    Diagnostic::error("impl type parameters are not supported yet", i.span)
+                        .with_id(DiagnosticId::TypeImplTypeParamsUnsupported),
+                );
                 continue;
             }
 
@@ -1150,10 +1165,10 @@ pub fn typecheck(
                 collect_type_params(&mut ctx, &mut f_labels, &i.type_params, &traits, &mut diagnostics);
             let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
             if type_contains_unbound_var(&ctx, target_ty) {
-                diagnostics.push(Diagnostic::error(
-                    "impl target type must be concrete",
-                    i.target_ty.span(),
-                ));
+                diagnostics.push(
+                    Diagnostic::error("impl target type must be concrete", i.target_ty.span())
+                        .with_id(DiagnosticId::TypeImplTargetMustBeConcrete),
+                );
                 continue;
             }
             if trait_name == "Copy" {
@@ -1168,26 +1183,35 @@ pub fn typecheck(
             let mut seen_methods = BTreeSet::new();
             for m in &i.methods {
                 if !seen_methods.insert(m.name.name.clone()) {
-                    diagnostics.push(Diagnostic::error(
-                        "duplicate method in impl",
-                        m.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("duplicate method in impl", m.name.span)
+                            .with_id(DiagnosticId::TypeDuplicateImplMethod),
+                    );
                     continue;
                 }
                 if !m.type_params.is_empty() {
-                    diagnostics.push(Diagnostic::error(
-                        "impl methods cannot have type parameters yet",
-                        m.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(
+                            "impl methods cannot have type parameters yet",
+                            m.name.span,
+                        )
+                        .with_id(DiagnosticId::TypeTraitMethodTypeParamsUnsupported),
+                    );
                     continue;
                 }
                 let trait_sig = match trait_info.methods.get(&m.name.name) {
                     Some(sig) => *sig,
                     None => {
-                        diagnostics.push(Diagnostic::error(
-                            format!("method '{}' not found in trait '{}'", m.name.name, trait_name),
-                            m.name.span,
-                        ));
+                        diagnostics.push(
+                            Diagnostic::error(
+                                format!(
+                                    "method '{}' not found in trait '{}'",
+                                    m.name.name, trait_name
+                                ),
+                                m.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeImplMethodNotFoundInTrait),
+                        );
                         continue;
                     }
                 };
@@ -1196,10 +1220,10 @@ pub fn typecheck(
                 let expected_sig = ctx.substitute(trait_sig, &mapping);
                 let actual_sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
                 if !type_signature_matches(&ctx, expected_sig, actual_sig) {
-                    diagnostics.push(Diagnostic::error(
-                        "impl method signature does not match trait",
-                        m.name.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error("impl method signature does not match trait", m.name.span)
+                            .with_id(DiagnosticId::TypeImplMethodSignatureMismatch),
+                    );
                     continue;
                 }
                 let mut nested_functions = Vec::new();
@@ -1242,10 +1266,13 @@ pub fn typecheck(
 
             for trait_method in trait_info.methods.keys() {
                 if !seen_methods.contains(trait_method) {
-                    diagnostics.push(Diagnostic::error(
-                        format!("missing method '{}' for trait '{}'", trait_method, trait_name),
-                        i.span,
-                    ));
+                    diagnostics.push(
+                        Diagnostic::error(
+                            format!("missing method '{}' for trait '{}'", trait_method, trait_name),
+                            i.span,
+                        )
+                        .with_id(DiagnosticId::TypeImplMissingTraitMethod),
+                    );
                 }
             }
 
@@ -1277,10 +1304,10 @@ pub fn typecheck(
         if func_symbols.len() == 1 {
             Some(func_symbols.remove(0))
         } else {
-            diagnostics.push(Diagnostic::error(
-                "entry function is missing or ambiguous",
-                Span::dummy(),
-            ));
+            diagnostics.push(
+                Diagnostic::error("entry function is missing or ambiguous", Span::dummy())
+                    .with_id(DiagnosticId::TypeEntryFunctionMissingOrAmbiguous),
+            );
             None
         }
     } else {
@@ -1344,18 +1371,18 @@ fn check_function(
             ..
         } => (params, result, effect),
         _ => {
-            diags.push(Diagnostic::error(
-                "function signature must be a function type",
-                f.name.span,
-            ));
+            diags.push(
+                Diagnostic::error("function signature must be a function type", f.name.span)
+                    .with_id(DiagnosticId::TypeFunctionSignatureMustBeFunction),
+            );
             return Err(diags);
         }
     };
     if params_ty.len() != captured_params.len() + f.params.len() {
-        diags.push(Diagnostic::error(
-            "parameter count mismatch with signature",
-            f.name.span,
-        ));
+        diags.push(
+            Diagnostic::error("parameter count mismatch with signature", f.name.span)
+                .with_id(DiagnosticId::TypeArgumentArityMismatch),
+        );
         return Err(diags);
     }
 

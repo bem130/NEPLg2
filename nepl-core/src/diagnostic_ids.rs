@@ -171,6 +171,46 @@ pub enum DiagnosticId {
     TypeAssignmentArityMismatch = 3071,
     /// 呼び出し簡約の反復上限超過。
     TypeCallReductionLimitExceeded = 3072,
+    /// 存在しない trait 境界を指定。
+    TypeUnknownTraitBound = 3073,
+    /// #extern で WASI import を wasi 以外で使用。
+    TypeWasiImportTargetMismatch = 3074,
+    /// #extern のシグネチャが関数型でない。
+    TypeExternSignatureMustBeFunction = 3075,
+    /// 既存 item 名との衝突。
+    TypeItemNameConflict = 3076,
+    /// enum 型引数の trait 境界は未対応。
+    TypeEnumTypeParamBoundsUnsupported = 3077,
+    /// struct 型引数の trait 境界は未対応。
+    TypeStructTypeParamBoundsUnsupported = 3078,
+    /// trait 自体の型引数は未対応。
+    TypeTraitTypeParamsUnsupported = 3079,
+    /// trait method の型引数は未対応。
+    TypeTraitMethodTypeParamsUnsupported = 3080,
+    /// inherent impl は未対応。
+    TypeInherentImplUnsupported = 3081,
+    /// impl 型引数は未対応。
+    TypeImplTypeParamsUnsupported = 3082,
+    /// 不明 trait。
+    TypeUnknownTrait = 3083,
+    /// impl 対象型が concrete でない。
+    TypeImplTargetMustBeConcrete = 3084,
+    /// function signature が関数型でない。
+    TypeFunctionSignatureMustBeFunction = 3085,
+    /// 関数 alias の対象が未定義。
+    TypeAliasTargetNotFound = 3086,
+    /// function body 検証時に対応する overload が見つからない。
+    TypeFunctionSignatureOverloadNotFound = 3087,
+    /// impl 内でメソッド名が重複。
+    TypeDuplicateImplMethod = 3088,
+    /// trait に存在しないメソッドを impl。
+    TypeImplMethodNotFoundInTrait = 3089,
+    /// impl メソッドのシグネチャが trait と不一致。
+    TypeImplMethodSignatureMismatch = 3090,
+    /// trait の必須メソッドが impl に不足。
+    TypeImplMissingTraitMethod = 3091,
+    /// entry 関数が未定義または曖昧。
+    TypeEntryFunctionMissingOrAmbiguous = 3092,
 }
 
 impl DiagnosticId {
@@ -263,6 +303,26 @@ impl DiagnosticId {
             3070 => Some(DiagnosticId::TypeInvalidDeref),
             3071 => Some(DiagnosticId::TypeAssignmentArityMismatch),
             3072 => Some(DiagnosticId::TypeCallReductionLimitExceeded),
+            3073 => Some(DiagnosticId::TypeUnknownTraitBound),
+            3074 => Some(DiagnosticId::TypeWasiImportTargetMismatch),
+            3075 => Some(DiagnosticId::TypeExternSignatureMustBeFunction),
+            3076 => Some(DiagnosticId::TypeItemNameConflict),
+            3077 => Some(DiagnosticId::TypeEnumTypeParamBoundsUnsupported),
+            3078 => Some(DiagnosticId::TypeStructTypeParamBoundsUnsupported),
+            3079 => Some(DiagnosticId::TypeTraitTypeParamsUnsupported),
+            3080 => Some(DiagnosticId::TypeTraitMethodTypeParamsUnsupported),
+            3081 => Some(DiagnosticId::TypeInherentImplUnsupported),
+            3082 => Some(DiagnosticId::TypeImplTypeParamsUnsupported),
+            3083 => Some(DiagnosticId::TypeUnknownTrait),
+            3084 => Some(DiagnosticId::TypeImplTargetMustBeConcrete),
+            3085 => Some(DiagnosticId::TypeFunctionSignatureMustBeFunction),
+            3086 => Some(DiagnosticId::TypeAliasTargetNotFound),
+            3087 => Some(DiagnosticId::TypeFunctionSignatureOverloadNotFound),
+            3088 => Some(DiagnosticId::TypeDuplicateImplMethod),
+            3089 => Some(DiagnosticId::TypeImplMethodNotFoundInTrait),
+            3090 => Some(DiagnosticId::TypeImplMethodSignatureMismatch),
+            3091 => Some(DiagnosticId::TypeImplMissingTraitMethod),
+            3092 => Some(DiagnosticId::TypeEntryFunctionMissingOrAmbiguous),
             _ => None,
         }
     }
@@ -408,6 +468,52 @@ impl DiagnosticId {
             DiagnosticId::TypeAssignmentArityMismatch => "assignment expects one argument",
             DiagnosticId::TypeCallReductionLimitExceeded => {
                 "call reduction exceeded maximum iterations"
+            }
+            DiagnosticId::TypeUnknownTraitBound => "unknown trait bound",
+            DiagnosticId::TypeWasiImportTargetMismatch => {
+                "WASI import is only allowed for #target wasi"
+            }
+            DiagnosticId::TypeExternSignatureMustBeFunction => {
+                "extern signature must be a function type"
+            }
+            DiagnosticId::TypeItemNameConflict => "name already used by another item",
+            DiagnosticId::TypeEnumTypeParamBoundsUnsupported => {
+                "enum type parameter bounds are not supported yet"
+            }
+            DiagnosticId::TypeStructTypeParamBoundsUnsupported => {
+                "struct type parameter bounds are not supported yet"
+            }
+            DiagnosticId::TypeTraitTypeParamsUnsupported => {
+                "trait type parameters are not supported yet"
+            }
+            DiagnosticId::TypeTraitMethodTypeParamsUnsupported => {
+                "trait methods cannot have type parameters yet"
+            }
+            DiagnosticId::TypeInherentImplUnsupported => "inherent impl is not supported yet",
+            DiagnosticId::TypeImplTypeParamsUnsupported => {
+                "impl type parameters are not supported yet"
+            }
+            DiagnosticId::TypeUnknownTrait => "unknown trait",
+            DiagnosticId::TypeImplTargetMustBeConcrete => {
+                "impl target type must be concrete"
+            }
+            DiagnosticId::TypeFunctionSignatureMustBeFunction => {
+                "function signature must be a function type"
+            }
+            DiagnosticId::TypeAliasTargetNotFound => "alias target not found",
+            DiagnosticId::TypeFunctionSignatureOverloadNotFound => {
+                "function signature does not match any overload"
+            }
+            DiagnosticId::TypeDuplicateImplMethod => "duplicate method in impl",
+            DiagnosticId::TypeImplMethodNotFoundInTrait => {
+                "method is not found in the target trait"
+            }
+            DiagnosticId::TypeImplMethodSignatureMismatch => {
+                "impl method signature does not match trait"
+            }
+            DiagnosticId::TypeImplMissingTraitMethod => "missing required trait method in impl",
+            DiagnosticId::TypeEntryFunctionMissingOrAmbiguous => {
+                "entry function is missing or ambiguous"
             }
         }
     }

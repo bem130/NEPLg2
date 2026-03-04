@@ -120,6 +120,22 @@ fn main <()->i32> ():
     apply 5 @square
 ```
 
+## function_alias_target_not_found
+
+neplg2:test[compile_fail]
+diag_id: 3086
+```neplg2
+
+#entry main
+#indent 4
+#target core
+
+fn plus missing;
+
+fn main <()->i32> ():
+    0
+```
+
 ## function_return
 
 neplg2:test
