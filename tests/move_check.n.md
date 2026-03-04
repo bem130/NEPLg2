@@ -9,10 +9,13 @@ ret: 0
 #entry main
 #indent 4
 struct RegionToken:
-    raw <i32>
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
 
 fn main <()->i32> ():
-    let t <RegionToken> RegionToken 1
+    let t <RegionToken> RegionToken @token_id
     let u <RegionToken> t
     0
 ```
@@ -25,10 +28,13 @@ diag_id: 3053
 #entry main
 #indent 4
 struct RegionToken:
-    raw <i32>
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
 
 fn main <()->i32> ():
-    let t <RegionToken> RegionToken 1
+    let t <RegionToken> RegionToken @token_id
     let u <RegionToken> t
     let v <RegionToken> t
     0
@@ -42,13 +48,16 @@ diag_id: 3054
 #entry main
 #indent 4
 struct RegionToken:
-    raw <i32>
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
 
 fn consume <(RegionToken)->i32> (_t):
     1
 
 fn main <()->i32> ():
-    let t <RegionToken> RegionToken 1
+    let t <RegionToken> RegionToken @token_id
     if true:
         then:
             consume t
@@ -69,13 +78,16 @@ diag_id: 3065
 #import "core/math" as *
 
 struct RegionToken:
-    raw <i32>
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
 
 fn consume <(RegionToken)->i32> (_t):
     1
 
 fn main <()->i32> ():
-    let t <RegionToken> RegionToken 1
+    let t <RegionToken> RegionToken @token_id
     let mut i <i32> 0
     while lt i 1:
         do:

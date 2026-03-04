@@ -243,7 +243,7 @@ trait Copy:
         x
 
 struct RegionToken:
-    raw <i32>
+    raw <(i32)->i32>
 
 impl Copy for RegionToken:
     fn copy_mark <(RegionToken)->RegionToken> (x):
@@ -301,6 +301,28 @@ fn main <()->i32> ():
     0
 ```
 
+## 同一 trait と同一対象型への impl 重複は拒否
+
+neplg2:test[compile_fail]
+diag_id: 3093
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Mark:
+    fn mark <(Self)->Self> (x):
+        x
+
+impl Mark for i32:
+    fn mark <(i32)->i32> (x):
+        x
+
+impl Mark for i32:
+    fn mark <(i32)->i32> (x):
+        x
+```
+
 ## RegionToken は非Copyとして move 後再利用不可
 
 neplg2:test[compile_fail]
@@ -311,13 +333,16 @@ diag_id: 3053
 #target core
 
 struct RegionToken:
-    raw <i32>
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
 
 fn consume <(RegionToken)->i32> (_t):
     1
 
 fn main <()->i32> ():
-    let t <RegionToken> RegionToken 1
+    let t <RegionToken> RegionToken @token_id
     consume t
     consume t
 ```
@@ -332,13 +357,16 @@ diag_id: 3063
 #target core
 
 struct RegionToken:
-    raw <i32>
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
 
 fn consume <(RegionToken)->i32> (_t):
     1
 
 fn main <()->i32> ():
-    let t <RegionToken> RegionToken 1
+    let t <RegionToken> RegionToken @token_id
     consume t
     let r &t
     0
@@ -354,13 +382,16 @@ diag_id: 3054
 #target core
 
 struct RegionToken:
-    raw <i32>
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
 
 fn consume <(RegionToken)->i32> (_t):
     1
 
 fn main <()->i32> ():
-    let t <RegionToken> RegionToken 1
+    let t <RegionToken> RegionToken @token_id
     if true:
         then:
             consume t

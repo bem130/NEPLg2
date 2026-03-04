@@ -211,6 +211,8 @@ pub enum DiagnosticId {
     TypeImplMissingTraitMethod = 3091,
     /// entry 関数が未定義または曖昧。
     TypeEntryFunctionMissingOrAmbiguous = 3092,
+    /// 同一 trait と同一対象型への impl が重複。
+    TypeDuplicateImplForTraitTarget = 3093,
     /// WASM backend が extern シグネチャを lower できない。
     CodegenWasmUnsupportedExternSignature = 4001,
     /// WASM backend が関数シグネチャを lower できない。
@@ -353,6 +355,7 @@ impl DiagnosticId {
             3090 => Some(DiagnosticId::TypeImplMethodSignatureMismatch),
             3091 => Some(DiagnosticId::TypeImplMissingTraitMethod),
             3092 => Some(DiagnosticId::TypeEntryFunctionMissingOrAmbiguous),
+            3093 => Some(DiagnosticId::TypeDuplicateImplForTraitTarget),
             4001 => Some(DiagnosticId::CodegenWasmUnsupportedExternSignature),
             4002 => Some(DiagnosticId::CodegenWasmUnsupportedFunctionSignature),
             4003 => Some(DiagnosticId::CodegenWasmMissingReturnValue),
@@ -559,6 +562,9 @@ impl DiagnosticId {
             DiagnosticId::TypeImplMissingTraitMethod => "missing required trait method in impl",
             DiagnosticId::TypeEntryFunctionMissingOrAmbiguous => {
                 "entry function is missing or ambiguous"
+            }
+            DiagnosticId::TypeDuplicateImplForTraitTarget => {
+                "duplicate impl for same trait and target type"
             }
             DiagnosticId::CodegenWasmUnsupportedExternSignature => {
                 "unsupported extern signature for wasm"

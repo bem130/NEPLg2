@@ -6408,3 +6408,25 @@
   - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-temp-borrow-fix.json -j 15` -> `799/799 pass`
 - 補足:
   - 「copy 情報のハードコード削減」は継続課題。`TypeCtx::is_copy` の全面移行は move/effect 設計と同時に段階実施する（仕様書と todo の順序を優先）。
+# 2026-03-04 作業メモ (trait 設計の再確認と上流修正)
+
+- 目的:
+  - `plan.md` と `doc/move_effect_spec.md` に整合する形で、trait 実装整合の判定を安定化する。
+  - Rust/Haskell の設計論点（契約、制約、coherence）を NEPLg2 向けに整理し、実装方針を固定する。
+
+- 実施:
+  - `nepl-core/src/typecheck.rs`
+    - impl メソッド署名の trait 整合判定を文字列比較から構造型同値（`ctx.same_type`）へ変更。
+  - `doc/trait_system_design.md` を新規作成。
+    - NEPLg2 における trait の役割（interface/type-class/メモリ能力）を定義。
+    - coherence、オーバーロード整合、ハードコード最小化方針、拡張順序を明文化。
+  - `todo.md`
+    - フェーズ `B2`（trait 設計の実装反映）を追加。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-trait-design-targeted.json -j 15` -> `276/276 pass`
+
+- 差分認識:
+  - 依然として `Copy/Clone` 能力接続には最小限の trait 名参照が残っている。
+  - 次段で `todo.md` フェーズB2に従い、能力テーブル化して名前分岐を縮小する。

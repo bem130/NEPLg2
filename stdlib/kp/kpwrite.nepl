@@ -27,13 +27,17 @@
 
 struct Writer:
     raw <MemPtr<u8>>
+    marker <(i32)->i32>
 
 struct WriterBuf:
     ptr <i32>
     cap <i32>
 
+fn writer_noncopy_marker <(i32)->i32> (x):
+    x
+
 fn writer_wrap <(i32)->Writer> (raw):
-    Writer mem_ptr_wrap raw
+    Writer mem_ptr_wrap raw @writer_noncopy_marker
 
 //: writer_try_free: 解放失敗を無視して領域を解放する内部補助
 //:

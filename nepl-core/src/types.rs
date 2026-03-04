@@ -79,6 +79,7 @@ pub struct TypeCtx {
     str_ty: TypeId,
     never_ty: TypeId,
     named: alloc::collections::BTreeMap<alloc::string::String, TypeId>,
+    copy_impl_targets: Vec<TypeId>,
 }
 
 static GLOBAL_UNIFY_DEPTH: AtomicUsize = AtomicUsize::new(0);
@@ -91,28 +92,6 @@ impl Drop for UnifyDepthGuard {
 }
 
 impl TypeCtx {
-    fn is_explicit_noncopy_name(name: &str) -> bool {
-        matches!(name, "RegionToken" | "Writer")
-    }
-
-    fn is_explicit_noncopy_type(
-        &self,
-        id: TypeId,
-        mapping: &BTreeMap<TypeId, TypeId>,
-    ) -> bool {
-        let resolved = mapping
-            .get(&self.resolve_id(id))
-            .copied()
-            .unwrap_or_else(|| self.resolve_id(id));
-        match self.get_ref(resolved) {
-            TypeKind::Named(name) => Self::is_explicit_noncopy_name(name),
-            TypeKind::Struct { name, .. } => Self::is_explicit_noncopy_name(name),
-            TypeKind::Enum { name, .. } => Self::is_explicit_noncopy_name(name),
-            TypeKind::Apply { base, .. } => self.is_explicit_noncopy_type(*base, mapping),
-            _ => false,
-        }
-    }
-
     pub fn new() -> Self {
         let mut arena = Vec::new();
         let unit = TypeId(arena.len());
@@ -140,6 +119,7 @@ impl TypeCtx {
             str_ty,
             never_ty,
             named: alloc::collections::BTreeMap::new(),
+            copy_impl_targets: Vec::new(),
         }
     }
 
@@ -241,21 +221,41 @@ impl TypeCtx {
         }
     }
 
-    pub fn is_copy(&self, id: TypeId) -> bool {
-        let mut visiting = BTreeSet::new();
-        let mapping = BTreeMap::new();
-        self.is_copy_inner(id, &mut visiting, &mapping)
+    pub fn register_copy_impl_target(&mut self, id: TypeId) {
+        let resolved = self.resolve_id(id);
+        if self
+            .copy_impl_targets
+            .iter()
+            .any(|t| self.same_type(*t, resolved))
+        {
+            return;
+        }
+        self.copy_impl_targets.push(resolved);
     }
 
-    fn is_copy_inner(
+    pub fn has_copy_impl_target(&self, id: TypeId) -> bool {
+        let resolved = self.resolve_id(id);
+        self.copy_impl_targets
+            .iter()
+            .any(|t| self.same_type(*t, resolved))
+    }
+
+    pub fn is_copy_eligible(&self, id: TypeId) -> bool {
+        let mut visiting = BTreeSet::new();
+        let mapping = BTreeMap::new();
+        self.is_copy_eligible_inner(id, &mut visiting, &mapping)
+    }
+
+    pub fn is_copy(&self, id: TypeId) -> bool {
+        self.is_copy_eligible(id)
+    }
+
+    fn is_copy_eligible_inner(
         &self,
         id: TypeId,
         visiting: &mut BTreeSet<TypeId>,
         mapping: &BTreeMap<TypeId, TypeId>,
     ) -> bool {
-        if self.is_explicit_noncopy_type(id, mapping) {
-            return false;
-        }
         let resolved = mapping
             .get(&self.resolve_id(id))
             .copied()
@@ -275,13 +275,13 @@ impl TypeCtx {
             TypeKind::Box(_) => false,
             TypeKind::Enum { variants, .. } => variants
                 .iter()
-                .all(|v| v.payload.map(|p| self.is_copy_inner(p, visiting, mapping)).unwrap_or(true)),
+                .all(|v| v.payload.map(|p| self.is_copy_eligible_inner(p, visiting, mapping)).unwrap_or(true)),
             TypeKind::Struct { fields, .. } => fields
                 .iter()
-                .all(|f| self.is_copy_inner(*f, visiting, mapping)),
+                .all(|f| self.is_copy_eligible_inner(*f, visiting, mapping)),
             TypeKind::Tuple { items } => items
                 .iter()
-                .all(|t| self.is_copy_inner(*t, visiting, mapping)),
+                .all(|t| self.is_copy_eligible_inner(*t, visiting, mapping)),
             TypeKind::Apply { base, args } => {
                 let resolved_base = mapping
                     .get(&self.resolve_id(*base))
@@ -304,7 +304,7 @@ impl TypeCtx {
                             }
                             fields
                                 .iter()
-                                .all(|f| self.is_copy_inner(*f, visiting, &nested))
+                                .all(|f| self.is_copy_eligible_inner(*f, visiting, &nested))
                         }
                     }
                     TypeKind::Enum {
@@ -325,7 +325,7 @@ impl TypeCtx {
                             }
                             variants.iter().all(|v| {
                                 v.payload
-                                    .map(|p| self.is_copy_inner(p, visiting, &nested))
+                                    .map(|p| self.is_copy_eligible_inner(p, visiting, &nested))
                                     .unwrap_or(true)
                             })
                         }
@@ -336,7 +336,7 @@ impl TypeCtx {
             TypeKind::Function { .. } => false,
             TypeKind::Var(v) => {
                 if let Some(b) = v.binding {
-                    self.is_copy_inner(b, visiting, mapping)
+                    self.is_copy_eligible_inner(b, visiting, mapping)
                 } else {
                     false
                 }
@@ -344,6 +344,163 @@ impl TypeCtx {
             TypeKind::Named(name) => matches!(name.as_str(), "i64" | "f64"),
         };
         visiting.remove(&resolved);
+        result
+    }
+
+    pub fn same_type(&self, a: TypeId, b: TypeId) -> bool {
+        let mut seen = BTreeSet::new();
+        self.same_type_inner(self.resolve_id(a), self.resolve_id(b), &mut seen)
+    }
+
+    fn same_type_inner(
+        &self,
+        a: TypeId,
+        b: TypeId,
+        seen: &mut BTreeSet<(TypeId, TypeId)>,
+    ) -> bool {
+        let ra = self.resolve_id(a);
+        let rb = self.resolve_id(b);
+        if ra == rb {
+            return true;
+        }
+        let key = if ra <= rb { (ra, rb) } else { (rb, ra) };
+        if !seen.insert(key) {
+            return true;
+        }
+        let result = match (self.get_ref(ra), self.get_ref(rb)) {
+            (TypeKind::Unit, TypeKind::Unit)
+            | (TypeKind::I32, TypeKind::I32)
+            | (TypeKind::U8, TypeKind::U8)
+            | (TypeKind::F32, TypeKind::F32)
+            | (TypeKind::Bool, TypeKind::Bool)
+            | (TypeKind::Str, TypeKind::Str)
+            | (TypeKind::Never, TypeKind::Never) => true,
+            (TypeKind::Named(na), TypeKind::Named(nb)) => na == nb,
+            (TypeKind::Box(ia), TypeKind::Box(ib)) => self.same_type_inner(*ia, *ib, seen),
+            (TypeKind::Reference(ia, ma), TypeKind::Reference(ib, mb)) => {
+                ma == mb && self.same_type_inner(*ia, *ib, seen)
+            }
+            (TypeKind::Tuple { items: ia }, TypeKind::Tuple { items: ib }) => {
+                ia.len() == ib.len()
+                    && ia
+                        .iter()
+                        .zip(ib.iter())
+                        .all(|(ta, tb)| self.same_type_inner(*ta, *tb, seen))
+            }
+            (
+                TypeKind::Function {
+                    type_params: tpa,
+                    params: pa,
+                    result: ra,
+                    effect: ea,
+                },
+                TypeKind::Function {
+                    type_params: tpb,
+                    params: pb,
+                    result: rb,
+                    effect: eb,
+                },
+            ) => {
+                ea == eb
+                    && tpa.len() == tpb.len()
+                    && pa.len() == pb.len()
+                    && tpa
+                        .iter()
+                        .zip(tpb.iter())
+                        .all(|(ta, tb)| self.same_type_inner(*ta, *tb, seen))
+                    && pa
+                        .iter()
+                        .zip(pb.iter())
+                        .all(|(ta, tb)| self.same_type_inner(*ta, *tb, seen))
+                    && self.same_type_inner(*ra, *rb, seen)
+            }
+            (
+                TypeKind::Struct {
+                    name: na,
+                    type_params: tpa,
+                    fields: fa,
+                    field_names: fna,
+                    ..
+                },
+                TypeKind::Struct {
+                    name: nb,
+                    type_params: tpb,
+                    fields: fb,
+                    field_names: fnb,
+                    ..
+                },
+            ) => {
+                na == nb
+                    && fna == fnb
+                    && tpa.len() == tpb.len()
+                    && fa.len() == fb.len()
+                    && tpa
+                        .iter()
+                        .zip(tpb.iter())
+                        .all(|(ta, tb)| self.same_type_inner(*ta, *tb, seen))
+                    && fa
+                        .iter()
+                        .zip(fb.iter())
+                        .all(|(ta, tb)| self.same_type_inner(*ta, *tb, seen))
+            }
+            (
+                TypeKind::Enum {
+                    name: na,
+                    type_params: tpa,
+                    variants: va,
+                    ..
+                },
+                TypeKind::Enum {
+                    name: nb,
+                    type_params: tpb,
+                    variants: vb,
+                    ..
+                },
+            ) => {
+                na == nb
+                    && tpa.len() == tpb.len()
+                    && va.len() == vb.len()
+                    && tpa
+                        .iter()
+                        .zip(tpb.iter())
+                        .all(|(ta, tb)| self.same_type_inner(*ta, *tb, seen))
+                    && va.iter().zip(vb.iter()).all(|(a, b)| {
+                        a.name == b.name
+                            && match (a.payload, b.payload) {
+                                (Some(pa), Some(pb)) => self.same_type_inner(pa, pb, seen),
+                                (None, None) => true,
+                                _ => false,
+                            }
+                    })
+            }
+            (
+                TypeKind::Apply { base: ba, args: aa },
+                TypeKind::Apply { base: bb, args: ab },
+            ) => {
+                aa.len() == ab.len()
+                    && self.same_type_inner(*ba, *bb, seen)
+                    && aa
+                        .iter()
+                        .zip(ab.iter())
+                        .all(|(ta, tb)| self.same_type_inner(*ta, *tb, seen))
+            }
+            (TypeKind::Var(va), TypeKind::Var(vb)) => match (va.binding, vb.binding) {
+                (Some(ba), Some(bb)) => self.same_type_inner(ba, bb, seen),
+                (None, None) => va.label == vb.label,
+                (Some(ba), None) => self.same_type_inner(ba, rb, seen),
+                (None, Some(bb)) => self.same_type_inner(ra, bb, seen),
+            },
+            (TypeKind::Var(va), _) => va
+                .binding
+                .map(|ba| self.same_type_inner(ba, rb, seen))
+                .unwrap_or(false),
+            (_, TypeKind::Var(vb)) => vb
+                .binding
+                .map(|bb| self.same_type_inner(ra, bb, seen))
+                .unwrap_or(false),
+            _ => false,
+        };
+        seen.remove(&key);
         result
     }
 
