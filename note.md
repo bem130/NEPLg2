@@ -13,6 +13,8 @@
       - まず既存 `is_copy_eligible` で前提検証。
       - `copy_trait_enabled == false` では従来挙動を維持。
       - `copy_trait_enabled == true` では `is_copy_with_trait_model` を使い、ADT は `impl Copy` 登録（`copy_impl_targets`）を必須化。
+    - 追加調整:
+      - trait モード時の `TypeKind::Named` / `TypeKind::Apply` 判定を型名ハードコードから外し、`has_copy_impl_target` ベースへ変更。
   - `nepl-core/src/typecheck.rs`
     - `TraitSemantics::detect` 後に `ctx.set_copy_trait_enabled(...)` を設定し、`Copy` trait が定義されるモジュールでのみ新判定を有効化。
 - 検証:

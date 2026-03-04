@@ -273,12 +273,12 @@ impl TypeCtx {
             | TypeKind::Str
             | TypeKind::Never => true,
             TypeKind::Reference(_, _) => true,
-            TypeKind::Named(name) => matches!(name.as_str(), "i64" | "f64"),
+            TypeKind::Named(_) => self.has_copy_impl_target(resolved),
             TypeKind::Tuple { items } => items.iter().all(|t| self.is_copy(*t)),
             TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_copy_impl_target(resolved),
             TypeKind::Apply { base, .. } => match self.get_ref(self.resolve_id(*base)) {
                 TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_copy_impl_target(resolved),
-                _ => true,
+                _ => self.has_copy_impl_target(resolved),
             },
             TypeKind::Var(v) => v.binding.map(|b| self.is_copy(b)).unwrap_or(false),
             TypeKind::Function { .. } | TypeKind::Box(_) => false,
