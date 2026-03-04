@@ -21,6 +21,20 @@ pub enum DiagnosticId {
     LexerUnknownDirective = 1201,
     /// 字句解析で未知トークン。
     LexerUnknownToken = 1202,
+    /// インデントにタブを使用。
+    LexerIndentTabsNotAllowed = 1203,
+    /// `#wasm` / `#llvmir` 後のインデントブロック不足。
+    LexerExpectedIndentedBlock = 1204,
+    /// `pub` 接頭辞の不正利用。
+    LexerInvalidPubDirectivePrefix = 1205,
+    /// インデント幅が `#indent` 設定に不一致。
+    LexerIndentWidthMismatch = 1206,
+    /// 既存のインデント階層に一致しない dedent。
+    LexerIndentLevelMismatch = 1207,
+    /// 文字列エスケープが不正。
+    LexerInvalidStringEscape = 1208,
+    /// 文字列リテラルが未終端。
+    LexerUnterminatedStringLiteral = 1209,
     /// パーサでトークン期待に失敗。
     ParserExpectedToken = 2001,
     /// パーサで予期しないトークン。
@@ -174,6 +188,13 @@ impl DiagnosticId {
             1101 => Some(DiagnosticId::AmbiguousImport),
             1201 => Some(DiagnosticId::LexerUnknownDirective),
             1202 => Some(DiagnosticId::LexerUnknownToken),
+            1203 => Some(DiagnosticId::LexerIndentTabsNotAllowed),
+            1204 => Some(DiagnosticId::LexerExpectedIndentedBlock),
+            1205 => Some(DiagnosticId::LexerInvalidPubDirectivePrefix),
+            1206 => Some(DiagnosticId::LexerIndentWidthMismatch),
+            1207 => Some(DiagnosticId::LexerIndentLevelMismatch),
+            1208 => Some(DiagnosticId::LexerInvalidStringEscape),
+            1209 => Some(DiagnosticId::LexerUnterminatedStringLiteral),
             2001 => Some(DiagnosticId::ParserExpectedToken),
             2002 => Some(DiagnosticId::ParserUnexpectedToken),
             2003 => Some(DiagnosticId::ParserExpectedIdentifier),
@@ -255,6 +276,23 @@ impl DiagnosticId {
             DiagnosticId::AmbiguousImport => "ambiguous import",
             DiagnosticId::LexerUnknownDirective => "unknown directive",
             DiagnosticId::LexerUnknownToken => "unknown token",
+            DiagnosticId::LexerIndentTabsNotAllowed => {
+                "tabs are not allowed for indentation"
+            }
+            DiagnosticId::LexerExpectedIndentedBlock => {
+                "expected indented block after raw directive"
+            }
+            DiagnosticId::LexerInvalidPubDirectivePrefix => {
+                "pub prefix is only allowed for #import"
+            }
+            DiagnosticId::LexerIndentWidthMismatch => {
+                "indentation is not aligned to #indent width"
+            }
+            DiagnosticId::LexerIndentLevelMismatch => {
+                "indentation level does not match any previous indent"
+            }
+            DiagnosticId::LexerInvalidStringEscape => "invalid escape in string literal",
+            DiagnosticId::LexerUnterminatedStringLiteral => "unterminated string literal",
             DiagnosticId::ParserExpectedToken => "expected token",
             DiagnosticId::ParserUnexpectedToken => "unexpected token",
             DiagnosticId::ParserExpectedIdentifier => "expected identifier",

@@ -1,3 +1,35 @@
+# 2026-03-04 作業メモ (上流修正: lexer 診断IDの明示化と回帰追加)
+
+- 目的:
+  - `lexer.rs` の未付与エラーに診断IDを付け、`compile_fail + diag_id` で固定検証できる状態にする。
+- 根本原因:
+  - `unknown token/directive` 以外の字句エラーは `with_id` 未付与で、失敗分類が文言依存になっていた。
+- 変更:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D1203..D1209` を追加:
+      - `LexerIndentTabsNotAllowed`
+      - `LexerExpectedIndentedBlock`
+      - `LexerInvalidPubDirectivePrefix`
+      - `LexerIndentWidthMismatch`
+      - `LexerIndentLevelMismatch`
+      - `LexerInvalidStringEscape`
+      - `LexerUnterminatedStringLiteral`
+  - `nepl-core/src/lexer.rs`
+    - タブインデント、`#wasm/#llvmir` 後インデント不足、`pub` 接頭辞誤用、
+      インデント幅不一致/階層不一致、invalid escape、unterminated string に `with_id` を付与。
+  - `tests/lexer_diag.n.md`
+    - 新規追加（3ケース）:
+      - invalid escape -> `diag_id: 1208`
+      - unterminated string -> `diag_id: 1209`
+      - invalid `pub` prefix -> `diag_id: 1205`
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/lexer_diag.n.md --no-tree -o /tmp/tests-lexer-diag.json -j 15` -> `207/207 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-lexer-diagid-extend.json -j 15` -> `796/796 pass`
+- 状況:
+  - parser + lexer + typecheck（主要経路）の診断ID固定化が進行。
+  - 次段は `typecheck` 上流（module/impl 定義時）と `codegen_*.rs` の残未付与診断を整理する。
+
 # 2026-03-04 作業メモ (上流修正: overload/trait/pipe の診断ID拡張)
 
 - 目的:
