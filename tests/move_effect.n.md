@@ -8,6 +8,7 @@ ret: 123
 #entry main
 #indent 4
 #target core
+#import "core/cast" as *
 
 #import "core/mem" as *
 
@@ -298,6 +299,67 @@ impl Copy for i32:
         x
 
 fn main <()->i32> ():
+    0
+```
+
+## Copy trait 有効時は i64 も impl がなければ move 扱い
+
+neplg2:test[compile_fail]
+diag_id: 3053
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Clone:
+    fn clone <(Self)->Self> (x):
+        x
+
+trait Copy:
+    fn copy_mark <(Self)->Self> (x):
+        x
+
+impl Clone for i64:
+    fn clone <(i64)->i64> (x):
+        x
+
+fn main <()->i32> ():
+    let a <i64> cast 10
+    let b <i64> a
+    let c <i64> a
+    0
+```
+
+## Copy trait 有効時でも i64 に Clone+Copy があれば再利用できる
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/cast" as *
+
+trait Clone:
+    fn clone <(Self)->Self> (x):
+        x
+
+trait Copy:
+    fn copy_mark <(Self)->Self> (x):
+        x
+
+impl Clone for i64:
+    fn clone <(i64)->i64> (x):
+        x
+
+impl Copy for i64:
+    fn copy_mark <(i64)->i64> (x):
+        x
+
+fn main <()->i32> ():
+    let a <i64> cast 10
+    let b <i64> a
+    let c <i64> a
     0
 ```
 

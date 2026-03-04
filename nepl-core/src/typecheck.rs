@@ -697,7 +697,7 @@ pub fn typecheck(
                 continue;
             }
             if trait_semantics.is_copy_trait(trait_name.as_deref()) {
-                if !ctx.is_copy_eligible(target_ty) {
+                if !ctx.is_copy_impl_eligible(target_ty) {
                     diagnostics.push(
                         Diagnostic::error(
                             "copy impl target type is not copyable",

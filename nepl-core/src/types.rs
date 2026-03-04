@@ -249,17 +249,20 @@ impl TypeCtx {
     pub fn is_copy_eligible(&self, id: TypeId) -> bool {
         let mut visiting = BTreeSet::new();
         let mapping = BTreeMap::new();
-        self.is_copy_eligible_inner(id, &mut visiting, &mapping)
+        self.is_copy_eligible_inner(id, &mut visiting, &mapping, false)
+    }
+
+    pub fn is_copy_impl_eligible(&self, id: TypeId) -> bool {
+        let mut visiting = BTreeSet::new();
+        let mapping = BTreeMap::new();
+        self.is_copy_eligible_inner(id, &mut visiting, &mapping, true)
     }
 
     pub fn is_copy(&self, id: TypeId) -> bool {
-        if !self.is_copy_eligible(id) {
-            return false;
+        if self.copy_trait_enabled {
+            return self.is_copy_with_trait_model(id);
         }
-        if !self.copy_trait_enabled {
-            return true;
-        }
-        self.is_copy_with_trait_model(id)
+        self.is_copy_eligible(id)
     }
 
     fn is_copy_with_trait_model(&self, id: TypeId) -> bool {
@@ -290,6 +293,7 @@ impl TypeCtx {
         id: TypeId,
         visiting: &mut BTreeSet<TypeId>,
         mapping: &BTreeMap<TypeId, TypeId>,
+        allow_opaque_named: bool,
     ) -> bool {
         let resolved = mapping
             .get(&self.resolve_id(id))
@@ -310,13 +314,17 @@ impl TypeCtx {
             TypeKind::Box(_) => false,
             TypeKind::Enum { variants, .. } => variants
                 .iter()
-                .all(|v| v.payload.map(|p| self.is_copy_eligible_inner(p, visiting, mapping)).unwrap_or(true)),
+                .all(|v| {
+                    v.payload
+                        .map(|p| self.is_copy_eligible_inner(p, visiting, mapping, allow_opaque_named))
+                        .unwrap_or(true)
+                }),
             TypeKind::Struct { fields, .. } => fields
                 .iter()
-                .all(|f| self.is_copy_eligible_inner(*f, visiting, mapping)),
+                .all(|f| self.is_copy_eligible_inner(*f, visiting, mapping, allow_opaque_named)),
             TypeKind::Tuple { items } => items
                 .iter()
-                .all(|t| self.is_copy_eligible_inner(*t, visiting, mapping)),
+                .all(|t| self.is_copy_eligible_inner(*t, visiting, mapping, allow_opaque_named)),
             TypeKind::Apply { base, args } => {
                 let resolved_base = mapping
                     .get(&self.resolve_id(*base))
@@ -339,7 +347,7 @@ impl TypeCtx {
                             }
                             fields
                                 .iter()
-                                .all(|f| self.is_copy_eligible_inner(*f, visiting, &nested))
+                                .all(|f| self.is_copy_eligible_inner(*f, visiting, &nested, allow_opaque_named))
                         }
                     }
                     TypeKind::Enum {
@@ -360,7 +368,7 @@ impl TypeCtx {
                             }
                             variants.iter().all(|v| {
                                 v.payload
-                                    .map(|p| self.is_copy_eligible_inner(p, visiting, &nested))
+                                    .map(|p| self.is_copy_eligible_inner(p, visiting, &nested, allow_opaque_named))
                                     .unwrap_or(true)
                             })
                         }
@@ -371,12 +379,18 @@ impl TypeCtx {
             TypeKind::Function { .. } => false,
             TypeKind::Var(v) => {
                 if let Some(b) = v.binding {
-                    self.is_copy_eligible_inner(b, visiting, mapping)
+                    self.is_copy_eligible_inner(b, visiting, mapping, allow_opaque_named)
                 } else {
                     false
                 }
             }
-            TypeKind::Named(name) => matches!(name.as_str(), "i64" | "f64"),
+            TypeKind::Named(name) => {
+                if allow_opaque_named {
+                    true
+                } else {
+                    matches!(name.as_str(), "i64" | "f64")
+                }
+            }
         };
         visiting.remove(&resolved);
         result

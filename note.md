@@ -1,3 +1,31 @@
+# 2026-03-04 作業メモ (フェーズB2継続: Copy判定の経路分離と tests/*.n.md 回帰追加)
+
+- 目的:
+  - `todo.md` フェーズB2の残件として、trait モード時の `Copy` 判定を旧互換経路から分離し、名前ハードコード依存をさらに減らす。
+  - 変更に対応する回帰を `tests/*.n.md` に追加する。
+- 根本原因:
+  - `TypeCtx::is_copy` は trait モードでも先に `is_copy_eligible`（`i64/f64` 名ハードコード）を通るため、`impl Copy` ベース判定に完全移行できていなかった。
+  - `Copy impl` 妥当性検査も同じ経路を使っており、段階移行の境界が曖昧だった。
+- 変更:
+  - `nepl-core/src/types.rs`
+    - `is_copy_impl_eligible` を追加（`impl Copy` 妥当性専用）。
+    - `is_copy` を経路分離:
+      - trait モード有効時は `is_copy_with_trait_model` を直接使用。
+      - trait モード無効時のみ `is_copy_eligible` を使用。
+    - `is_copy_eligible_inner` に `allow_opaque_named` を追加し、`is_copy_impl_eligible` からは Named 型を名前依存なしで妥当判定可能にした。
+  - `nepl-core/src/typecheck.rs`
+    - `impl Copy for T` の対象妥当性検査を `ctx.is_copy_impl_eligible(target_ty)` に変更。
+  - `tests/move_effect.n.md`
+    - 回帰ケースを2件追加:
+      - `Copy` trait 有効時、`i64` に `Copy impl` がない場合は move エラー（`diag_id: 3053`）。
+      - `Clone+Copy impl` を与えた `i64` は再利用可能。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-copy-trait-model-targeted.json -j 15` -> `278/278 pass`
+- 状況:
+  - `Copy` 判定の trait モード経路は分離済み。
+  - 次段で `Copy/Clone` 能力宣言の抽象化（trait 名検出ロジックのさらなる一般化）へ進む。
+
 # 2026-03-04 作業メモ (フェーズB2: Copy能力判定のtrait移行スイッチ導入)
 
 - 目的:
