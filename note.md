@@ -1,3 +1,45 @@
+# 2026-03-04 作業メモ (上流修正: overload/trait/pipe の診断ID拡張)
+
+- 目的:
+  - `typecheck` の未付与エラー（特に overload/trait method/pipe/arity 周辺）を診断IDで固定化し、`compile_fail` 回帰を安定化する。
+- 根本原因:
+  - 同一カテゴリの型検査失敗で `with_id` 未付与経路が残り、文言変更に弱い状態だった。
+  - trait 経由呼び出しの失敗（未知メソッド・境界未充足など）が `diag_id` で識別できなかった。
+- 変更:
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D3066..D3072` を追加:
+      - `TypeTraitMethodTypeArgsNotSupported`
+      - `TypeTraitMethodNotFound`
+      - `TypeArgumentArityMismatch`
+      - `TypeTraitBoundUnsatisfied`
+      - `TypeInvalidDeref`
+      - `TypeAssignmentArityMismatch`
+      - `TypeCallReductionLimitExceeded`
+  - `nepl-core/src/typecheck.rs`
+    - 以下の診断に `with_id` を付与:
+      - `pipe has no target` -> `D3013`
+      - trait method への型引数未対応 -> `D3066`
+      - trait method 不在 -> `D3067`
+      - overload の型引数不一致 -> `D3021`
+      - 引数個数不一致（関数/constructor/trait method receiver）-> `D3068`
+      - trait 境界未充足 -> `D3069`
+      - assignment 個数不一致 -> `D3071`
+      - field assignment 型不一致 -> `D3036`
+      - 非参照型 deref -> `D3070`
+      - call reduction 反復上限超過 -> `D3072`
+  - `tests/overload.n.md`
+    - `compile_fail + diag_id` を3ケース追加:
+      - trait method 型引数未対応 (`3066`)
+      - trait method 不在 (`3067`)
+      - trait 境界未充足 (`3069`)
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md --no-tree -o /tmp/tests-overload-diagid-extend.json -j 15` -> `244/244 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-typecheck-diagid-extend.json -j 15` -> `793/793 pass`
+- 状況:
+  - `D3006`（no matching overload）と field access（`D3011`）は診断経路を分離したまま維持。
+  - 次段は `todo.md` の診断ID拡張残件（lexer + typecheck上流の未付与領域）を継続する。
+
 # 2026-03-04 作業メモ (上流修正: typecheck の noshadow/shadow 診断IDを明示化)
 
 - 目的:

@@ -3341,7 +3341,7 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             "type arguments are not supported for trait methods yet",
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeTraitMethodTypeArgsNotSupported));
                                         return None;
                                     }
                                     if let Some(sig) = trait_info.methods.get(method_name) {
@@ -3369,7 +3369,7 @@ impl<'a> BlockChecker<'a> {
                                                 method_name, trait_name
                                             ),
                                             id.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeTraitMethodNotFound));
                                         return None;
                                     }
                                 } else {
@@ -4095,7 +4095,10 @@ impl<'a> BlockChecker<'a> {
 
         if pipe_pending.is_some() {
             self.diagnostics
-                .push(Diagnostic::error("pipe has no target", expr.span));
+                .push(
+                    Diagnostic::error("pipe has no target", expr.span)
+                        .with_id(DiagnosticId::TypePipeError),
+                );
         }
 
         let leading_let = matches!(
@@ -4257,7 +4260,7 @@ impl<'a> BlockChecker<'a> {
                 self.diagnostics.push(Diagnostic::error(
                     "reduce_calls exceeded maximum iterations (possible infinite loop)",
                     Span::dummy(),
-                ));
+                ).with_id(DiagnosticId::TypeCallReductionLimitExceeded));
                 break;
             }
             dump!("reduce_calls: stack=[{}]", stack.iter().map(|e| match &e.expr.kind { HirExprKind::Var(n) => n.clone(), _ => "<expr>".to_string() }).collect::<Vec<_>>().join(","));
@@ -4435,7 +4438,7 @@ impl<'a> BlockChecker<'a> {
                 self.diagnostics.push(Diagnostic::error(
                     "reduce_calls_guarded exceeded maximum iterations (possible infinite loop)",
                     Span::dummy(),
-                ));
+                ).with_id(DiagnosticId::TypeCallReductionLimitExceeded));
                 break;
             }
             dump!("reduce_calls_guarded: stack=[{}]", stack.iter().map(|e| match &e.expr.kind { HirExprKind::Var(n) => n.clone(), _ => "<expr>".to_string() }).collect::<Vec<_>>().join(","));
@@ -4838,24 +4841,24 @@ impl<'a> BlockChecker<'a> {
         }
 
         // Assignment operators
-        if let Some(assign) = func.assign {
-            if args.len() != 1 {
-                self.diagnostics.push(Diagnostic::error(
-                    "assignment expects one argument",
-                    func.expr.span,
-                ));
-                return None;
-            }
+            if let Some(assign) = func.assign {
+                if args.len() != 1 {
+                    self.diagnostics.push(Diagnostic::error(
+                        "assignment expects one argument",
+                        func.expr.span,
+                    ).with_id(DiagnosticId::TypeAssignmentArityMismatch));
+                    return None;
+                }
             // Handle field store first since it doesn't need variable lookup
             if let AssignKind::Store(addr) = assign {
-                if !params.is_empty() {
-                    if let Err(_) = self.ctx.unify(params[0], args[0].ty) {
-                        self.diagnostics.push(Diagnostic::error(
-                            "type mismatch in field assignment",
-                            func.expr.span,
-                        ));
+                    if !params.is_empty() {
+                        if let Err(_) = self.ctx.unify(params[0], args[0].ty) {
+                            self.diagnostics.push(Diagnostic::error(
+                                "type mismatch in field assignment",
+                                func.expr.span,
+                            ).with_id(DiagnosticId::TypeAssignmentTypeMismatch));
+                        }
                     }
-                }
                 return Some(StackEntry {
                     ty: self.ctx.unit(),
                     expr: HirExpr {
@@ -4898,7 +4901,7 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             format!("cannot dereference non-reference type: {}", self.ctx.type_to_string(arg_ty)),
                             args[0].expr.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeInvalidDeref));
                         self.ctx.never()
                     }
                 };
@@ -5429,7 +5432,7 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "type arguments do not match overload",
                                 func.expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypeOverloadTypeArgsMismatch));
                             return None;
                         }
                         let mut mapping = BTreeMap::new();
@@ -5475,7 +5478,7 @@ impl<'a> BlockChecker<'a> {
                         self.diagnostics.push(Diagnostic::error(
                             "argument count mismatch",
                             func.expr.span,
-                        ));
+                        ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                         return None;
                     }
                     for (arg, param_ty) in args.iter().zip(user_params.iter()) {
@@ -5520,7 +5523,7 @@ impl<'a> BlockChecker<'a> {
                                         self.diagnostics.push(Diagnostic::error(
                                             format!("type does not satisfy trait bound '{}'", b),
                                             func.expr.span,
-                                        ));
+                                        ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
                                     }
                                 }
                             }
@@ -5535,14 +5538,14 @@ impl<'a> BlockChecker<'a> {
                                     self.diagnostics.push(Diagnostic::error(
                                         "constructor expects one argument",
                                         func.expr.span,
-                                    ));
+                                    ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                                     return None;
                                 }
                                 if c_params.is_empty() && !args.is_empty() {
                                     self.diagnostics.push(Diagnostic::error(
                                         "constructor takes no arguments",
                                         func.expr.span,
-                                    ));
+                                    ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                                     return None;
                                 }
                                 let payload_expr = if c_params.len() == 1 {
@@ -5583,7 +5586,7 @@ impl<'a> BlockChecker<'a> {
                             self.diagnostics.push(Diagnostic::error(
                                 "struct constructor arity mismatch",
                                 func.expr.span,
-                            ));
+                            ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                             return None;
                         }
                         let applied_ty = if resolved_args.is_empty() {
@@ -5735,7 +5738,7 @@ impl<'a> BlockChecker<'a> {
                                 self.diagnostics.push(Diagnostic::error(
                                     "trait method call requires receiver argument",
                                     func.expr.span,
-                                ));
+                                ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                                 return None;
                             }
                             let self_ty = self.ctx.resolve_id(args[0].ty);
@@ -5746,7 +5749,7 @@ impl<'a> BlockChecker<'a> {
                                         trait_name
                                     ),
                                     func.expr.span,
-                                ));
+                                ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
                                 return None;
                             }
                             if matches!(self.current_effect, Effect::Pure)

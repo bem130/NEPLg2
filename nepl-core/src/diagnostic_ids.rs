@@ -143,6 +143,20 @@ pub enum DiagnosticId {
     TypeBorrowPossiblyMovedValue = 3064,
     /// ループ反復で move される可能性がある。
     TypeLoopPotentiallyMovedValue = 3065,
+    /// trait メソッド参照に型引数は未対応。
+    TypeTraitMethodTypeArgsNotSupported = 3066,
+    /// trait に存在しないメソッドを参照。
+    TypeTraitMethodNotFound = 3067,
+    /// 関数/コンストラクタ呼び出しの引数個数不一致。
+    TypeArgumentArityMismatch = 3068,
+    /// trait 境界を満たさない型引数/受信型。
+    TypeTraitBoundUnsatisfied = 3069,
+    /// 参照型でない値への deref。
+    TypeInvalidDeref = 3070,
+    /// 代入演算子の引数個数不一致。
+    TypeAssignmentArityMismatch = 3071,
+    /// 呼び出し簡約の反復上限超過。
+    TypeCallReductionLimitExceeded = 3072,
 }
 
 impl DiagnosticId {
@@ -221,6 +235,13 @@ impl DiagnosticId {
             3063 => Some(DiagnosticId::TypeBorrowMovedValue),
             3064 => Some(DiagnosticId::TypeBorrowPossiblyMovedValue),
             3065 => Some(DiagnosticId::TypeLoopPotentiallyMovedValue),
+            3066 => Some(DiagnosticId::TypeTraitMethodTypeArgsNotSupported),
+            3067 => Some(DiagnosticId::TypeTraitMethodNotFound),
+            3068 => Some(DiagnosticId::TypeArgumentArityMismatch),
+            3069 => Some(DiagnosticId::TypeTraitBoundUnsatisfied),
+            3070 => Some(DiagnosticId::TypeInvalidDeref),
+            3071 => Some(DiagnosticId::TypeAssignmentArityMismatch),
+            3072 => Some(DiagnosticId::TypeCallReductionLimitExceeded),
             _ => None,
         }
     }
@@ -339,6 +360,17 @@ impl DiagnosticId {
                 "borrow of potentially moved value"
             }
             DiagnosticId::TypeLoopPotentiallyMovedValue => "potentially moved value in loop",
+            DiagnosticId::TypeTraitMethodTypeArgsNotSupported => {
+                "type arguments are not supported for trait methods yet"
+            }
+            DiagnosticId::TypeTraitMethodNotFound => "unknown method for trait",
+            DiagnosticId::TypeArgumentArityMismatch => "argument count mismatch",
+            DiagnosticId::TypeTraitBoundUnsatisfied => "type does not satisfy trait bound",
+            DiagnosticId::TypeInvalidDeref => "cannot dereference non-reference type",
+            DiagnosticId::TypeAssignmentArityMismatch => "assignment expects one argument",
+            DiagnosticId::TypeCallReductionLimitExceeded => {
+                "call reduction exceeded maximum iterations"
+            }
         }
     }
 

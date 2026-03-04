@@ -833,3 +833,58 @@ fn main <()->i32> ():
     let back <i32> <i32> cast v128;
     if eq back 12 1 0
 ```
+
+## overload_trait_method_type_args_not_supported
+
+neplg2:test[compile_fail]
+diag_id: 3066
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        0
+
+fn main <()->i32> ():
+    Show::show<i32> 1
+```
+
+## overload_trait_method_not_found
+
+neplg2:test[compile_fail]
+diag_id: 3067
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        0
+
+fn main <()->i32> ():
+    Show::missing 1
+```
+
+## overload_trait_bound_unsatisfied
+
+neplg2:test[compile_fail]
+diag_id: 3069
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Show:
+    fn show <(Self)->i32> (x):
+        x
+
+impl Show for i32:
+    fn show <(i32)->i32> (x):
+        x
+
+fn main <()->i32> ():
+    Show::show true
+```
