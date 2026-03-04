@@ -80,6 +80,7 @@ pub struct TypeCtx {
     never_ty: TypeId,
     named: alloc::collections::BTreeMap<alloc::string::String, TypeId>,
     copy_impl_targets: Vec<TypeId>,
+    copy_trait_enabled: bool,
 }
 
 static GLOBAL_UNIFY_DEPTH: AtomicUsize = AtomicUsize::new(0);
@@ -120,6 +121,7 @@ impl TypeCtx {
             never_ty,
             named: alloc::collections::BTreeMap::new(),
             copy_impl_targets: Vec::new(),
+            copy_trait_enabled: false,
         }
     }
 
@@ -240,6 +242,10 @@ impl TypeCtx {
             .any(|t| self.same_type(*t, resolved))
     }
 
+    pub fn set_copy_trait_enabled(&mut self, enabled: bool) {
+        self.copy_trait_enabled = enabled;
+    }
+
     pub fn is_copy_eligible(&self, id: TypeId) -> bool {
         let mut visiting = BTreeSet::new();
         let mapping = BTreeMap::new();
@@ -247,7 +253,36 @@ impl TypeCtx {
     }
 
     pub fn is_copy(&self, id: TypeId) -> bool {
-        self.is_copy_eligible(id)
+        if !self.is_copy_eligible(id) {
+            return false;
+        }
+        if !self.copy_trait_enabled {
+            return true;
+        }
+        self.is_copy_with_trait_model(id)
+    }
+
+    fn is_copy_with_trait_model(&self, id: TypeId) -> bool {
+        let resolved = self.resolve_id(id);
+        match self.get_ref(resolved) {
+            TypeKind::Unit
+            | TypeKind::I32
+            | TypeKind::U8
+            | TypeKind::F32
+            | TypeKind::Bool
+            | TypeKind::Str
+            | TypeKind::Never => true,
+            TypeKind::Reference(_, _) => true,
+            TypeKind::Named(name) => matches!(name.as_str(), "i64" | "f64"),
+            TypeKind::Tuple { items } => items.iter().all(|t| self.is_copy(*t)),
+            TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_copy_impl_target(resolved),
+            TypeKind::Apply { base, .. } => match self.get_ref(self.resolve_id(*base)) {
+                TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_copy_impl_target(resolved),
+                _ => true,
+            },
+            TypeKind::Var(v) => v.binding.map(|b| self.is_copy(b)).unwrap_or(false),
+            TypeKind::Function { .. } | TypeKind::Box(_) => false,
+        }
     }
 
     fn is_copy_eligible_inner(

@@ -642,6 +642,7 @@ pub fn typecheck(
     }
 
     let trait_semantics = TraitSemantics::detect(&traits, &ctx);
+    ctx.set_copy_trait_enabled(trait_semantics.copy_trait_name.is_some());
 
     // Process Impls separately or in the same loop?
     // Doing it here simplifies pending_if logic.

@@ -1,3 +1,27 @@
+# 2026-03-04 作業メモ (フェーズB2: Copy能力判定のtrait移行スイッチ導入)
+
+- 目的:
+  - `todo.md` フェーズB2の「`Copy/Clone` 能力判定のハードコード撤廃」に向け、`Copy` trait 実装情報へ段階移行する土台を追加する。
+- 根本原因:
+  - `TypeCtx::is_copy` は常に構造ベース判定のみで、`impl Copy for T` の有無を能力判定に反映できなかった。
+  - 既存資産との互換を保ちながら移行する切替点がなく、一括移行すると広範囲の回帰リスクが高かった。
+- 変更:
+  - `nepl-core/src/types.rs`
+    - `TypeCtx` に `copy_trait_enabled: bool` を追加。
+    - `set_copy_trait_enabled(bool)` を追加。
+    - `is_copy` を段階判定へ変更:
+      - まず既存 `is_copy_eligible` で前提検証。
+      - `copy_trait_enabled == false` では従来挙動を維持。
+      - `copy_trait_enabled == true` では `is_copy_with_trait_model` を使い、ADT は `impl Copy` 登録（`copy_impl_targets`）を必須化。
+  - `nepl-core/src/typecheck.rs`
+    - `TraitSemantics::detect` 後に `ctx.set_copy_trait_enabled(...)` を設定し、`Copy` trait が定義されるモジュールでのみ新判定を有効化。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-copy-trait-model-targeted.json -j 15` -> `276/276 pass`
+- 状況:
+  - 互換性を保ったまま `Copy` trait 反映の切替点を導入済み。
+  - 次段で `Copy/Clone` を能力テーブル化し、判定ロジックの文字列依存をさらに削減する。
+
 # 2026-03-04 作業メモ (上流修正: codegen_wasm 診断IDの明示化)
 
 - 目的:
