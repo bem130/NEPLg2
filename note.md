@@ -6430,3 +6430,21 @@
 - 差分認識:
   - 依然として `Copy/Clone` 能力接続には最小限の trait 名参照が残っている。
   - 次段で `todo.md` フェーズB2に従い、能力テーブル化して名前分岐を縮小する。
+
+# 2026-03-04 作業メモ (trait能力判定の集約)
+
+- 目的:
+  - `Copy/Clone` の判定分岐を局所化し、`typecheck.rs` 全体に散在していた文字列比較を集約する。
+
+- 実施:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitSemantics` を追加し、trait 宣言から `copy_trait_name` / `clone_trait_name` を検出する流れへ変更。
+    - `Copy` / `Clone` 参照箇所（impl 収集、clone 前提検査、reject 適用、final impl 生成）を `trait_semantics` 経由へ統一。
+    - 直接の `Some(\"Copy\")` / `Some(\"Clone\")` 比較を除去。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-trait-semantics-targeted.json -j 15` -> `276/276 pass`
+
+- 次段:
+  - `todo.md` フェーズB2の残件として、能力判定の外部定義化（コンパイラ内部固定名のさらなる縮小）を設計する。

@@ -92,6 +92,39 @@ struct TraitInfo {
     span: Span,
 }
 
+#[derive(Debug, Clone, Default)]
+struct TraitSemantics {
+    copy_trait_name: Option<String>,
+    clone_trait_name: Option<String>,
+}
+
+impl TraitSemantics {
+    fn detect(traits: &BTreeMap<String, TraitInfo>, ctx: &TypeCtx) -> Self {
+        let copy_trait_name =
+            detect_capability_trait(traits, ctx, "Copy", "copy_mark");
+        let clone_trait_name =
+            detect_capability_trait(traits, ctx, "Clone", "clone");
+        Self {
+            copy_trait_name,
+            clone_trait_name,
+        }
+    }
+
+    fn is_copy_trait(&self, trait_name: Option<&str>) -> bool {
+        match (&self.copy_trait_name, trait_name) {
+            (Some(expected), Some(actual)) => expected == actual,
+            _ => false,
+        }
+    }
+
+    fn is_clone_trait(&self, trait_name: Option<&str>) -> bool {
+        match (&self.clone_trait_name, trait_name) {
+            (Some(expected), Some(actual)) => expected == actual,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct ImplInfo {
     doc: Option<String>,
@@ -104,6 +137,50 @@ struct ImplInfo {
 enum FieldIdx {
     Index(usize),
     Name(String),
+}
+
+fn detect_capability_trait(
+    traits: &BTreeMap<String, TraitInfo>,
+    ctx: &TypeCtx,
+    preferred_trait_name: &str,
+    required_method_name: &str,
+) -> Option<String> {
+    if let Some(info) = traits.get(preferred_trait_name) {
+        if trait_has_unary_self_to_self_method(info, ctx, required_method_name) {
+            return Some(preferred_trait_name.to_string());
+        }
+    }
+    for (name, info) in traits {
+        if trait_has_unary_self_to_self_method(info, ctx, required_method_name) {
+            return Some(name.clone());
+        }
+    }
+    None
+}
+
+fn trait_has_unary_self_to_self_method(
+    info: &TraitInfo,
+    ctx: &TypeCtx,
+    method_name: &str,
+) -> bool {
+    let Some(sig) = info.methods.get(method_name).copied() else {
+        return false;
+    };
+    let resolved = ctx.resolve_id(sig);
+    match ctx.get(resolved) {
+        TypeKind::Function {
+            params,
+            result,
+            type_params,
+            ..
+        } => {
+            type_params.is_empty()
+                && params.len() == 1
+                && ctx.same_type(params[0], info.self_ty)
+                && ctx.same_type(result, info.self_ty)
+        }
+        _ => false,
+    }
 }
 
 fn collect_type_params(
@@ -564,6 +641,8 @@ pub fn typecheck(
         }
     }
 
+    let trait_semantics = TraitSemantics::detect(&traits, &ctx);
+
     // Process Impls separately or in the same loop?
     // Doing it here simplifies pending_if logic.
     pending_if = None;
@@ -616,7 +695,7 @@ pub fn typecheck(
                 );
                 continue;
             }
-            if trait_name.as_deref() == Some("Copy") {
+            if trait_semantics.is_copy_trait(trait_name.as_deref()) {
                 if !ctx.is_copy_eligible(target_ty) {
                     diagnostics.push(
                         Diagnostic::error(
@@ -660,7 +739,7 @@ pub fn typecheck(
     }
     for (target_ty, span) in pending_copy_clone_checks {
         let has_clone_impl = impls.iter().any(|imp| {
-            imp.trait_name.as_deref() == Some("Clone")
+            trait_semantics.is_clone_trait(imp.trait_name.as_deref())
                 && ctx.same_type(imp.target_ty, target_ty)
         });
         if !has_clone_impl {
@@ -675,13 +754,13 @@ pub fn typecheck(
         }
     }
     impls.retain(|imp| {
-        if imp.trait_name.as_deref() != Some("Copy") {
+        if !trait_semantics.is_copy_trait(imp.trait_name.as_deref()) {
             return true;
         }
         !contains_same_type(&ctx, &rejected_copy_targets, imp.target_ty)
     });
     for imp in impls.iter() {
-        if imp.trait_name.as_deref() == Some("Copy") {
+        if trait_semantics.is_copy_trait(imp.trait_name.as_deref()) {
             ctx.register_copy_impl_target(imp.target_ty);
         }
     }
@@ -1195,7 +1274,7 @@ pub fn typecheck(
                 );
                 continue;
             }
-            if trait_name == "Copy" {
+            if trait_semantics.is_copy_trait(Some(trait_name.as_str())) {
                 if contains_same_type(&ctx, &rejected_copy_targets, target_ty) {
                     continue;
                 }
