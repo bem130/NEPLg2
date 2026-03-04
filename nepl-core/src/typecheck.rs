@@ -94,31 +94,35 @@ struct TraitInfo {
 
 #[derive(Debug, Clone, Default)]
 struct TraitSemantics {
-    copy_trait_name: Option<String>,
-    clone_trait_name: Option<String>,
+    copy_trait: Option<(String, TypeId)>,
+    clone_trait: Option<(String, TypeId)>,
 }
 
 impl TraitSemantics {
     fn detect(traits: &BTreeMap<String, TraitInfo>, ctx: &TypeCtx) -> Self {
-        let copy_trait_name =
+        let copy_trait =
             detect_capability_trait(traits, ctx, "Copy", "copy_mark");
-        let clone_trait_name =
+        let clone_trait =
             detect_capability_trait(traits, ctx, "Clone", "clone");
         Self {
-            copy_trait_name,
-            clone_trait_name,
+            copy_trait,
+            clone_trait,
         }
     }
 
-    fn is_copy_trait(&self, trait_name: Option<&str>) -> bool {
-        match (&self.copy_trait_name, trait_name) {
+    fn copy_trait_name(&self) -> Option<&str> {
+        self.copy_trait.as_ref().map(|(name, _)| name.as_str())
+    }
+
+    fn is_copy_trait(&self, trait_id: Option<TypeId>) -> bool {
+        match (self.copy_trait.as_ref().map(|(_, id)| *id), trait_id) {
             (Some(expected), Some(actual)) => expected == actual,
             _ => false,
         }
     }
 
-    fn is_clone_trait(&self, trait_name: Option<&str>) -> bool {
-        match (&self.clone_trait_name, trait_name) {
+    fn is_clone_trait(&self, trait_id: Option<TypeId>) -> bool {
+        match (self.clone_trait.as_ref().map(|(_, id)| *id), trait_id) {
             (Some(expected), Some(actual)) => expected == actual,
             _ => false,
         }
@@ -129,6 +133,7 @@ impl TraitSemantics {
 struct ImplInfo {
     doc: Option<String>,
     trait_name: Option<String>,
+    trait_self_ty: Option<TypeId>,
     target_ty: TypeId,
     methods: BTreeMap<String, (String, TypeId)>, // name -> (mangled_name, type)
 }
@@ -144,15 +149,15 @@ fn detect_capability_trait(
     ctx: &TypeCtx,
     preferred_trait_name: &str,
     required_method_name: &str,
-) -> Option<String> {
+) -> Option<(String, TypeId)> {
     if let Some(info) = traits.get(preferred_trait_name) {
         if trait_has_unary_self_to_self_method(info, ctx, required_method_name) {
-            return Some(preferred_trait_name.to_string());
+            return Some((preferred_trait_name.to_string(), info.self_ty));
         }
     }
     for (name, info) in traits {
         if trait_has_unary_self_to_self_method(info, ctx, required_method_name) {
-            return Some(name.clone());
+            return Some((name.clone(), info.self_ty));
         }
     }
     None
@@ -642,7 +647,7 @@ pub fn typecheck(
     }
 
     let trait_semantics = TraitSemantics::detect(&traits, &ctx);
-    ctx.set_copy_trait_enabled(trait_semantics.copy_trait_name.is_some());
+    ctx.set_copy_trait_enabled(trait_semantics.copy_trait_name().is_some());
 
     // Process Impls separately or in the same loop?
     // Doing it here simplifies pending_if logic.
@@ -680,6 +685,7 @@ pub fn typecheck(
             let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
             f_labels.insert(String::from("Self"), target_ty);
             let trait_name = i.trait_name.as_ref().map(|tn| tn.name.clone());
+            let mut trait_self_ty = None;
             if let Some(tn) = &trait_name {
                 if !traits.contains_key(tn) {
                     diagnostics.push(
@@ -688,6 +694,7 @@ pub fn typecheck(
                     );
                     continue;
                 }
+                trait_self_ty = traits.get(tn).map(|info| info.self_ty);
             }
             if type_contains_unbound_var(&ctx, target_ty) {
                 diagnostics.push(
@@ -696,7 +703,7 @@ pub fn typecheck(
                 );
                 continue;
             }
-            if trait_semantics.is_copy_trait(trait_name.as_deref()) {
+            if trait_semantics.is_copy_trait(trait_self_ty) {
                 if !ctx.is_copy_impl_eligible(target_ty) {
                     diagnostics.push(
                         Diagnostic::error(
@@ -711,7 +718,7 @@ pub fn typecheck(
                 pending_copy_clone_checks.push((target_ty, i.span));
             }
             if impls.iter().any(|imp| {
-                imp.trait_name.as_deref() == trait_name.as_deref()
+                imp.trait_self_ty == trait_self_ty
                     && ctx.same_type(imp.target_ty, target_ty)
             }) {
                 diagnostics.push(
@@ -733,6 +740,7 @@ pub fn typecheck(
             impls.push(ImplInfo {
                 doc: i.doc.clone(),
                 trait_name,
+                trait_self_ty,
                 target_ty,
                 methods,
             });
@@ -740,7 +748,7 @@ pub fn typecheck(
     }
     for (target_ty, span) in pending_copy_clone_checks {
         let has_clone_impl = impls.iter().any(|imp| {
-            trait_semantics.is_clone_trait(imp.trait_name.as_deref())
+            trait_semantics.is_clone_trait(imp.trait_self_ty)
                 && ctx.same_type(imp.target_ty, target_ty)
         });
         if !has_clone_impl {
@@ -755,13 +763,13 @@ pub fn typecheck(
         }
     }
     impls.retain(|imp| {
-        if !trait_semantics.is_copy_trait(imp.trait_name.as_deref()) {
+        if !trait_semantics.is_copy_trait(imp.trait_self_ty) {
             return true;
         }
         !contains_same_type(&ctx, &rejected_copy_targets, imp.target_ty)
     });
     for imp in impls.iter() {
-        if trait_semantics.is_copy_trait(imp.trait_name.as_deref()) {
+        if trait_semantics.is_copy_trait(imp.trait_self_ty) {
             ctx.register_copy_impl_target(imp.target_ty);
         }
     }
@@ -1275,7 +1283,7 @@ pub fn typecheck(
                 );
                 continue;
             }
-            if trait_semantics.is_copy_trait(Some(trait_name.as_str())) {
+            if trait_semantics.is_copy_trait(Some(trait_info.self_ty)) {
                 if contains_same_type(&ctx, &rejected_copy_targets, target_ty) {
                     continue;
                 }

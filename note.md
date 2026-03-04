@@ -1,3 +1,24 @@
+# 2026-03-04 作業メモ (フェーズB2継続: Copy/Clone 判定の trait識別子化)
+
+- 目的:
+  - `todo.md` フェーズB2「trait 契約判定の文字列依存を減らす」を進め、`Copy/Clone` 能力判定を trait名ではなく trait識別子で扱う。
+- 根本原因:
+  - `TraitSemantics` と `ImplInfo` の判定は `trait_name` 文字列比較に依存しており、名前解決変更や alias 導入時に脆い。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitSemantics` を `copy_trait/clone_trait: Option<(String, TypeId)>` に変更。
+    - `is_copy_trait` / `is_clone_trait` を `TypeId` 比較へ変更。
+    - `detect_capability_trait` の戻り値を `Option<(String, TypeId)>` へ変更。
+    - `ImplInfo` に `trait_self_ty: Option<TypeId>` を追加し、`Copy/Clone` 判定・重複 impl 判定に利用。
+    - `ctx.set_copy_trait_enabled(...)` は `copy_trait_name().is_some()` で制御。
+    - 最終 impl 生成パスの copy 判定も `trait_info.self_ty` を使用。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-copy-trait-model-targeted.json -j 15` -> `278/278 pass`
+- 状況:
+  - `Copy/Clone` 能力判定の主要経路は trait名文字列比較から離脱。
+  - 残りの文字列依存は一般 trait 境界判定（`trait_bound_satisfied` など）側に限定される。
+
 # 2026-03-04 作業メモ (フェーズB2継続: Copy判定の経路分離と tests/*.n.md 回帰追加)
 
 - 目的:
