@@ -6389,3 +6389,22 @@
 - 状況:
   - `kp` 系テスト/チュートリアルの主要サンプルは安全API経路へ移行済み。
   - 次段は棚卸し済み残件（`stdlib/std`, `stdlib/nm`, `stdlib/alloc/collections`）を上流影響の小さい順に移行する。
+
+# 2026-03-04 作業メモ (move_check: 一時借用の寿命誤判定を根本修正)
+
+- 目的:
+  - `stdlib` doctest で発生していた `D3051 cannot move out of shared borrowed value` / `D3053 use of moved value` の連鎖を、場当たり対応ではなく move_check の借用寿命モデル修正で解消する。
+- 根本原因:
+  - `passes/move_check.rs` が `#intrinsic load/store` のアドレス評価を永続借用として扱っていた。
+  - `get`/`load` のような読み取りで生成される借用は式評価中のみ有効なはずだが、関数末尾まで `BorrowedShared` が残り、後続の同一値利用を誤って拒否していた。
+- 修正:
+  - `nepl-core/src/passes/move_check.rs`
+    - `check_temporary_borrow` を追加。
+    - `#intrinsic load/store` のアドレス評価を永続借用ではなく一時借用として検証するよう変更。
+    - 永続借用状態更新が必要な `AddrOf` は従来どおり `check_borrow` を使用。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/move_check.n.md -i tests/kp.n.md -i tests/kp_i64.n.md --no-tree -o /tmp/tests-copy-move-targeted-after-temp-borrow.json -j 15` -> `245/245 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib -i tutorials --no-tree -o /tmp/tests-all-after-temp-borrow-fix.json -j 15` -> `799/799 pass`
+- 補足:
+  - 「copy 情報のハードコード削減」は継続課題。`TypeCtx::is_copy` の全面移行は move/effect 設計と同時に段階実施する（仕様書と todo の順序を優先）。

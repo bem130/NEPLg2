@@ -265,6 +265,45 @@ impl MoveCheckContext {
         }
     }
 
+    fn check_temporary_borrow(&mut self, name: &str, span: Span, kind: BorrowKind, is_copy: bool) {
+        if is_copy {
+            return;
+        }
+        match self.get_state(name) {
+            Some(VarState::Valid) => {}
+            Some(VarState::BorrowedShared) => {
+                if matches!(kind, BorrowKind::Unique) {
+                    self.diagnostics.push(Diagnostic::error(
+                        alloc::format!(
+                            "cannot uniquely borrow shared borrowed value: `{}`",
+                            name
+                        ),
+                        span,
+                    ).with_id(DiagnosticId::TypeUniqueBorrowSharedBorrowedValue));
+                }
+            }
+            Some(VarState::BorrowedUnique) => {
+                self.diagnostics.push(Diagnostic::error(
+                    alloc::format!("cannot borrow uniquely borrowed value: `{}`", name),
+                    span,
+                ).with_id(DiagnosticId::TypeBorrowUniquelyBorrowedValue));
+            }
+            Some(VarState::Moved) => {
+                self.diagnostics.push(Diagnostic::error(
+                    alloc::format!("borrow of moved value: `{}`", name),
+                    span,
+                ).with_id(DiagnosticId::TypeBorrowMovedValue));
+            }
+            Some(VarState::PossiblyMoved) => {
+                self.diagnostics.push(Diagnostic::error(
+                    alloc::format!("borrow of potentially moved value: `{}`", name),
+                    span,
+                ).with_id(DiagnosticId::TypeBorrowPossiblyMovedValue));
+            }
+            None => {}
+        }
+    }
+
     fn merge_state_pair(a: VarState, b: VarState) -> VarState {
         use VarState::*;
         match (a, b) {
@@ -540,16 +579,17 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
                         .map(|ty| tctx.is_copy(*ty))
                         .unwrap_or(false);
                     if let Some(addr) = args.get(0) {
-                        if is_copy_load {
-                            visit_borrow(addr, ctx, tctx, BorrowKind::Shared);
+                        let kind = if is_copy_load {
+                            BorrowKind::Shared
                         } else {
-                            visit_expr(addr, ctx, tctx);
-                        }
+                            BorrowKind::Unique
+                        };
+                        visit_temporary_borrow(addr, ctx, tctx, kind);
                     }
                 }
                 "store" => {
                     if let Some(addr) = args.get(0) {
-                        visit_borrow(addr, ctx, tctx, BorrowKind::Unique);
+                        visit_temporary_borrow(addr, ctx, tctx, BorrowKind::Unique);
                     }
                     if let Some(val) = args.get(1) {
                         visit_expr(val, ctx, tctx);
@@ -600,6 +640,29 @@ fn visit_borrow(
             }
         }
         _ => visit_expr(expr, ctx, tctx),
+    }
+}
+
+fn visit_temporary_borrow(
+    expr: &HirExpr,
+    ctx: &mut MoveCheckContext,
+    tctx: &crate::types::TypeCtx,
+    kind: BorrowKind,
+) {
+    match &expr.kind {
+        HirExprKind::Var(name) => {
+            let is_copy = tctx.is_copy(expr.ty);
+            ctx.check_temporary_borrow(name, expr.span, kind, is_copy);
+        }
+        HirExprKind::Deref(inner) => {
+            visit_temporary_borrow(inner, ctx, tctx, kind);
+        }
+        HirExprKind::Intrinsic { args, .. } => {
+            for arg in args {
+                visit_temporary_borrow(arg, ctx, tctx, kind);
+            }
+        }
+        _ => {}
     }
 }
 

@@ -384,3 +384,22 @@ fn main <()->i32> ():
     let v <i32> get 1 0
     v
 ```
+
+## Writer は非Copyとして move 後再利用不可
+
+neplg2:test[compile_fail]
+diag_id: 3053
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "core/result" as *
+#import "kp/kpwrite" as *
+
+fn main <()*>i32> ():
+    let w <Writer> unwrap_ok writer_new
+    let w2 <Writer> w
+    writer_flush w
+    0
+```
