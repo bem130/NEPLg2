@@ -1,3 +1,20 @@
+# 2026-03-05 作業メモ (フェーズD先行: kpread の Scanner ヘッダを RegionToken 化)
+
+- 目的:
+  - `todo.md` フェーズD着手として、`kpread` の公開ハンドルに領域所有情報を持たせ、`core/mem` の新安全APIへ寄せる。
+- 根本原因:
+  - `Scanner` が `MemPtr<u8>` 直接保持のみで、ヘッダ領域境界の情報が型に乗っていなかった。
+  - ヘッダアクセスが `mem_ptr_addr + off` の算術依存で、境界検証を再利用しにくかった。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `Scanner` フィールドを `raw: MemPtr<u8>` から `region: RegionToken<u8>` に変更。
+    - `scanner_wrap` で `region_new raw 12` を構築。
+    - `scanner_header_ptr` を `region_ptr_at<u8,i32>` ベースの `Result` 返却へ変更。
+    - `scanner_load_header` / `scanner_store_header` を上記 `Result` 経路で処理。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-scanner-regiontoken.json -j 15`
+  - 結果: `221/221 pass`
+
 # 2026-03-05 作業メモ (フェーズC: core/mem に RegionToken 安全APIを追加)
 
 - 目的:

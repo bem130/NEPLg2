@@ -26,10 +26,10 @@
 #import "core/field" as *
 
 struct Scanner:
-    raw <MemPtr<u8>>
+    region <RegionToken<u8>>
 
 fn scanner_wrap <(MemPtr<u8>)->Scanner> (raw):
-    Scanner raw
+    Scanner region_new raw 12
 
 fn scanner_new_handle <()*>Result<MemPtr<u8>,str>> ():
     scanner_new_impl
@@ -42,22 +42,30 @@ fn scanner_new <()*>Result<Scanner,str>> ():
         Result::Err e:
             Result<Scanner,str>::Err e
 
-fn scanner_header_ptr <(Scanner,i32)->MemPtr<i32>> (sc, off):
-    mem_ptr_wrap add mem_ptr_addr get sc "raw" off
+fn scanner_header_ptr <(Scanner,i32)->Result<MemPtr<i32>,str>> (sc, off):
+    region_ptr_at<u8,i32> get sc "region" off
 
 fn scanner_load_header <(Scanner,i32)->i32> (sc, off):
-    match load_i32 scanner_header_ptr sc off:
-        Option::Some v:
-            v
-        Option::None:
+    match scanner_header_ptr sc off:
+        Result::Err _e:
             0
+        Result::Ok p:
+            match load_i32 p:
+                Option::Some v:
+                    v
+                Option::None:
+                    0
 
 fn scanner_store_header <(Scanner,i32,i32)->()> (sc, off, v):
-    match store_i32 scanner_header_ptr sc off v:
-        Result::Ok _:
-            ()
+    match scanner_header_ptr sc off:
         Result::Err _e:
             ()
+        Result::Ok p:
+            match store_i32 p v:
+                Result::Ok _:
+                    ()
+                Result::Err _e:
+                    ()
 
 //: kpread: 競技プログラミング用高速スキャナ
 //: 
