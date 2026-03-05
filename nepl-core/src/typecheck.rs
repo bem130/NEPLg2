@@ -100,10 +100,66 @@ struct TraitSemantics {
 
 impl TraitSemantics {
     fn detect(traits: &BTreeMap<String, TraitInfo>, ctx: &TypeCtx) -> Self {
-        let copy_trait =
-            detect_capability_trait(traits, ctx, "Copy", "copy_mark");
-        let clone_trait =
-            detect_capability_trait(traits, ctx, "Clone", "clone");
+        let mut copy_trait: Option<(String, TypeId)> = None;
+        let mut clone_trait: Option<(String, TypeId)> = None;
+
+        for (name, info) in traits {
+            for cap in detect_declared_trait_capabilities(info.doc.as_deref()) {
+                match cap {
+                    TraitCapability::Copy => {
+                        if copy_trait.is_none() {
+                            copy_trait = Some((name.clone(), info.self_ty));
+                        }
+                    }
+                    TraitCapability::Clone => {
+                        if clone_trait.is_none() {
+                            clone_trait = Some((name.clone(), info.self_ty));
+                        }
+                    }
+                }
+            }
+        }
+
+        if clone_trait.is_none() {
+            let mut clone_candidates: Vec<(String, TypeId)> = Vec::new();
+            for (name, info) in traits {
+                if trait_has_single_unary_self_to_self_method(info, ctx) {
+                    clone_candidates.push((name.clone(), info.self_ty));
+                }
+            }
+            if clone_candidates.len() == 1 {
+                clone_trait = clone_candidates.into_iter().next();
+            }
+        }
+
+        if copy_trait.is_none() {
+            let mut copy_candidates: Vec<(String, TypeId)> = Vec::new();
+            for (name, info) in traits {
+                if trait_is_marker(info) {
+                    copy_candidates.push((name.clone(), info.self_ty));
+                }
+            }
+            if copy_candidates.len() == 1 {
+                copy_trait = copy_candidates.into_iter().next();
+            }
+        }
+
+        if clone_trait.is_none() {
+            if let Some(info) = traits.get("Clone") {
+                if trait_has_single_unary_self_to_self_method(info, ctx) {
+                    clone_trait = Some(("Clone".to_string(), info.self_ty));
+                }
+            }
+        }
+        if copy_trait.is_none() {
+            if let Some(info) = traits.get("Copy") {
+                if trait_is_marker(info) || trait_has_single_unary_self_to_self_method(info, ctx)
+                {
+                    copy_trait = Some(("Copy".to_string(), info.self_ty));
+                }
+            }
+        }
+
         Self {
             copy_trait,
             clone_trait,
@@ -150,34 +206,43 @@ enum FieldIdx {
     Name(String),
 }
 
-fn detect_capability_trait(
-    traits: &BTreeMap<String, TraitInfo>,
-    ctx: &TypeCtx,
-    preferred_trait_name: &str,
-    required_method_name: &str,
-) -> Option<(String, TypeId)> {
-    if let Some(info) = traits.get(preferred_trait_name) {
-        if trait_has_unary_self_to_self_method(info, ctx, required_method_name) {
-            return Some((preferred_trait_name.to_string(), info.self_ty));
-        }
-    }
-    for (name, info) in traits {
-        if trait_has_unary_self_to_self_method(info, ctx, required_method_name) {
-            return Some((name.clone(), info.self_ty));
-        }
-    }
-    None
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TraitCapability {
+    Copy,
+    Clone,
 }
 
-fn trait_has_unary_self_to_self_method(
+fn detect_declared_trait_capabilities(doc: Option<&str>) -> Vec<TraitCapability> {
+    let mut out = Vec::new();
+    let Some(doc) = doc else {
+        return out;
+    };
+    for line in doc.lines() {
+        let trimmed = line.trim();
+        let Some(rest) = trimmed.strip_prefix("@capability:") else {
+            continue;
+        };
+        let name = rest.trim();
+        if name == "copy" {
+            out.push(TraitCapability::Copy);
+        } else if name == "clone" {
+            out.push(TraitCapability::Clone);
+        }
+    }
+    out
+}
+
+fn trait_has_single_unary_self_to_self_method(
     info: &TraitInfo,
     ctx: &TypeCtx,
-    method_name: &str,
 ) -> bool {
-    let Some(sig) = info.methods.get(method_name).copied() else {
+    if info.methods.len() != 1 {
+        return false;
+    }
+    let Some((_, sig)) = info.methods.iter().next() else {
         return false;
     };
-    let resolved = ctx.resolve_id(sig);
+    let resolved = ctx.resolve_id(*sig);
     match ctx.get(resolved) {
         TypeKind::Function {
             params,
@@ -192,6 +257,10 @@ fn trait_has_unary_self_to_self_method(
         }
         _ => false,
     }
+}
+
+fn trait_is_marker(info: &TraitInfo) -> bool {
+    info.methods.is_empty()
 }
 
 fn collect_type_params(

@@ -238,10 +238,12 @@ diag_id: 3049
 #indent 4
 #target core
 
+//: @capability: clone
 trait Clone:
     fn clone <(Self)->Self> (x):
         x
 
+//: @capability: copy
 trait Copy:
     fn copy_mark <(Self)->Self> (x):
         x
@@ -252,6 +254,9 @@ struct RegionToken:
 impl Copy for RegionToken:
     fn copy_mark <(RegionToken)->RegionToken> (x):
         x
+
+fn main <()->i32> ():
+    0
 ```
 
 ## Copy impl には Clone impl が必要
@@ -263,10 +268,12 @@ diag_id: 3050
 #indent 4
 #target core
 
+//: @capability: clone
 trait Clone:
     fn clone <(Self)->Self> (x):
         x
 
+//: @capability: copy
 trait Copy:
     fn copy_mark <(Self)->Self> (x):
         x
@@ -274,6 +281,9 @@ trait Copy:
 impl Copy for i32:
     fn copy_mark <(i32)->i32> (x):
         x
+
+fn main <()->i32> ():
+    0
 ```
 
 ## Clone と Copy の両方があれば受理
@@ -285,10 +295,12 @@ ret: 0
 #indent 4
 #target core
 
+//: @capability: clone
 trait Clone:
     fn clone <(Self)->Self> (x):
         x
 
+//: @capability: copy
 trait Copy:
     fn copy_mark <(Self)->Self> (x):
         x
@@ -315,10 +327,12 @@ diag_id: 3053
 #target core
 #import "core/cast" as *
 
+//: @capability: clone
 trait Clone:
     fn clone <(Self)->Self> (x):
         x
 
+//: @capability: copy
 trait Copy:
     fn copy_mark <(Self)->Self> (x):
         x
@@ -344,10 +358,12 @@ ret: 0
 #target core
 #import "core/cast" as *
 
+//: @capability: clone
 trait Clone:
     fn clone <(Self)->Self> (x):
         x
 
+//: @capability: copy
 trait Copy:
     fn copy_mark <(Self)->Self> (x):
         x

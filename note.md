@@ -6712,3 +6712,33 @@
 - 補足:
   - `diag_id` の変更は、各ケースを単体再現して実診断を確認したもののみ反映した。
   - 失敗原因が複数混在するケースは、テストコード側を「狙った診断だけが出る形」に分解して再構成した。
+
+# 2026-03-05 作業メモ (フェーズB2: trait能力テーブルの導入と回帰安定化)
+
+- 目的:
+  - `todo.md` フェーズB2（`Copy/Clone` 能力判定の能力テーブル化）を進め、`typecheck` の能力判定を局所化する。
+
+- 実施:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitSemantics::detect` を拡張し、trait doc から `@capability: copy|clone` を読んで能力を設定する経路を追加。
+    - 既存のメソッド名ベタ依存（`copy_mark`/`clone`）検出を削除。
+    - 構造ヒューリスティックを追加:
+      - clone 候補: 単一メソッドかつ `(Self)->Self`
+      - copy 候補: marker trait（メソッドなし）
+    - 互換維持のため、能力未確定時のみ `Clone` / `Copy` 名の最小フォールバックを追加。
+  - `tests/move_effect.n.md`
+    - `compile_fail` 2ケースで `#entry main` だけ定義され診断が `D3092` に吸われる問題を修正し、`main` を追加して狙った `diag_id` を検証可能化。
+    - `Copy` 関連ケースに `@capability` 宣言を追記。
+
+- 根本原因:
+  - 旧実装は能力判定を「trait名 + method名」組に依存しており、仕様拡張時に誤判定が起きやすかった。
+  - `compile_fail` の一部ケースはエントリ未定義が先に発火し、狙った回帰検証になっていなかった。
+
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-b2-capability-targeted-v4.json -j 15` -> `281/281 pass`
+  - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v1.json -j 15` -> `837/837 pass`
+
+- 差分認識:
+  - 能力検出の主経路は能力テーブル化済み。
+  - ただし完全撤廃ではなく、未宣言時の最小互換として `Copy/Clone` 名フォールバックが残る。`todo.md` フェーズB2の「文字列比較完全撤廃」を満たすには次段でこの互換層を外す必要がある。
