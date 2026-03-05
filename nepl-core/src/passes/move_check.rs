@@ -579,12 +579,11 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
                         .map(|ty| tctx.is_copy(*ty))
                         .unwrap_or(false);
                     if let Some(addr) = args.get(0) {
-                        let kind = if is_copy_load {
-                            BorrowKind::Shared
-                        } else {
-                            BorrowKind::Unique
-                        };
-                        visit_temporary_borrow(addr, ctx, tctx, kind);
+                        if is_copy_load {
+                            visit_temporary_borrow(addr, ctx, tctx, BorrowKind::Shared);
+                        } else if !visit_field_move_source(addr, ctx, tctx) {
+                            visit_temporary_borrow(addr, ctx, tctx, BorrowKind::Unique);
+                        }
                     }
                 }
                 "store" => {
@@ -663,6 +662,26 @@ fn visit_temporary_borrow(
             }
         }
         _ => {}
+    }
+}
+
+fn visit_field_move_source(
+    expr: &HirExpr,
+    ctx: &mut MoveCheckContext,
+    tctx: &crate::types::TypeCtx,
+) -> bool {
+    match &expr.kind {
+        HirExprKind::Var(name) => {
+            if !tctx.is_copy(expr.ty) {
+                ctx.check_use(name, expr.span, false);
+                return true;
+            }
+            false
+        }
+        HirExprKind::Intrinsic { name, args, .. } if name == "add" && !args.is_empty() => {
+            visit_field_move_source(&args[0], ctx, tctx)
+        }
+        _ => false,
     }
 }
 

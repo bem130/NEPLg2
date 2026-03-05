@@ -6867,3 +6867,26 @@
 - テスト:
   - `node nodesrc/tests.js -i tests/move_check.n.md -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-movecheck-unskip-v5.json -j 15`
     - `282/282 pass`
+
+# 2026-03-05 作業メモ (move_check: 構造体フィールド move 検出の根本修正)
+
+- 事象:
+  - `move_struct_field_err` が `skip` のままで、`s.f` から非Copy値を2回読むケースを検出できていなかった。
+
+- 根本原因:
+  - `s.f` は HIR 上 `load` に lower されるが、`move_check` の `load<non-Copy>` 分岐が
+    常に「一時借用」扱いで、所有権移動として状態更新していなかった。
+
+- 修正:
+  - `nepl-core/src/passes/move_check.rs`
+    - `visit_field_move_source` を追加。
+    - `load<non-Copy>` のとき、アドレス式がローカル複合値由来（`Var` / `add(Var, ...)`）なら
+      値移動として `check_use(..., is_copy=false)` を適用。
+    - それ以外の `load<non-Copy>` は従来どおり一時 unique borrow を適用。
+  - `tests/move_check.n.md`
+    - `move_struct_field_err` を `skip` から `compile_fail` (`diag_id: 3053`) に戻した。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_check.n.md -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-movecheck-unskip-v6.json -j 15`
+    - `282/282 pass`

@@ -200,7 +200,8 @@ fn main <()->()> ():
 
 ## move_struct_field_err
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
+diag_id: 3053
 ```neplg2
 #entry main
 #indent 4
