@@ -23,6 +23,10 @@
 - `_safe` 接尾辞を廃止し、安全APIを標準名へ統一する。
 - 生ポインタ前提APIは段階的に `*_raw` へ隔離し、最終的に公開面から削除する。
 - trait 境界（`MemReadable<T>`, `MemWritable<T>`, `RegionOwned`）を導入可能な箇所から適用。
+- `mem/kpread/kpwrite` 完了後に、`stdlib/std`（`stdio` / `fs` / `env/cliarg`）を同じ安全モデルへ移行する。
+- API/ライブラリ安全化完了後に、`tutorials` を新APIへ全面書き直しする。
+  - pipe演算子と式指向を活かし、不要な中間変数を削減する。
+  - 記述の簡潔さとメモリ安全性が両立するスタイルへ統一する。
 - 完了条件:
   - `mem/kpread/kpwrite` の公開APIが Result/Option 前提で統一。
   - 既存 examples/tests/tutorials が新APIへ更新済み。

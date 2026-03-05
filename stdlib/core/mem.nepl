@@ -664,6 +664,41 @@ fn fill_i32 <(i32,i32,i32)->()> (ptr, count, value):
             store_i32 <i32> add ptr <i32> mul i 4 value;
             set i add i 1;
 
+//: memset_u8: MemPtr<u8> を受け取る安全オーバーロード
+//:
+//: 目的:
+//: - 無効ポインタを `Result::Err` として扱い、`i32` 生ポインタ境界を減らします。
+fn memset_u8 <(MemPtr<u8>,i32,i32)->Result<(),str>> (ptr, len, value):
+    let raw <i32> mem_ptr_addr ptr;
+    if:
+        or lt raw 1 lt len 0
+        then:
+            Result<(),str>::Err "mem.memset_u8 invalid argument"
+        else:
+            memset_u8 raw len value
+            Result<(),str>::Ok ()
+
+//: fill_u8: MemPtr<u8> を受け取る安全オーバーロード
+//:
+//: 目的:
+//: - `fill_u8` を `MemPtr` で利用できるようにし、呼び出し側の生ポインタ露出を減らします。
+fn fill_u8 <(MemPtr<u8>,i32,i32)->Result<(),str>> (ptr, len, value):
+    memset_u8 ptr len value
+
+//: fill_i32: MemPtr<i32> を受け取る安全オーバーロード
+//:
+//: 目的:
+//: - 無効ポインタを `Result::Err` として扱い、`i32` 生ポインタ境界を減らします。
+fn fill_i32 <(MemPtr<i32>,i32,i32)->Result<(),str>> (ptr, count, value):
+    let raw <i32> mem_ptr_addr ptr;
+    if:
+        or lt raw 1 lt count 0
+        then:
+            Result<(),str>::Err "mem.fill_i32 invalid argument"
+        else:
+            fill_i32 raw count value
+            Result<(),str>::Ok ()
+
 fn alloc_ptr <.T> <(i32)->Result<MemPtr<.T>,str>> (size):
     match alloc size:
         Result::Ok raw:

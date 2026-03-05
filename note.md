@@ -1,3 +1,21 @@
+# 2026-03-05 作業メモ (フェーズC/D接続: core/mem に MemPtr 初期化オーバーロード追加)
+
+- 目的:
+  - `core/mem` 後段移行（`stdlib/std`/tutorials）で `i32` 生ポインタを露出せずに配列初期化できる上流APIを用意する。
+  - `MemPtr` モデル上で `fill/memset` を統一し、`Result` で失敗を扱えるようにする。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `memset_u8 <(MemPtr<u8>,i32,i32)->Result<(),str>>` を追加。
+    - `fill_u8 <(MemPtr<u8>,i32,i32)->Result<(),str>>` を追加。
+    - `fill_i32 <(MemPtr<i32>,i32,i32)->Result<(),str>>` を追加。
+    - 無効ポインタや負の長さは `Result::Err` を返す。
+  - `tests/memory_safety.n.md`
+    - `MemPtr fill_i32/fill_u8 の安全オーバーロード` ケースを追加。
+    - `MemPtr fill 系は無効引数を Err で返す` ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety-fill-overload.json -j 15` -> `217/217 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-mem-fill-overload.json -j 15` -> `787/787 pass`
+
 # 2026-03-05 作業メモ (フェーズD: kpread_core ヘッダフィールドの型安全化)
 
 - 目的:
