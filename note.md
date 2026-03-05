@@ -7340,3 +7340,28 @@
   - 結果: `207/207 pass`
   - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-final-fix.json -j 15`
   - 結果: `783/783 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: 関数署名比較の文字列依存を排除)
+
+- 目的:
+  - オーバーロード/hoist関連で残っていた署名照合の文字列比較を廃止し、型構造比較へ統一する。
+- 根本原因:
+  - `remove_duplicate_func`, `lookup_func_symbol`, `find_same_signature_func`, `fn` 定義時照合が文字列キー比較に依存しており、型変数名や生成順序差で不安定化する余地があった。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `same_function_signature` を追加し、関数型のシグネチャ同値（ジェネリクスα同値含む）を型構造で判定。
+    - `same_type_with_signature_generics` を追加し、型パラメータ対応表（A->B/B->A）を持った再帰比較を実装。
+    - 以下を文字列比較から `same_function_signature` へ置換:
+      - `fn` 定義時の過負荷候補選択
+      - `Env::remove_duplicate_func`
+      - `Env::lookup_func_symbol`
+      - `find_same_signature_func`
+      - `find_nonshadow_same_signature_func`
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-after-same-signature-api.json -j 15`
+  - 結果: `272/272 pass`
+  - `node nodesrc/tests.js -i tests/compile_fail_diag_location.n.md --no-tree -o /tmp/tests-compile-fail-diag-location-after-same-signature-api.json -j 15`
+  - 結果: `207/207 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-same-signature-api.json -j 15`
+  - 結果: `783/783 pass`
