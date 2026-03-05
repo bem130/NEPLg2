@@ -601,32 +601,44 @@ fn valtype(kind: &TypeKind) -> Option<ValType> {
     }
 }
 
-fn find_runtime_helper_index(name_map: &BTreeMap<String, u32>, base: &str) -> Option<u32> {
-    if let Some(idx) = name_map.get(base) {
-        return Some(*idx);
+fn helper_base_name(name: &str) -> &str {
+    let tail = if let Some(pos) = name.rfind("::") {
+        &name[pos + 2..]
+    } else {
+        name
+    };
+    if let Some(pos) = tail.find("__") {
+        &tail[..pos]
+    } else {
+        tail
     }
-    let mut plain_prefix = String::from(base);
-    plain_prefix.push_str("__");
-    let mut namespaced_prefix = String::from("::");
-    namespaced_prefix.push_str(base);
-    namespaced_prefix.push_str("__");
-    let mut namespaced_exact = String::from("::");
-    namespaced_exact.push_str(base);
+}
 
+fn find_runtime_helper_index(
+    name_map: &BTreeMap<String, u32>,
+    base: &str,
+    skip_idx: Option<u32>,
+) -> Option<u32> {
+    if let Some(idx) = name_map.get(base) {
+        if Some(*idx) != skip_idx {
+            return Some(*idx);
+        }
+    }
     for (name, idx) in name_map {
-        if name.starts_with(&plain_prefix)
-            || name.contains(&namespaced_prefix)
-            || name.ends_with(&namespaced_exact)
-        {
+        if Some(*idx) == skip_idx {
+            continue;
+        }
+        if helper_base_name(name) == base {
             return Some(*idx);
         }
     }
     None
 }
 
-fn find_alloc_index(name_map: &BTreeMap<String, u32>) -> Option<u32> {
+fn find_alloc_index(name_map: &BTreeMap<String, u32>, current_func: &str) -> Option<u32> {
+    let skip_idx = name_map.get(current_func).copied();
     for base in ALLOC_CANDIDATES {
-        if let Some(idx) = find_runtime_helper_index(name_map, base) {
+        if let Some(idx) = find_runtime_helper_index(name_map, base, skip_idx) {
             return Some(idx);
         }
     }
@@ -682,11 +694,10 @@ fn emit_inline_alloc(locals: &mut LocalMap, insts: &mut Vec<Instruction<'static>
 }
 
 fn emit_alloc_call(
-    name_map: &BTreeMap<String, u32>,
     locals: &mut LocalMap,
     insts: &mut Vec<Instruction<'static>>,
 ) {
-    if let Some(idx) = find_alloc_index(name_map) {
+    if let Some(idx) = locals.alloc_helper_idx {
         insts.push(Instruction::Call(idx));
     } else {
         emit_inline_alloc(locals, insts);
@@ -739,6 +750,7 @@ fn lower_user(
     for p in &func.params {
         locals.register_param(p.name.clone(), p.ty);
     }
+    locals.alloc_helper_idx = find_alloc_index(name_map, &func.name);
 
     let mut insts: Vec<Instruction<'static>> = Vec::new();
 
@@ -1146,7 +1158,7 @@ fn gen_expr(
             } else if name == "callsite_span" {
                 let size = 12;
                 insts.push(Instruction::I32Const(size));
-                emit_alloc_call(name_map, locals, insts);
+                emit_alloc_call(locals, insts);
                 let ptr_local = locals.alloc_temp(ValType::I32);
                 insts.push(Instruction::LocalTee(ptr_local));
 
@@ -1237,7 +1249,7 @@ fn gen_expr(
                 None => (0i32, 4i32),
             };
             insts.push(Instruction::I32Const(size as i32));
-            emit_alloc_call(name_map, locals, insts);
+            emit_alloc_call(locals, insts);
             let ptr_local = locals.alloc_temp(ValType::I32);
             insts.push(Instruction::LocalTee(ptr_local));
             // store tag
@@ -1312,7 +1324,7 @@ fn gen_expr(
                 size += field_size(valtype(&ctx.get(f.ty)));
             }
             insts.push(Instruction::I32Const(size as i32));
-            emit_alloc_call(name_map, locals, insts);
+            emit_alloc_call(locals, insts);
             let ptr_local = locals.alloc_temp(ValType::I32);
             insts.push(Instruction::LocalTee(ptr_local));
             for (i, f) in fields.iter().enumerate() {
@@ -1397,7 +1409,7 @@ fn gen_expr(
                 size += item_size(valtype(&ctx.get(item.ty)));
             }
             insts.push(Instruction::I32Const(size as i32));
-            emit_alloc_call(name_map, locals, insts);
+            emit_alloc_call(locals, insts);
             let ptr_local = locals.alloc_temp(ValType::I32);
             insts.push(Instruction::LocalTee(ptr_local));
             for (i, item) in items.iter().enumerate() {
@@ -1615,6 +1627,7 @@ struct LocalMap {
     scopes: Vec<Vec<String>>,
     next_idx: u32,
     decls: Vec<ValType>,
+    alloc_helper_idx: Option<u32>,
 }
 
 impl LocalMap {
@@ -1625,6 +1638,7 @@ impl LocalMap {
             scopes: vec![Vec::new()],
             next_idx: param_count as u32,
             decls: Vec::new(),
+            alloc_helper_idx: None,
         }
     }
 

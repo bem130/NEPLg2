@@ -1,3 +1,27 @@
+# 2026-03-06 作業メモ (フェーズD: wasm helper 解決の自己再帰バグ修正)
+
+- 目的:
+  - `tests + stdlib` で発生していた `RangeError: Maximum call stack size exceeded` を根本原因から解消する。
+- 再現と切り分け:
+  - `option.nepl` doctest を単独再現すると `wasm-function[4]` の自己再帰で停止。
+  - 同一ソースを `nepl-cli` で生成した wasm は正常実行。
+  - `web` 生成 WAT と `native` 生成 WAT を比較すると、同一箇所で `call 5` が `call 4`（自己呼び出し）に化けていた。
+- 原因:
+  - `codegen_wasm` の runtime helper 解決が曖昧な文字列一致（prefix/contains）依存だった。
+  - allocator helper 解決時に `alloc` と `alloc_raw` の取り違えが発生し、enum/tuple 構築時の内部確保で自己再帰が起きていた。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - helper 名の基底名抽出 `helper_base_name` を追加。
+    - runtime helper 解決を基底名一致へ変更し、曖昧一致を廃止。
+    - 現在 lowering 中の関数インデックスは helper 候補から除外。
+    - `LocalMap` に `alloc_helper_idx` を保持し、関数ごとに一度だけ helper を確定。
+  - `nepl-core/src/runtime_helpers.rs`
+    - `ALLOC_CANDIDATES` を `["alloc_raw", "alloc"]` の順へ変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i stdlib/core/option.nepl -i stdlib/alloc/collections/vec.nepl -i stdlib/alloc/collections/vec/sort.nepl --no-stdlib --no-tree -o /tmp/tests-vec-option-after-alloc-helper-fix.json -j 15` -> `22/22 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-alloc-helper-fix.json -j 15` -> `791/791 pass`
+
 # 2026-03-05 作業メモ (フェーズD: web 実行時 `compile: unreachable` の根本修正)
 
 - 目的:
