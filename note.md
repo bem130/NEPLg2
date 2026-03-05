@@ -7466,3 +7466,18 @@
   - 結果: `207/207 pass`
   - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-same-signature-api.json -j 15`
   - 結果: `783/783 pass`
+# 2026-03-05 作業メモ (`move_check.n.md::doctest#4` の診断ID不一致を上流で修正)
+
+- 目的:
+  - `tests + stdlib` 全体で唯一失敗していた `tests/move_check.n.md::doctest#4` の `diag_id: 3065` 不一致を、場当たりではなくテスト記述の上流整備で解消する。
+- 原因:
+  - 既存ケースが `#target core` + `core/math` 依存の書き方で、`loop move` 本体検証より前に `D3016` 系のスタック検査エラーを先行発生させていた。
+  - 結果として、意図していた `D3065`（`TypeLoopPotentiallyMovedValue`）に到達しなかった。
+- 対応:
+  - `tests/move_check.n.md` の `move_in_loop`（doctest#4）を、`loop` 合流での moved 値再利用だけを検証する最小ケースに置換。
+  - `#target core` / `core/math` 依存を除去し、`bool` フラグ更新 (`set c false`) で 1 回ループを構成。
+  - `consume` は `()->()` にし、`D3016` のノイズを排除。
+  - 最後に `consume t` を置き、`loop` 内 move の合流で `D3065` を安定再現する形に固定。
+- 実施テスト:
+  - `node nodesrc/tests.js -i tests/move_check.n.md --no-tree -o /tmp/tests-move-check-after-fix.json -j 15` -> `217/217 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-movecheck-fix.json -j 15` -> `785/785 pass`

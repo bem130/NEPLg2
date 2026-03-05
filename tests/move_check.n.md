@@ -73,9 +73,6 @@ diag_id: 3065
 ```neplg2
 #entry main
 #indent 4
-#target core
-
-#import "core/math" as *
 
 struct RegionToken:
     raw <(i32)->i32>
@@ -83,17 +80,18 @@ struct RegionToken:
 fn token_id <(i32)->i32> (x):
     x
 
-fn consume <(RegionToken)->i32> (_t):
-    1
+fn consume <(RegionToken)->()> (_t):
+    ()
 
 fn main <()->i32> ():
     let t <RegionToken> RegionToken @token_id
-    let mut i <i32> 0
-    while lt i 1:
+    let mut c <bool> true
+    while c:
         do:
             consume t
-            set i add i 1
+            set c false
     consume t
+    0
 ```
 
 ## move_reassign_non_copy
