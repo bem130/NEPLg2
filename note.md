@@ -1,3 +1,18 @@
+# 2026-03-05 作業メモ (フェーズD: kpread ヘッダフィールドの型安全化)
+
+- 目的:
+  - `kpread` のヘッダアクセスで使っていた生オフセット値（`0/4/8`）を列挙型へ置き換え、呼び出し側の誤指定を減らす。
+  - `todo.md` 2026-03-03 フェーズD（`mem/kpread/kpwrite` の公開API安全化）に沿って、上流の表現を固定する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `ScannerHeaderField` を追加（`BufPtr` / `Len` / `Pos`）。
+    - `scanner_header_off` を追加し、オフセット解決を1箇所へ集約。
+    - `scanner_header_ptr` / `scanner_load_header` / `scanner_store_header` の第2引数を `i32` から `ScannerHeaderField` に変更。
+    - 呼び出し側の `scanner_load_header sc 0/4/8` と `scanner_store_header sc 8 ...` を列挙型指定へ置換。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpread.nepl --no-tree -o /tmp/tests-kpread-header-field-targeted.json -j 15` -> `222/222 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpread-header-field.json -j 15` -> `785/785 pass`
+
 # 2026-03-05 作業メモ (フェーズD先行: Writer を RegionToken 保持へ移行)
 
 - 目的:

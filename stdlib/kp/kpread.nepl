@@ -28,6 +28,11 @@
 struct Scanner:
     region <RegionToken<u8>>
 
+enum ScannerHeaderField:
+    BufPtr
+    Len
+    Pos
+
 fn scanner_wrap <(MemPtr<u8>)->Scanner> (raw):
     Scanner region_new raw 12
 
@@ -42,11 +47,20 @@ fn scanner_new <()*>Result<Scanner,str>> ():
         Result::Err e:
             Result<Scanner,str>::Err e
 
-fn scanner_header_ptr <(Scanner,i32)->Result<MemPtr<i32>,str>> (sc, off):
-    region_ptr_at<u8,i32> get sc "region" off
+fn scanner_header_off <(ScannerHeaderField)->i32> (field):
+    match field:
+        ScannerHeaderField::BufPtr:
+            0
+        ScannerHeaderField::Len:
+            4
+        ScannerHeaderField::Pos:
+            8
 
-fn scanner_load_header <(Scanner,i32)->i32> (sc, off):
-    match scanner_header_ptr sc off:
+fn scanner_header_ptr <(Scanner,ScannerHeaderField)->Result<MemPtr<i32>,str>> (sc, field):
+    region_ptr_at<u8,i32> get sc "region" scanner_header_off field
+
+fn scanner_load_header <(Scanner,ScannerHeaderField)->i32> (sc, field):
+    match scanner_header_ptr sc field:
         Result::Err _e:
             0
         Result::Ok p:
@@ -56,8 +70,8 @@ fn scanner_load_header <(Scanner,i32)->i32> (sc, off):
                 Option::None:
                     0
 
-fn scanner_store_header <(Scanner,i32,i32)->()> (sc, off, v):
-    match scanner_header_ptr sc off:
+fn scanner_store_header <(Scanner,ScannerHeaderField,i32)->()> (sc, field, v):
+    match scanner_header_ptr sc field:
         Result::Err _e:
             ()
         Result::Ok p:
@@ -122,9 +136,9 @@ fn scanner_store_header <(Scanner,i32,i32)->()> (sc, off, v):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn scanner_skip_ws_handle <(Scanner)*>()> (sc):
-    let buf <i32> scanner_load_header sc 0;
-    let len <i32> scanner_load_header sc 4;
-    let mut p <i32> scanner_load_header sc 8;
+    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
 
     if:
         eq p 0
@@ -196,7 +210,7 @@ fn scanner_skip_ws_handle <(Scanner)*>()> (sc):
             else:
                 set done 1;
 
-    scanner_store_header sc 8 p;
+    scanner_store_header sc ScannerHeaderField::Pos p;
     ()
 
 //: scanner_is_eof: トークンが残っていないか確認する
@@ -224,8 +238,8 @@ fn scanner_skip_ws_handle <(Scanner)*>()> (sc):
 //: - 本体処理に準じます。
 fn scanner_is_eof_handle <(Scanner)*>bool> (sc):
     scanner_skip_ws_handle sc;
-    let len <i32> scanner_load_header sc 4;
-    let p <i32> scanner_load_header sc 8;
+    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
+    let p <i32> scanner_load_header sc ScannerHeaderField::Pos;
     ge p len
 
 //: scanner_skip_token: アロケーションなしで 1 トークン消費する
@@ -254,9 +268,9 @@ fn scanner_is_eof_handle <(Scanner)*>bool> (sc):
 //: - 本体処理に準じます。
 fn scanner_skip_token_handle <(Scanner)*>()> (sc):
     scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc 0;
-    let len <i32> scanner_load_header sc 4;
-    let mut p <i32> scanner_load_header sc 8;
+    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
 
     let mut done <i32> 0;
     while eq done 0:
@@ -288,7 +302,7 @@ fn scanner_skip_token_handle <(Scanner)*>()> (sc):
             else:
                 set done 1;
 
-    scanner_store_header sc 8 p;
+    scanner_store_header sc ScannerHeaderField::Pos p;
     ()
 
 //: scanner_read_token: 次のトークンを文字列として読み込む
@@ -320,9 +334,9 @@ fn scanner_skip_token_handle <(Scanner)*>()> (sc):
 //: - 本体処理に準じます。
 fn scanner_read_token_handle <(Scanner)*>str> (sc):
     scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc 0;
-    let len <i32> scanner_load_header sc 4;
-    let start <i32> scanner_load_header sc 8;
+    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
+    let start <i32> scanner_load_header sc ScannerHeaderField::Pos;
     let mut p <i32> start;
 
     let mut done <i32> 0;
@@ -363,7 +377,7 @@ fn scanner_read_token_handle <(Scanner)*>str> (sc):
         else:
             match alloc add 4 tlen:
                 Result::Err _e:
-                    scanner_store_header sc 8 p;
+                    scanner_store_header sc ScannerHeaderField::Pos p;
                     ""
                 Result::Ok s:
                     store_i32 s tlen;
@@ -377,7 +391,7 @@ fn scanner_read_token_handle <(Scanner)*>str> (sc):
                             let bv <i32> load_u8 bp;
                             store_u8 sp bv;
                             set i add i 1;
-                    scanner_store_header sc 8 p;
+                    scanner_store_header sc ScannerHeaderField::Pos p;
                     s
 
 //: scanner_read_i32: 次のトークンを i32 として読み込む（符号付き 10 進数）
@@ -409,9 +423,9 @@ fn scanner_read_token_handle <(Scanner)*>str> (sc):
 //: - 本体処理に準じます。
 fn scanner_read_i32_handle <(Scanner)*>i32> (sc):
     scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc 0;
-    let len <i32> scanner_load_header sc 4;
-    let mut p <i32> scanner_load_header sc 8;
+    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
     if:
         ge p len
         then:
@@ -456,7 +470,7 @@ fn scanner_read_i32_handle <(Scanner)*>i32> (sc):
                     else:
                         set done 1;
 
-            scanner_store_header sc 8 p;
+            scanner_store_header sc ScannerHeaderField::Pos p;
             let signed <i32> mul val sign;
             signed
 
@@ -477,9 +491,9 @@ fn scanner_read_i32_handle <(Scanner)*>i32> (sc):
 //: - O(桁数)
 fn scanner_read_u64_handle <(Scanner)*>i64> (sc):
     scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc 0;
-    let len <i32> scanner_load_header sc 4;
-    let mut p <i32> scanner_load_header sc 8;
+    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
     if:
         ge p len
         then:
@@ -523,7 +537,7 @@ fn scanner_read_u64_handle <(Scanner)*>i64> (sc):
                     else:
                         set done 1;
 
-            scanner_store_header sc 8 p;
+            scanner_store_header sc ScannerHeaderField::Pos p;
             val
 
 //: scanner_read_i64: 次のトークンを i64 として読み込む
@@ -539,9 +553,9 @@ fn scanner_read_u64_handle <(Scanner)*>i64> (sc):
 //: - O(桁数)
 fn scanner_read_i64_handle <(Scanner)*>i64> (sc):
     scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc 0;
-    let len <i32> scanner_load_header sc 4;
-    let mut p <i32> scanner_load_header sc 8;
+    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
     if:
         ge p len
         then:
@@ -592,7 +606,7 @@ fn scanner_read_i64_handle <(Scanner)*>i64> (sc):
                     else:
                         set done 1;
 
-            scanner_store_header sc 8 p;
+            scanner_store_header sc ScannerHeaderField::Pos p;
             if:
                 eq is_neg 1
                 then:
@@ -617,9 +631,9 @@ fn scanner_read_i64_handle <(Scanner)*>i64> (sc):
 //: - O(桁数)
 fn scanner_read_f64_handle <(Scanner)*>f64> (sc):
     scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc 0;
-    let buf_len <i32> scanner_load_header sc 4;
-    let mut p <i32> scanner_load_header sc 8;
+    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
+    let buf_len <i32> scanner_load_header sc ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
     if:
         ge p buf_len
         then:
@@ -775,7 +789,7 @@ fn scanner_read_f64_handle <(Scanner)*>f64> (sc):
                 else:
                     ();
 
-            scanner_store_header sc 8 p;
+            scanner_store_header sc ScannerHeaderField::Pos p;
             if:
                 eq any_digit 0
                 then:
@@ -915,9 +929,9 @@ fn scanner_read_all_i32_handle <(Scanner)*>Vec<i32>> (sc):
     while eq done 0:
         do:
             scanner_skip_ws_handle sc;
-            let buf <i32> scanner_load_header sc 0;
-            let len <i32> scanner_load_header sc 4;
-            let p <i32> scanner_load_header sc 8;
+            let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
+            let len <i32> scanner_load_header sc ScannerHeaderField::Len;
+            let p <i32> scanner_load_header sc ScannerHeaderField::Pos;
 
             if:
                 ge p len
