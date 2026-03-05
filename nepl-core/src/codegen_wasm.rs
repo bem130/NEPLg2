@@ -1060,11 +1060,7 @@ fn gen_expr(
                 insts.push(Instruction::I32Const(off as i32));
                 Some(ValType::I32)
             } else {
-                diags.push(
-                    Diagnostic::error("string literal not found during codegen", expr.span)
-                        .with_id(DiagnosticId::CodegenWasmStringLiteralNotFound),
-                );
-                None
+                panic!("internal compiler error: string literal not found during codegen")
             }
         }
         HirExprKind::Unit => None,
@@ -1080,11 +1076,10 @@ fn gen_expr(
                 insts.push(Instruction::I32Const(fidx as i32));
                 Some(ValType::I32)
             } else {
-                diags.push(
-                    Diagnostic::error(format!("unknown variable {}", name), expr.span)
-                        .with_id(DiagnosticId::CodegenWasmUnknownVariable),
-                );
-                None
+                panic!(
+                    "internal compiler error: unknown variable '{}' reached wasm codegen",
+                    name
+                )
             }
         }
         HirExprKind::FnValue(name) => {
@@ -1092,11 +1087,10 @@ fn gen_expr(
                 insts.push(Instruction::I32Const(fidx as i32));
                 Some(ValType::I32)
             } else {
-                diags.push(
-                    Diagnostic::error(format!("unknown function value {}", name), expr.span)
-                        .with_id(DiagnosticId::CodegenWasmUnknownFunctionValue),
-                );
-                None
+                panic!(
+                    "internal compiler error: unknown function value '{}' reached wasm codegen",
+                    name
+                )
             }
         }
         HirExprKind::Call { callee, args } => {
@@ -1118,9 +1112,9 @@ fn gen_expr(
                         s
                     }
                 };
-                diags.push(
-                    Diagnostic::error(format!("unknown function {missing}"), expr.span)
-                        .with_id(DiagnosticId::CodegenWasmUnknownFunction),
+                panic!(
+                    "internal compiler error: unknown function '{}' reached wasm codegen",
+                    missing
                 );
             }
             valtype(&ctx.get(expr.ty))
@@ -1784,9 +1778,9 @@ fn gen_expr(
                     insts.push(Instruction::LocalSet(idx));
                 }
             } else {
-                diags.push(
-                    Diagnostic::error("unknown variable", expr.span)
-                        .with_id(DiagnosticId::CodegenWasmUnknownVariable),
+                panic!(
+                    "internal compiler error: unknown variable '{}' in set reached wasm codegen",
+                    name
                 );
             }
             None

@@ -7795,3 +7795,17 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-indirect-missing-v1.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: 参照解決系 wasm backend 診断の削減)
+
+- 目的:
+  - `CodegenWasmStringLiteralNotFound (4006)` / `CodegenWasmUnknownVariable (4007)` /
+    `CodegenWasmUnknownFunctionValue (4008)` / `CodegenWasmUnknownFunction (4009)` を
+    backend 診断から外し、上流通過後の内部不整合として扱う。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `LiteralStr/Var/FnValue/Call/Set` での上記診断生成を削除。
+    - 同箇所は `panic!` に変更し、codegen 到達時は解決済み前提を強制。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-ref-invariant-v2.json -j 15` -> `8/8 pass`
