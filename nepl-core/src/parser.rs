@@ -45,6 +45,7 @@ pub fn parse_tokens(file_id: FileId, lex: LexResult) -> ParseResult {
         directives: Vec::new(),
         indent_width: lex.indent_width,
         depth: 0,
+        single_line_block_depth: 0,
     };
 
     let module = parser.parse_module();
@@ -62,6 +63,7 @@ struct Parser {
     directives: Vec<Directive>,
     indent_width: usize,
     depth: usize,
+    single_line_block_depth: usize,
 }
 
 impl Parser {
@@ -1118,6 +1120,14 @@ impl Parser {
 
     fn parse_block_after_colon(&mut self) -> Option<Block> {
         if self.consume_if(&TokenKind::Newline) {
+            if self.single_line_block_depth > 0 {
+                let span = self.peek_span().unwrap_or_else(Span::dummy);
+                self.push_error_with_id(
+                    DiagnosticId::ParserUnexpectedToken,
+                    "single-line block cannot contain multi-line ':' blocks",
+                    span,
+                );
+            }
             while self.consume_if(&TokenKind::Newline) {}
             self.expect(&TokenKind::Indent)?;
             let block = self.parse_block_until(TokenEnd::Dedent)?;
@@ -2519,6 +2529,46 @@ impl Parser {
         Self::sole_non_type_marker(items)
     }
 
+    fn clone_expr_and_semi(stmt: &Stmt) -> Option<(PrefixExpr, Option<Span>)> {
+        match stmt {
+            Stmt::Expr(e) => Some((e.clone(), None)),
+            Stmt::ExprSemi(e, semi_span) => Some((e.clone(), *semi_span)),
+            _ => None,
+        }
+    }
+
+    fn stmt_from_expr_with_semi(expr: PrefixExpr, semi_span: Option<Span>) -> Stmt {
+        if semi_span.is_some() {
+            Stmt::ExprSemi(expr, semi_span)
+        } else {
+            Stmt::Expr(expr)
+        }
+    }
+
+    fn expr_from_stmt_preserving_semicolon(&self, stmt: Stmt) -> Option<PrefixExpr> {
+        match stmt {
+            Stmt::Expr(e) => Some(e),
+            Stmt::ExprSemi(e, semi_span) => {
+                let semi = semi_span.unwrap_or(e.span);
+                let block_span = e.span.join(semi).unwrap_or(e.span);
+                let wrapped = PrefixExpr {
+                    items: vec![PrefixItem::Block(
+                        Block {
+                            items: vec![Stmt::ExprSemi(e, semi_span)],
+                            span: block_span,
+                        },
+                        block_span,
+                    )],
+                    trailing_semis: 0,
+                    trailing_semi_span: None,
+                    span: block_span,
+                };
+                Some(wrapped)
+            }
+            _ => None,
+        }
+    }
+
     fn if_layout_needs_cond(items: &[PrefixItem]) -> bool {
         // Detect `... if:` or `... if cond:` (no real cond-expr yet)
         // Ignore trailing type annotations for detection.
@@ -2574,10 +2624,8 @@ impl Parser {
 
         for stmt in block.items {
             let mut is_marker = false;
-            if let Stmt::Expr(e) | Stmt::ExprSemi(e, _) = &stmt {
-                let mut e_copy = e.clone();
-                let role_opt = Self::take_role_from_expr(&mut e_copy);
-                if let Some(role) = role_opt {
+            if let Some((mut expr, semi_span)) = Self::clone_expr_and_semi(&stmt) {
+                if let Some(role) = Self::take_role_from_expr(&mut expr) {
                     // It's a marker! Finish previous branch if not empty.
                     if !current_branch.is_empty() || current_role.is_some() {
                         branches.push((current_role, current_branch));
@@ -2587,8 +2635,8 @@ impl Parser {
                     current_branch = Vec::new();
                     // If there was something else on the marker line, treat that as
                     // the complete expression for this branch (push immediately).
-                    if !e_copy.items.is_empty() {
-                        current_branch.push(Stmt::Expr(e_copy));
+                    if !expr.items.is_empty() {
+                        current_branch.push(Self::stmt_from_expr_with_semi(expr, semi_span));
                         branches.push((current_role, current_branch));
                         // reset for following positional branches
                         current_role = None;
@@ -2638,10 +2686,8 @@ impl Parser {
         for (role, stmts) in expanded {
             // Convert statements into a single PrefixExpr (wrapped in Block if multiple)
             let expr = if stmts.len() == 1 {
-                match stmts.into_iter().next().unwrap() {
-                    Stmt::Expr(e) | Stmt::ExprSemi(e, _) => e,
-                    _ => unreachable!(),
-                }
+                self.expr_from_stmt_preserving_semicolon(stmts.into_iter().next().unwrap())
+                    .unwrap()
             } else {
                 let span = if let (Some(f), Some(l)) = (stmts.first(), stmts.last()) {
                     self.stmt_span(f).join(self.stmt_span(l)).unwrap_or_else(|| self.stmt_span(f))
@@ -2718,32 +2764,40 @@ impl Parser {
         let mut pending_role: Option<IfRole> = None;
 
         for stmt in block.items {
-            let mut expr = match stmt {
-                Stmt::Expr(e) | Stmt::ExprSemi(e, _) => e,
-                other => {
+            let (mut marker_expr, semi_span) = match Self::clone_expr_and_semi(&stmt) {
+                Some(v) => v,
+                None => {
                     return Err(Diagnostic::error(
                         "only expressions are allowed in if-layout block",
-                        self.stmt_span(&other),
+                        self.stmt_span(&stmt),
                     )
                     .with_id(DiagnosticId::ParserUnexpectedToken));
                 }
             };
 
-            if let Some(role) = Self::take_role_from_expr(&mut expr) {
-                if expr.items.is_empty() {
+            if let Some(role) = Self::take_role_from_expr(&mut marker_expr) {
+                if marker_expr.items.is_empty() {
                     if pending_role.is_some() {
                         return Err(
-                            Diagnostic::error("duplicate marker in if-layout block", expr.span)
+                            Diagnostic::error(
+                                "duplicate marker in if-layout block",
+                                marker_expr.span,
+                            )
                                 .with_id(DiagnosticId::ParserUnexpectedToken),
                         );
                     }
                     pending_role = Some(role);
                 } else {
-                    entries.push((Some(role), expr));
+                    let stmt_with_semi = Self::stmt_from_expr_with_semi(marker_expr, semi_span);
+                    let preserved = self
+                        .expr_from_stmt_preserving_semicolon(stmt_with_semi)
+                        .unwrap();
+                    entries.push((Some(role), preserved));
                 }
                 continue;
             }
 
+            let expr = self.expr_from_stmt_preserving_semicolon(stmt).unwrap();
             let role = pending_role.take();
             entries.push((role, expr));
         }
@@ -2835,17 +2889,16 @@ impl Parser {
 
         for stmt in block.items {
             let mut is_marker = false;
-            if let Stmt::Expr(e) | Stmt::ExprSemi(e, _) = &stmt {
-                let mut e_copy = e.clone();
-                let role_opt = Self::take_while_role_from_expr(&mut e_copy);
+            if let Some((mut expr, semi_span)) = Self::clone_expr_and_semi(&stmt) {
+                let role_opt = Self::take_while_role_from_expr(&mut expr);
                 if let Some(role) = role_opt {
                     if !current_branch.is_empty() || current_role.is_some() {
                         branches.push((current_role, current_branch));
                     }
                     current_role = Some(role);
                     current_branch = Vec::new();
-                    if !e_copy.items.is_empty() {
-                        current_branch.push(Stmt::Expr(e_copy));
+                    if !expr.items.is_empty() {
+                        current_branch.push(Self::stmt_from_expr_with_semi(expr, semi_span));
                         branches.push((current_role, current_branch));
                         current_role = None;
                         current_branch = Vec::new();
@@ -2886,10 +2939,8 @@ impl Parser {
         let mut next_unfilled = 0usize;
         for (role, stmts) in expanded {
             let expr = if stmts.len() == 1 {
-                match stmts.into_iter().next().unwrap() {
-                    Stmt::Expr(e) | Stmt::ExprSemi(e, _) => e,
-                    _ => unreachable!(),
-                }
+                self.expr_from_stmt_preserving_semicolon(stmts.into_iter().next().unwrap())
+                    .unwrap()
             } else {
                 let span = if let (Some(f), Some(l)) = (stmts.first(), stmts.last()) {
                     self.stmt_span(f).join(self.stmt_span(l)).unwrap_or_else(|| self.stmt_span(f))
@@ -2956,13 +3007,13 @@ impl Parser {
     ) -> Result<Vec<PrefixExpr>, Diagnostic> {
         let mut exprs: Vec<PrefixExpr> = Vec::new();
         for stmt in block.items {
-            match stmt {
-                Stmt::Expr(e) | Stmt::ExprSemi(e, _) => exprs.push(e),
-                other => {
-                    let sp = self.stmt_span(&other);
+            let stmt_span = self.stmt_span(&stmt);
+            match self.expr_from_stmt_preserving_semicolon(stmt) {
+                Some(e) => exprs.push(e),
+                None => {
                     return Err(Diagnostic::error(
                         "only expressions are allowed in argument layout",
-                        sp,
+                        stmt_span,
                     )
                     .with_id(DiagnosticId::ParserUnexpectedToken));
                 }
@@ -3577,102 +3628,112 @@ impl Parser {
     }
 
     fn parse_single_line_block(&mut self, span: Span) -> Option<Block> {
-        let mut items = Vec::new();
-        while !self.is_end(&TokenEnd::Line) {
-            while self.consume_if(&TokenKind::Semicolon) {} // Skip empty statements/leading semicolons
-            if self.is_end(&TokenEnd::Line) {
-                break;
-            }
+        self.single_line_block_depth += 1;
+        let out = (|| {
+            let mut items = Vec::new();
+            while !self.is_end(&TokenEnd::Line) {
+                while self.consume_if(&TokenKind::Semicolon) {} // Skip empty statements/leading semicolons
+                if self.is_end(&TokenEnd::Line) {
+                    break;
+                }
 
-            if matches!(
-                self.peek_kind(),
-                Some(
-                    TokenKind::IntLiteral(_)
-                        | TokenKind::FloatLiteral(_)
-                        | TokenKind::BoolLiteral(_)
-                        | TokenKind::UnitLiteral
-                        | TokenKind::StringLiteral(_)
-                )
-            ) {
-                let next_kind = self.peek_kind_at(1);
-                let should_stop_after_literal = matches!(
-                    next_kind,
-                    Some(TokenKind::KwBlock)
-                        | Some(TokenKind::KwIf)
-                        | Some(TokenKind::KwWhile)
-                        | Some(TokenKind::KwCond)
-                        | Some(TokenKind::KwThen)
-                        | Some(TokenKind::KwElse)
-                        | Some(TokenKind::KwDo)
-                        | Some(TokenKind::KwMatch)
-                        | Some(TokenKind::At)
-                        | Some(TokenKind::Ident(_))
-                        | Some(TokenKind::LParen)
-                );
-                if should_stop_after_literal {
-                    let tok = self.next().unwrap();
-                    let lit = match tok.kind {
-                        TokenKind::IntLiteral(v) => Literal::Int(v),
-                        TokenKind::FloatLiteral(v) => Literal::Float(v),
-                        TokenKind::BoolLiteral(b) => Literal::Bool(b),
-                        TokenKind::StringLiteral(s) => Literal::Str(s),
-                        TokenKind::UnitLiteral => Literal::Unit,
-                        _ => unreachable!(),
-                    };
-                    items.push(Stmt::Expr(PrefixExpr {
-                        items: vec![PrefixItem::Literal(lit, tok.span)],
-                        trailing_semis: 0,
-                        trailing_semi_span: None,
-                        span: tok.span,
-                    }));
+                if matches!(
+                    self.peek_kind(),
+                    Some(
+                        TokenKind::IntLiteral(_)
+                            | TokenKind::FloatLiteral(_)
+                            | TokenKind::BoolLiteral(_)
+                            | TokenKind::UnitLiteral
+                            | TokenKind::StringLiteral(_)
+                    )
+                ) {
+                    let next_kind = self.peek_kind_at(1);
+                    let should_stop_after_literal = matches!(
+                        next_kind,
+                        Some(TokenKind::KwBlock)
+                            | Some(TokenKind::KwIf)
+                            | Some(TokenKind::KwWhile)
+                            | Some(TokenKind::KwCond)
+                            | Some(TokenKind::KwThen)
+                            | Some(TokenKind::KwElse)
+                            | Some(TokenKind::KwDo)
+                            | Some(TokenKind::KwMatch)
+                            | Some(TokenKind::At)
+                            | Some(TokenKind::Ident(_))
+                            | Some(TokenKind::LParen)
+                    );
+                    if should_stop_after_literal {
+                        let tok = self.next().unwrap();
+                        let lit = match tok.kind {
+                            TokenKind::IntLiteral(v) => Literal::Int(v),
+                            TokenKind::FloatLiteral(v) => Literal::Float(v),
+                            TokenKind::BoolLiteral(b) => Literal::Bool(b),
+                            TokenKind::StringLiteral(s) => Literal::Str(s),
+                            TokenKind::UnitLiteral => Literal::Unit,
+                            _ => unreachable!(),
+                        };
+                        items.push(Stmt::Expr(PrefixExpr {
+                            items: vec![PrefixItem::Literal(lit, tok.span)],
+                            trailing_semis: 0,
+                            trailing_semi_span: None,
+                            span: tok.span,
+                        }));
+                        break;
+                    }
+                }
+
+                if let Some(expr) = self.parse_prefix_expr() {
+                    if expr.trailing_semis > 0 {
+                        items.push(Stmt::ExprSemi(expr.clone(), expr.trailing_semi_span));
+                    } else {
+                        items.push(Stmt::Expr(expr));
+                    }
+                } else {
                     break;
                 }
             }
-
-            if let Some(expr) = self.parse_prefix_expr() {
-                if expr.trailing_semis > 0 {
-                    items.push(Stmt::ExprSemi(expr.clone(), expr.trailing_semi_span));
-                } else {
-                    items.push(Stmt::Expr(expr));
-                }
-            } else {
-                break;
-            }
-        }
-        let end_span = self.peek_span().unwrap_or(span);
-        Some(Block {
-            items,
-            span: span.join(end_span).unwrap_or(span),
-        })
+            let end_span = self.peek_span().unwrap_or(span);
+            Some(Block {
+                items,
+                span: span.join(end_span).unwrap_or(span),
+            })
+        })();
+        self.single_line_block_depth = self.single_line_block_depth.saturating_sub(1);
+        out
     }
 
     fn parse_single_line_block_until_tuple_delim(&mut self, span: Span) -> Option<Block> {
-        let mut items = Vec::new();
-        while !self.is_end(&TokenEnd::Line)
-            && !matches!(self.peek_kind(), Some(TokenKind::Comma | TokenKind::RParen))
-        {
-            while self.consume_if(&TokenKind::Semicolon) {}
-            if self.is_end(&TokenEnd::Line)
-                || matches!(self.peek_kind(), Some(TokenKind::Comma | TokenKind::RParen))
+        self.single_line_block_depth += 1;
+        let out = (|| {
+            let mut items = Vec::new();
+            while !self.is_end(&TokenEnd::Line)
+                && !matches!(self.peek_kind(), Some(TokenKind::Comma | TokenKind::RParen))
             {
-                break;
-            }
-
-            if let Some(expr) = self.parse_prefix_expr_until_tuple_delim() {
-                if expr.trailing_semis > 0 {
-                    items.push(Stmt::ExprSemi(expr.clone(), expr.trailing_semi_span));
-                } else {
-                    items.push(Stmt::Expr(expr));
+                while self.consume_if(&TokenKind::Semicolon) {}
+                if self.is_end(&TokenEnd::Line)
+                    || matches!(self.peek_kind(), Some(TokenKind::Comma | TokenKind::RParen))
+                {
+                    break;
                 }
-            } else {
-                break;
+
+                if let Some(expr) = self.parse_prefix_expr_until_tuple_delim() {
+                    if expr.trailing_semis > 0 {
+                        items.push(Stmt::ExprSemi(expr.clone(), expr.trailing_semi_span));
+                    } else {
+                        items.push(Stmt::Expr(expr));
+                    }
+                } else {
+                    break;
+                }
             }
-        }
-        let end_span = self.peek_span().unwrap_or(span);
-        Some(Block {
-            items,
-            span: span.join(end_span).unwrap_or(span),
-        })
+            let end_span = self.peek_span().unwrap_or(span);
+            Some(Block {
+                items,
+                span: span.join(end_span).unwrap_or(span),
+            })
+        })();
+        self.single_line_block_depth = self.single_line_block_depth.saturating_sub(1);
+        out
     }
 
     fn parse_mlstr_layout(&mut self, span: Span) -> Option<String> {

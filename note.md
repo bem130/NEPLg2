@@ -1,3 +1,26 @@
+# 2026-03-05 作業メモ (パーサ根本修正: 単行 block 制約と `ExprSemi` 意味論保持)
+
+- 目的:
+  - `tests/plan.n.md::doctest#29`（単行 `block` 内に複行 `block:` が入ってしまう）をコンパイラ側で根本修正する。
+  - `tests/block_semicolon_return.n.md::doctest#10`（複行式末尾 `;` の意味落ち）を解消する。
+- 根本原因:
+  - パーサが「単行 block 文脈」を保持しておらず、単行 `block` 内でも `parse_block_after_colon()` を通して複行 `:` ブロックを受理していた。
+  - `extract_if_layout_exprs` / `extract_while_layout_exprs` / `extract_arg_layout_exprs` が `Stmt::ExprSemi` を `Stmt::Expr` と同一扱いし、`;` による unit 化とスタック検証を落としていた。
+- 変更:
+  - `nepl-core/src/parser.rs`
+    - `single_line_block_depth` を追加し、単行 block 解析中に複行 `:` ブロックを検出したら `D2002` を出すように変更。
+    - `parse_single_line_block*` で文脈深さを管理するよう変更。
+    - `ExprSemi` を保持してレイアウト抽出へ渡す共通ヘルパーを追加。
+    - if/while/引数レイアウト抽出で `ExprSemi` を捨てずに block 化して保持し、型検査段で `;` 意味論が反映されるように変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/plan.n.md --no-stdlib --no-tree -o /tmp/tests-plan-nostd.json -j 15` -> `36/36 pass`
+  - `node nodesrc/tests.js -i tests/block_semicolon_return.n.md --no-stdlib --no-tree -o /tmp/tests-block-semicolon-nostd.json -j 15` -> `10/10 pass`
+- 影響:
+  - `--with-stdlib` で走らせると stdlib doctest 側に `;` 意味論不整合が顕在化（`List` などで `expected ... got unit`）。
+  - これは今回のパーサ修正で隠れていた仕様違反が表面化した状態。
+  - 次段として stdlib 側の `;` 使用箇所を plan.md に合わせて整理する必要がある。
+
 # 2026-03-05 作業メモ (plan.md 全体再読: plan.n.md 拡充)
 
 - 目的:
