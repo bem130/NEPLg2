@@ -64,6 +64,10 @@
   - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-handle-wrap-v3.json -j 15`
   - 結果: `217/217 pass`
 
+- 補足（設計判断）:
+  - 一時 `writer_wrap` を都度作る呼び出しは move エラー回避としては機能するが、線形 API 設計として不明瞭だったため採用しない。
+  - `Writer -> Writer` の更新連鎖を handle 層で明示し、move 規則と API 契約を一致させる方針に統一した。
+
 # 2026-03-05 作業メモ (フェーズC: `core/mem` の `*_ptr` を安全API経由へ統一)
 
 - 目的:
