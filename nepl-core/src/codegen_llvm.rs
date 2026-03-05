@@ -74,6 +74,10 @@ pub fn emit_ll_from_module_for_target(
     let mut out = String::new();
     let entry_names = collect_active_entry_names(module, target, profile);
     let reachable_hint = compute_reachable_hint(module, target, profile, &entry_names);
+    let raw_call_requirements = collect_required_raw_calls_fixed_point(module, target, profile);
+    let raw_name_counts = collect_active_ast_raw_name_counts(module, target, profile);
+    let mut raw_canonical_taken: BTreeSet<String> = BTreeSet::new();
+    let mut selected_raw_ll_sigs: BTreeSet<String> = BTreeSet::new();
     let mut emitted_functions: Vec<String> = Vec::new();
     for idx in target_precheck::active_stmt_indices(&module.root, target, profile) {
         let stmt = &module.root.items[idx];
@@ -85,11 +89,30 @@ pub fn emit_ll_from_module_for_target(
             }
             Stmt::FnDef(def) => match &def.body {
                 FnBody::LlvmIr(block) => {
-                    if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
+                    if !should_emit_ast_llvmir_fn(
+                        def,
+                        reachable_hint.as_ref(),
+                        raw_call_requirements.as_slice(),
+                    ) {
                         continue;
                     }
-                    collect_defined_functions_from_llvmir_block(block, &mut emitted_functions);
-                    append_llvmir_block(&mut out, block);
+                    if !raw_call_requirements.is_empty() {
+                        if let Some((ps, ret)) = ast_fn_signature_llty(&def.signature) {
+                            let key = raw_abi_signature_key(def.name.name.as_str(), ps.as_slice(), ret);
+                            if selected_raw_ll_sigs.contains(key.as_str()) {
+                                continue;
+                            }
+                            selected_raw_ll_sigs.insert(key);
+                        }
+                    }
+                    let normalized = normalize_ast_raw_llvmir_block(
+                        def,
+                        block,
+                        &raw_name_counts,
+                        &mut raw_canonical_taken,
+                    );
+                    collect_defined_functions_from_llvmir_block(&normalized, &mut emitted_functions);
+                    append_llvmir_block(&mut out, &normalized);
                 }
                 FnBody::Parsed(block) => {
                     if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
@@ -102,8 +125,14 @@ pub fn emit_ll_from_module_for_target(
                         def.name.name.as_str(),
                     ) {
                         Ok(Some(ActiveRawBody::LlvmIr(raw))) => {
-                            collect_defined_functions_from_llvmir_block(raw, &mut emitted_functions);
-                            append_llvmir_block(&mut out, raw);
+                            let normalized = normalize_ast_raw_llvmir_block(
+                                def,
+                                raw,
+                                &raw_name_counts,
+                                &mut raw_canonical_taken,
+                            );
+                            collect_defined_functions_from_llvmir_block(&normalized, &mut emitted_functions);
+                            append_llvmir_block(&mut out, &normalized);
                         }
                         Ok(Some(ActiveRawBody::Wasm(_))) => {
                             panic!(
@@ -175,7 +204,7 @@ pub fn emit_ll_from_module_for_target(
         }
     }
 
-    Ok(out)
+    Ok(deduplicate_overloaded_llvm_symbols(out.as_str()))
 }
 
 fn compute_reachable_hint(
@@ -206,6 +235,424 @@ fn is_ast_fn_reachable(name: &str, reachable_hint: Option<&BTreeSet<String>>) ->
         None => true,
         Some(set) => set.contains(name),
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RawCallRequirement {
+    name: String,
+    params: Vec<LlTy>,
+    ret: LlTy,
+}
+
+fn should_emit_ast_llvmir_fn(
+    def: &crate::ast::FnDef,
+    reachable_hint: Option<&BTreeSet<String>>,
+    raw_reqs: &[RawCallRequirement],
+) -> bool {
+    if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint) {
+        return false;
+    }
+    if raw_reqs.is_empty() {
+        return true;
+    }
+    let reqs_for_name = raw_reqs
+        .iter()
+        .filter(|r| r.name == def.name.name)
+        .collect::<Vec<_>>();
+    if reqs_for_name.is_empty() {
+        return false;
+    }
+    let Some((params, ret)) = ast_fn_signature_llty(&def.signature) else {
+        return false;
+    };
+    reqs_for_name
+        .iter()
+        .any(|r| r.ret == ret && r.params.as_slice() == params.as_slice())
+}
+
+fn ast_fn_signature_llty(sig: &TypeExpr) -> Option<(Vec<LlTy>, LlTy)> {
+    let TypeExpr::Function { params, result, .. } = sig else {
+        return None;
+    };
+    let mut ps = Vec::new();
+    for p in params {
+        ps.push(llty_for_type_expr(p)?);
+    }
+    let ret = llty_for_type_expr(result.as_ref())?;
+    Some((ps, ret))
+}
+
+fn llty_for_type_expr(ty: &TypeExpr) -> Option<LlTy> {
+    match ty {
+        TypeExpr::Unit | TypeExpr::Never => Some(LlTy::Void),
+        TypeExpr::I32 | TypeExpr::U8 | TypeExpr::Bool | TypeExpr::Str => Some(LlTy::I32),
+        TypeExpr::F32 => Some(LlTy::F32),
+        TypeExpr::Named(name) if name == "i64" => Some(LlTy::I64),
+        TypeExpr::Named(name) if name == "f64" => Some(LlTy::F64),
+        TypeExpr::Reference(_, _)
+        | TypeExpr::Boxed(_)
+        | TypeExpr::Tuple(_)
+        | TypeExpr::Apply(_, _)
+        | TypeExpr::Named(_)
+        | TypeExpr::Label(_) => Some(LlTy::I32),
+        TypeExpr::Function { .. } => Some(LlTy::I32),
+    }
+}
+
+fn collect_required_raw_calls_fixed_point(
+    module: &Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+) -> Vec<RawCallRequirement> {
+    #[derive(Debug, Clone)]
+    struct Candidate<'a> {
+        name: &'a str,
+        params: Vec<LlTy>,
+        ret: LlTy,
+        block: &'a crate::ast::LlvmIrBlock,
+    }
+    let mut candidates: Vec<Candidate<'_>> = Vec::new();
+    let mut reqs = Vec::new();
+    for idx in target_precheck::active_stmt_indices(&module.root, target, profile) {
+        let stmt = &module.root.items[idx];
+        match stmt {
+            Stmt::LlvmIr(block) => {
+                collect_call_requirements_from_llvmir_block(block, &mut reqs);
+            }
+            Stmt::FnDef(def) => match &def.body {
+                FnBody::LlvmIr(block) => {
+                    if let Some((params, ret)) = ast_fn_signature_llty(&def.signature) {
+                        candidates.push(Candidate {
+                            name: def.name.name.as_str(),
+                            params,
+                            ret,
+                            block,
+                        });
+                    }
+                }
+                FnBody::Parsed(block) => {
+                    if let Ok(Some(ActiveRawBody::LlvmIr(raw))) = target_precheck::select_active_raw_body(
+                        block,
+                        target,
+                        profile,
+                        def.name.name.as_str(),
+                    ) {
+                        if let Some((params, ret)) = ast_fn_signature_llty(&def.signature) {
+                            candidates.push(Candidate {
+                                name: def.name.name.as_str(),
+                                params,
+                                ret,
+                                block: raw,
+                            });
+                        }
+                    }
+                }
+                FnBody::Wasm(_) => {}
+            },
+            _ => {}
+        }
+    }
+    loop {
+        let mut changed = false;
+        for c in &candidates {
+            let selected = reqs.iter().any(|r| {
+                r.name == c.name && r.ret == c.ret && r.params.as_slice() == c.params.as_slice()
+            });
+            if !selected {
+                continue;
+            }
+            let before = reqs.len();
+            collect_call_requirements_from_llvmir_block(c.block, &mut reqs);
+            if reqs.len() != before {
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    reqs
+}
+
+fn collect_active_ast_raw_name_counts(
+    module: &Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+) -> BTreeMap<String, usize> {
+    let mut out = BTreeMap::new();
+    for idx in target_precheck::active_stmt_indices(&module.root, target, profile) {
+        let stmt = &module.root.items[idx];
+        let Some(def) = (match stmt {
+            Stmt::FnDef(def) => Some(def),
+            _ => None,
+        }) else {
+            continue;
+        };
+        let has_raw = match &def.body {
+            FnBody::LlvmIr(_) => true,
+            FnBody::Parsed(block) => matches!(
+                target_precheck::select_active_raw_body(block, target, profile, def.name.name.as_str()),
+                Ok(Some(ActiveRawBody::LlvmIr(_)))
+            ),
+            FnBody::Wasm(_) => false,
+        };
+        if !has_raw {
+            continue;
+        }
+        let entry = out.entry(def.name.name.clone()).or_insert(0);
+        *entry += 1;
+    }
+    out
+}
+
+fn normalize_ast_raw_llvmir_block(
+    def: &crate::ast::FnDef,
+    block: &crate::ast::LlvmIrBlock,
+    raw_name_counts: &BTreeMap<String, usize>,
+    raw_canonical_taken: &mut BTreeSet<String>,
+) -> crate::ast::LlvmIrBlock {
+    let name = def.name.name.as_str();
+    let Some(count) = raw_name_counts.get(name) else {
+        return block.clone();
+    };
+    if *count <= 1 {
+        return block.clone();
+    }
+    if !raw_canonical_taken.contains(name) {
+        raw_canonical_taken.insert(String::from(name));
+        return block.clone();
+    }
+    let suffix = ast_signature_suffix(&def.signature);
+    let target_symbol = format!("{}__raw_{}", name, suffix);
+    rewrite_llvmir_symbol(block, name, target_symbol.as_str())
+}
+
+fn ast_signature_suffix(sig: &TypeExpr) -> String {
+    let Some((params, ret)) = ast_fn_signature_llty(sig) else {
+        return String::from("unknown");
+    };
+    let mut s = String::new();
+    for (i, p) in params.iter().enumerate() {
+        if i > 0 {
+            s.push('_');
+        }
+        s.push_str(p.ir());
+    }
+    s.push_str("_to_");
+    s.push_str(ret.ir());
+    s
+}
+
+fn rewrite_llvmir_symbol(
+    block: &crate::ast::LlvmIrBlock,
+    from: &str,
+    to: &str,
+) -> crate::ast::LlvmIrBlock {
+    let from_plain = format!("@{}(", from);
+    let from_quoted = format!("@\"{}\"(", from);
+    let to_quoted = format!("@\"{}\"(", to);
+    let mut lines = Vec::new();
+    for line in &block.lines {
+        let mut replaced = String::from(line);
+        replaced = replaced.replace(from_plain.as_str(), to_quoted.as_str());
+        replaced = replaced.replace(from_quoted.as_str(), to_quoted.as_str());
+        lines.push(replaced);
+    }
+    crate::ast::LlvmIrBlock {
+        lines,
+        span: block.span,
+    }
+}
+
+fn collect_call_requirements_from_llvmir_block(
+    block: &crate::ast::LlvmIrBlock,
+    out: &mut Vec<RawCallRequirement>,
+) {
+    for line in &block.lines {
+        if let Some(req) = parse_llvm_call_requirement(line) {
+            if !out.iter().any(|e| e == &req) {
+                out.push(req);
+            }
+        }
+    }
+}
+
+fn parse_llvm_call_requirement(line: &str) -> Option<RawCallRequirement> {
+    let trimmed = line.trim();
+    let call_idx = trimmed.find("call ")?;
+    let rest = &trimmed[(call_idx + 5)..];
+    let at = rest.find('@')?;
+    let ret_str = rest[..at].trim();
+    let ret = parse_llty_token(ret_str)?;
+    let after_at = &rest[(at + 1)..];
+    let open = after_at.find('(')?;
+    let close = after_at.rfind(')')?;
+    if close < open {
+        return None;
+    }
+    let mut name = after_at[..open].trim();
+    if name.starts_with('"') && name.ends_with('"') && name.len() >= 2 {
+        name = &name[1..name.len() - 1];
+    }
+    if name.is_empty() {
+        return None;
+    }
+    let args = &after_at[(open + 1)..close];
+    let mut params = Vec::new();
+    for raw_arg in args.split(',') {
+        let arg = raw_arg.trim();
+        if arg.is_empty() {
+            continue;
+        }
+        let ty_tok = arg.split_whitespace().next()?;
+        params.push(parse_llty_token(ty_tok)?);
+    }
+    Some(RawCallRequirement {
+        name: String::from(name),
+        params,
+        ret,
+    })
+}
+
+fn parse_llty_token(tok: &str) -> Option<LlTy> {
+    match tok.trim() {
+        "void" => Some(LlTy::Void),
+        "i32" | "i8" | "i1" => Some(LlTy::I32),
+        "i64" => Some(LlTy::I64),
+        "float" => Some(LlTy::F32),
+        "double" => Some(LlTy::F64),
+        _ => None,
+    }
+}
+
+fn deduplicate_overloaded_llvm_symbols(src: &str) -> String {
+    #[derive(Debug, Clone)]
+    struct DefLine {
+        idx: usize,
+        name: String,
+        ret: LlTy,
+        params: Vec<LlTy>,
+    }
+    let mut lines = src.lines().map(String::from).collect::<Vec<_>>();
+    let mut defs_by_name: BTreeMap<String, Vec<DefLine>> = BTreeMap::new();
+    for (idx, line) in lines.iter().enumerate() {
+        if let Some((name, ret, params)) = parse_define_signature(line.as_str()) {
+            defs_by_name
+                .entry(String::from(name))
+                .or_default()
+                .push(DefLine {
+                    idx,
+                    name: String::from(name),
+                    ret,
+                    params,
+                });
+        }
+    }
+
+    let mut rename_map: BTreeMap<String, String> = BTreeMap::new();
+    for (name, defs) in defs_by_name {
+        if defs.len() <= 1 {
+            continue;
+        }
+        let canonical = 0usize;
+        let mut serial = 0usize;
+        for (i, d) in defs.iter().enumerate() {
+            if i == canonical {
+                continue;
+            }
+            let new_name = format!(
+                "{}__ov{}_{}",
+                name,
+                serial,
+                raw_abi_signature_key("", d.params.as_slice(), d.ret)
+                    .trim_start_matches('|')
+                    .replace("->", "_to_")
+            );
+            serial += 1;
+            rename_map.insert(
+                ir_sig_key(d.name.as_str(), d.params.as_slice(), d.ret),
+                new_name.clone(),
+            );
+            if let Some(line) = lines.get_mut(d.idx) {
+                *line = replace_signature_symbol_name(line.as_str(), d.name.as_str(), new_name.as_str());
+            }
+        }
+    }
+    if rename_map.is_empty() {
+        return src.to_string();
+    }
+    for line in &mut lines {
+        if let Some(req) = parse_llvm_call_requirement(line.as_str()) {
+            let k = ir_sig_key(req.name.as_str(), req.params.as_slice(), req.ret);
+            if let Some(new_name) = rename_map.get(k.as_str()) {
+                *line = replace_call_symbol_name(line.as_str(), req.name.as_str(), new_name.as_str());
+            }
+        }
+    }
+    lines.join("\n")
+}
+
+fn ir_sig_key(name: &str, params: &[LlTy], ret: LlTy) -> String {
+    raw_abi_signature_key(name, params, ret)
+}
+
+fn parse_define_signature(line: &str) -> Option<(&str, LlTy, Vec<LlTy>)> {
+    let trimmed = line.trim_start();
+    if !trimmed.starts_with("define ") {
+        return None;
+    }
+    let at = trimmed.find('@')?;
+    let ret_str = trimmed["define ".len()..at].trim();
+    let ret = parse_llty_token(ret_str)?;
+    let rest = &trimmed[(at + 1)..];
+    let open = rest.find('(')?;
+    let close = rest.rfind(')')?;
+    if close < open {
+        return None;
+    }
+    let mut name = rest[..open].trim();
+    if name.starts_with('"') && name.ends_with('"') && name.len() >= 2 {
+        name = &name[1..name.len() - 1];
+    }
+    if name.is_empty() {
+        return None;
+    }
+    let args = &rest[(open + 1)..close];
+    let mut params = Vec::new();
+    for raw_arg in args.split(',') {
+        let arg = raw_arg.trim();
+        if arg.is_empty() {
+            continue;
+        }
+        let ty_tok = arg.split_whitespace().next()?;
+        params.push(parse_llty_token(ty_tok)?);
+    }
+    Some((name, ret, params))
+}
+
+fn replace_signature_symbol_name(line: &str, from: &str, to: &str) -> String {
+    let from_plain = format!("@{}(", from);
+    let from_quoted = format!("@\"{}\"(", from);
+    let to_quoted = format!("@\"{}\"(", to);
+    let mut out = String::from(line);
+    out = out.replace(from_plain.as_str(), to_quoted.as_str());
+    out.replace(from_quoted.as_str(), to_quoted.as_str())
+}
+
+fn replace_call_symbol_name(line: &str, from: &str, to: &str) -> String {
+    replace_signature_symbol_name(line, from, to)
+}
+
+fn raw_abi_signature_key(name: &str, params: &[LlTy], ret: LlTy) -> String {
+    let mut s = String::from(name);
+    s.push('|');
+    for p in params {
+        s.push_str(p.ir());
+        s.push(',');
+    }
+    s.push_str("->");
+    s.push_str(ret.ir());
+    s
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -31,10 +31,9 @@
 - llvm 経路の precheck を拡張し、intrinsic/戻り値規約など backend 依存失敗を前段で確定する。
 - runtime helper 名解決から `_raw` フォールバックを段階的に除去する（stdlib 移行完了後）。
 - 完了条件:
-  - compiler が `_raw` 名へ依存せずに安全APIを解決できる。
-  - raw 名称変更で backend が壊れない。
-  - 診断は codegen 前段で一貫して決定され、wasm/llvm で同一入力に同一診断が出る。
-  - `--runner all --llvm-all` 実行時の `tests/llvm_target.n.md` 既存ケース（`doctest#4/#5`）で発生する `add` 再定義リンク失敗を解消する。
+- compiler が `_raw` 名へ依存せずに安全APIを解決できる。
+- raw 名称変更で backend が壊れない。
+- 診断は codegen 前段で一貫して決定され、wasm/llvm で同一入力に同一診断が出る。
 
 フェーズE: stdlib移行（mem/kpread/kpwrite -> alloc -> std/nm）
 - `mem/kpread/kpwrite` の公開APIを Result/Option 前提で統一する。

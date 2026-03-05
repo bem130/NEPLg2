@@ -1,3 +1,22 @@
+# 2026-03-06 作業メモ (フェーズD: llvm `add/sub` 再定義リンク失敗の根本修正)
+
+- 目的:
+  - `--runner all --llvm-all` 実行時に `tests/llvm_target.n.md::doctest#4/#5` が `invalid redefinition of function 'add'/'sub'` で失敗する問題を、後付け回避ではなく生成IR構造から解消する。
+- 原因:
+  - `stdlib/core/math.nepl` の overload 群（`add/sub` など）が `#llvmir` 内で同一シンボル名（`@add`, `@sub`）を使っていた。
+  - LLVM はシンボル名で overloading できないため、同一モジュールへ複数型版を同名定義するとリンク時に衝突する。
+  - さらに `u8` と `i32` は LLVM ABI で同じ `i32` に落ちるため、型別 overload をそのままシンボル名で共存させる設計が成立しない。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - 生成完了直前に `deduplicate_overloaded_llvm_symbols` を追加し、同名 `define` をシグネチャ単位で一意化。
+    - `define` 側の重複を `name__ovN_<sig>` へ正規化し、対応する `call` 参照も同一シグネチャで張り替える。
+    - 前段として `#llvmir` 呼び出し要件抽出と AST raw-body 選別補助を追加し、不要な overload 出力を抑制。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `cargo build -p nepl-cli` -> success
+  - `node nodesrc/tests.js -i tests/llvm_target.n.md --no-stdlib --no-tree --runner all --llvm-all -o /tmp/tests-llvm-target-after-dedup-pass.json -j 15` -> `6/6 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-dedup.json -j 15` -> `791/791 pass`
+
 # 2026-03-06 作業メモ (フェーズD: llvm codegen 内の precheck 後診断返却を除去)
 
 - 目的:
