@@ -11,6 +11,20 @@
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-after-llvm-invariant-2.json -j 15` -> `8/8 pass`
   - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-precheck-invariant.json -j 15` -> `791/791 pass`
 
+# 2026-03-06 作業メモ (フェーズD: llvm precheck 回帰ケースの追加)
+
+- 目的:
+  - LLVM backend 到達前に未対応 intrinsic を診断できることを回帰固定する。
+- 変更:
+  - `tests/llvm_target.n.md`
+    - `llvm_precheck_rejects_wasm_only_intrinsic` を追加。
+    - `#intrinsic "i32_add"` を `#target llvm` で使った場合に `diag_id: 3012` を期待する compile_fail ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/llvm_target.n.md --no-stdlib --no-tree --runner all --llvm-all -o /tmp/tests-llvm-target-after-precheck-case.json -j 15`
+    - 追加ケース（`doctest#6::llvm`）は pass。
+    - 既存ケース `doctest#4/#5` は `invalid redefinition of function 'add'` で fail（既知未解決）。
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-test-add.json -j 15` -> `791/791 pass`
+
 # 2026-03-06 作業メモ (フェーズD: allocator helper 解決の意味論修正)
 
 - 目的:
