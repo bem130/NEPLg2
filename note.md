@@ -1,3 +1,19 @@
+# 2026-03-05 作業メモ (フェーズD先行: kpwrite ヘッダアクセスを RegionToken 経由へ移行)
+
+- 目的:
+  - `kpwrite` 側でもヘッダアクセスを `RegionToken` ベースに寄せ、`core/mem` の境界検証APIを再利用できるようにする。
+- 根本原因:
+  - 既存 `writer_header_ptr` は `mem_ptr_addr + off` で直接アドレス算術を行い、
+    20byte ヘッダ境界の前提を関数ごとに暗黙化していた。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_header_region` を追加（`region_new w_mem 20`）。
+    - `writer_header_ptr` を `Result<MemPtr<i32>,str>` へ変更し、`region_ptr_at<u8,i32>` を使用。
+    - `writer_load_header` / `writer_store_header` を上記 `Result` 経路へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-writer-header-regiontoken.json -j 15`
+  - 結果: `221/221 pass`
+
 # 2026-03-05 作業メモ (フェーズD先行: kpread の Scanner ヘッダを RegionToken 化)
 
 - 目的:
