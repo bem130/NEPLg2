@@ -28,7 +28,6 @@
 - codegen 前段で検証と診断を完結させる（codegen は原則診断を出さない）。
 - wasm/llvm の診断規則を共通化し、backend ごとの差分診断を廃止する。
 - `#wasm/#llvmir` の前段検証を共通化し、codegen 到達時は基本的に生成成功を前提にする。
-- `codegen_precheck` の wasm 側ヘルパ依存を整理し、前段専用モジュールへ分離する。
 - llvm 経路でも backend 依存エラーを前段診断に寄せる（UnsupportedHirLowering の整理）。
 - runtime helper 名解決から `_raw` フォールバックを段階的に除去する（stdlib 移行完了後）。
 - 完了条件:

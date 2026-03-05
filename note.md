@@ -1,3 +1,20 @@
+# 2026-03-05 作業メモ (フェーズD: raw wasm 行検査の前段分離を完了)
+
+- 目的:
+  - `codegen_precheck` が `codegen_wasm` 実装詳細へ依存する経路を解消し、前段検査の責務を `wasm_shared` へ集約する。
+  - 「codegen 到達時は生成専任」の方針を維持し、raw wasm 行パース失敗を前段で確定する。
+- 変更:
+  - `nepl-core/src/wasm_shared.rs`
+    - `parse_wasm_line_with_lookup` を共有化。
+    - `precheck_raw_wasm_body` を追加し、`HirBody::Wasm` 行を前段で検査して `D4004` を返すように変更。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - raw wasm 事前検査呼び出し先を `codegen_wasm` から `wasm_shared` へ変更。
+  - `todo.md`
+    - フェーズDの「`codegen_precheck` の wasm 側ヘルパ依存整理」項目を完了として削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v1.json -j 15` -> `8/8 pass`
+
 # 2026-03-05 作業メモ (フェーズD: #wasm のスタック検証を前段検査へ移動)
 
 - 目的:
