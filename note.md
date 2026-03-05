@@ -1,3 +1,18 @@
+# 2026-03-05 作業メモ (フェーズD: llvm codegen_precheck に実検査を追加)
+
+- 目的:
+  - `codegen` 到達後は生成専任に寄せるため、LLVM 側でも前段検査で弾ける入力を増やす。
+- 変更:
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_llvm_codegen` を追加。
+    - 到達関数（reachable set）に対して expression tree を走査し、LLVM 未対応 intrinsic を前段診断化。
+    - 未対応 intrinsic は `D3012 (TypeUnknownIntrinsic)` で報告。
+  - `nepl-core/src/codegen_llvm.rs`
+    - HIR lower 前に `precheck_llvm_codegen` を実行し、error があれば `TypecheckFailed` で早期終了。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v8.json -j 15` -> `8/8 pass`
+
 # 2026-03-05 作業メモ (フェーズD: llvm backend 診断型の整理)
 
 - 目的:

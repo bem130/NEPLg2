@@ -1,6 +1,7 @@
 extern crate alloc;
 
 use alloc::collections::BTreeSet;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::diagnostic::Diagnostic;
@@ -11,6 +12,17 @@ use crate::wasm_shared;
 use wasm_encoder::ValType;
 
 type WasmSig = (Vec<ValType>, Vec<ValType>);
+const LLVM_SUPPORTED_INTRINSICS: &[&str] = &[
+    "size_of",
+    "align_of",
+    "load",
+    "store",
+    "unreachable",
+    "add",
+    "f32_to_i32",
+    "i32_to_u8",
+    "u8_to_i32",
+];
 
 pub fn precheck_wasm_codegen(ctx: &TypeCtx, module: &HirModule) -> Vec<Diagnostic> {
     let mut out = Vec::new();
@@ -64,6 +76,99 @@ pub fn precheck_wasm_codegen(ctx: &TypeCtx, module: &HirModule) -> Vec<Diagnosti
     }
 
     out
+}
+
+pub fn precheck_llvm_codegen(module: &HirModule, reachable: &BTreeSet<String>) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    for f in &module.functions {
+        if !reachable.contains(&f.name) {
+            continue;
+        }
+        if let HirBody::Block(block) = &f.body {
+            precheck_llvm_expr_tree(block, &mut out);
+        }
+    }
+    out
+}
+
+fn precheck_llvm_expr_tree(block: &HirBlock, out: &mut Vec<Diagnostic>) {
+    for line in &block.lines {
+        check_llvm_expr(&line.expr, out);
+    }
+}
+
+fn check_llvm_expr(expr: &HirExpr, out: &mut Vec<Diagnostic>) {
+    match &expr.kind {
+        HirExprKind::Intrinsic { name, args, .. } => {
+            if !LLVM_SUPPORTED_INTRINSICS.iter().any(|n| *n == name.as_str()) {
+                out.push(
+                    Diagnostic::error("unknown codegen intrinsic for llvm", expr.span)
+                        .with_id(DiagnosticId::TypeUnknownIntrinsic),
+                );
+            }
+            for arg in args {
+                check_llvm_expr(arg, out);
+            }
+        }
+        HirExprKind::Call { args, .. } => {
+            for arg in args {
+                check_llvm_expr(arg, out);
+            }
+        }
+        HirExprKind::CallIndirect { callee, args, .. } => {
+            check_llvm_expr(callee, out);
+            for arg in args {
+                check_llvm_expr(arg, out);
+            }
+        }
+        HirExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            check_llvm_expr(cond, out);
+            check_llvm_expr(then_branch, out);
+            check_llvm_expr(else_branch, out);
+        }
+        HirExprKind::While { cond, body } => {
+            check_llvm_expr(cond, out);
+            check_llvm_expr(body, out);
+        }
+        HirExprKind::Match { scrutinee, arms } => {
+            check_llvm_expr(scrutinee, out);
+            for arm in arms {
+                check_llvm_expr(&arm.body, out);
+            }
+        }
+        HirExprKind::Block(b) => precheck_llvm_expr_tree(b, out),
+        HirExprKind::Let { value, .. } | HirExprKind::Set { value, .. } => {
+            check_llvm_expr(value, out);
+        }
+        HirExprKind::EnumConstruct { payload, .. } => {
+            if let Some(payload) = payload {
+                check_llvm_expr(payload, out);
+            }
+        }
+        HirExprKind::StructConstruct { fields, .. } => {
+            for field in fields {
+                check_llvm_expr(field, out);
+            }
+        }
+        HirExprKind::TupleConstruct { items } => {
+            for item in items {
+                check_llvm_expr(item, out);
+            }
+        }
+        HirExprKind::AddrOf(inner) | HirExprKind::Deref(inner) => check_llvm_expr(inner, out),
+        HirExprKind::Drop { .. } => {}
+        HirExprKind::Unit
+        | HirExprKind::LiteralI32(_)
+        | HirExprKind::LiteralF32(_)
+        | HirExprKind::LiteralBool(_)
+        | HirExprKind::LiteralStr(_)
+        | HirExprKind::Var(_)
+        | HirExprKind::FnValue(_) => {}
+    }
 }
 
 fn block_produces_value(ctx: &TypeCtx, block: &HirBlock) -> bool {
