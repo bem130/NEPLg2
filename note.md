@@ -6742,3 +6742,21 @@
 - 差分認識:
   - 能力検出の主経路は能力テーブル化済み。
   - ただし完全撤廃ではなく、未宣言時の最小互換として `Copy/Clone` 名フォールバックが残る。`todo.md` フェーズB2の「文字列比較完全撤廃」を満たすには次段でこの互換層を外す必要がある。
+
+# 2026-03-05 作業メモ (B2 検証: 名称フォールバック撤去の試行結果)
+
+- 実施:
+  - `TraitSemantics::detect` の `Copy/Clone` 名フォールバックを一時的に撤去し、能力宣言 + 構造ヒューリスティックのみへ切替を試行した。
+
+- 結果:
+  - `tests/move_effect.n.md` の `Copy` 系 `compile_fail` が通らず、`expected compile_fail, but compiled successfully` となった。
+  - 原因は、現行実装では `//: @capability: ...` が能力検出入力として安定供給されず、`Copy` 能力が未検出になる経路が残るため。
+
+- 対応:
+  - 名称フォールバックは再導入した。
+  - 再検証:
+    - `NO_COLOR=false trunk build` -> success
+    - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v2.json -j 15` -> `837/837 pass`
+
+- 次段の上流課題:
+  - `Copy/Clone` の能力宣言を `doc comment` 依存でなく AST/文法レベルで供給する仕組みを追加し、名称フォールバックを撤去する。
