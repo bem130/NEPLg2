@@ -14,6 +14,37 @@
   - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-scanner-handle-v1.json -j 15`
   - 結果: `217/217 pass`
 
+# 2026-03-05 作業メモ (フェーズC: kpread 残り handle 群の Scanner 型化完了)
+
+- 目的:
+  - `kpread` で残っていた `*_handle <(i32)...>` 群を `Scanner` 受け取りへ統一し、公開/内部の型境界を一貫化する。
+- 根本原因:
+  - 一部 handle が `i32` を直接受け取り、他の `Scanner` 受け取り関数と境界設計が混在していた。
+  - その結果、公開ラッパで `mem_ptr_addr get sc "raw"` を都度書く必要があり、raw 露出と誤用余地が残っていた。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - 以下を `Scanner` 受け取りへ変更:
+      - `scanner_read_i32_handle`
+      - `scanner_read_u64_handle`
+      - `scanner_read_i64_handle`
+      - `scanner_read_f64_handle`
+      - `scanner_read_f32_handle`
+      - `scanner_read_vec_i64_handle`
+      - `scanner_read_vec_i32_handle`
+      - `scanner_read_matrix_i32_handle`
+      - `scanner_read_all_i32_handle`
+      - `scanner_read_na_i32_handle`
+      - `scanner_read_interval_queries_i32_handle`
+      - `scanner_read_query_tuples_i32_handle`
+      - `scanner_read_ndrh_i32_handle`
+    - 各関数内部では必要箇所のみ `sc_raw = mem_ptr_addr get sc "raw"` を導入し、既存ロジックを維持。
+    - 公開ラッパ (`scanner_read_i32` など) は raw 抽出を削除して handle へ `Scanner` を直接渡すよう統一。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kpread-scanner-allhandles-v1.json -j 15`
+  - 結果: `212/212 pass`
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-scanner-allhandles-v2.json -j 15`
+  - 結果: `217/217 pass`
+
 # 2026-03-05 作業メモ (フェーズC: `core/mem` の `*_ptr` を安全API経由へ統一)
 
 - 目的:
