@@ -214,7 +214,7 @@ fn main <()->i32> ():
     let v:
         vec_new<i32>
         |> push<i32> 3
-        |> push<i32> 5;
+        |> push<i32> 5
     let a <i32> size v;
     let b <i32> size "x";
     let ok_a <bool> eq a 2;
@@ -243,7 +243,7 @@ fn main <()*>i32> ():
     let v <Vec<i32>>:
         <Vec<i32>> new
         |> push 1
-        |> push 2;
+        |> push 2
     len v
 ```
 
@@ -420,9 +420,9 @@ ret: 1
 fn main <()->i32> ():
     let st <Stack<i32>>:
         new
-        |> unwrap_ok<Stack<i32>, Diag>;
+        |> unwrap_ok<Stack<i32>, Diag>
     let v <Vec<i32>>:
-        new;
+        new
     if and eq len st 0 eq len v 0 1 0
 ```
 
@@ -445,7 +445,7 @@ fn main <()->i32> ():
         new
         |> unwrap_ok<Stack<i32>, Diag>
         |> push 10
-        |> unwrap_ok<Stack<i32>, Diag>;
+        |> unwrap_ok<Stack<i32>, Diag>
     if eq len st 1 1 0
 ```
 
@@ -672,10 +672,10 @@ fn kind <(bool)->i32> (v):
 fn main <()->i32> ():
     let a <i32>:
         5
-        |> kind;
+        |> kind
     let b <i32>:
         true
-        |> kind;
+        |> kind
     add a b
 ```
 
@@ -693,7 +693,7 @@ fn main <()->i32> ():
     let v <i32>:
         3
         |> add 4
-        |> mul 2;
+        |> mul 2
     v
 ```
 
@@ -827,7 +827,7 @@ fn main <()->i32> ():
     let seed <i64> <i64> cast 5;
     let v64 <i64>:
         seed
-        |> add <i64> cast 7;
+        |> add <i64> cast 7
 
     let v128 <i128> <i128> cast v64;
     let back <i32> <i32> cast v128;
