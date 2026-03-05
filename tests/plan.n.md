@@ -360,7 +360,7 @@ fn main <()->i32> ():
 ## plan_block_colon_rejects_tokens_after_colon
 
 neplg2:test[compile_fail]
-diag_id: 2002
+diag_id: 2001
 ```neplg2
 
 #entry main
@@ -515,7 +515,7 @@ fn main <()->i32> ():
 ## plan_if_colon_consumes_exactly_three_expressions
 
 neplg2:test[compile_fail]
-diag_id: 2002
+diag_id: 2001
 ```neplg2
 
 #entry main

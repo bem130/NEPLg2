@@ -1,3 +1,25 @@
+# 2026-03-05 作業メモ (`;` 診断の上流化と loader 診断整形)
+
+- 目的:
+  - `tests/block_semicolon_return.n.md::doctest#10` の backend 漏れ（wasm validation error）を止め、parser 段で `diag_id` を固定化する。
+  - `compile_fail` で loader 経由のエラーでも `error[Dxxxx]` を安定取得できるようにする。
+- 根本原因:
+  - `if:` レイアウト内の `Stmt::ExprSemi` が上流で拒否されず、codegen まで進んでいた。
+  - `nepl-web/src/lib.rs` で loader エラーを `to_string()` しており、`Diagnostics` 文字列が整形されず `diag_id` 抽出が不安定だった。
+- 変更:
+  - `nepl-core/src/parser.rs`
+    - `reject_layout_semicolon` を追加。
+    - `extract_if_layout_exprs` / `extract_if_layout_exprs_lenient` で `ExprSemi` を `D2002` として即時拒否。
+    - `while` / 一般引数レイアウトは既存仕様（`;` 許容）を維持。
+  - `nepl-web/src/lib.rs`
+    - loader 失敗時に `render_loader_error` を通すよう変更。
+    - `LoaderError::Core` は `render_core_error` へ流し、`error[Dxxxx]` 形式で返す。
+  - `tests/plan.n.md`
+    - `diag_id` 期待を実装実態に合わせて `2002 -> 2001` に修正（2ケース）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/lexer_diag.n.md -i tests/plan.n.md -i tests/block_single_line.n.md -i tests/block_semicolon_return.n.md --no-stdlib --no-tree -o /tmp/tests-diag-parser.json -j 15` -> `70/70 pass`
+
 # 2026-03-05 作業メモ (codegen 前段共通 precheck 導入: raw body/target 診断の統一)
 
 - 目的:

@@ -2569,6 +2569,20 @@ impl Parser {
         }
     }
 
+    fn reject_layout_semicolon(&self, stmt: &Stmt, context: &str) -> Result<(), Diagnostic> {
+        if let Stmt::ExprSemi(_, semi_span) = stmt {
+            let span = semi_span.unwrap_or(self.stmt_span(stmt));
+            return Err(
+                Diagnostic::error(
+                    alloc::format!("';' is not allowed in {} layout expression", context),
+                    span,
+                )
+                .with_id(DiagnosticId::ParserUnexpectedToken),
+            );
+        }
+        Ok(())
+    }
+
     fn if_layout_needs_cond(items: &[PrefixItem]) -> bool {
         // Detect `... if:` or `... if cond:` (no real cond-expr yet)
         // Ignore trailing type annotations for detection.
@@ -2623,6 +2637,7 @@ impl Parser {
         let mut current_role: Option<IfRole> = None;
 
         for stmt in block.items {
+            self.reject_layout_semicolon(&stmt, "if")?;
             let mut is_marker = false;
             if let Some((mut expr, semi_span)) = Self::clone_expr_and_semi(&stmt) {
                 if let Some(role) = Self::take_role_from_expr(&mut expr) {
@@ -2764,6 +2779,7 @@ impl Parser {
         let mut pending_role: Option<IfRole> = None;
 
         for stmt in block.items {
+            self.reject_layout_semicolon(&stmt, "if")?;
             let (mut marker_expr, semi_span) = match Self::clone_expr_and_semi(&stmt) {
                 Some(v) => v,
                 None => {
