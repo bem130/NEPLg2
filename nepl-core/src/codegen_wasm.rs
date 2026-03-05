@@ -19,7 +19,6 @@ use wasm_encoder::{
 };
 
 use crate::diagnostic::Diagnostic;
-use crate::diagnostic_ids::DiagnosticId;
 use crate::hir::*;
 use crate::runtime_helpers::ALLOC_CANDIDATES;
 use crate::types::{TypeCtx, TypeId, TypeKind};
@@ -288,18 +287,8 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
 
     let mut code_section = CodeSection::new();
     for f in &functions {
-        match lower_body(ctx, f, &name_to_index, &sig_map, &strings) {
-            Ok(body) => {
-                code_section.function(&body);
-            }
-            Err(ds) => {
-                panic!(
-                    "internal compiler error: unexpected wasm backend diagnostics after precheck in function '{}': {} diagnostics",
-                    f.name,
-                    ds.len()
-                );
-            }
-        }
+        let body = lower_body(ctx, f, &name_to_index, &sig_map, &strings);
+        code_section.function(&body);
     }
 
     let mut memory_section = MemorySection::new();
@@ -728,7 +717,7 @@ fn lower_body<'a>(
     name_map: &BTreeMap<String, u32>,
     sig_map: &BTreeMap<(Vec<ValType>, Vec<ValType>), u32>,
     strings: &StringLower,
-) -> Result<Function, Vec<Diagnostic>> {
+) -> Function {
     match func.body {
         FuncBodyLower::User(f) => lower_user(ctx, f, name_map, sig_map, strings),
     }
@@ -744,8 +733,7 @@ fn lower_user(
     name_map: &BTreeMap<String, u32>,
     sig_map: &BTreeMap<(Vec<ValType>, Vec<ValType>), u32>,
     strings: &StringLower,
-) -> Result<Function, Vec<Diagnostic>> {
-    let mut diags = Vec::new();
+) -> Function {
     let mut locals = LocalMap::new(func.params.len());
     for p in &func.params {
         locals.register_param(p.name.clone(), p.ty);
@@ -764,7 +752,6 @@ fn lower_user(
                 strings,
                 &mut locals,
                 &mut insts,
-                &mut diags,
             );
             let expected = valtype(&ctx.get(func.result));
             if expected.is_some() && produced.flatten().is_none() {
@@ -800,11 +787,7 @@ fn lower_user(
         wasm_func.instruction(&inst);
     }
     wasm_func.instruction(&Instruction::End);
-    if diags.is_empty() {
-        Ok(wasm_func)
-    } else {
-        Err(diags)
-    }
+    wasm_func
 }
 
 fn gen_block(
@@ -815,7 +798,6 @@ fn gen_block(
     strings: &StringLower,
     locals: &mut LocalMap,
     insts: &mut Vec<Instruction<'static>>,
-    diags: &mut Vec<Diagnostic>,
 ) -> Option<Option<ValType>> {
     // gen_block semantics:
     // - Each `HirLine` may set `drop_result` to indicate that the
@@ -833,7 +815,7 @@ fn gen_block(
     predeclare_block_locals(ctx, block, locals);
     let mut last_val: Option<ValType> = None;
     for line in &block.lines {
-        let val = gen_expr(ctx, &line.expr, name_map, sig_map, strings, locals, insts, diags);
+        let val = gen_expr(ctx, &line.expr, name_map, sig_map, strings, locals, insts);
         if line.drop_result {
             if val.is_some() {
                 insts.push(Instruction::Drop);
@@ -866,7 +848,6 @@ fn gen_expr(
     strings: &StringLower,
     locals: &mut LocalMap,
     insts: &mut Vec<Instruction<'static>>,
-    diags: &mut Vec<Diagnostic>,
 ) -> Option<ValType> {
     match &expr.kind {
         HirExprKind::LiteralI32(v) => {
@@ -921,7 +902,7 @@ fn gen_expr(
         }
         HirExprKind::Call { callee, args } => {
             for arg in args {
-                gen_expr(ctx, arg, name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, arg, name_map, sig_map, strings, locals, insts);
             }
             if let Some(idx) = match callee {
                 FuncRef::Builtin(n) | FuncRef::User(n, _) => name_map.get(n),
@@ -952,9 +933,9 @@ fn gen_expr(
             args,
         } => {
             for arg in args {
-                gen_expr(ctx, arg, name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, arg, name_map, sig_map, strings, locals, insts);
             }
-            gen_expr(ctx, callee, name_map, sig_map, strings, locals, insts, diags);
+            gen_expr(ctx, callee, name_map, sig_map, strings, locals, insts);
             if let Some(sig) = wasm_sig_ids(ctx, *result, params) {
                 if let Some(type_idx) = sig_map.get(&sig) {
                     insts.push(Instruction::CallIndirect {
@@ -978,15 +959,15 @@ fn gen_expr(
             then_branch,
             else_branch,
         } => {
-            gen_expr(ctx, cond, name_map, sig_map, strings, locals, insts, diags);
+            gen_expr(ctx, cond, name_map, sig_map, strings, locals, insts);
             let result_ty = valtype(&ctx.get(expr.ty));
             match result_ty {
                 Some(vt) => insts.push(Instruction::If(wasm_encoder::BlockType::Result(vt))),
                 None => insts.push(Instruction::If(wasm_encoder::BlockType::Empty)),
             }
-            gen_expr(ctx, then_branch, name_map, sig_map, strings, locals, insts, diags);
+            gen_expr(ctx, then_branch, name_map, sig_map, strings, locals, insts);
             insts.push(Instruction::Else);
-            gen_expr(ctx, else_branch, name_map, sig_map, strings, locals, insts, diags);
+            gen_expr(ctx, else_branch, name_map, sig_map, strings, locals, insts);
             insts.push(Instruction::End);
             result_ty
         }
@@ -1003,17 +984,17 @@ fn gen_expr(
             // end
             insts.push(Instruction::Block(wasm_encoder::BlockType::Empty));
             insts.push(Instruction::Loop(wasm_encoder::BlockType::Empty));
-            gen_expr(ctx, cond, name_map, sig_map, strings, locals, insts, diags);
+            gen_expr(ctx, cond, name_map, sig_map, strings, locals, insts);
             insts.push(Instruction::I32Eqz);
             insts.push(Instruction::BrIf(1));
-            gen_expr(ctx, body, name_map, sig_map, strings, locals, insts, diags);
+            gen_expr(ctx, body, name_map, sig_map, strings, locals, insts);
             insts.push(Instruction::Br(0));
             insts.push(Instruction::End);
             insts.push(Instruction::End);
             None
         }
         HirExprKind::Block(b) => {
-            gen_block(ctx, b, name_map, sig_map, strings, locals, insts, diags).flatten()
+            gen_block(ctx, b, name_map, sig_map, strings, locals, insts).flatten()
         }
         HirExprKind::Intrinsic {
             name,
@@ -1049,7 +1030,7 @@ fn gen_expr(
                 let ty_kind = ctx.get(ty);
                 let vt = valtype(&ty_kind);
                 // address
-                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
                 match vt {
                     Some(ValType::I32) => {
                         if matches!(ty_kind, TypeKind::U8) {
@@ -1103,9 +1084,9 @@ fn gen_expr(
                 let vt = valtype(&ty_kind);
                 
                 // address
-                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
                 // value
-                gen_expr(ctx, &args[1], name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &args[1], name_map, sig_map, strings, locals, insts);
 
                 match vt {
                     Some(ValType::I32) => {
@@ -1195,35 +1176,35 @@ fn gen_expr(
                 Some(ValType::I32)
             } else if name == "i32_to_f32" {
                 // signed convert i32 -> f32
-                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
                 insts.push(Instruction::F32ConvertI32S);
                 Some(ValType::F32)
             } else if name == "i32_to_u8" {
-                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
                 insts.push(Instruction::I32Const(255));
                 insts.push(Instruction::I32And);
                 Some(ValType::I32)
             } else if name == "f32_to_i32" {
                 // signed trunc f32 -> i32
-                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
                 insts.push(Instruction::I32TruncF32S);
                 Some(ValType::I32)
             } else if name == "u8_to_i32" {
-                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
                 Some(ValType::I32)
             } else if name == "reinterpret_i32_f32" {
                 // bitcast i32 -> f32
-                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
                 insts.push(Instruction::F32ReinterpretI32);
                 Some(ValType::F32)
             } else if name == "reinterpret_f32_i32" {
                 // bitcast f32 -> i32
-                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
                 insts.push(Instruction::I32ReinterpretF32);
                 Some(ValType::I32)
             } else if name == "add" {
-                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts, diags);
-                gen_expr(ctx, &args[1], name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
+                gen_expr(ctx, &args[1], name_map, sig_map, strings, locals, insts);
                 insts.push(Instruction::I32Add);
                 Some(ValType::I32)
             } else if name == "unreachable" {
@@ -1267,7 +1248,7 @@ fn gen_expr(
                         insts.push(Instruction::LocalGet(ptr_local));
                         insts.push(Instruction::I32Const(payload_offset));
                         insts.push(Instruction::I32Add);
-                        gen_expr(ctx, p, name_map, sig_map, strings, locals, insts, diags);
+                        gen_expr(ctx, p, name_map, sig_map, strings, locals, insts);
                         match vt {
                             ValType::I32 => insts.push(Instruction::I32Store(MemArg {
                                 offset: 0,
@@ -1298,7 +1279,7 @@ fn gen_expr(
                     }
                     None => {
                         // Preserve side effects even when payload has no runtime representation (e.g. unit).
-                        gen_expr(ctx, p, name_map, sig_map, strings, locals, insts, diags);
+                        gen_expr(ctx, p, name_map, sig_map, strings, locals, insts);
                     }
                 }
             }
@@ -1333,7 +1314,7 @@ fn gen_expr(
                 match valtype(&vk) {
                     Some(vt) => {
                         let temp = locals.alloc_temp(vt);
-                        gen_expr(ctx, f, name_map, sig_map, strings, locals, insts, diags);
+                        gen_expr(ctx, f, name_map, sig_map, strings, locals, insts);
                         insts.push(Instruction::LocalSet(temp));
                         insts.push(Instruction::LocalGet(ptr_local));
                         insts.push(Instruction::I32Const(offset as i32));
@@ -1380,7 +1361,7 @@ fn gen_expr(
                     }
                     None => {
                         // Preserve side effects even when the field type is unit.
-                        gen_expr(ctx, f, name_map, sig_map, strings, locals, insts, diags);
+                        gen_expr(ctx, f, name_map, sig_map, strings, locals, insts);
                         insts.push(Instruction::LocalGet(ptr_local));
                         insts.push(Instruction::I32Const(offset as i32));
                         insts.push(Instruction::I32Add);
@@ -1418,7 +1399,7 @@ fn gen_expr(
                 match valtype(&vk) {
                     Some(vt) => {
                         let temp = locals.alloc_temp(vt);
-                        gen_expr(ctx, item, name_map, sig_map, strings, locals, insts, diags);
+                        gen_expr(ctx, item, name_map, sig_map, strings, locals, insts);
                         insts.push(Instruction::LocalSet(temp));
                         insts.push(Instruction::LocalGet(ptr_local));
                         insts.push(Instruction::I32Const(offset as i32));
@@ -1465,7 +1446,7 @@ fn gen_expr(
                     }
                     None => {
                         // Preserve side effects even when the element type is unit.
-                        gen_expr(ctx, item, name_map, sig_map, strings, locals, insts, diags);
+                        gen_expr(ctx, item, name_map, sig_map, strings, locals, insts);
                         insts.push(Instruction::LocalGet(ptr_local));
                         insts.push(Instruction::I32Const(offset as i32));
                         insts.push(Instruction::I32Add);
@@ -1482,7 +1463,7 @@ fn gen_expr(
         }
         HirExprKind::Match { scrutinee, arms } => {
             // evaluate scrutinee pointer once
-            gen_expr(ctx, scrutinee, name_map, sig_map, strings, locals, insts, diags);
+            gen_expr(ctx, scrutinee, name_map, sig_map, strings, locals, insts);
             let ptr_local = locals.alloc_temp(ValType::I32);
             insts.push(Instruction::LocalSet(ptr_local));
             let result_ty = valtype(&ctx.get(expr.ty));
@@ -1555,7 +1536,7 @@ fn gen_expr(
                         }
                     }
                 }
-                gen_expr(ctx, &arm.body, name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, &arm.body, name_map, sig_map, strings, locals, insts);
                 if is_last {
                     insts.push(Instruction::Else);
                     insts.push(Instruction::Unreachable);
@@ -1573,7 +1554,7 @@ fn gen_expr(
         }
         HirExprKind::Let { name, value, .. } => {
             let idx = locals.ensure_local(name.clone(), value.ty, ctx);
-            gen_expr(ctx, value, name_map, sig_map, strings, locals, insts, diags);
+            gen_expr(ctx, value, name_map, sig_map, strings, locals, insts);
             if valtype(&ctx.get(value.ty)).is_some() {
                 insts.push(Instruction::LocalSet(idx));
             }
@@ -1581,7 +1562,7 @@ fn gen_expr(
         }
         HirExprKind::Set { name, value } => {
             if let Some(idx) = locals.lookup(name) {
-                gen_expr(ctx, value, name_map, sig_map, strings, locals, insts, diags);
+                gen_expr(ctx, value, name_map, sig_map, strings, locals, insts);
                 if valtype(&ctx.get(value.ty)).is_some() {
                     insts.push(Instruction::LocalSet(idx));
                 }
@@ -1598,11 +1579,11 @@ fn gen_expr(
             None
         }
         HirExprKind::AddrOf(inner) => {
-            gen_expr(ctx, inner, name_map, sig_map, strings, locals, insts, diags);
+            gen_expr(ctx, inner, name_map, sig_map, strings, locals, insts);
             valtype(&ctx.get(expr.ty))
         }
         HirExprKind::Deref(inner) => {
-            gen_expr(ctx, inner, name_map, sig_map, strings, locals, insts, diags);
+            gen_expr(ctx, inner, name_map, sig_map, strings, locals, insts);
             valtype(&ctx.get(expr.ty))
         }
     }
@@ -1809,15 +1790,3 @@ fn enum_variant_payload(ctx: &TypeCtx, enum_ty: TypeId, variant: &str) -> Option
     }
 }
 
-fn validate_wasm_stack(
-    ctx: &TypeCtx,
-    func: &HirFunction,
-    locals: &LocalMap,
-    insts: &[Instruction<'static>],
-) -> Result<(), Diagnostic> {
-    // For now, we skip strict stack validation for #wasm blocks
-    // The WASM runtime will validate the instructions
-    // This allows us to support all WASM instructions without implementing
-    // full stack validation logic for every instruction
-    Ok(())
-}

@@ -1,3 +1,18 @@
+# 2026-03-06 作業メモ (フェーズD: wasm codegen 診断返却経路の撤去)
+
+- 目的:
+  - `codegen` 到達後は生成専任にする方針に合わせ、`codegen_wasm` の `Vec<Diagnostic>` 返却経路を撤去する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `lower_body` / `lower_user` の戻り値を `Result<Function, Vec<Diagnostic>>` から `Function` へ変更。
+    - `gen_block` / `gen_expr` の `diags` 引数を削除。
+    - `generate_wasm` の code section 生成で `Err(ds)` 分岐を削除し、前段検査通過後は直接生成する形に統一。
+    - backend 内診断として残っていた未使用関数 `validate_wasm_stack` を削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-after-wasm-no-diag.json -j 15` -> `8/8 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-wasm-no-diag.json -j 15` -> `791/791 pass`
+
 # 2026-03-06 作業メモ (フェーズD: wasm helper 解決の自己再帰バグ修正)
 
 - 目的:
