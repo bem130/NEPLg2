@@ -17,6 +17,20 @@
 #import "alloc/collections/vec" as *
 #import "alloc/string" as *
 
+fn fs_alloc <(i32)->Result<i32,i32>> (size):
+    match alloc size:
+        Result::Ok p:
+            Result<i32,i32>::Ok p
+        Result::Err _e:
+            Result<i32,i32>::Err 12
+
+fn fs_free <(i32,i32)->()> (ptr, size):
+    match dealloc ptr size:
+        Result::Ok _:
+            ()
+        Result::Err _e:
+            ()
+
 //: fs: ファイル読み込み（WASI / LLVM）
 //:
 //: 目的:
@@ -145,16 +159,21 @@ fn wasi_fd_close <(i32)*>i32> (fd):
 //:     fs_open_read "sample";
 //: ```
 fn fs_open_read <(str)*>Result<i32,i32>> (path):
-    let fd_out <i32> alloc_raw 4;
-    store_i32 fd_out 0;
-    let path_ptr <i32> add path 4;
-    let path_len <i32> load_i32 path;
-    let rights <i64> cast 0;
-    let errno <i32> wasi_path_open 3 0 path_ptr path_len 0 rights rights 0 fd_out;
-    if:
-        eq errno 0
-        then Result::Ok load_i32 fd_out
-        else Result::Err errno
+    match fs_alloc 4:
+        Result::Err e:
+            Result::Err e
+        Result::Ok fd_out:
+            store_i32 fd_out 0;
+            let path_ptr <i32> add path 4;
+            let path_len <i32> load_i32 path;
+            let rights <i64> cast 0;
+            let errno <i32> wasi_path_open 3 0 path_ptr path_len 0 rights rights 0 fd_out;
+            let res <Result<i32,i32>> if:
+                eq errno 0
+                then Result<i32,i32>::Ok load_i32 fd_out
+                else Result<i32,i32>::Err errno;
+            fs_free fd_out 4;
+            res
 
 //: fs_read_fd_bytes: fd から全て読み込んで Vec<u8> を返す
 //:
@@ -190,40 +209,56 @@ fn fs_open_read <(str)*>Result<i32,i32>> (path):
 fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
     let mut buf <Vec<u8>> vec_new<u8>;
     let cap <i32> 256;
-    let tmp <i32> alloc_raw cap;
-    let iov <i32> alloc_raw 8;
-    store_i32 iov tmp;
-    store_i32 add iov 4 cap;
-    let nread <i32> alloc_raw 4;
-    let mut done <i32> 0;
-    let mut err <i32> 0;
+    match fs_alloc cap:
+        Result::Err e:
+            Result::Err e
+        Result::Ok tmp:
+            match fs_alloc 8:
+                Result::Err e:
+                    fs_free tmp cap;
+                    Result::Err e
+                Result::Ok iov:
+                    store_i32 iov tmp;
+                    store_i32 add iov 4 cap;
+                    match fs_alloc 4:
+                        Result::Err e:
+                            fs_free iov 8;
+                            fs_free tmp cap;
+                            Result::Err e
+                        Result::Ok nread:
+                            let mut done <i32> 0;
+                            let mut err <i32> 0;
 
-    while eq done 0:
-        do:
-            store_i32 nread 0;
-            let errno <i32> wasi_fd_read fd iov 1 nread;
-            if:
-                eq errno 0
-                then:
-                    let n <i32> load_i32 nread;
-                    if:
-                        eq n 0
-                        then set done 1
-                        else:
-                            let mut i <i32> 0;
-                            while lt i n:
+                            while eq done 0:
                                 do:
-                                    let b <i32> load_u8 add tmp i;
-                                    set buf vec_push<u8> buf <u8> cast b;
-                                    set i add i 1;
-                else:
-                    set err errno;
-                    set done 1;
+                                    store_i32 nread 0;
+                                    let errno <i32> wasi_fd_read fd iov 1 nread;
+                                    if:
+                                        eq errno 0
+                                        then:
+                                            let n <i32> load_i32 nread;
+                                            if:
+                                                eq n 0
+                                                then set done 1
+                                                else:
+                                                    let mut i <i32> 0;
+                                                    while lt i n:
+                                                        do:
+                                                            let b <i32> load_u8 add tmp i;
+                                                            set buf vec_push<u8> buf <u8> cast b;
+                                                            set i add i 1;
+                                        else:
+                                            set err errno;
+                                            set done 1;
 
-    if:
-        eq err 0
-        then Result::Ok buf
-        else Result::Err err
+                            let res <Result<Vec<u8>,i32>> if:
+                                eq err 0
+                                then Result<Vec<u8>,i32>::Ok buf
+                                else Result<Vec<u8>,i32>::Err err;
+                            fs_free nread 4;
+                            fs_free iov 8;
+                            fs_free tmp cap;
+                            res
 
 //: fs_bytes_to_string: Vec<u8> を str に変換する
 //:

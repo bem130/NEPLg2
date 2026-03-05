@@ -12,6 +12,16 @@
 #import "core/math" as *
 #import "core/cast" as *
 
+fn std_alloc <(i32)->Result<i32,str>> (size):
+    alloc size
+
+fn std_free <(i32,i32)->()> (ptr, size):
+    match dealloc ptr size:
+        Result::Ok _:
+            ()
+        Result::Err _:
+            ()
+
 //: stdio: 標準入出力（WASI / LLVM）
 //:
 //: 目的:
@@ -156,13 +166,22 @@ fn fd_read <(i32,i32,i32,i32)*>i32> (_fd,iovs,iovs_len,nread_ptr):
 //:     print "sample";
 //: ```
 fn noshadow print <(str)*>()> (s):
-    let iov <i32> alloc_raw 8;
-    store_i32 iov add s 4;
-    store_i32 add iov 4 load_i32 s;
-    let nwritten <i32> alloc_raw 4;
-    store_i32 nwritten 0;
-    let _errno <i32> fd_write 1 iov 1 nwritten;
-    ()
+    match std_alloc 8:
+        Result::Err _:
+            ()
+        Result::Ok iov:
+            match std_alloc 4:
+                Result::Err _:
+                    std_free iov 8;
+                    ()
+                Result::Ok nwritten:
+                    store_i32 iov add s 4;
+                    store_i32 add iov 4 load_i32 s;
+                    store_i32 nwritten 0;
+                    let _errno <i32> fd_write 1 iov 1 nwritten;
+                    std_free nwritten 4;
+                    std_free iov 8;
+                    ()
 
 //: read_all: 標準入力を読み込む（固定長）
 //:
@@ -198,24 +217,37 @@ fn noshadow print <(str)*>()> (s):
 //: ```
 fn read_all <()*>str> ():
     let cap <i32> 4096;
-    let out <i32> alloc_raw add 4 cap;
-    let iov <i32> alloc_raw 8;
-    store_i32 iov add out 4;
-    store_i32 add iov 4 cap;
-
-    let nread <i32> alloc_raw 4;
-    store_i32 nread 0;
-    let errno <i32> fd_read 0 iov 1 nread;
-
-    if:
-        eq errno 0
-        then:
-            let n <i32> load_i32 nread;
-            store_i32 out n;
-            out
-        else:
-            store_i32 out 0;
-            out
+    match std_alloc add 4 cap:
+        Result::Err _:
+            ""
+        Result::Ok out:
+            match std_alloc 8:
+                Result::Err _:
+                    std_free out add 4 cap;
+                    ""
+                Result::Ok iov:
+                    match std_alloc 4:
+                        Result::Err _:
+                            std_free iov 8;
+                            std_free out add 4 cap;
+                            ""
+                        Result::Ok nread:
+                            store_i32 iov add out 4;
+                            store_i32 add iov 4 cap;
+                            store_i32 nread 0;
+                            let errno <i32> fd_read 0 iov 1 nread;
+                            let res <str> if:
+                                eq errno 0
+                                then:
+                                    let n <i32> load_i32 nread;
+                                    store_i32 out n;
+                                    out
+                                else:
+                                    store_i32 out 0;
+                                    out;
+                            std_free nread 4;
+                            std_free iov 8;
+                            res
 
 //: read_line: 1 行読み込む
 //:
@@ -251,46 +283,60 @@ fn read_all <()*>str> ():
 //: ```
 fn noshadow read_line <()*>str> ():
     let cap <i32> 1024;
-    let out <i32> alloc_raw add 4 cap;
-    let iov <i32> alloc_raw 8;
-    let nread <i32> alloc_raw 4;
-    let mut len <i32> 0;
-    let mut done <i32> 0;
+    match std_alloc add 4 cap:
+        Result::Err _:
+            ""
+        Result::Ok out:
+            match std_alloc 8:
+                Result::Err _:
+                    std_free out add 4 cap;
+                    ""
+                Result::Ok iov:
+                    match std_alloc 4:
+                        Result::Err _:
+                            std_free iov 8;
+                            std_free out add 4 cap;
+                            ""
+                        Result::Ok nread:
+                            let mut len <i32> 0;
+                            let mut done <i32> 0;
 
-    while eq done 0:
-        if:
-            lt len cap
-            then:
-                let out_base <i32> add out 4;
-                let write_ptr <i32> add out_base len;
-                store_i32 iov write_ptr;
-                store_i32 add iov 4 1;
-                store_i32 nread 0;
-                let errno <i32> fd_read 0 iov 1 nread;
-                if:
-                    eq errno 0
-                    then:
-                        let n <i32> load_i32 nread;
-                        if:
-                            eq n 0
-                            then:
-                                set done 1;
-                            else:
-                                let out_base <i32> add out 4;
-                                let read_ptr <i32> add out_base len;
-                                let b <i32> load_u8 read_ptr;
+                            while eq done 0:
                                 if:
-                                    eq b 10
+                                    lt len cap
                                     then:
-                                        set done 1;
+                                        let out_base <i32> add out 4;
+                                        let write_ptr <i32> add out_base len;
+                                        store_i32 iov write_ptr;
+                                        store_i32 add iov 4 1;
+                                        store_i32 nread 0;
+                                        let errno <i32> fd_read 0 iov 1 nread;
+                                        if:
+                                            eq errno 0
+                                            then:
+                                                let n <i32> load_i32 nread;
+                                                if:
+                                                    eq n 0
+                                                    then:
+                                                        set done 1;
+                                                    else:
+                                                        let out_base <i32> add out 4;
+                                                        let read_ptr <i32> add out_base len;
+                                                        let b <i32> load_u8 read_ptr;
+                                                        if:
+                                                            eq b 10
+                                                            then:
+                                                                set done 1;
+                                                            else:
+                                                                set len add len 1;
+                                            else:
+                                                set done 1;
                                     else:
-                                        set len add len 1;
-                    else:
-                        set done 1;
-            else:
-                set done 1;
-    store_i32 out len;
-    out
+                                        set done 1;
+                            store_i32 out len;
+                            std_free nread 4;
+                            std_free iov 8;
+                            out
 
 //: println: 改行付き出力
 //:

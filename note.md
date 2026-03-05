@@ -1,3 +1,21 @@
+# 2026-03-05 作業メモ (フェーズC/D接続: core/mem に MemPtr 初期化オーバーロード追加)
+
+- 目的:
+  - `core/mem` 後段移行（`stdlib/std`/tutorials）で `i32` 生ポインタを露出せずに配列初期化できる上流APIを用意する。
+  - `MemPtr` モデル上で `fill/memset` を統一し、`Result` で失敗を扱えるようにする。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `memset_u8 <(MemPtr<u8>,i32,i32)->Result<(),str>>` を追加。
+    - `fill_u8 <(MemPtr<u8>,i32,i32)->Result<(),str>>` を追加。
+    - `fill_i32 <(MemPtr<i32>,i32,i32)->Result<(),str>>` を追加。
+    - 無効ポインタや負の長さは `Result::Err` を返す。
+  - `tests/memory_safety.n.md`
+    - `MemPtr fill_i32/fill_u8 の安全オーバーロード` ケースを追加。
+    - `MemPtr fill 系は無効引数を Err で返す` ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety-fill-overload.json -j 15` -> `217/217 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-mem-fill-overload.json -j 15` -> `787/787 pass`
+
 # 2026-03-05 作業メモ (フェーズD: kpread_core ヘッダフィールドの型安全化)
 
 - 目的:
@@ -7561,3 +7579,22 @@
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/move_check.n.md -i tests/overload.n.md -i tests/move_effect.n.md --no-tree -o /tmp/tests-trait-capability-targeted.json -j 15` -> `285/285 pass`
   - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-trait-cap-enum.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (フェーズD: stdlib/std 安全化の着手)
+
+- 目的:
+  - `core/mem` 安全 API 導入後の後続として、`stdlib/std`（`fs` / `stdio` / `env/cliarg`）を同一モデルへ移行する。
+  - 生 `alloc_raw` 直接利用と暗黙失敗経路を段階的に削減する。
+
+- 進捗:
+  - `stdlib/std/fs.nepl`
+    - `fs_alloc` / `fs_free` を追加。
+    - `fs_open_read` の `fd_out` 確保を `Result` 化し、解放を明示化。
+    - `fs_read_fd_bytes` の `tmp/iov/nread` 確保を `Result` 連鎖化し、全分岐で解放する形へ変更。
+  - `stdlib/std/stdio.nepl`
+    - 未着手（次段で `print/read_all/read_line/print_i32` の一時領域確保を安全化予定）。
+  - `stdlib/std/env/cliarg.nepl`
+    - 未着手（次段で `args_sizes_get/args_get` 周辺の確保失敗と解放方針を整理予定）。
+
+- メモ:
+  - `fs` 単体の実行系テストは入力待ちケースを含むため、今後は非対話セットで回帰確認する。
