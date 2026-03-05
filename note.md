@@ -1,3 +1,19 @@
+# 2026-03-05 作業メモ (フェーズC: kpread 基盤 handle の Scanner 型化)
+
+- 目的:
+  - `kpread` の公開面で露出している生 `i32` ハンドル関数を段階的に減らすため、基盤となる3関数を `Scanner` 受け取りへ変更する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_skip_ws_handle` を `(Scanner)*>()` へ変更。
+    - `scanner_is_eof_handle` を `(Scanner)*>bool` へ変更。
+    - `scanner_skip_token_handle` を `(Scanner)*>()` へ変更。
+    - `scanner_read_token_handle` を `(Scanner)*>str` へ変更。
+    - 上記呼び出し箇所（`i32` ベースの既存 handle 群）では `scanner_wrap mem_ptr_wrap sc` を明示して渡すよう統一。
+    - 公開ラッパ（`scanner_skip_ws` など）は raw 取り出しをやめて `Scanner` を直接渡すよう簡素化。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-scanner-handle-v1.json -j 15`
+  - 結果: `217/217 pass`
+
 # 2026-03-05 作業メモ (フェーズC: `core/mem` の `*_ptr` を安全API経由へ統一)
 
 - 目的:

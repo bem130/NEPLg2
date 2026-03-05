@@ -96,10 +96,11 @@ fn scanner_new <()*>Result<Scanner,str>> ():
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_skip_ws_handle <(i32)*>()> (sc):
-    let buf <i32> load_i32 sc;
-    let len <i32> load_i32 add sc 4;
-    let mut p <i32> load_i32 add sc 8;
+fn scanner_skip_ws_handle <(Scanner)*>()> (sc):
+    let sc_raw <i32> mem_ptr_addr get sc "raw";
+    let buf <i32> load_i32 sc_raw;
+    let len <i32> load_i32 add sc_raw 4;
+    let mut p <i32> load_i32 add sc_raw 8;
 
     if:
         eq p 0
@@ -171,7 +172,7 @@ fn scanner_skip_ws_handle <(i32)*>()> (sc):
             else:
                 set done 1;
 
-    store_i32 add sc 8 p;
+    store_i32 add sc_raw 8 p;
     ()
 
 //: scanner_is_eof: トークンが残っていないか確認する
@@ -197,10 +198,11 @@ fn scanner_skip_ws_handle <(i32)*>()> (sc):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_is_eof_handle <(i32)*>bool> (sc):
+fn scanner_is_eof_handle <(Scanner)*>bool> (sc):
     scanner_skip_ws_handle sc;
-    let len <i32> load_i32 add sc 4;
-    let p <i32> load_i32 add sc 8;
+    let sc_raw <i32> mem_ptr_addr get sc "raw";
+    let len <i32> load_i32 add sc_raw 4;
+    let p <i32> load_i32 add sc_raw 8;
     ge p len
 
 //: scanner_skip_token: アロケーションなしで 1 トークン消費する
@@ -227,11 +229,12 @@ fn scanner_is_eof_handle <(i32)*>bool> (sc):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_skip_token_handle <(i32)*>()> (sc):
+fn scanner_skip_token_handle <(Scanner)*>()> (sc):
     scanner_skip_ws_handle sc;
-    let buf <i32> load_i32 sc;
-    let len <i32> load_i32 add sc 4;
-    let mut p <i32> load_i32 add sc 8;
+    let sc_raw <i32> mem_ptr_addr get sc "raw";
+    let buf <i32> load_i32 sc_raw;
+    let len <i32> load_i32 add sc_raw 4;
+    let mut p <i32> load_i32 add sc_raw 8;
 
     let mut done <i32> 0;
     while eq done 0:
@@ -263,7 +266,7 @@ fn scanner_skip_token_handle <(i32)*>()> (sc):
             else:
                 set done 1;
 
-    store_i32 add sc 8 p;
+    store_i32 add sc_raw 8 p;
     ()
 
 //: scanner_read_token: 次のトークンを文字列として読み込む
@@ -293,11 +296,12 @@ fn scanner_skip_token_handle <(i32)*>()> (sc):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_read_token_handle <(i32)*>str> (sc):
+fn scanner_read_token_handle <(Scanner)*>str> (sc):
     scanner_skip_ws_handle sc;
-    let buf <i32> load_i32 sc;
-    let len <i32> load_i32 add sc 4;
-    let start <i32> load_i32 add sc 8;
+    let sc_raw <i32> mem_ptr_addr get sc "raw";
+    let buf <i32> load_i32 sc_raw;
+    let len <i32> load_i32 add sc_raw 4;
+    let start <i32> load_i32 add sc_raw 8;
     let mut p <i32> start;
 
     let mut done <i32> 0;
@@ -338,7 +342,7 @@ fn scanner_read_token_handle <(i32)*>str> (sc):
         else:
             match alloc add 4 tlen:
                 Result::Err _e:
-                    store_i32 add sc 8 p;
+                    store_i32 add sc_raw 8 p;
                     ""
                 Result::Ok s:
                     store_i32 s tlen;
@@ -352,7 +356,7 @@ fn scanner_read_token_handle <(i32)*>str> (sc):
                             let bv <i32> load_u8 bp;
                             store_u8 sp bv;
                             set i add i 1;
-                    store_i32 add sc 8 p;
+                    store_i32 add sc_raw 8 p;
                     s
 
 //: scanner_read_i32: 次のトークンを i32 として読み込む（符号付き 10 進数）
@@ -383,7 +387,7 @@ fn scanner_read_token_handle <(i32)*>str> (sc):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn scanner_read_i32_handle <(i32)*>i32> (sc):
-    scanner_skip_ws_handle sc;
+    scanner_skip_ws_handle scanner_wrap mem_ptr_wrap sc;
     let buf <i32> load_i32 sc;
     let len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
@@ -451,7 +455,7 @@ fn scanner_read_i32_handle <(i32)*>i32> (sc):
 //: 計算量:
 //: - O(桁数)
 fn scanner_read_u64_handle <(i32)*>i64> (sc):
-    scanner_skip_ws_handle sc;
+    scanner_skip_ws_handle scanner_wrap mem_ptr_wrap sc;
     let buf <i32> load_i32 sc;
     let len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
@@ -513,7 +517,7 @@ fn scanner_read_u64_handle <(i32)*>i64> (sc):
 //: 計算量:
 //: - O(桁数)
 fn scanner_read_i64_handle <(i32)*>i64> (sc):
-    scanner_skip_ws_handle sc;
+    scanner_skip_ws_handle scanner_wrap mem_ptr_wrap sc;
     let buf <i32> load_i32 sc;
     let len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
@@ -591,7 +595,7 @@ fn scanner_read_i64_handle <(i32)*>i64> (sc):
 //: 計算量:
 //: - O(桁数)
 fn scanner_read_f64_handle <(i32)*>f64> (sc):
-    scanner_skip_ws_handle sc;
+    scanner_skip_ws_handle scanner_wrap mem_ptr_wrap sc;
     let buf <i32> load_i32 sc;
     let buf_len <i32> load_i32 add sc 4;
     let mut p <i32> load_i32 add sc 8;
@@ -889,7 +893,7 @@ fn scanner_read_all_i32_handle <(i32)*>Vec<i32>> (sc):
 
     while eq done 0:
         do:
-            scanner_skip_ws_handle sc;
+            scanner_skip_ws_handle scanner_wrap mem_ptr_wrap sc;
             let buf <i32> load_i32 sc;
             let len <i32> load_i32 add sc 4;
             let p <i32> load_i32 add sc 8;
@@ -906,7 +910,7 @@ fn scanner_read_all_i32_handle <(i32)*>Vec<i32>> (sc):
                             let x <i32> scanner_read_i32_handle sc;
                             set out vec_push<i32> out x;
                         else:
-                            scanner_skip_token_handle sc;
+                            scanner_skip_token_handle scanner_wrap mem_ptr_wrap sc;
                             ();
 
     out
@@ -1183,16 +1187,16 @@ fn scanner_read_ndrh_i32_handle <(i32)*>NDRHInput> (sc):
     NDRHInput n d r h
 
 fn scanner_skip_ws <(Scanner)*>()> (sc):
-    scanner_skip_ws_handle mem_ptr_addr get sc "raw"
+    scanner_skip_ws_handle sc
 
 fn scanner_is_eof <(Scanner)*>bool> (sc):
-    scanner_is_eof_handle mem_ptr_addr get sc "raw"
+    scanner_is_eof_handle sc
 
 fn scanner_skip_token <(Scanner)*>()> (sc):
-    scanner_skip_token_handle mem_ptr_addr get sc "raw"
+    scanner_skip_token_handle sc
 
 fn scanner_read_token <(Scanner)*>str> (sc):
-    scanner_read_token_handle mem_ptr_addr get sc "raw"
+    scanner_read_token_handle sc
 
 fn scanner_read_i32 <(Scanner)*>i32> (sc):
     scanner_read_i32_handle mem_ptr_addr get sc "raw"
