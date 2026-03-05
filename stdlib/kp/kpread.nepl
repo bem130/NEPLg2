@@ -62,24 +62,24 @@ fn scanner_header_ptr <(Scanner,ScannerHeaderField)->Result<MemPtr<i32>,str>> (s
 fn scanner_load_header <(Scanner,ScannerHeaderField)->i32> (sc, field):
     match scanner_header_ptr sc field:
         Result::Err _e:
-            0
+            #intrinsic "unreachable" <> ()
         Result::Ok p:
             match load_i32 p:
                 Option::Some v:
                     v
                 Option::None:
-                    0
+                    #intrinsic "unreachable" <> ()
 
 fn scanner_store_header <(Scanner,ScannerHeaderField,i32)->()> (sc, field, v):
     match scanner_header_ptr sc field:
         Result::Err _e:
-            ()
+            #intrinsic "unreachable" <> ()
         Result::Ok p:
             match store_i32 p v:
                 Result::Ok _:
                     ()
                 Result::Err _e:
-                    ()
+                    #intrinsic "unreachable" <> ()
 
 //: kpread: 競技プログラミング用高速スキャナ
 //: 

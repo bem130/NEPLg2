@@ -13,6 +13,23 @@
   - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpread.nepl --no-tree -o /tmp/tests-kpread-header-field-targeted.json -j 15` -> `222/222 pass`
   - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpread-header-field.json -j 15` -> `785/785 pass`
 
+# 2026-03-05 作業メモ (フェーズD: kpread ヘッダアクセスのサイレント失敗を除去)
+
+- 目的:
+  - `scanner_load_header` / `scanner_store_header` の失敗時フォールバック（`0` / `()`）を廃止し、ヘッダ不整合を隠蔽しない。
+  - 上流仕様（安全API優先）に合わせ、壊れた状態を継続させるより即時停止に統一する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_load_header`:
+      - `scanner_header_ptr` が `Err` の場合の `0` 返却を `#intrinsic "unreachable"` へ変更。
+      - `load_i32` が `None` の場合の `0` 返却を `#intrinsic "unreachable"` へ変更。
+    - `scanner_store_header`:
+      - `scanner_header_ptr` が `Err` の場合の無視を `#intrinsic "unreachable"` へ変更。
+      - `store_i32` が `Err` の場合の無視を `#intrinsic "unreachable"` へ変更。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpread.nepl --no-tree -o /tmp/tests-kpread-header-unreachable-targeted.json -j 15` -> `222/222 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpread-unreachable.json -j 15` -> `785/785 pass`
+
 # 2026-03-05 作業メモ (フェーズD先行: Writer を RegionToken 保持へ移行)
 
 - 目的:
