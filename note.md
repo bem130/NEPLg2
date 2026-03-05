@@ -1,3 +1,21 @@
+# 2026-03-05 作業メモ (フェーズC: kpwrite の header アクセス集約と non-copy 整合)
+
+- 目的:
+  - `kpwrite.nepl` で散在していた header 生アクセス（`load_i32 add w_raw ...` / `store_i32 add w_raw ...`）を共通化し、`Writer` の non-copy/move 規則と矛盾しない形へ整理する。
+- 根本原因:
+  - `Writer` は non-copy なのに、最初のヘルパ化で `writer_load_header/store_header` が `Writer` 値渡しとなり、ヘルパ呼び出し自体が move を発生させ `D3053` を誘発していた。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_header_ptr/load/store` を追加。
+    - 上記ヘルパは `Writer` ではなく `w_raw:i32` を受け取り、`Writer` の move を発生させない設計に変更。
+    - `writer_free_handle`, `writer_flush_handle`, `writer_ensure_handle`, `writer_put_u8_handle`, `writer_write_str_handle`, `writer_write_i32_handle`, `writer_write_u64_handle` を共通ヘルパ経由に置換。
+    - 置換後、`w_raw` 直接参照は解放処理境界（`writer_free_handle`）のみへ縮小。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-header-v2.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v4.json -j 15`
+  - 結果: `226/226 pass`
+
 # 2026-03-05 作業メモ (フェーズB2: trait capability 判定の自動推定を廃止)
 
 - 目的:
