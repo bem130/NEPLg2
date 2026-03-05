@@ -205,6 +205,7 @@ function collectTestsFromPath(inputPath) {
                 expected_stdout: dt.stdout ?? null,
                 expected_stderr: dt.stderr ?? null,
                 expected_diag_ids: Array.isArray(dt.diag_ids) ? dt.diag_ids : [],
+                expected_diag_spans: Array.isArray(dt.diag_spans) ? dt.diag_spans : [],
             });
         }
     }
@@ -439,36 +440,91 @@ function normalizeOutputByTags(text, tags) {
     return out;
 }
 
+function normalizePathLike(p) {
+    return String(p || '').replace(/\\/g, '/');
+}
+
+function extractDiagSpansFromCompileError(text) {
+    const src = stripAnsi(String(text || '')).replace(/\r\n/g, '\n');
+    const out = [];
+    const re = /-->\s+(.+?):(\d+):(\d+)/g;
+    let m;
+    while ((m = re.exec(src)) !== null) {
+        out.push({
+            file: String(m[1] || '').trim(),
+            line: Number(m[2]),
+            col: Number(m[3]),
+        });
+    }
+    return out;
+}
+
+function diagSpanMatches(expected, actual) {
+    const expLine = Number(expected?.line);
+    const expCol = Number(expected?.col);
+    if (!Number.isFinite(expLine) || !Number.isFinite(expCol)) return false;
+    if (Number(actual?.line) !== expLine || Number(actual?.col) !== expCol) return false;
+    const expFile = String(expected?.file || '').trim();
+    if (!expFile) return true;
+    const want = normalizePathLike(expFile);
+    const got = normalizePathLike(actual?.file || '');
+    return got === want || got.endsWith(`/${want}`) || got.endsWith(want);
+}
+
 function applyDoctestExpectations(result, testCase, options = {}) {
     const r = { ...result };
     const tags = testCase?.tags || r.tags || [];
     const expectedDiagIds = Array.isArray(testCase?.expected_diag_ids)
         ? testCase.expected_diag_ids.filter((v) => Number.isFinite(v)).map((v) => Number(v))
         : [];
-    const strictIo = !!options.assertIo || process.env.NEPL_ASSERT_IO === '1' || hasTag(tags, 'assert_io');
-    if (!strictIo) return r;
+    const expectedDiagSpans = Array.isArray(testCase?.expected_diag_spans)
+        ? testCase.expected_diag_spans.filter((v) => v && Number.isFinite(Number(v.line)) && Number.isFinite(Number(v.col)))
+        : [];
     const wantsStdout = testCase?.expected_stdout !== null && testCase?.expected_stdout !== undefined;
     const wantsStderr = testCase?.expected_stderr !== null && testCase?.expected_stderr !== undefined;
 
     if (r.status !== 'pass') return r;
     if (r.phase === 'skip') return r;
     if (hasTag(tags, 'compile_fail')) {
-        if (expectedDiagIds.length === 0) return r;
         const compileError = String(r.compile_error || '');
-        const missing = expectedDiagIds.filter((id) => !compileError.includes(`[D${id}]`));
-        if (missing.length > 0) {
-            r.ok = false;
-            r.status = 'fail';
-            r.phase = r.phase || 'compile';
-            r.error = [
-                'compile_fail diagnostic id mismatch',
-                `expected ids: ${JSON.stringify(expectedDiagIds)}`,
-                `missing ids: ${JSON.stringify(missing)}`,
-                `compile_error: ${JSON.stringify(compileError)}`,
-            ].join('\n');
+        if (expectedDiagIds.length > 0) {
+            const missing = expectedDiagIds.filter((id) => !compileError.includes(`[D${id}]`));
+            if (missing.length > 0) {
+                r.ok = false;
+                r.status = 'fail';
+                r.phase = r.phase || 'compile';
+                r.error = [
+                    'compile_fail diagnostic id mismatch',
+                    `expected ids: ${JSON.stringify(expectedDiagIds)}`,
+                    `missing ids: ${JSON.stringify(missing)}`,
+                    `compile_error: ${JSON.stringify(compileError)}`,
+                ].join('\n');
+                return r;
+            }
+        }
+        if (expectedDiagSpans.length > 0) {
+            const actualSpans = extractDiagSpansFromCompileError(compileError);
+            const missingSpans = expectedDiagSpans.filter(
+                (exp) => !actualSpans.some((act) => diagSpanMatches(exp, act))
+            );
+            if (missingSpans.length > 0) {
+                r.ok = false;
+                r.status = 'fail';
+                r.phase = r.phase || 'compile';
+                r.error = [
+                    'compile_fail diagnostic span mismatch',
+                    `expected spans: ${JSON.stringify(expectedDiagSpans)}`,
+                    `missing spans: ${JSON.stringify(missingSpans)}`,
+                    `actual spans: ${JSON.stringify(actualSpans)}`,
+                    `compile_error: ${JSON.stringify(compileError)}`,
+                ].join('\n');
+                return r;
+            }
         }
         return r;
     }
+    const strictIo = !!options.assertIo || process.env.NEPL_ASSERT_IO === '1' || hasTag(tags, 'assert_io');
+    if (!strictIo) return r;
     if (hasTag(tags, 'should_panic')) return r;
     if (!wantsStdout && !wantsStderr) return r;
 

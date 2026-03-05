@@ -6624,3 +6624,31 @@
 
 - 次段:
   - `todo.md` フェーズB2の残件として、能力判定の外部定義化（コンパイラ内部固定名のさらなる縮小）を設計する。
+
+# 2026-03-05 作業メモ (compile_fail の診断位置検証を追加)
+
+- 目的:
+  - `tests/*.n.md` の `compile_fail` ケースで、`diag_id` だけでなく診断位置（file/line/col）も宣言して検証できるようにする。
+
+- 根本原因:
+  - 既存の doctest 仕様は `diag_id` のみを受理しており、「どの位置でその診断が出るべきか」を機械検証できなかった。
+  - そのため、同じ `diag_id` が別位置で発生してもテストが見逃す余地があった。
+
+- 実施:
+  - `nodesrc/parser.js`
+    - doctest メタに `diag_span` / `diag_spans` を追加。
+    - `line:col` と `file:line:col` の両形式を受理。
+  - `nodesrc/tests.js`
+    - `expected_diag_spans` をケースに保持。
+    - `compile_fail` 評価時に `compile_error` から `--> file:line:col` を抽出し、期待位置と照合。
+    - `compile_fail` の `diag_id` / `diag_span` 検証を `--assert-io` 依存から切り離し、常時評価へ変更。
+  - `tests/compile_fail_diag_location.n.md`
+    - `diag_span`（単体）と `diag_spans`（複数）を使った検証ケースを追加。
+
+- 検証:
+  - `node -c nodesrc/parser.js && node -c nodesrc/tests.js` -> success
+  - `node nodesrc/tests.js -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-compile-fail-diag-location.json -j 15` -> `2/2 pass`
+  - `node nodesrc/tests.js -i tests/keywords_reserved.n.md --no-stdlib --no-tree -o /tmp/tests-keywords-reserved.json -j 15` -> `6/6 pass`
+
+- 補足:
+  - `--no-stdlib` なし実行時は既知の `stdlib/alloc/collections/list.nepl` 失敗が混在するため、今回タスクの局所検証では除外した。

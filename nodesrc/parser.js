@@ -55,6 +55,44 @@ function parseMetaValue(raw) {
     return s;
 }
 
+function parseDiagSpanEntry(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    let m = s.match(/^(\d+)\s*:\s*(\d+)$/);
+    if (m) {
+        return {
+            file: null,
+            line: parseInt(m[1], 10),
+            col: parseInt(m[2], 10),
+        };
+    }
+    m = s.match(/^(.+):(\d+):(\d+)$/);
+    if (m) {
+        return {
+            file: String(m[1]).trim(),
+            line: parseInt(m[2], 10),
+            col: parseInt(m[3], 10),
+        };
+    }
+    return null;
+}
+
+function parseDiagSpanList(raw) {
+    const parsed = parseMetaValue(raw);
+    const vals = Array.isArray(parsed)
+        ? parsed
+        : String(parsed)
+            .split(',')
+            .map((x) => x.trim())
+            .filter(Boolean);
+    const out = [];
+    for (const v of vals) {
+        const one = parseDiagSpanEntry(v);
+        if (one) out.push(one);
+    }
+    return out;
+}
+
 function scanForDoctests(lines, opts) {
     // opts:
     // - lineTransform: (rawLine)=>string
@@ -76,13 +114,14 @@ function scanForDoctests(lines, opts) {
             stdout: null,
             stderr: null,
             diag_ids: [],
+            diag_spans: [],
         };
 
         // 次の ```neplg2 を探す
         let j = i + 1;
         while (j < lines.length) {
             const l2 = opts.lineTransform(lines[j]);
-            const mm = l2.match(/^\s*(stdin|stdout|stderr|diag_id|diag_ids)\s*:\s*(.*?)\s*$/);
+            const mm = l2.match(/^\s*(stdin|stdout|stderr|diag_id|diag_ids|diag_span|diag_spans)\s*:\s*(.*?)\s*$/);
             if (mm) {
                 const k = mm[1];
                 if (k === 'diag_id') {
@@ -100,6 +139,11 @@ function scanForDoctests(lines, opts) {
                         const v = parseInt(String(x).trim(), 10);
                         if (Number.isFinite(v)) meta.diag_ids.push(v);
                     }
+                } else if (k === 'diag_span') {
+                    const one = parseDiagSpanEntry(parseMetaValue(mm[2] ?? ''));
+                    if (one) meta.diag_spans.push(one);
+                } else if (k === 'diag_spans') {
+                    meta.diag_spans.push(...parseDiagSpanList(mm[2] ?? ''));
                 } else {
                     meta[k] = parseMetaValue(mm[2]);
                 }
@@ -133,6 +177,7 @@ function scanForDoctests(lines, opts) {
             stdout: meta.stdout,
             stderr: meta.stderr,
             diag_ids: meta.diag_ids,
+            diag_spans: meta.diag_spans,
         });
 
         i = j;
