@@ -185,7 +185,6 @@ fn collect_indirect_sigs(
 }
 
 pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
-    let mut diags: Vec<Diagnostic> = Vec::new();
     let strings = lower_strings(&module.string_literals);
 
     // Build imports / function list (builtins first)
@@ -357,16 +356,6 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
         });
     }
 
-    if diags
-        .iter()
-        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
-    {
-        return CodegenResult {
-            bytes: None,
-            diagnostics: diags,
-        };
-    }
-
     let mut module_bytes = Module::new();
     module_bytes.section(&type_section);
     if !imports.is_empty() {
@@ -386,7 +375,7 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
 
     CodegenResult {
         bytes: Some(module_bytes.finish()),
-        diagnostics: diags,
+        diagnostics: Vec::new(),
     }
 }
 
@@ -783,11 +772,6 @@ fn lower_user(
                             func.name, msg
                         );
                     }
-                }
-            }
-            if diags.is_empty() {
-                if let Err(d) = validate_wasm_stack(ctx, func, &locals, &insts) {
-                    diags.push(d);
                 }
             }
         }
@@ -2063,7 +2047,7 @@ fn parse_wasm_line(line: &str, locals: &LocalMap) -> Result<Vec<Instruction<'sta
     Ok(insts)
 }
 
-pub(crate) fn precheck_raw_wasm_body(func: &HirFunction) -> Vec<Diagnostic> {
+pub(crate) fn precheck_raw_wasm_body(ctx: &TypeCtx, func: &HirFunction) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     let HirBody::Wasm(wb) = &func.body else {
         return out;
@@ -2072,12 +2056,21 @@ pub(crate) fn precheck_raw_wasm_body(func: &HirFunction) -> Vec<Diagnostic> {
     for p in &func.params {
         locals.register_param(p.name.clone(), p.ty);
     }
+    let mut insts = Vec::new();
     for line in &wb.lines {
-        if let Err(msg) = parse_wasm_line(line, &locals) {
-            out.push(
-                Diagnostic::error(msg, func.span)
-                    .with_id(DiagnosticId::CodegenWasmRawLineParseError),
-            );
+        match parse_wasm_line(line, &locals) {
+            Ok(mut v) => insts.append(&mut v),
+            Err(msg) => {
+                out.push(
+                    Diagnostic::error(msg, func.span)
+                        .with_id(DiagnosticId::CodegenWasmRawLineParseError),
+                );
+            }
+        }
+    }
+    if out.is_empty() {
+        if let Err(d) = validate_wasm_stack(ctx, func, &locals, &insts) {
+            out.push(d);
         }
     }
     out

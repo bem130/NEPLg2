@@ -1,3 +1,19 @@
+# 2026-03-05 作業メモ (フェーズD: #wasm のスタック検証を前段検査へ移動)
+
+- 目的:
+  - 「codegen は正しい入力を生成するだけ」の方針に合わせ、`#wasm` ボディ検証を backend 実行時ではなく `codegen_precheck` 側で完了させる。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `precheck_raw_wasm_body` シグネチャを `precheck_raw_wasm_body(ctx, func)` に変更。
+    - raw 行のパース成功時に命令列を蓄積し、前段で `validate_wasm_stack` を実行するよう変更。
+    - `lower_user` の `HirBody::Wasm` 経路から `validate_wasm_stack` を削除。
+    - `generate_wasm` の診断集約を実質空に整理（codegen 内診断を発生させない方向に統一）。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_raw_wasm_body` 呼び出しを新シグネチャへ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v4.json -j 15` -> `8/8 pass`
+
 # 2026-03-05 作業メモ (フェーズD: codegen_precheck の wasm 事前検査を共通モジュールへ分離)
 
 - 目的:
