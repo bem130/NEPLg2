@@ -39,7 +39,7 @@
 //:         do:
 //:             if lt 0 i:
 //:                 then set w writer_write_space w
-//:                 else ();
+//:                 else ()
 //:             set w writer_write_i32 w load_i32 add data mul i 4;
 //:             set i add i 1;
 //:     set w writer_writeln w;
@@ -194,8 +194,8 @@ fn dense_graph_bfs_dist_raw <(i32,i32,i32)*>Vec<i32>> (n, mat, start):
                                     store_i32 to_ptr add dv 1;
                                     store_i32 add q mul tail 4 to;
                                     set tail add tail 1;
-                                else ();
-                        else ();
+                                else ()
+                        else ()
                     set to add to 1;
 
     let mut out <Vec<i32>> vec_new<i32>;

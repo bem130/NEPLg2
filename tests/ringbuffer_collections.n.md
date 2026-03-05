@@ -22,7 +22,7 @@ fn main <()*>i32> ():
         |> ringbuffer_push_back<i32> 4
         |> unwrap_ok<RingBuffer<i32>, Diag>
         |> ringbuffer_push_back<i32> 9
-        |> unwrap_ok<RingBuffer<i32>, Diag>;
+        |> unwrap_ok<RingBuffer<i32>, Diag>
     let ok0 <bool> eq ringbuffer_len<i32> rb 2;
     let rb2 <RingBuffer<i32>>:
         ringbuffer_new<i32>
@@ -30,7 +30,7 @@ fn main <()*>i32> ():
         |> ringbuffer_push_back<i32> 4
         |> unwrap_ok<RingBuffer<i32>, Diag>
         |> ringbuffer_push_back<i32> 9
-        |> unwrap_ok<RingBuffer<i32>, Diag>;
+        |> unwrap_ok<RingBuffer<i32>, Diag>
     let ok1 <bool> match rb2 |> ringbuffer_pop_front<i32>:
         Option::Some v:
             eq v 4

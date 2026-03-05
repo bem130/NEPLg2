@@ -208,7 +208,7 @@ fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
                     let n <i32> load_i32 nread;
                     if:
                         eq n 0
-                        then set done 1;
+                        then set done 1
                         else:
                             let mut i <i32> 0;
                             while lt i n:

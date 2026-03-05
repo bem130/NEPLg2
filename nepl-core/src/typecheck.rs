@@ -87,6 +87,7 @@ struct TraitInfo {
     doc: Option<String>,
     name: String,
     type_params: Vec<TypeId>,
+    capabilities: Vec<TraitCapability>,
     methods: BTreeMap<String, TypeId>,
     self_ty: TypeId,
     span: Span,
@@ -99,11 +100,27 @@ struct TraitSemantics {
 }
 
 impl TraitSemantics {
-    fn detect(traits: &BTreeMap<String, TraitInfo>, ctx: &TypeCtx) -> Self {
-        let copy_trait =
-            detect_capability_trait(traits, ctx, "Copy", "copy_mark");
-        let clone_trait =
-            detect_capability_trait(traits, ctx, "Clone", "clone");
+    fn detect(traits: &BTreeMap<String, TraitInfo>) -> Self {
+        let mut copy_trait: Option<(String, TypeId)> = None;
+        let mut clone_trait: Option<(String, TypeId)> = None;
+
+        for (name, info) in traits {
+            for cap in info.capabilities.iter().copied() {
+                match cap {
+                    TraitCapability::Copy => {
+                        if copy_trait.is_none() {
+                            copy_trait = Some((name.clone(), info.self_ty));
+                        }
+                    }
+                    TraitCapability::Clone => {
+                        if clone_trait.is_none() {
+                            clone_trait = Some((name.clone(), info.self_ty));
+                        }
+                    }
+                }
+            }
+        }
+
         Self {
             copy_trait,
             clone_trait,
@@ -150,48 +167,10 @@ enum FieldIdx {
     Name(String),
 }
 
-fn detect_capability_trait(
-    traits: &BTreeMap<String, TraitInfo>,
-    ctx: &TypeCtx,
-    preferred_trait_name: &str,
-    required_method_name: &str,
-) -> Option<(String, TypeId)> {
-    if let Some(info) = traits.get(preferred_trait_name) {
-        if trait_has_unary_self_to_self_method(info, ctx, required_method_name) {
-            return Some((preferred_trait_name.to_string(), info.self_ty));
-        }
-    }
-    for (name, info) in traits {
-        if trait_has_unary_self_to_self_method(info, ctx, required_method_name) {
-            return Some((name.clone(), info.self_ty));
-        }
-    }
-    None
-}
-
-fn trait_has_unary_self_to_self_method(
-    info: &TraitInfo,
-    ctx: &TypeCtx,
-    method_name: &str,
-) -> bool {
-    let Some(sig) = info.methods.get(method_name).copied() else {
-        return false;
-    };
-    let resolved = ctx.resolve_id(sig);
-    match ctx.get(resolved) {
-        TypeKind::Function {
-            params,
-            result,
-            type_params,
-            ..
-        } => {
-            type_params.is_empty()
-                && params.len() == 1
-                && ctx.same_type(params[0], info.self_ty)
-                && ctx.same_type(result, info.self_ty)
-        }
-        _ => false,
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TraitCapability {
+    Copy,
+    Clone,
 }
 
 fn collect_type_params(
@@ -582,6 +561,30 @@ pub fn typecheck(
                 let mut f_labels = LabelEnv::new();
                 let (tps, _bounds_vec, _bounds_map) =
                     collect_type_params(&mut ctx, &mut f_labels, &t.type_params, &traits, &mut diagnostics);
+                let mut capabilities = Vec::new();
+                for cap in &t.capabilities {
+                    match cap {
+                        crate::ast::TraitCapability::Copy => {
+                            if !capabilities.contains(&TraitCapability::Copy) {
+                                capabilities.push(TraitCapability::Copy);
+                            }
+                        }
+                        crate::ast::TraitCapability::Clone => {
+                            if !capabilities.contains(&TraitCapability::Clone) {
+                                capabilities.push(TraitCapability::Clone);
+                            }
+                        }
+                        crate::ast::TraitCapability::Unknown(name) => {
+                            diagnostics.push(
+                                Diagnostic::error(
+                                    format!("unknown trait capability '{}'", name.trim()),
+                                    t.name.span,
+                                )
+                                .with_id(DiagnosticId::TypeUnknownTraitCapability),
+                            );
+                        }
+                    }
+                }
                 if !t.type_params.is_empty() {
                     diagnostics.push(
                         Diagnostic::error(
@@ -614,6 +617,7 @@ pub fn typecheck(
                         doc: t.doc.clone(),
                         name: t.name.name.clone(),
                         type_params: tps,
+                        capabilities,
                         methods,
                         self_ty,
                         span: t.name.span,
@@ -659,7 +663,7 @@ pub fn typecheck(
         }
     }
 
-    let trait_semantics = TraitSemantics::detect(&traits, &ctx);
+    let trait_semantics = TraitSemantics::detect(&traits);
     ctx.set_copy_trait_enabled(trait_semantics.copy_trait_name().is_some());
 
     // Process Impls separately or in the same loop?
@@ -1159,15 +1163,30 @@ pub fn typecheck(
                     funcs[0].ty
                 } else {
                     let mut tmp_labels = LabelEnv::new();
+                    let mut sig_type_params = Vec::new();
                     for tp in &f.type_params {
                         let tv = ctx.fresh_var(Some(tp.name.name.clone()));
                         tmp_labels.insert(tp.name.name.clone(), tv);
+                        sig_type_params.push(tv);
                     }
-                    let sig_ty = type_from_expr(&mut ctx, &mut tmp_labels, &f.signature);
-                    let sig_key = function_signature_string(&ctx, sig_ty);
+                    let sig_ty = match &f.signature {
+                        TypeExpr::Function {
+                            params,
+                            result,
+                            effect,
+                        } => {
+                            let mut sig_params = Vec::new();
+                            for p in params {
+                                sig_params.push(type_from_expr(&mut ctx, &mut tmp_labels, p));
+                            }
+                            let sig_result = type_from_expr(&mut ctx, &mut tmp_labels, result);
+                            ctx.function(sig_type_params, sig_params, sig_result, *effect)
+                        }
+                        _ => type_from_expr(&mut ctx, &mut tmp_labels, &f.signature),
+                    };
                     let mut matched: Option<TypeId> = None;
                     for binding in funcs.drain(..) {
-                        if function_signature_string(&ctx, binding.ty) == sig_key {
+                        if same_function_signature(&ctx, binding.ty, sig_ty) {
                             matched = Some(binding.ty);
                             break;
                         }
@@ -2229,13 +2248,6 @@ impl<'a> BlockChecker<'a> {
         self.impls.iter().any(|imp| {
             imp.trait_self_ty == Some(bound.trait_self_ty)
                 && self.ctx.same_type(imp.target_ty, ty)
-        })
-    }
-
-    fn resolve_trait_bound_ref(&self, trait_name: &str) -> Option<TraitBoundRef> {
-        self.traits.get(trait_name).map(|info| TraitBoundRef {
-            name: trait_name.to_string(),
-            trait_self_ty: info.self_ty,
         })
     }
 
@@ -5936,18 +5948,12 @@ impl<'a> BlockChecker<'a> {
                                 return None;
                             }
                             let self_ty = self.ctx.resolve_id(args[0].ty);
-                            if let Some(bound) = self.resolve_trait_bound_ref(trait_name) {
-                                if !self.trait_bound_satisfied_by_ref(&bound, self_ty) {
-                                    self.diagnostics.push(Diagnostic::error(
-                                        format!(
-                                            "type does not satisfy trait bound '{}'",
-                                            trait_name
-                                        ),
-                                        func.expr.span,
-                                    ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
-                                    return None;
-                                }
-                            } else {
+                            let trait_ok = self.type_param_has_bound(self_ty, trait_info.self_ty)
+                                || self.impls.iter().any(|imp| {
+                                    imp.trait_self_ty == Some(trait_info.self_ty)
+                                        && self.ctx.same_type(imp.target_ty, self_ty)
+                                });
+                            if !trait_ok {
                                 self.diagnostics.push(Diagnostic::error(
                                     format!(
                                         "type does not satisfy trait bound '{}'",
@@ -6157,14 +6163,12 @@ impl Env {
     }
 
     fn remove_duplicate_func(&mut self, name: &str, ty: TypeId, ctx: &TypeCtx) {
-        let target = function_signature_string(ctx, ty);
         if let Some(scope) = self.scopes.first_mut() {
             scope.callables.retain(|b| {
                 if b.name != name || !b.kind.is_callable() {
                     return true;
                 }
-                let existing = function_signature_string(ctx, b.ty);
-                existing != target
+                !same_function_signature(ctx, b.ty, ty)
             });
         }
     }
@@ -6365,10 +6369,9 @@ impl Env {
     /// typecheck 本体と HIR 生成で関数名決定ロジックを共有し、
     /// hoist した symbol と最終的な HIR 名の不整合を防ぐ。
     fn lookup_func_symbol(&self, name: &str, ty: TypeId, ctx: &TypeCtx) -> Option<String> {
-        let target_sig = function_signature_string(ctx, ty);
         for binding in self.lookup_all_callables(name) {
             if let BindingKind::Func { symbol, .. } = &binding.kind {
-                if function_signature_string(ctx, binding.ty) == target_sig {
+                if same_function_signature(ctx, binding.ty, ty) {
                     return Some(symbol.clone());
                 }
             }
@@ -6510,10 +6513,9 @@ fn find_same_signature_func<'a>(
     ty: TypeId,
     ctx: &TypeCtx,
 ) -> Option<&'a Binding> {
-    let target_sig = function_signature_string(ctx, ty);
     env.lookup_all_callables(name).into_iter().find(|b| {
         matches!(b.kind, BindingKind::Func { .. })
-            && function_signature_string(ctx, b.ty) == target_sig
+            && same_function_signature(ctx, b.ty, ty)
     })
 }
 
@@ -6523,12 +6525,11 @@ fn find_nonshadow_same_signature_func<'a>(
     ty: TypeId,
     ctx: &TypeCtx,
 ) -> Option<&'a Binding> {
-    let target_sig = function_signature_string(ctx, ty);
     env.lookup_all_callables(name).into_iter().find(|b| {
         b.no_shadow
             && b.defined
             && matches!(b.kind, BindingKind::Func { .. })
-            && function_signature_string(ctx, b.ty) == target_sig
+            && same_function_signature(ctx, b.ty, ty)
     })
 }
 
@@ -6714,12 +6715,22 @@ fn function_signature_string(ctx: &TypeCtx, ty: TypeId) -> String {
     let resolved = ctx.resolve_id(ty);
     match ctx.get(resolved) {
         TypeKind::Function {
+            type_params,
             params,
             result,
             effect,
-            ..
         } => {
+            let mut generics = BTreeMap::new();
+            for (i, tp) in type_params.iter().enumerate() {
+                let mut name = String::from("$T");
+                name.push_str(&i.to_string());
+                generics.insert(ctx.resolve_id(*tp), name);
+            }
             let mut s = String::from("func");
+            if !type_params.is_empty() {
+                s.push_str("_gen_");
+                s.push_str(&type_params.len().to_string());
+            }
             s.push_str("__");
             if params.is_empty() {
                 s.push_str("unit");
@@ -6728,11 +6739,11 @@ fn function_signature_string(ctx: &TypeCtx, ty: TypeId) -> String {
                     if i > 0 {
                         s.push('_');
                     }
-                    s.push_str(&ctx.type_to_string(*p));
+                    s.push_str(&signature_type_string(ctx, *p, &generics));
                 }
             }
             s.push_str("__");
-            s.push_str(&ctx.type_to_string(result));
+            s.push_str(&signature_type_string(ctx, result, &generics));
             match effect {
                 Effect::Pure => s.push_str("__pure"),
                 Effect::Impure => s.push_str("__imp"),
@@ -6740,6 +6751,344 @@ fn function_signature_string(ctx: &TypeCtx, ty: TypeId) -> String {
             s
         }
         _ => ctx.type_to_string(resolved),
+    }
+}
+
+fn same_function_signature(ctx: &TypeCtx, a: TypeId, b: TypeId) -> bool {
+    let ra = ctx.resolve_id(a);
+    let rb = ctx.resolve_id(b);
+    let (tpa, pa, resa, ea) = match ctx.get(ra) {
+        TypeKind::Function {
+            type_params,
+            params,
+            result,
+            effect,
+        } => (type_params, params, result, effect),
+        _ => return ctx.same_type(ra, rb),
+    };
+    let (tpb, pb, resb, eb) = match ctx.get(rb) {
+        TypeKind::Function {
+            type_params,
+            params,
+            result,
+            effect,
+        } => (type_params, params, result, effect),
+        _ => return false,
+    };
+    if ea != eb || tpa.len() != tpb.len() || pa.len() != pb.len() {
+        return false;
+    }
+    let mut map_ab: BTreeMap<TypeId, TypeId> = BTreeMap::new();
+    let mut map_ba: BTreeMap<TypeId, TypeId> = BTreeMap::new();
+    for (ta, tb) in tpa.iter().zip(tpb.iter()) {
+        map_ab.insert(ctx.resolve_id(*ta), ctx.resolve_id(*tb));
+        map_ba.insert(ctx.resolve_id(*tb), ctx.resolve_id(*ta));
+    }
+    let mut seen = BTreeSet::new();
+    for (ta, tb) in pa.iter().zip(pb.iter()) {
+        if !same_type_with_signature_generics(
+            ctx,
+            *ta,
+            *tb,
+            &map_ab,
+            &map_ba,
+            &mut seen,
+        ) {
+            return false;
+        }
+    }
+    same_type_with_signature_generics(ctx, resa, resb, &map_ab, &map_ba, &mut seen)
+}
+
+fn same_type_with_signature_generics(
+    ctx: &TypeCtx,
+    a: TypeId,
+    b: TypeId,
+    map_ab: &BTreeMap<TypeId, TypeId>,
+    map_ba: &BTreeMap<TypeId, TypeId>,
+    seen: &mut BTreeSet<(TypeId, TypeId)>,
+) -> bool {
+    let ra = ctx.resolve_id(a);
+    let rb = ctx.resolve_id(b);
+    if ra == rb {
+        return true;
+    }
+    if let Some(mapped) = map_ab.get(&ra) {
+        return *mapped == rb;
+    }
+    if let Some(mapped) = map_ba.get(&rb) {
+        return *mapped == ra;
+    }
+    let key = if ra <= rb { (ra, rb) } else { (rb, ra) };
+    if !seen.insert(key) {
+        return true;
+    }
+    let result = match (ctx.get(ra), ctx.get(rb)) {
+        (TypeKind::Unit, TypeKind::Unit)
+        | (TypeKind::I32, TypeKind::I32)
+        | (TypeKind::U8, TypeKind::U8)
+        | (TypeKind::F32, TypeKind::F32)
+        | (TypeKind::Bool, TypeKind::Bool)
+        | (TypeKind::Str, TypeKind::Str)
+        | (TypeKind::Never, TypeKind::Never) => true,
+        (TypeKind::Named(na), TypeKind::Named(nb)) => na == nb,
+        (TypeKind::Box(ia), TypeKind::Box(ib)) => {
+            same_type_with_signature_generics(ctx, ia, ib, map_ab, map_ba, seen)
+        }
+        (TypeKind::Reference(ia, ma), TypeKind::Reference(ib, mb)) => {
+            ma == mb && same_type_with_signature_generics(ctx, ia, ib, map_ab, map_ba, seen)
+        }
+        (TypeKind::Tuple { items: ia }, TypeKind::Tuple { items: ib }) => {
+            ia.len() == ib.len()
+                && ia.iter().zip(ib.iter()).all(|(ta, tb)| {
+                    same_type_with_signature_generics(ctx, *ta, *tb, map_ab, map_ba, seen)
+                })
+        }
+        (
+            TypeKind::Apply { base: ba, args: aa },
+            TypeKind::Apply { base: bb, args: ab },
+        ) => {
+            aa.len() == ab.len()
+                && same_type_with_signature_generics(ctx, ba, bb, map_ab, map_ba, seen)
+                && aa.iter().zip(ab.iter()).all(|(ta, tb)| {
+                    same_type_with_signature_generics(ctx, *ta, *tb, map_ab, map_ba, seen)
+                })
+        }
+        (
+            TypeKind::Function {
+                type_params: tpa,
+                params: pa,
+                result: resa,
+                effect: ea,
+            },
+            TypeKind::Function {
+                type_params: tpb,
+                params: pb,
+                result: resb,
+                effect: eb,
+            },
+        ) => {
+            if ea != eb || tpa.len() != tpb.len() || pa.len() != pb.len() {
+                false
+            } else {
+                let mut nested_ab = map_ab.clone();
+                let mut nested_ba = map_ba.clone();
+                for (ta, tb) in tpa.iter().zip(tpb.iter()) {
+                    nested_ab.insert(ctx.resolve_id(*ta), ctx.resolve_id(*tb));
+                    nested_ba.insert(ctx.resolve_id(*tb), ctx.resolve_id(*ta));
+                }
+                pa.iter().zip(pb.iter()).all(|(ta, tb)| {
+                    same_type_with_signature_generics(
+                        ctx,
+                        *ta,
+                        *tb,
+                        &nested_ab,
+                        &nested_ba,
+                        seen,
+                    )
+                }) && same_type_with_signature_generics(
+                    ctx, resa, resb, &nested_ab, &nested_ba, seen,
+                )
+            }
+        }
+        (TypeKind::Var(va), TypeKind::Var(vb)) => match (va.binding, vb.binding) {
+            (Some(ba), Some(bb)) => {
+                same_type_with_signature_generics(ctx, ba, bb, map_ab, map_ba, seen)
+            }
+            (Some(ba), None) => {
+                same_type_with_signature_generics(ctx, ba, rb, map_ab, map_ba, seen)
+            }
+            (None, Some(bb)) => {
+                same_type_with_signature_generics(ctx, ra, bb, map_ab, map_ba, seen)
+            }
+            (None, None) => va.label == vb.label,
+        },
+        (TypeKind::Var(va), _) => va
+            .binding
+            .map(|ba| same_type_with_signature_generics(ctx, ba, rb, map_ab, map_ba, seen))
+            .unwrap_or(false),
+        (_, TypeKind::Var(vb)) => vb
+            .binding
+            .map(|bb| same_type_with_signature_generics(ctx, ra, bb, map_ab, map_ba, seen))
+            .unwrap_or(false),
+        (
+            TypeKind::Struct {
+                name: na,
+                type_params: tpa,
+                fields: fa,
+                field_names: fna,
+                ..
+            },
+            TypeKind::Struct {
+                name: nb,
+                type_params: tpb,
+                fields: fb,
+                field_names: fnb,
+                ..
+            },
+        ) => {
+            na == nb
+                && fna == fnb
+                && tpa.len() == tpb.len()
+                && fa.len() == fb.len()
+                && tpa.iter().zip(tpb.iter()).all(|(ta, tb)| {
+                    same_type_with_signature_generics(ctx, *ta, *tb, map_ab, map_ba, seen)
+                })
+                && fa.iter().zip(fb.iter()).all(|(ta, tb)| {
+                    same_type_with_signature_generics(ctx, *ta, *tb, map_ab, map_ba, seen)
+                })
+        }
+        (
+            TypeKind::Enum {
+                name: na,
+                type_params: tpa,
+                variants: va,
+                ..
+            },
+            TypeKind::Enum {
+                name: nb,
+                type_params: tpb,
+                variants: vb,
+                ..
+            },
+        ) => {
+            na == nb
+                && tpa.len() == tpb.len()
+                && va.len() == vb.len()
+                && tpa.iter().zip(tpb.iter()).all(|(ta, tb)| {
+                    same_type_with_signature_generics(ctx, *ta, *tb, map_ab, map_ba, seen)
+                })
+                && va.iter().zip(vb.iter()).all(|(a, b)| {
+                    a.name == b.name
+                        && match (a.payload, b.payload) {
+                            (Some(pa), Some(pb)) => {
+                                same_type_with_signature_generics(ctx, pa, pb, map_ab, map_ba, seen)
+                            }
+                            (None, None) => true,
+                            _ => false,
+                        }
+                })
+        }
+        _ => false,
+    };
+    seen.remove(&key);
+    result
+}
+
+fn signature_type_string(ctx: &TypeCtx, ty: TypeId, generics: &BTreeMap<TypeId, String>) -> String {
+    let resolved = ctx.resolve_id(ty);
+    if let Some(name) = generics.get(&resolved) {
+        return name.clone();
+    }
+    match ctx.get(resolved) {
+        TypeKind::Unit => String::from("unit"),
+        TypeKind::I32 => String::from("i32"),
+        TypeKind::U8 => String::from("u8"),
+        TypeKind::F32 => String::from("f32"),
+        TypeKind::Bool => String::from("bool"),
+        TypeKind::Str => String::from("str"),
+        TypeKind::Never => String::from("never"),
+        TypeKind::Named(name) => name,
+        TypeKind::Var(tv) => {
+            if let Some(binding) = tv.binding {
+                signature_type_string(ctx, binding, generics)
+            } else {
+                tv.label.unwrap_or_else(|| format!("var_{}", resolved.0))
+            }
+        }
+        TypeKind::Tuple { items } => {
+            let mut s = String::from("tuple_");
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    s.push('_');
+                }
+                s.push_str(&signature_type_string(ctx, *item, generics));
+            }
+            s
+        }
+        TypeKind::Apply { base, args } => {
+            let mut s = signature_type_string(ctx, base, generics);
+            s.push('_');
+            for (i, arg) in args.iter().enumerate() {
+                if i > 0 {
+                    s.push('_');
+                }
+                s.push_str(&signature_type_string(ctx, *arg, generics));
+            }
+            s
+        }
+        TypeKind::Box(inner) => {
+            let mut s = String::from("box_");
+            s.push_str(&signature_type_string(ctx, inner, generics));
+            s
+        }
+        TypeKind::Reference(inner, is_mut) => {
+            let mut s = String::from("ref_");
+            if is_mut {
+                s.push_str("mut_");
+            }
+            s.push_str(&signature_type_string(ctx, inner, generics));
+            s
+        }
+        TypeKind::Function {
+            params,
+            result,
+            effect,
+            ..
+        } => {
+            let mut s = String::from("fn__");
+            for (i, p) in params.iter().enumerate() {
+                if i > 0 {
+                    s.push('_');
+                }
+                s.push_str(&signature_type_string(ctx, *p, generics));
+            }
+            s.push_str("__");
+            s.push_str(&signature_type_string(ctx, result, generics));
+            match effect {
+                Effect::Pure => s.push_str("__pure"),
+                Effect::Impure => s.push_str("__imp"),
+            }
+            s
+        }
+        TypeKind::Enum {
+            name,
+            type_params,
+            ..
+        } => {
+            if type_params.is_empty() {
+                name
+            } else {
+                let mut s = name;
+                s.push('_');
+                for (i, tp) in type_params.iter().enumerate() {
+                    if i > 0 {
+                        s.push('_');
+                    }
+                    s.push_str(&signature_type_string(ctx, *tp, generics));
+                }
+                s
+            }
+        }
+        TypeKind::Struct {
+            name,
+            type_params,
+            ..
+        } => {
+            if type_params.is_empty() {
+                name
+            } else {
+                let mut s = name;
+                s.push('_');
+                for (i, tp) in type_params.iter().enumerate() {
+                    if i > 0 {
+                        s.push('_');
+                    }
+                    s.push_str(&signature_type_string(ctx, *tp, generics));
+                }
+                s
+            }
+        }
     }
 }
 

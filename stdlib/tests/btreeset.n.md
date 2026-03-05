@@ -36,19 +36,19 @@ fn main <()*>i32> ():
     let s0 <BTreeSet>:
         btreeset_new
         |> btreeset_insert 5
-        |> btreeset_insert 1;
+        |> btreeset_insert 1
     let ok0 <bool> btreeset_contains s0 1;
     let s1 <BTreeSet>:
         btreeset_new
         |> btreeset_insert 5
         |> btreeset_insert 1
-        |> btreeset_remove 1;
+        |> btreeset_remove 1
     let ok1a <bool> if btreeset_contains s1 1 false true;
     let s2 <BTreeSet>:
         btreeset_new
         |> btreeset_insert 5
         |> btreeset_insert 1
-        |> btreeset_remove 1;
+        |> btreeset_remove 1
     let ok1b <bool> eq btreeset_len s2 1;
     let ok1 <bool> and ok1a ok1b;
     if and ok0 ok1 1 0

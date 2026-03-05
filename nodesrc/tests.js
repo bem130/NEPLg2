@@ -447,13 +447,17 @@ function normalizePathLike(p) {
 function extractDiagSpansFromCompileError(text) {
     const src = stripAnsi(String(text || '')).replace(/\r\n/g, '\n');
     const out = [];
-    const re = /-->\s+(.+?):(\d+):(\d+)/g;
-    let m;
-    while ((m = re.exec(src)) !== null) {
+    const lines = src.split('\n');
+    for (const line of lines) {
+        const m = line.match(/^\s*-->\s+(.+)\s*$/);
+        if (!m) continue;
+        const loc = String(m[1] || '').trim();
+        const lm = loc.match(/^(.*):(\d+):(\d+)$/);
+        if (!lm) continue;
         out.push({
-            file: String(m[1] || '').trim(),
-            line: Number(m[2]),
-            col: Number(m[3]),
+            file: String(lm[1] || '').trim(),
+            line: Number(lm[2]),
+            col: Number(lm[3]),
         });
     }
     return out;

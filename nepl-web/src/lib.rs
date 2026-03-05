@@ -8,7 +8,7 @@ use nepl_core::diagnostic_ids::DiagnosticId;
 use nepl_core::error::CoreError;
 use nepl_core::hir::{HirBlock, HirExpr, HirExprKind, HirLine};
 use nepl_core::lexer::{lex, Token, TokenKind};
-use nepl_core::loader::{Loader, SourceMap};
+use nepl_core::loader::{Loader, LoaderError, SourceMap};
 use nepl_core::parser::parse_tokens;
 use nepl_core::span::{FileId, Span};
 use nepl_core::typecheck::typecheck;
@@ -388,6 +388,7 @@ fn token_kind_name(kind: &TokenKind) -> &'static str {
         TokenKind::DirUse(_) => "DirUse",
         TokenKind::DirIfTarget(_) => "DirIfTarget",
         TokenKind::DirIfProfile(_) => "DirIfProfile",
+        TokenKind::DirCapability(_) => "DirCapability",
         TokenKind::DirWasm => "DirWasm",
         TokenKind::DirLlvmIr => "DirLlvmIr",
         TokenKind::DirIndentWidth(_) => "DirIndentWidth",
@@ -416,6 +417,7 @@ fn token_extra(kind: &TokenKind) -> Option<String> {
         | TokenKind::DirUse(v)
         | TokenKind::DirIfTarget(v)
         | TokenKind::DirIfProfile(v)
+        | TokenKind::DirCapability(v)
         | TokenKind::DirInclude(v)
         | TokenKind::DirPrelude(v)
         | TokenKind::WasmText(v)
@@ -3103,7 +3105,7 @@ fn compile_wasm_with_entry_and_profile_and_stdlib(
     };
     let loaded = loader
         .load_inline_with_provider(PathBuf::from(entry_path), source.to_string(), &mut provider)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| render_loader_error(e, loader.source_map()))?;
     let artifact = compile_module(
         loaded.module,
         CompileOptions {
@@ -3185,6 +3187,13 @@ fn render_core_error(err: CoreError, sm: &SourceMap) -> String {
     match err {
         CoreError::Diagnostics(diags) => render_diagnostics(&diags, sm),
         other => other.to_string(),
+    }
+}
+
+fn render_loader_error(err: LoaderError, sm: &SourceMap) -> String {
+    match err {
+        LoaderError::Io(msg) => format!("IO error: {}", msg),
+        LoaderError::Core(core) => render_core_error(core, sm),
     }
 }
 

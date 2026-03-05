@@ -31,13 +31,13 @@
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3
 //:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1;
+//:         |> list_push_front<i32> 1
 //:     let ok0 if eq list_len<i32> base0 3 1 0;
 //:     let base1 <List<i32>>:
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3
 //:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1;
+//:         |> list_push_front<i32> 1
 //:     let ok1 match list_head<i32> base1:
 //:         Option::Some x:
 //:             if eq x 1 1 0
@@ -47,7 +47,7 @@
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3
 //:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1;
+//:         |> list_push_front<i32> 1
 //:     let ok2 match list_get<i32> base2 1:
 //:         Option::Some x:
 //:             if eq x 2 1 0
@@ -57,7 +57,7 @@
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3
 //:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1;
+//:         |> list_push_front<i32> 1
 //:     let ok3 match list_tail<i32> base3:
 //:         Option::Some t:
 //:             if eq list_len<i32> t 2 1 0
@@ -82,7 +82,7 @@
 //:         list_nil<str>
 //:         |> list_push_front<str> "c"
 //:         |> list_push_front<str> "b"
-//:         |> list_push_front<str> "a";
+//:         |> list_push_front<str> "a"
 //:     let ra list_reverse<str> src0;
 //:     let ok0 match list_head<str> ra:
 //:         Option::Some x:
@@ -93,7 +93,7 @@
 //:         list_nil<str>
 //:         |> list_push_front<str> "c"
 //:         |> list_push_front<str> "b"
-//:         |> list_push_front<str> "a";
+//:         |> list_push_front<str> "a"
 //:     let rb list_reverse<str> src1;
 //:     let ok1 match list_get<str> rb 2:
 //:         Option::Some x:
@@ -104,7 +104,7 @@
 //:         list_nil<str>
 //:         |> list_push_front<str> "c"
 //:         |> list_push_front<str> "b"
-//:         |> list_push_front<str> "a";
+//:         |> list_push_front<str> "a"
 //:     let rc list_reverse<str> src2;
 //:     let ok2 if is_none<str> list_get<str> rc 3 1 0;
 //:     let s01 <i32> add ok0 ok1;
@@ -276,7 +276,7 @@ fn list_head <.T> <(List<.T>)->Option<.T>> (lst):
 //:     let l2 <List<i32>>:
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1;
+//:         |> list_push_front<i32> 1
 //:     match list_tail<i32> l2:
 //:         Option::Some t:
 //:             if eq list_len<i32> t 1 0 1
@@ -346,7 +346,7 @@ fn list_is_empty <.T> <(List<.T>)->bool> (lst):
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3
 //:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1;
+//:         |> list_push_front<i32> 1
 //:     if eq list_len<i32> l3 3 0 1
 //: ```
 fn list_len <.T> <(List<.T>)->i32> (lst):
@@ -387,7 +387,7 @@ fn list_len <.T> <(List<.T>)->i32> (lst):
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3
 //:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1;
+//:         |> list_push_front<i32> 1
 //:     match list_get<i32> l3 1:
 //:         Option::Some x:
 //:             if eq x 2 0 1
@@ -480,7 +480,7 @@ fn list_free <.T> <(List<.T>)->()> (lst):
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3
 //:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1;
+//:         |> list_push_front<i32> 1
 //:     let r list_reverse<i32> l3;
 //:     match list_head<i32> r:
 //:         Option::Some x:

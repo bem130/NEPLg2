@@ -171,10 +171,10 @@ fn main <()->i32> ():
     add as_i32 s1 as_i32 s2
 ```
 
-## グローバル変数の set は impure になる
+## 関数内で未定義変数を set すると拒否
 
 neplg2:test[compile_fail]
-diag_id: 3025
+diag_id: 3002
 ```neplg2
 #entry main
 #indent 4
@@ -199,14 +199,17 @@ diag_id: 3051
 #indent 4
 #target core
 
-fn id <(i32)->i32> (x):
+struct Boxed:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
     x
 
 fn main <()->i32> ():
-    let f @id
-    let r &f
-    let g f
-    g 1
+    let b <Boxed> Boxed @token_id
+    let r &b
+    let c b
+    0
 ```
 
 ## Copy値への borrow は move を阻害しない
@@ -236,10 +239,12 @@ diag_id: 3049
 #target core
 
 trait Clone:
+    #capability clone
     fn clone <(Self)->Self> (x):
         x
 
 trait Copy:
+    #capability copy
     fn copy_mark <(Self)->Self> (x):
         x
 
@@ -249,6 +254,9 @@ struct RegionToken:
 impl Copy for RegionToken:
     fn copy_mark <(RegionToken)->RegionToken> (x):
         x
+
+fn main <()->i32> ():
+    0
 ```
 
 ## Copy impl には Clone impl が必要
@@ -261,16 +269,21 @@ diag_id: 3050
 #target core
 
 trait Clone:
+    #capability clone
     fn clone <(Self)->Self> (x):
         x
 
 trait Copy:
+    #capability copy
     fn copy_mark <(Self)->Self> (x):
         x
 
 impl Copy for i32:
     fn copy_mark <(i32)->i32> (x):
         x
+
+fn main <()->i32> ():
+    0
 ```
 
 ## Clone と Copy の両方があれば受理
@@ -283,10 +296,12 @@ ret: 0
 #target core
 
 trait Clone:
+    #capability clone
     fn clone <(Self)->Self> (x):
         x
 
 trait Copy:
+    #capability copy
     fn copy_mark <(Self)->Self> (x):
         x
 
@@ -310,12 +325,15 @@ diag_id: 3053
 #entry main
 #indent 4
 #target core
+#import "core/cast" as *
 
 trait Clone:
+    #capability clone
     fn clone <(Self)->Self> (x):
         x
 
 trait Copy:
+    #capability copy
     fn copy_mark <(Self)->Self> (x):
         x
 
@@ -341,10 +359,12 @@ ret: 0
 #import "core/cast" as *
 
 trait Clone:
+    #capability clone
     fn clone <(Self)->Self> (x):
         x
 
 trait Copy:
+    #capability copy
     fn copy_mark <(Self)->Self> (x):
         x
 
@@ -383,6 +403,69 @@ impl Mark for i32:
 impl Mark for i32:
     fn mark <(i32)->i32> (x):
         x
+```
+
+## marker trait は #capability copy 未指定なら Copy 扱いしない
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Marker:
+    fn tag <(Self)->Self> (x):
+        x
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+impl Marker for RegionToken:
+    fn tag <(RegionToken)->RegionToken> (x):
+        x
+
+fn main <()->i32> ():
+    0
+```
+
+## clone 形状の trait も #capability clone 未指定なら Clone 扱いしない
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Dup:
+    fn dup <(Self)->Self> (x):
+        x
+
+impl Dup for i32:
+    fn dup <(i32)->i32> (x):
+        x
+
+fn main <()->i32> ():
+    0
+```
+
+## 不明 capability 名は診断ID付きで拒否
+
+neplg2:test[compile_fail]
+diag_id: 3096
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait BadCap:
+    #capability cpoy
+    fn f <(Self)->Self> (x):
+        x
+
+fn main <()->i32> ():
+    0
 ```
 
 ## RegionToken は非Copyとして move 後再利用不可
@@ -471,11 +554,9 @@ diag_id: 3011
 #indent 4
 #target core
 
-#import "core/field" as *
-
 fn main <()->i32> ():
-    let v <i32> get 1 0
-    v
+    let v <i32> 10;
+    v.len
 ```
 
 ## Writer は非Copyとして move 後再利用不可

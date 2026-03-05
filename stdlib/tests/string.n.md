@@ -15,7 +15,7 @@ ret: 1
 fn main <()*>i32> ():
     let s:
         "hello"
-        |> concat "world";
+        |> concat "world"
     let s1234 from_i32 1234;
     let ok0 eq len s 10;
     let ok1 eq len s1234 4;
@@ -64,7 +64,7 @@ fn main <()*>i32> ():
         |> sb_append "Error: "
         |> sb_append_i32 404
         |> sb_append " Not Found"
-        |> sb_build;
+        |> sb_build
     let ok0 eq vec_len<str> parts 3;
     let ok1 eq len msg 20;
     if and ok0 ok1 1 0

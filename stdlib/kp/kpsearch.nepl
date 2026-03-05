@@ -56,7 +56,7 @@ fn lower_bound_i32 <(i32,i32,i32)*>i32> (data, len, x):
                 then:
                     let next <i32> add mid 1;
                     set lo next;
-                else set hi mid;
+                else set hi mid
     lo
 
 //: upper_bound_i32: `x` より大きい値が最初に現れる位置を返す
@@ -74,7 +74,7 @@ fn upper_bound_i32 <(i32,i32,i32)*>i32> (data, len, x):
                 then:
                     let next <i32> add mid 1;
                     set lo next;
-                else set hi mid;
+                else set hi mid
     lo
 
 //: contains_i32: 値 `x` が存在するか判定する
@@ -169,7 +169,7 @@ fn count_equal_range_i32 <(i32,i32,i32)*>i32> (data, len, x):
 //:         do:
 //:             if gt i 0:
 //:                 then print " "
-//:                 else ();
+//:                 else ()
 //:             print_i32 load_i32 add data mul i 4;
 //:             set i add i 1;
 //:     println "";
@@ -197,6 +197,6 @@ fn unique_sorted_i32 <(i32,i32)*>i32> (data, len):
                             let write_ptr <i32> add data write_off;
                             store_i32 write_ptr cur;
                             set write add write 1;
-                        else ();
+                        else ()
                     set read add read 1;
             write

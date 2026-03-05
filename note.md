@@ -1,3 +1,507 @@
+# 2026-03-05 作業メモ (フェーズD: kpread_core ヘッダフィールドの型安全化)
+
+- 目的:
+  - `kpread_core` に残っていたヘッダ生オフセット（`0/4/8`）を列挙型へ移行し、`kpread`/`kpwrite` と同じ境界表現に揃える。
+  - ヘッダレイアウトの意味を型で固定し、オフセット誤指定を上流で防ぐ。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `ScannerHeaderFieldCore` を追加（`BufPtr` / `Len` / `Pos`）。
+    - `scanner_header_core_off` を追加し、オフセット解決を1箇所に集約。
+    - `store_i32_u8_at sc*_region 0/4/8 ...` を列挙型 + オフセット関数経由へ置換。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-kp-core-header-field-enum.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpread-core-header-field-enum.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpwrite ヘッダフィールドの型安全化)
+
+- 目的:
+  - `kpwrite` のヘッダアクセスで使っていた生オフセット値（`0/4/8/12/16`）を列挙型に置換し、`kpread` と同じ安全モデルへ統一する。
+  - `mem/kpread/kpwrite` の公開API安全化で、ヘッダ境界の意味を型で表現する。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `WriterHeaderField` を追加（`BufPtr` / `Cap` / `WriteLen` / `IovPtr` / `NwPtr`）。
+    - `writer_header_off` を追加し、オフセット解決を一箇所に集約。
+    - `writer_header_ptr` / `writer_load_header` / `writer_store_header` / `writer_load_header_ptr` の第2引数を `i32` から `WriterHeaderField` に変更。
+    - 呼び出し側の生数値オフセットを全廃し、列挙値に置換。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl --no-tree -o /tmp/tests-kp-header-field-enum-unified.json -j 15` -> `226/226 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpwrite-header-field-enum.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpread ヘッダフィールドの型安全化)
+
+- 目的:
+  - `kpread` のヘッダアクセスで使っていた生オフセット値（`0/4/8`）を列挙型へ置き換え、呼び出し側の誤指定を減らす。
+  - `todo.md` 2026-03-03 フェーズD（`mem/kpread/kpwrite` の公開API安全化）に沿って、上流の表現を固定する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `ScannerHeaderField` を追加（`BufPtr` / `Len` / `Pos`）。
+    - `scanner_header_off` を追加し、オフセット解決を1箇所へ集約。
+    - `scanner_header_ptr` / `scanner_load_header` / `scanner_store_header` の第2引数を `i32` から `ScannerHeaderField` に変更。
+    - 呼び出し側の `scanner_load_header sc 0/4/8` と `scanner_store_header sc 8 ...` を列挙型指定へ置換。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpread.nepl --no-tree -o /tmp/tests-kpread-header-field-targeted.json -j 15` -> `222/222 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpread-header-field.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpread ヘッダアクセスのサイレント失敗を除去)
+
+- 目的:
+  - `scanner_load_header` / `scanner_store_header` の失敗時フォールバック（`0` / `()`）を廃止し、ヘッダ不整合を隠蔽しない。
+  - 上流仕様（安全API優先）に合わせ、壊れた状態を継続させるより即時停止に統一する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_load_header`:
+      - `scanner_header_ptr` が `Err` の場合の `0` 返却を `#intrinsic "unreachable"` へ変更。
+      - `load_i32` が `None` の場合の `0` 返却を `#intrinsic "unreachable"` へ変更。
+    - `scanner_store_header`:
+      - `scanner_header_ptr` が `Err` の場合の無視を `#intrinsic "unreachable"` へ変更。
+      - `store_i32` が `Err` の場合の無視を `#intrinsic "unreachable"` へ変更。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpread.nepl --no-tree -o /tmp/tests-kpread-header-unreachable-targeted.json -j 15` -> `222/222 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpread-unreachable.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (フェーズD先行: Writer を RegionToken 保持へ移行)
+
+- 目的:
+  - `kpread` と同様に `kpwrite` でも公開ハンドルが領域情報を持つようにし、メモリ安全APIを統一する。
+- 根本原因:
+  - `Writer` は `MemPtr<u8>` を直接保持し、ヘッダ領域サイズ（20byte）が型に表現されていなかった。
+  - 途中で追加した `writer_mem(Writer)->MemPtr<u8>` ヘルパは `Writer` を値渡しで受けるため、
+    non-copy な `Writer` の move を発生させ `D3053` を引き起こした。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `Writer.raw` を `Writer.region: RegionToken<u8>` に変更。
+    - `writer_wrap` で `region_new raw 20` を構築。
+    - `writer_mem` ヘルパは削除し、`region_ptr get w "region"` を直接展開して move を回避。
+  - `stdlib/kp/kpread_core.nepl`
+    - `store_i32_u8_at/load_i32_u8_at` を `RegionToken<u8>` 受け取りへ変更。
+    - `sc0/iov/nread/sc` の各領域を `RegionToken` 化してアクセス経路を統一。
+    - 途中で発生した `match` アーム崩れ（`D3009/D3008/D3045`）を修正。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-writer-regiontoken-v3.json -j 15`
+  - 結果: `221/221 pass`
+
+# 2026-03-05 作業メモ (フェーズD先行: kpread_core の内部ヘッダアクセスを RegionToken 化)
+
+- 目的:
+  - `kpread_core` の内部メモリアクセスも `RegionToken` 経由に統一し、`MemPtr + off` の直接算術依存を減らす。
+- 根本原因:
+  - `store_i32_u8_at` / `load_i32_u8_at` が `MemPtr<u8>` と `off` から直接 `MemPtr<i32>` を作る設計で、
+    領域境界の前提がヘルパ外へ漏れていた。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `mem_i32_region_ptr` を追加し、`region_ptr_at<u8,i32>` を使用。
+    - `store_i32_u8_at` / `load_i32_u8_at` の引数を `RegionToken<u8>` に変更。
+    - `sc0(12)`, `iov(8)`, `nread(4)`, `sc(12)` で `RegionToken` を構築してヘルパへ渡す形に更新。
+  - 途中修正:
+    - `match dealloc_ptr<u8> buf cap` の `Result::Err` アームのインデント崩れにより
+      `D3009/D3008/D3045` が発生したため、分岐構造を正しく修正。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-kpread-core-regiontoken-v2.json -j 15`
+  - 結果: `221/221 pass`
+
+# 2026-03-05 作業メモ (フェーズD先行: kpwrite ヘッダアクセスを RegionToken 経由へ移行)
+
+- 目的:
+  - `kpwrite` 側でもヘッダアクセスを `RegionToken` ベースに寄せ、`core/mem` の境界検証APIを再利用できるようにする。
+- 根本原因:
+  - 既存 `writer_header_ptr` は `mem_ptr_addr + off` で直接アドレス算術を行い、
+    20byte ヘッダ境界の前提を関数ごとに暗黙化していた。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_header_region` を追加（`region_new w_mem 20`）。
+    - `writer_header_ptr` を `Result<MemPtr<i32>,str>` へ変更し、`region_ptr_at<u8,i32>` を使用。
+    - `writer_load_header` / `writer_store_header` を上記 `Result` 経路へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-writer-header-regiontoken.json -j 15`
+  - 結果: `221/221 pass`
+
+# 2026-03-05 作業メモ (フェーズD先行: kpread の Scanner ヘッダを RegionToken 化)
+
+- 目的:
+  - `todo.md` フェーズD着手として、`kpread` の公開ハンドルに領域所有情報を持たせ、`core/mem` の新安全APIへ寄せる。
+- 根本原因:
+  - `Scanner` が `MemPtr<u8>` 直接保持のみで、ヘッダ領域境界の情報が型に乗っていなかった。
+  - ヘッダアクセスが `mem_ptr_addr + off` の算術依存で、境界検証を再利用しにくかった。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `Scanner` フィールドを `raw: MemPtr<u8>` から `region: RegionToken<u8>` に変更。
+    - `scanner_wrap` で `region_new raw 12` を構築。
+    - `scanner_header_ptr` を `region_ptr_at<u8,i32>` ベースの `Result` 返却へ変更。
+    - `scanner_load_header` / `scanner_store_header` を上記 `Result` 経路で処理。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-scanner-regiontoken.json -j 15`
+  - 結果: `221/221 pass`
+
+# 2026-03-05 作業メモ (フェーズC: core/mem に RegionToken 安全APIを追加)
+
+- 目的:
+  - `todo.md` フェーズCに沿って、`MemPtr<T>` と `RegionToken<T>` を使う安全APIを `core/mem` に追加し、`kpread/kpwrite` 移行の上流基盤を作る。
+- 根本原因:
+  - 既存 `mem` は `MemPtr<T>` までは整備済みだったが、領域所有を表す公開APIが不足しており、
+    境界情報付きアクセスを型として統一できていなかった。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `RegionToken<T>` 補助APIを追加:
+      - `region_new`
+      - `region_in_bounds`
+      - `region_ptr_at`
+      - `alloc_region_bytes`
+      - `alloc_region`
+      - `dealloc_region`
+    - これにより、領域サイズを伴う型付きオフセット取得を `Result` で扱えるようにした。
+  - `tests/memory_safety.n.md`
+    - `alloc_region/region_ptr_at/dealloc_region` の基本動作ケースを追加。
+    - 範囲外オフセットで `Result::Err` を返す回帰ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/block_semicolon_return.n.md -i tests/plan.n.md -i tests/block_single_line.n.md --no-stdlib --no-tree -o /tmp/tests-semicolon-focus.json -j 15`
+  - 結果: `67/67 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md --no-tree -o /tmp/tests-memory-safety-region-token.json -j 15`
+  - 結果: `211/211 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i tests/kp_i64.n.md --no-tree -o /tmp/tests-memory-kp-regression.json -j 15`
+  - 結果: `221/221 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: trait capability の型付き保持へ移行)
+
+- 目的:
+  - trait capability 判定の文字列再解析を減らし、型付きデータで一貫して扱う。
+- 根本原因:
+  - 既存実装では `TraitInfo.capabilities` が `Vec<String>` のため、
+    `TraitSemantics::detect` で毎回文字列を再パースしていた。
+  - この構造は capability 判定の責務が分散し、将来拡張時に不整合を生みやすい。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitInfo.capabilities` を `Vec<String>` から `Vec<TraitCapability>` へ変更。
+    - trait 定義処理 (`Stmt::Trait`) で capability を1回だけパースし、型付きで保持。
+    - 重複 capability 指定は同一trait内で重複登録しないよう整理。
+    - `TraitSemantics::detect` は `TraitInfo` 内の型付き capability を直接参照。
+    - 不要になった `detect_declared_trait_capabilities` を削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-after-capability-typed.json -j 15`
+  - 結果: `272/272 pass`
+  - `node nodesrc/tests.js -i tests/compile_fail_diag_location.n.md --no-tree -o /tmp/tests-compile-fail-diag-location-after-capability-typed.json -j 15`
+  - 結果: `207/207 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-capability-typed.json -j 15`
+  - 結果: `783/783 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpwrite header 読み取りの Result 化と None フォールバック廃止)
+
+- 目的:
+  - `writer_load_header` の `None -> 0` フォールバックを廃止し、header 読み取り失敗を明示分岐で扱う。
+- 根本原因:
+  - 従来の `writer_load_header` は `load_i32` 失敗時に 0 を返しており、異常状態を正常値へ潰していた。
+  - そのため後続処理で `buf/cap/iov/nw` が不正値のまま進行する余地があった。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_load_header` を `Result<i32,str>` へ変更。
+    - `writer_load_header_ptr` を `Result<MemPtr<u8>,str>` へ変更。
+    - `writer_free_handle`, `writer_flush_handle`, `writer_ensure_handle`,
+      `writer_put_u8_handle`, `writer_write_str_handle`,
+      `writer_write_i32_handle`, `writer_write_u64_handle` を
+      `Result` 分岐で安全に処理する形へ更新。
+    - `if` レイアウト中の冗長な `then: block:` を除去し、`D2002` 回避のため式構造を仕様準拠へ整理。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-after-header-result-v2.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-after-header-result.json -j 15`
+  - 結果: `226/226 pass`
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kpwrite-style-fix.json -j 15`
+  - 結果: `215/215 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpwrite の header アクセス集約と non-copy 整合)
+
+- 目的:
+  - `kpwrite.nepl` で散在していた header 生アクセス（`load_i32 add w_raw ...` / `store_i32 add w_raw ...`）を共通化し、`Writer` の non-copy/move 規則と矛盾しない形へ整理する。
+- 根本原因:
+  - `Writer` は non-copy なのに、最初のヘルパ化で `writer_load_header/store_header` が `Writer` 値渡しとなり、ヘルパ呼び出し自体が move を発生させ `D3053` を誘発していた。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_header_ptr/load/store` を追加。
+    - 上記ヘルパは `Writer` ではなく `w_raw:i32` を受け取り、`Writer` の move を発生させない設計に変更。
+    - `writer_free_handle`, `writer_flush_handle`, `writer_ensure_handle`, `writer_put_u8_handle`, `writer_write_str_handle`, `writer_write_i32_handle`, `writer_write_u64_handle` を共通ヘルパ経由に置換。
+    - 置換後、`w_raw` 直接参照は解放処理境界（`writer_free_handle`）のみへ縮小。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-header-v2.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v4.json -j 15`
+  - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: trait capability 判定の自動推定を廃止)
+
+- 目的:
+  - `copy/clone` の trait 意味付けを明示 capability (`#capability`) のみに限定し、暗黙推定による誤判定を根本的に除去する。
+- 根本原因:
+  - `TraitSemantics::detect` が capability 未指定時に
+    - `Self -> Self` 単一メソッド trait を clone 候補
+    - marker trait を copy 候補
+    として推定していた。
+  - これにより trait 設計意図と無関係な構造一致だけで copy/clone 意味が付与される余地があった。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitSemantics::detect` から clone/copy の自動候補推定を削除。
+    - `#capability copy` / `#capability clone` の宣言結果のみを意味付けに使用。
+    - 不要化した `trait_has_single_unary_self_to_self_method` と `trait_is_marker` を削除。
+    - `TraitSemantics::detect` の未使用 `ctx` 引数を削除。
+  - `tests/move_effect.n.md`
+    - `#capability` 未指定 trait が copy/clone として推定されないことを確認する回帰ケースを追加。
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D3096 TypeUnknownTraitCapability` を追加。
+  - `nepl-core/src/typecheck.rs`
+    - trait 定義で未知の `#capability` 名を検出し、`D3096` を返すよう変更。
+  - `tests/move_effect.n.md`
+    - `#capability cpoy` の compile_fail ケース（`diag_id: 3096`）を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-v1.json -j 15`
+  - 結果: `269/269 pass`
+  - `node nodesrc/tests.js -i tests/move_effect.n.md --no-tree -o /tmp/tests-move-effect-capability-v2.json -j 15`
+  - 結果: `227/227 pass`
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-v2.json -j 15`
+  - 結果: `272/272 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpread の header 直アクセスを共通安全ヘルパへ統一)
+
+- 目的:
+  - `kpread.nepl` で残っていた `sc_raw` ベースの header 直接読み書きを除去し、`Scanner` 境界の型安全性を上げる。
+- 根本原因:
+  - `scanner_header_ptr` / `scanner_load_header` / `scanner_store_header` を導入済みでも、主要パーサ関数が旧経路（`load_i32 add sc_raw ...` / `store_i32 add sc_raw ...`）を使い続けていた。
+  - これにより API 境界は `Scanner` でも、実装内部が生ポインタ前提のまま分岐していた。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - 以下の関数で header アクセスを `scanner_load_header` / `scanner_store_header` に統一:
+      - `scanner_skip_ws_handle`
+      - `scanner_is_eof_handle`
+      - `scanner_skip_token_handle`
+      - `scanner_read_token_handle`
+      - `scanner_read_i32_handle`
+      - `scanner_read_u64_handle`
+      - `scanner_read_i64_handle`
+      - `scanner_read_f64_handle`
+      - `scanner_read_all_i32_handle`
+    - 置換後、`kpread.nepl` 内の `sc_raw` 直接アクセスは `scanner_header_ptr` 内の実装一点のみに集約。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-safe-headers-v1.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v3.json -j 15`
+  - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpread 基盤 handle の Scanner 型化)
+
+- 目的:
+  - `kpread` の公開面で露出している生 `i32` ハンドル関数を段階的に減らすため、基盤となる3関数を `Scanner` 受け取りへ変更する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_skip_ws_handle` を `(Scanner)*>()` へ変更。
+    - `scanner_is_eof_handle` を `(Scanner)*>bool` へ変更。
+    - `scanner_skip_token_handle` を `(Scanner)*>()` へ変更。
+    - `scanner_read_token_handle` を `(Scanner)*>str` へ変更。
+    - 上記呼び出し箇所（`i32` ベースの既存 handle 群）では `scanner_wrap mem_ptr_wrap sc` を明示して渡すよう統一。
+    - 公開ラッパ（`scanner_skip_ws` など）は raw 取り出しをやめて `Scanner` を直接渡すよう簡素化。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-scanner-handle-v1.json -j 15`
+  - 結果: `217/217 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpread 残り handle 群の Scanner 型化完了)
+
+- 目的:
+  - `kpread` で残っていた `*_handle <(i32)...>` 群を `Scanner` 受け取りへ統一し、公開/内部の型境界を一貫化する。
+- 根本原因:
+  - 一部 handle が `i32` を直接受け取り、他の `Scanner` 受け取り関数と境界設計が混在していた。
+  - その結果、公開ラッパで `mem_ptr_addr get sc "raw"` を都度書く必要があり、raw 露出と誤用余地が残っていた。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - 以下を `Scanner` 受け取りへ変更:
+      - `scanner_read_i32_handle`
+      - `scanner_read_u64_handle`
+      - `scanner_read_i64_handle`
+      - `scanner_read_f64_handle`
+      - `scanner_read_f32_handle`
+      - `scanner_read_vec_i64_handle`
+      - `scanner_read_vec_i32_handle`
+      - `scanner_read_matrix_i32_handle`
+      - `scanner_read_all_i32_handle`
+      - `scanner_read_na_i32_handle`
+      - `scanner_read_interval_queries_i32_handle`
+      - `scanner_read_query_tuples_i32_handle`
+      - `scanner_read_ndrh_i32_handle`
+    - 各関数内部では必要箇所のみ `sc_raw = mem_ptr_addr get sc "raw"` を導入し、既存ロジックを維持。
+    - 公開ラッパ (`scanner_read_i32` など) は raw 抽出を削除して handle へ `Scanner` を直接渡すよう統一。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kpread-scanner-allhandles-v1.json -j 15`
+  - 結果: `212/212 pass`
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-scanner-allhandles-v2.json -j 15`
+  - 結果: `217/217 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpwrite handle API の線形化と move 整合化)
+
+- 目的:
+  - `kpwrite` の内部 API でも生 `i32` 境界を減らしつつ、`Writer` の non-copy 設計と move 規則が矛盾しない形へ整理する。
+- 根本原因:
+  - `Writer` を受ける handle が `()` を返す設計のまま `Writer` を複数回利用しており、`D3053/D3054`（moved value）を誘発していた。
+  - 一時 `writer_wrap` を多用する形は局所的には動くが、設計として線形消費規則が明確でなかった。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_flush_handle` / `writer_ensure_handle` / `writer_put_u8_handle` / `writer_writeln_handle` / `writer_write_*_handle` を `Writer` 受け取り・`Writer` 返却に統一。
+    - 各 handle で `w_raw` を内部取得し、更新後は `writer_wrap mem_ptr_wrap w_raw` を返す線形 API に変更。
+    - 複数操作を行う handle（`writer_write_i32_handle`, `writer_write_u64_handle`, `writer_write_*_ln_handle` など）は `let mut ww <Writer>` / `set ww ...` で線形に更新。
+    - 公開 API (`writer_write_i32` など) は raw 再ラップの重複を削除し、対応 handle を直接呼ぶ構造へ整理。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-kpwrite-only-v4.json -j 15`
+  - 結果: `208/208 pass`
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-handle-wrap-v3.json -j 15`
+  - 結果: `217/217 pass`
+
+- 補足（設計判断）:
+  - 一時 `writer_wrap` を都度作る呼び出しは move エラー回避としては機能するが、線形 API 設計として不明瞭だったため採用しない。
+  - `Writer -> Writer` の更新連鎖を handle 層で明示し、move 規則と API 契約を一致させる方針に統一した。
+
+# 2026-03-05 作業メモ (フェーズC: kpread_core の生メモリアクセス安全API化)
+
+- 目的:
+  - syscall 境界以外の生メモリアクセスを `MemPtr` + `Result/Option` 経由へ寄せ、失敗検出を上流化する。
+- 根本原因:
+  - `kpread_core` 内で `mem_ptr_addr` + 生 `store_i32/load_i32` を直接実行しており、境界不整合時に失敗を型で扱えなかった。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `mem_i32_ptr`, `store_i32_u8_at`, `load_i32_u8_at` を追加。
+    - scanner header 初期化 (`sc0`, `sc`) を `store_i32_u8_at` 経由へ変更し、失敗時は確保済み領域を解放して `Err` 返却。
+    - `iov/nread` 構築時の書き込みと `nread` 読み取りを安全ヘルパ経由へ変更。
+    - メモリアクセス失敗時は `mem_failed` を立て、後段で一括解放して `Result::Err \"kpread_core.memory access failed\"` を返す経路を追加。
+    - `fd_read` 呼び出し自体は syscall 仕様上 `i32` ポインタが必要なため、境界点でのみ `mem_ptr_addr` を使用。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-core-safe-v1.json -j 15`
+  - 結果: `217/217 pass`
+
+# 2026-03-05 作業メモ (フェーズC: `core/mem` の `*_ptr` を安全API経由へ統一)
+
+- 目的:
+  - `MemPtr` 系 API の内部実装を `alloc_raw/realloc_raw/dealloc_raw` 直結から分離し、`alloc/realloc/dealloc` を通る共通安全経路へ統一する。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `alloc_ptr` を `alloc` 経由へ変更。
+    - `realloc_ptr` を `realloc` 経由へ変更。
+    - `dealloc_ptr` を `dealloc` 経由へ変更。
+  - これにより `MemPtr` 系エラー経路は基底安全APIの前提検査結果と整合する。
+- 検証:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v2.json -j 15`
+  - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpread_core 内部確保を `*_ptr` API に統一)
+
+- 目的:
+  - `kpread_core` 内部での生ポインタ管理を減らし、`MemPtr<u8>` を使った確保/再確保/解放へ寄せる。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `buf/iov/nread/scanner header` の確保を `alloc_ptr<u8>` に変更。
+    - バッファ拡張を `realloc_ptr<u8>` に変更。
+    - 解放を `dealloc_ptr<u8>` に変更。
+    - `fd_read` や `store_i32/load_i32` へ渡す箇所のみ `mem_ptr_addr` で `i32` に明示変換。
+  - `scanner_new_impl` は既存どおり `Result<MemPtr<u8>,str>` を返し、API互換を維持。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-memptr-wrap-v6.json -j 15`
+  - 結果: `217/217 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpread_core の返却型を MemPtr 化)
+
+- 目的:
+  - `kpread` 入力初期化の上流（`kpread_core`）でも生 `i32` 返却を減らし、`MemPtr<u8>` で境界を揃える。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `scanner_new_impl` の戻り値を `Result<MemPtr<u8>,str>` に変更。
+    - 成功時 `sc:i32` は `mem_ptr_wrap` して返却。
+    - 失敗系の `Result` 型パラメータを `MemPtr<u8>` に統一。
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_handle` は `scanner_new_impl` をそのまま返す実装へ簡素化。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-memptr-wrap-v5.json -j 15`
+  - 結果: `217/217 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpread/kpwrite の `*_new_handle` 返り値を MemPtr 化)
+
+- 目的:
+  - 生成系 API の境界から生 `i32` を減らし、`MemPtr<u8>` による型境界を明確化する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_handle` を `Result<MemPtr<u8>,str>` へ変更。
+    - `scanner_new` は `MemPtr<u8>` をそのまま `scanner_wrap` に渡す形へ変更。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_handle` を `Result<MemPtr<u8>,str>` へ変更。
+    - 内部確保で得た `w:i32` は `mem_ptr_wrap` して `Ok` 返却。
+    - `writer_new` は `MemPtr<u8>` をそのまま `writer_wrap` に渡す形へ変更。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-memptr-wrap-v4.json -j 15`
+  - 結果: `216/216 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpwrite Writer ラップ境界の型整合)
+
+- 目的:
+  - `todo.md` フェーズC（公開APIの生ポインタ露出削減）に沿って、`kpwrite` の `Writer` 生成境界を `MemPtr<u8>` で統一する。
+- 根本原因:
+  - `Writer.raw` は `MemPtr<u8>` だが `writer_wrap` が `(i32)->Writer` で、生ポインタを直接受け取る境界が残っていた。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_wrap` を `(MemPtr<u8>)->Writer` に変更。
+    - `writer_new` と `Writer` を返す公開ラッパ群で `i32` を `mem_ptr_wrap` してから `writer_wrap` を呼ぶよう統一。
+  - 内部 `*_handle` は段階移行として `i32` を維持（公開API境界のみ型安全化）。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-memptr-wrap-v3.json -j 15`
+  - 結果: `216/216 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpread Scanner ラップ境界の型整合)
+
+- 目的:
+  - `todo.md` フェーズC（公開APIの生ポインタ露出削減）に沿って、`kpread` の `Scanner` 生成境界を `MemPtr<u8>` で統一する。
+- 根本原因:
+  - `Scanner.raw` は `MemPtr<u8>` なのに `scanner_wrap` が `(i32)->Scanner` で、生成境界で生ポインタを直接受けていた。
+  - これにより `Scanner` の公開型設計と生成シグネチャが不一致だった。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_wrap` を `(MemPtr<u8>)->Scanner` に変更。
+    - `scanner_new` で `raw:i32` を `mem_ptr_wrap` してから `scanner_wrap` へ渡すよう変更。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-memptr-wrap-v2.json -j 15`
+  - 結果: `216/216 pass`
+
+# 2026-03-05 作業メモ (compile_fail: diag_id + 位置検証の運用固定)
+
+- 目的:
+  - `compile_fail` ケースで `diag_id` だけでなく発生位置（file/line/col）も安定検証できるようにする。
+- 変更:
+  - `nodesrc/tests.js`
+    - `extractDiagSpansFromCompileError` を行単位解析へ変更。
+    - `--> ...` 行から末尾 `:line:col` を基準に抽出するよう修正し、パス中のコロンを含む形式にも耐えるようにした。
+  - `nodesrc/parser.js`
+    - doctest メタ `diag_spans` に JSON object 形式（`{file,line,col}`）を許可。
+    - 既存の `"line:col"` / `"file:line:col"` 文字列表記は互換維持。
+  - `tests/compile_fail_diag_location.n.md`
+    - `diag_spans` の object 形式を使う回帰ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/compile_fail_diag_location.n.md -i tests/lexer_diag.n.md --no-stdlib --no-tree -o /tmp/tests-compile-fail-location-verify.json -j 15`
+  - 結果: `6/6 pass`
+
+# 2026-03-05 作業メモ (`;` 診断の上流化と loader 診断整形)
+
+- 目的:
+  - `tests/block_semicolon_return.n.md::doctest#10` の backend 漏れ（wasm validation error）を止め、parser 段で `diag_id` を固定化する。
+  - `compile_fail` で loader 経由のエラーでも `error[Dxxxx]` を安定取得できるようにする。
+- 根本原因:
+  - `if:` レイアウト内の `Stmt::ExprSemi` が上流で拒否されず、codegen まで進んでいた。
+  - `nepl-web/src/lib.rs` で loader エラーを `to_string()` しており、`Diagnostics` 文字列が整形されず `diag_id` 抽出が不安定だった。
+- 変更:
+  - `nepl-core/src/parser.rs`
+    - `reject_layout_semicolon` を追加。
+    - `extract_if_layout_exprs` / `extract_if_layout_exprs_lenient` で `ExprSemi` を `D2002` として即時拒否。
+    - `while` / 一般引数レイアウトは既存仕様（`;` 許容）を維持。
+  - `nepl-web/src/lib.rs`
+    - loader 失敗時に `render_loader_error` を通すよう変更。
+    - `LoaderError::Core` は `render_core_error` へ流し、`error[Dxxxx]` 形式で返す。
+  - `tests/plan.n.md`
+    - `diag_id` 期待を実装実態に合わせて `2002 -> 2001` に修正（2ケース）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/lexer_diag.n.md -i tests/plan.n.md -i tests/block_single_line.n.md -i tests/block_semicolon_return.n.md --no-stdlib --no-tree -o /tmp/tests-diag-parser.json -j 15` -> `70/70 pass`
+
 # 2026-03-05 作業メモ (codegen 前段共通 precheck 導入: raw body/target 診断の統一)
 
 - 目的:
@@ -6652,3 +7156,408 @@
 
 - 補足:
   - `--no-stdlib` なし実行時は既知の `stdlib/alloc/collections/list.nepl` 失敗が混在するため、今回タスクの局所検証では除外した。
+
+# 2026-03-05 作業メモ (diag_id 検証の厳密化)
+
+- 目的:
+  - `compile_fail` の `diag_id` を「テスト通過のための値合わせ」ではなく、実際に検証したい失敗原因に一致させる。
+
+- 実施:
+  - `tests/move_effect.n.md`
+    - 「shared borrow 中 move 拒否」を、関数値呼び出し由来の副次診断が混ざらない最小再現へ書き換え（`diag_id: 3051`）。
+    - 「非複合型 field access 拒否」を `v.len` 形式の最小再現へ書き換え（`diag_id: 3011`）。
+    - 「グローバル set」ケースは現在実装の診断挙動（`TypeUndefinedVariable`, `3002`）を明示する形に説明を更新。
+
+- 検証:
+  - `node nodesrc/tests.js -i tests/move_effect.n.md --no-tree -o /tmp/tests-move-effect-audit2.json -j 15` -> `225/225 pass`
+  - `node nodesrc/tests.js -i tests/neplg2.n.md --no-tree -o /tmp/tests-neplg2-fix2.json -j 15` -> `249/249 pass`
+  - `node nodesrc/tests.js -i tests/kp.n.md --no-tree -o /tmp/tests-kp-fix2.json -j 15` -> `211/211 pass`
+  - `node nodesrc/tests.js -i tests -o /tmp/tests-current-full8.json -j 15` -> `797/797 pass`
+
+- 補足:
+  - `diag_id` の変更は、各ケースを単体再現して実診断を確認したもののみ反映した。
+  - 失敗原因が複数混在するケースは、テストコード側を「狙った診断だけが出る形」に分解して再構成した。
+
+# 2026-03-05 作業メモ (フェーズB2: trait能力テーブルの導入と回帰安定化)
+
+- 目的:
+  - `todo.md` フェーズB2（`Copy/Clone` 能力判定の能力テーブル化）を進め、`typecheck` の能力判定を局所化する。
+
+- 実施:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitSemantics::detect` を拡張し、trait doc から `@capability: copy|clone` を読んで能力を設定する経路を追加。
+    - 既存のメソッド名ベタ依存（`copy_mark`/`clone`）検出を削除。
+    - 構造ヒューリスティックを追加:
+      - clone 候補: 単一メソッドかつ `(Self)->Self`
+      - copy 候補: marker trait（メソッドなし）
+    - 互換維持のため、能力未確定時のみ `Clone` / `Copy` 名の最小フォールバックを追加。
+  - `tests/move_effect.n.md`
+    - `compile_fail` 2ケースで `#entry main` だけ定義され診断が `D3092` に吸われる問題を修正し、`main` を追加して狙った `diag_id` を検証可能化。
+    - `Copy` 関連ケースに `@capability` 宣言を追記。
+
+- 根本原因:
+  - 旧実装は能力判定を「trait名 + method名」組に依存しており、仕様拡張時に誤判定が起きやすかった。
+  - `compile_fail` の一部ケースはエントリ未定義が先に発火し、狙った回帰検証になっていなかった。
+
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-b2-capability-targeted-v4.json -j 15` -> `281/281 pass`
+  - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v1.json -j 15` -> `837/837 pass`
+
+- 差分認識:
+  - 能力検出の主経路は能力テーブル化済み。
+  - ただし完全撤廃ではなく、未宣言時の最小互換として `Copy/Clone` 名フォールバックが残る。`todo.md` フェーズB2の「文字列比較完全撤廃」を満たすには次段でこの互換層を外す必要がある。
+
+# 2026-03-05 作業メモ (B2 検証: 名称フォールバック撤去の試行結果)
+
+- 実施:
+  - `TraitSemantics::detect` の `Copy/Clone` 名フォールバックを一時的に撤去し、能力宣言 + 構造ヒューリスティックのみへ切替を試行した。
+
+- 結果:
+  - `tests/move_effect.n.md` の `Copy` 系 `compile_fail` が通らず、`expected compile_fail, but compiled successfully` となった。
+  - 原因は、現行実装では `//: @capability: ...` が能力検出入力として安定供給されず、`Copy` 能力が未検出になる経路が残るため。
+
+- 対応:
+  - 名称フォールバックは再導入した。
+  - 再検証:
+    - `NO_COLOR=false trunk build` -> success
+    - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v2.json -j 15` -> `837/837 pass`
+
+- 次段の上流課題:
+  - `Copy/Clone` の能力宣言を `doc comment` 依存でなく AST/文法レベルで供給する仕組みを追加し、名称フォールバックを撤去する。
+# 2026-03-05 作業メモ (フェーズB2: `#capability` 文法化と型検査統合)
+
+- 目的:
+  - `todo.md` フェーズB2の上流側として、`Copy/Clone` 能力の宣言経路を doc 文字列依存から parser/AST 経路へ移す。
+  - codegen 手前で同一の trait 能力情報を参照できる形に揃える。
+
+- 実装:
+  - `nepl-core/src/ast.rs`
+    - `TraitDef` に `capabilities: Vec<String>` を追加。
+  - `nepl-core/src/lexer.rs`
+    - `TokenKind::DirCapability(String)` を追加。
+    - `#capability ...` を lex 対象に追加。
+  - `nepl-core/src/parser.rs`
+    - trait 本文内で `#capability` を受理し `TraitDef.capabilities` へ格納。
+    - トップレベル `#capability` は `ParserUnexpectedToken` で拒否。
+  - `nepl-core/src/typecheck.rs`
+    - `TraitInfo` に `capabilities` を保持。
+    - 能力抽出は `TraitInfo.capabilities` から行うよう変更（doc 行解析を廃止）。
+  - `nepl-web/src/lib.rs`
+    - token 表示側に `DirCapability` の分岐を追加して `trunk build` の non-exhaustive を解消。
+  - `tests/move_effect.n.md`
+    - `@capability:` コメント表現を trait 本文の `#capability` に置換。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-b2-capability-targeted-v6.json -j 15`
+    - `281/281 pass`
+  - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v3.json -j 15`
+    - `837/837 pass`
+
+- 残課題:
+  - `Copy/Clone` 検出の最終フォールバック（trait 名 `Copy` / `Clone`）はまだ残っている。
+  - フェーズB2完了条件「文字列比較の完全撤廃」に向けて、次段で除去する。
+# 2026-03-05 作業メモ (フェーズB2: `Copy/Clone` 名フォールバック削除)
+
+- 目的:
+  - フェーズB2残課題だった `Copy` / `Clone` の trait 名ハードコードフォールバックを廃止する。
+
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitSemantics::detect` の末尾に残っていた
+      - `traits.get("Clone")` フォールバック
+      - `traits.get("Copy")` フォールバック
+      を削除。
+    - 能力判定は `#capability`（および構造ヒューリスティック）経路のみを使用する形に統一。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-b2-capability-targeted-v7.json -j 15`
+    - `281/281 pass`
+  - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v4.json -j 15`
+    - `837/837 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: `#capability` 仕様境界の回帰追加)
+
+- 目的:
+  - `#capability` が trait 本文内のみ有効である仕様をテストで固定する。
+
+- 実装:
+  - `tests/overload.n.md`
+    - `capability_directive_is_trait_local_only` を追加。
+    - `compile_fail + diag_id: 2002 (ParserUnexpectedToken)` で固定。
+
+- テスト:
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-b2-capability-targeted-v8.json -j 15`
+    - `282/282 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: trait bound 判定の TypeId 直参照化)
+
+- 目的:
+  - trait method 呼び出し時の bound 判定で、trait 名再解決を経由する経路を削減する。
+
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - trait method 呼び出し分岐で `resolve_trait_bound_ref(trait_name)` を廃止。
+    - すでに取得済みの `trait_info.self_ty` を使い、
+      - `type_param_has_bound(self_ty, trait_self_ty)`
+      - `impls` 上の `trait_self_ty + target_ty` 一致
+      の合成判定へ置換。
+    - 未使用化した `resolve_trait_bound_ref` を削除。
+  - `tests/overload.n.md`
+    - `capability_directive_is_trait_local_only` を追加して parser 境界を固定（`diag_id: 2002`）。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-b2-capability-targeted-v9.json -j 15`
+    - `282/282 pass`
+  - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v5.json -j 15`
+    - `838/838 pass`
+
+# 2026-03-05 作業メモ (move_check の diag_id 検証精度修正)
+
+- 事象:
+  - `tests/move_check.n.md::doctest#7` が `diag_id: 3051` 期待で失敗。
+  - 実際は `D3003` が先に出ており、`diag_id` 検証として不正確だった。
+
+- 原因:
+  - `move_reference_ok` ケースで `fn main <()->i32>` に対して末尾式がなく、
+    move/borrow 診断より先に戻り値不一致診断が発生していた。
+
+- 修正:
+  - `tests/move_check.n.md` の `move_reference_ok` に末尾式 `0` を追加し、
+    目的の `D3051` が前面に出る形へ修正。
+
+- テスト:
+  - `node nodesrc/tests.js -i tests/move_check.n.md -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-movecheck-unskip-v5.json -j 15`
+    - `282/282 pass`
+
+# 2026-03-05 作業メモ (move_check: 構造体フィールド move 検出の根本修正)
+
+- 事象:
+  - `move_struct_field_err` が `skip` のままで、`s.f` から非Copy値を2回読むケースを検出できていなかった。
+
+- 根本原因:
+  - `s.f` は HIR 上 `load` に lower されるが、`move_check` の `load<non-Copy>` 分岐が
+    常に「一時借用」扱いで、所有権移動として状態更新していなかった。
+
+- 修正:
+  - `nepl-core/src/passes/move_check.rs`
+    - `visit_field_move_source` を追加。
+    - `load<non-Copy>` のとき、アドレス式がローカル複合値由来（`Var` / `add(Var, ...)`）なら
+      値移動として `check_use(..., is_copy=false)` を適用。
+    - それ以外の `load<non-Copy>` は従来どおり一時 unique borrow を適用。
+  - `tests/move_check.n.md`
+    - `move_struct_field_err` を `skip` から `compile_fail` (`diag_id: 3053`) に戻した。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_check.n.md -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-movecheck-unskip-v6.json -j 15`
+    - `282/282 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpread_core syscall境界の MemPtr 統一)
+
+- 目的:
+  - `kpread_core` で syscall 境界以外の `MemPtr<u8> -> i32` 変換を局所化し、ポインタ境界を明示する。
+
+- 根本原因:
+  - `fd_read` 呼び出し箇所で `mem_ptr_addr` を呼び出し側に直接展開しており、境界責務が分散していた。
+  - これにより effect/pointer 仕様の見通しが悪く、将来の共通化で誤用が再発しやすい状態だった。
+
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `mem_u8_addr <(MemPtr<u8>)->i32>` を追加し、`MemPtr<u8>` からのアドレス取得を一箇所へ集約。
+    - `fd_read_mem <(i32,MemPtr<u8>,i32,MemPtr<u8>)*>i32>` を追加し、`fd_read` 呼び出し境界を共通化。
+    - `scanner_new_impl` 内の `fd_read` 呼び出しを `fd_read_mem 0 iov 1 nread_ptr` に置換。
+    - `buf` アドレス取得の直接 `mem_ptr_addr` を `mem_u8_addr` に置換。
+
+- 実装上の注意:
+  - `fd_read_mem` は syscall 呼び出しを含むため `*>`（impure）シグネチャで定義。
+  - 一時的に pure 定義として `D3025` が発生したが、effect 仕様に合わせて impure へ修正し再検証した。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-core-boundary-v2.json -j 15`
+  - 結果: `217/217 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpwrite ヘッダアクセスの MemPtr 境界統一)
+
+- 目的:
+  - `Writer.raw` が `MemPtr<u8>` である設計に合わせ、`kpwrite` 内部ヘッダアクセスの型境界を `i32` から `MemPtr<u8>` へ統一する。
+
+- 根本原因:
+  - `writer_header_ptr/load/store` が `i32` 受け取りのまま残っており、`Writer` から毎回 `mem_ptr_addr` へ降格していた。
+  - 境界降格が散在し、メモリ安全モデル（フェーズC）の「公開・内部ともに MemPtr 基準」の方針と不整合だった。
+
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_header_ptr` を `(MemPtr<u8>, i32)->MemPtr<i32>` へ変更。
+    - `writer_load_header` / `writer_store_header` を `MemPtr<u8>` 受け取りへ変更。
+    - `writer_free_handle` / `writer_flush_handle` / `writer_ensure_handle` / `writer_put_u8_handle` / `writer_write_str_handle` / `writer_write_i32_handle` / `writer_write_u64_handle` の内部で `w_mem:MemPtr<u8>` を使う形へ統一。
+    - `writer_free_handle` のヘッダ解放は `dealloc_ptr<u8> w_mem 20` を使用し、生 `i32` 経路を削減。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-memptr-v1.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v5.json -j 15`
+  - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpwrite 内部確保/解放の MemPtr 化)
+
+- 目的:
+  - `kpwrite` の内部実装で、確保・解放経路を `alloc_ptr/dealloc_ptr` ベースに統一する。
+  - syscall 境界以外の生 `i32` ポインタ操作を減らし、型安全境界を明確化する。
+
+- 根本原因:
+  - `writer_alloc_buf` と `writer_new_handle` が `alloc/dealloc` (`i32`) ベースで実装されており、`Writer.raw: MemPtr<u8>` と内部経路が二重化していた。
+  - 失敗時巻き戻しも `i32` 解放経路に寄っていて、MemPtr 系の安全API統一方針と不整合だった。
+
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `WriterBuf.ptr` を `i32` から `MemPtr<u8>` へ変更。
+    - `writer_try_free` を `writer_try_free_ptr<.T>` に置換し、`dealloc_ptr` 経由へ統一。
+    - `writer_alloc_buf` を `alloc_ptr<u8>` ベースへ変更。
+    - `writer_new_handle` の `buf/iov/nw/w` 確保を `alloc_ptr<u8>` ベースへ変更し、失敗時巻き戻しも `writer_try_free_ptr` に統一。
+    - header へ格納する値だけを `mem_ptr_addr` で明示的に境界変換（syscall/ヘッダ構造との接続点）。
+    - `writer_free_handle` の `buf/iov/nw` 解放を `writer_try_free_ptr<u8> mem_ptr_wrap ...` 経由へ変更。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-memptr-v2.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v6.json -j 15`
+  - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpwrite 初期化経路の header API 統一)
+
+- 目的:
+  - `writer_new_handle` で残っていた生 `store_i32` の直書きをなくし、`writer_store_header` 経由に統一する。
+
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_handle` の header 初期化（buf/cap/len/iov/nw）を `writer_store_header` 呼び出しに置換。
+    - 初期化時のポインタ境界変換は `mem_ptr_addr` のみを引数位置に限定。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-init-v1.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v8.json -j 15`
+  - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpwrite 解放経路のポインタ境界集約)
+
+- 目的:
+  - `writer_free_handle` で残っていた `i32 -> MemPtr` の都度変換をヘルパへ集約し、解放境界を単純化する。
+
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_load_header_ptr <(MemPtr<u8>,i32)->MemPtr<u8>>` を追加。
+    - `writer_free_handle` は `buf/iov/nw` を `writer_load_header_ptr` で取得して `writer_try_free_ptr` へ渡す構成へ変更。
+    - `mem_ptr_wrap` の直呼びを削減して、header 値のポインタ化責務を一箇所に集約。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-freeptr-v1.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v9.json -j 15`
+  - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズD: writer ヘッダ書き込み失敗の握り潰し廃止)
+
+- 目的:
+  - `writer_store_header` が失敗を黙殺していた設計を修正し、writer 構築時の不整合状態を防ぐ。
+
+- 根本原因:
+  - 旧実装では `writer_store_header` が常に `()` を返し、`store_i32` 失敗時でも呼び出し側が異常を検出できなかった。
+  - `writer_new_handle` でヘッダ初期化に失敗しても成功扱いになりうる設計だった。
+
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_store_header` の返り値を `Result<(),str>` に変更。
+    - `writer_new_handle` の 5 つのヘッダ書き込みを逐次 `match` で検証し、失敗時は確保済み領域を解放して `Err` 返却。
+    - `flush/put/write` 系の長さ更新箇所も `Result` を明示的に受ける構造へ統一。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-header-result-v1.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v10.json -j 15`
+  - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: fn定義時オーバーロード照合のジェネリクス同値修正)
+
+- 目的:
+  - `D3087`（function signature does not match any overload）の誤検出を、ジェネリクス署名照合の根本から解消する。
+- 根本原因:
+  - `fn` 定義照合で `same_type` を直接使うと、未束縛型変数のラベル一致に依存し、α同値（型パラメータ名の差）を許容できず失敗した。
+  - さらに照合用に作る署名型 `sig_ty` が `type_params` なしで構築されており、ジェネリクス関数の署名キーと不整合を起こしていた。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `function_signature_string` をジェネリクス正規化キー生成へ変更（`$T0, $T1...` へ正規化）。
+    - `signature_type_string` を追加し、関数シグネチャ比較専用の型文字列化を導入。
+    - `fn` 定義照合時の `sig_ty` を、`f.type_params` を含む `ctx.function(type_params, params, result, effect)` で構築するよう修正。
+    - 既存のオーバーロード候補照合（`function_signature_string` 比較）を維持しつつ、ジェネリクス同値比較の精度を改善。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-after-final-fix.json -j 15`
+  - 結果: `272/272 pass`
+  - `node nodesrc/tests.js -i tests/compile_fail_diag_location.n.md --no-tree -o /tmp/tests-compile-fail-diag-location-after-final-fix.json -j 15`
+  - 結果: `207/207 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-final-fix.json -j 15`
+  - 結果: `783/783 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: 関数署名比較の文字列依存を排除)
+
+- 目的:
+  - オーバーロード/hoist関連で残っていた署名照合の文字列比較を廃止し、型構造比較へ統一する。
+- 根本原因:
+  - `remove_duplicate_func`, `lookup_func_symbol`, `find_same_signature_func`, `fn` 定義時照合が文字列キー比較に依存しており、型変数名や生成順序差で不安定化する余地があった。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `same_function_signature` を追加し、関数型のシグネチャ同値（ジェネリクスα同値含む）を型構造で判定。
+    - `same_type_with_signature_generics` を追加し、型パラメータ対応表（A->B/B->A）を持った再帰比較を実装。
+    - 以下を文字列比較から `same_function_signature` へ置換:
+      - `fn` 定義時の過負荷候補選択
+      - `Env::remove_duplicate_func`
+      - `Env::lookup_func_symbol`
+      - `find_same_signature_func`
+      - `find_nonshadow_same_signature_func`
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-after-same-signature-api.json -j 15`
+  - 結果: `272/272 pass`
+  - `node nodesrc/tests.js -i tests/compile_fail_diag_location.n.md --no-tree -o /tmp/tests-compile-fail-diag-location-after-same-signature-api.json -j 15`
+  - 結果: `207/207 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-same-signature-api.json -j 15`
+  - 結果: `783/783 pass`
+# 2026-03-05 作業メモ (`move_check.n.md::doctest#4` の診断ID不一致を上流で修正)
+
+- 目的:
+  - `tests + stdlib` 全体で唯一失敗していた `tests/move_check.n.md::doctest#4` の `diag_id: 3065` 不一致を、場当たりではなくテスト記述の上流整備で解消する。
+- 原因:
+  - 既存ケースが `#target core` + `core/math` 依存の書き方で、`loop move` 本体検証より前に `D3016` 系のスタック検査エラーを先行発生させていた。
+  - 結果として、意図していた `D3065`（`TypeLoopPotentiallyMovedValue`）に到達しなかった。
+- 対応:
+  - `tests/move_check.n.md` の `move_in_loop`（doctest#4）を、`loop` 合流での moved 値再利用だけを検証する最小ケースに置換。
+  - `#target core` / `core/math` 依存を除去し、`bool` フラグ更新 (`set c false`) で 1 回ループを構成。
+  - `consume` は `()->()` にし、`D3016` のノイズを排除。
+  - 最後に `consume t` を置き、`loop` 内 move の合流で `D3065` を安定再現する形に固定。
+- 実施テスト:
+  - `node nodesrc/tests.js -i tests/move_check.n.md --no-tree -o /tmp/tests-move-check-after-fix.json -j 15` -> `217/217 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-movecheck-fix.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (trait capability の enum 化: typecheck 文字列依存の除去)
+
+- 目的:
+  - `todo.md` フェーズB2に沿って、trait capability 判定の責務を `typecheck` から前段へ寄せる。
+  - `typecheck` 内の `copy/clone` 文字列パースを削除し、AST の capability enum を直接処理する。
+- 変更:
+  - `nepl-core/src/ast.rs`
+    - `TraitCapability` enum を追加 (`Copy` / `Clone` / `Unknown(String)` )。
+    - `TraitDef.capabilities` を `Vec<String>` から `Vec<TraitCapability>` に変更。
+  - `nepl-core/src/parser.rs`
+    - `#capability` を parser 段で enum 化する `parse_trait_capability` を追加。
+  - `nepl-core/src/typecheck.rs`
+    - `parse_trait_capability(&str)` と文字列比較を削除。
+    - AST enum を直接読み、`Unknown` のみ `D3096` を出す構成に変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_check.n.md -i tests/overload.n.md -i tests/move_effect.n.md --no-tree -o /tmp/tests-trait-capability-targeted.json -j 15` -> `285/285 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-trait-cap-enum.json -j 15` -> `785/785 pass`

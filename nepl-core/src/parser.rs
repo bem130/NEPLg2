@@ -587,6 +587,15 @@ impl Parser {
                 };
                 Some(Stmt::Directive(Directive::IfProfile { profile, span }))
             }
+            TokenKind::DirCapability(_) => {
+                let span = self.next().map(|t| t.span).unwrap_or_else(Span::dummy);
+                self.push_error_with_id(
+                    DiagnosticId::ParserUnexpectedToken,
+                    "#capability is only allowed inside trait blocks",
+                    span,
+                );
+                None
+            }
             TokenKind::DirIndentWidth(width) => {
                 let span = self.next().unwrap().span;
                 Some(Stmt::Directive(Directive::IndentWidth { width: width, span }))
@@ -1147,9 +1156,19 @@ impl Parser {
         self.expect(&TokenKind::Colon)?;
         self.consume_if(&TokenKind::Newline);
         self.expect(&TokenKind::Indent)?;
+        let mut capabilities = Vec::new();
         let mut methods = Vec::new();
         while !self.check(&TokenKind::Dedent) && !self.is_eof() {
             if self.consume_if(&TokenKind::Newline) {
+                continue;
+            }
+            if let Some(TokenKind::DirCapability(cap)) = self.peek_kind() {
+                let cap = cap.clone();
+                self.next();
+                if !cap.is_empty() {
+                    capabilities.push(Self::parse_trait_capability(cap.as_str()));
+                }
+                self.consume_if(&TokenKind::Newline);
                 continue;
             }
             match self.parse_fn() {
@@ -1167,9 +1186,21 @@ impl Parser {
             vis,
             name: Ident { name, span: nspan },
             type_params,
+            capabilities,
             methods,
             span: kw_span.join(end_span).unwrap_or(kw_span),
         }))
+    }
+
+    fn parse_trait_capability(name: &str) -> TraitCapability {
+        let trimmed = name.trim();
+        if trimmed.eq_ignore_ascii_case("copy") {
+            TraitCapability::Copy
+        } else if trimmed.eq_ignore_ascii_case("clone") {
+            TraitCapability::Clone
+        } else {
+            TraitCapability::Unknown(trimmed.to_string())
+        }
     }
 
     fn parse_impl(&mut self) -> Option<Stmt> {
@@ -2569,6 +2600,20 @@ impl Parser {
         }
     }
 
+    fn reject_layout_semicolon(&self, stmt: &Stmt, context: &str) -> Result<(), Diagnostic> {
+        if let Stmt::ExprSemi(_, semi_span) = stmt {
+            let span = semi_span.unwrap_or(self.stmt_span(stmt));
+            return Err(
+                Diagnostic::error(
+                    alloc::format!("';' is not allowed in {} layout expression", context),
+                    span,
+                )
+                .with_id(DiagnosticId::ParserUnexpectedToken),
+            );
+        }
+        Ok(())
+    }
+
     fn if_layout_needs_cond(items: &[PrefixItem]) -> bool {
         // Detect `... if:` or `... if cond:` (no real cond-expr yet)
         // Ignore trailing type annotations for detection.
@@ -2623,6 +2668,7 @@ impl Parser {
         let mut current_role: Option<IfRole> = None;
 
         for stmt in block.items {
+            self.reject_layout_semicolon(&stmt, "if")?;
             let mut is_marker = false;
             if let Some((mut expr, semi_span)) = Self::clone_expr_and_semi(&stmt) {
                 if let Some(role) = Self::take_role_from_expr(&mut expr) {
@@ -2764,6 +2810,7 @@ impl Parser {
         let mut pending_role: Option<IfRole> = None;
 
         for stmt in block.items {
+            self.reject_layout_semicolon(&stmt, "if")?;
             let (mut marker_expr, semi_span) = match Self::clone_expr_and_semi(&stmt) {
                 Some(v) => v,
                 None => {

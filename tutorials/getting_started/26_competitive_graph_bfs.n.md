@@ -52,8 +52,8 @@ fn bfs_line4 <(i32)*>()> (dist):
                             store_i32 to_ptr add dv 1;
                             store_i32 add q mul tail 4 to;
                             set tail add tail 1;
-                        else ();
-                else ();
+                        else ()
+                else ()
 
             if lt v 3:
                 then:
@@ -65,8 +65,8 @@ fn bfs_line4 <(i32)*>()> (dist):
                             store_i32 to_ptr add dv 1;
                             store_i32 add q mul tail 4 to;
                             set tail add tail 1;
-                        else ();
-                else ();
+                        else ()
+                else ()
 
     unwrap_ok dealloc q 16
 |

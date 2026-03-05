@@ -1108,7 +1108,7 @@ fn from_f64 <(f64)->str> (x):
             let neg <bool> lt x <f64> cast 0;
             let absx <f64> if neg:
                 then sub <f64> cast 0 x
-                else x;
+                else x
             let int_part <i64> cast absx;
             let int_f <f64> cast int_part;
             let mut frac <f64> sub absx int_f;

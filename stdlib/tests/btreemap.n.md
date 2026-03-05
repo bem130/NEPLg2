@@ -37,7 +37,7 @@ fn main <()*>i32> ():
     let m0 <BTreeMap<i32>>:
         btreemap_new<i32>
         |> btreemap_insert<i32> 3 30
-        |> btreemap_insert<i32> 1 10;
+        |> btreemap_insert<i32> 1 10
     let ok0 <bool> match btreemap_get<i32> m0 3:
         Option::Some v:
             eq v 30
@@ -47,7 +47,7 @@ fn main <()*>i32> ():
         btreemap_new<i32>
         |> btreemap_insert<i32> 3 30
         |> btreemap_insert<i32> 1 10
-        |> btreemap_remove<i32> 1;
+        |> btreemap_remove<i32> 1
     let ok1 eq btreemap_len<i32> m1 1;
     if and ok0 ok1 1 0
 ```

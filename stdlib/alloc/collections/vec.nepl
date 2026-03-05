@@ -27,12 +27,12 @@
 //:     let a2 <Vec<i32>>:
 //:         new<i32>
 //:         |> push 10
-//:         |> push 20;
+//:         |> push 20
 //:     assert_eq_i32 2 vec_len a2;
 //:     let b2 <Vec<i32>>:
 //:         new<i32>
 //:         |> push 10
-//:         |> push 20;
+//:         |> push 20
 //:     match vec_get<i32> b2 1:
 //:         Option::Some x:
 //:             assert_eq_i32 20 x;
@@ -50,7 +50,7 @@
 //:     let v2 <Vec<i32>>:
 //:         vec_with_capacity<i32> 2
 //:         |> push 1
-//:         |> push 2;
+//:         |> push 2
 //:     match vec_get<i32> v2 0:
 //:         Option::Some x:
 //:             assert_eq_i32 1 x;
@@ -59,7 +59,7 @@
 //:     let w2 <Vec<i32>>:
 //:         vec_with_capacity<i32> 2
 //:         |> push 1
-//:         |> push 2;
+//:         |> push 2
 //:     assert is_none<i32> vec_get<i32> w2 3;
 //: ```
 //:
@@ -73,7 +73,7 @@
 //:         new<i32>
 //:         |> push 11
 //:         |> push 22
-//:         |> vec_clear<i32>;
+//:         |> vec_clear<i32>
 //:     if eq vec_len cleared 0 0 1
 //: ```
 
@@ -582,7 +582,7 @@ fn cap vec_cap;
 //:     let v:
 //:         new<i32>
 //:         |> push 1
-//:         |> push 2;
+//:         |> push 2
 //:     if eq len<i32> v 2 0 1
 //: ```
 fn push vec_push;

@@ -142,8 +142,16 @@ pub struct TraitDef {
     pub vis: Visibility,
     pub name: Ident,
     pub type_params: Vec<TypeParam>,
+    pub capabilities: Vec<TraitCapability>,
     pub methods: Vec<FnDef>,
     pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TraitCapability {
+    Copy,
+    Clone,
+    Unknown(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
