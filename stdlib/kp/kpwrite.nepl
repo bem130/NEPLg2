@@ -36,8 +36,8 @@ struct WriterBuf:
 fn writer_noncopy_marker <(i32)->i32> (x):
     x
 
-fn writer_wrap <(i32)->Writer> (raw):
-    Writer mem_ptr_wrap raw @writer_noncopy_marker
+fn writer_wrap <(MemPtr<u8>)->Writer> (raw):
+    Writer raw @writer_noncopy_marker
 
 //: writer_try_free: 解放失敗を無視して領域を解放する内部補助
 //:
@@ -117,7 +117,7 @@ fn writer_new <()*>Result<Writer,str>> ():
     let raw_res <Result<i32,str>> writer_new_handle;
     match raw_res:
         Result::Ok raw:
-            Result<Writer,str>::Ok writer_wrap raw
+            Result<Writer,str>::Ok writer_wrap mem_ptr_wrap raw
         Result::Err e:
             Result<Writer,str>::Err e
 
@@ -586,84 +586,84 @@ fn writer_free <(Writer)*>()> (w):
 fn writer_flush <(Writer)*>Writer> (w):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_flush_handle raw;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_ensure <(Writer,i32)*>Writer> (w, need):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_ensure_handle raw need;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_put_u8 <(Writer,i32)*>Writer> (w, b):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_put_u8_handle raw b;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_writeln <(Writer)*>Writer> (w):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_writeln_handle raw;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_str <(Writer,str)*>Writer> (w, s):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_str_handle raw s;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_i32 <(Writer,i32)*>Writer> (w, v):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_i32_handle raw v;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_u64 <(Writer,i64)*>Writer> (w, v):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_u64_handle raw v;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_i64 <(Writer,i64)*>Writer> (w, v):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_i64_handle raw v;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_f64_fixed <(Writer,f64,i32)*>Writer> (w, v, precision):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_f64_fixed_handle raw v precision;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_f64 <(Writer,f64)*>Writer> (w, v):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_f64_handle raw v;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_f32_fixed <(Writer,f32,i32)*>Writer> (w, v, precision):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_f32_fixed_handle raw v precision;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_f32 <(Writer,f32)*>Writer> (w, v):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_f32_handle raw v;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_space <(Writer)*>Writer> (w):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_space_handle raw;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_i32_ln <(Writer,i32)*>Writer> (w, v):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_i32_ln_handle raw v;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_i64_ln <(Writer,i64)*>Writer> (w, v):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_i64_ln_handle raw v;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_f64_ln <(Writer,f64)*>Writer> (w, v):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_f64_ln_handle raw v;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw
 
 fn writer_write_f32_ln <(Writer,f32)*>Writer> (w, v):
     let raw <i32> mem_ptr_addr get w "raw";
     writer_write_f32_ln_handle raw v;
-    writer_wrap raw
+    writer_wrap mem_ptr_wrap raw

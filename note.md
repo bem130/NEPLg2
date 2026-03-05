@@ -1,3 +1,18 @@
+# 2026-03-05 作業メモ (フェーズC: kpwrite Writer ラップ境界の型整合)
+
+- 目的:
+  - `todo.md` フェーズC（公開APIの生ポインタ露出削減）に沿って、`kpwrite` の `Writer` 生成境界を `MemPtr<u8>` で統一する。
+- 根本原因:
+  - `Writer.raw` は `MemPtr<u8>` だが `writer_wrap` が `(i32)->Writer` で、生ポインタを直接受け取る境界が残っていた。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_wrap` を `(MemPtr<u8>)->Writer` に変更。
+    - `writer_new` と `Writer` を返す公開ラッパ群で `i32` を `mem_ptr_wrap` してから `writer_wrap` を呼ぶよう統一。
+  - 内部 `*_handle` は段階移行として `i32` を維持（公開API境界のみ型安全化）。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-memptr-wrap-v3.json -j 15`
+  - 結果: `216/216 pass`
+
 # 2026-03-05 作業メモ (フェーズC: kpread Scanner ラップ境界の型整合)
 
 - 目的:
