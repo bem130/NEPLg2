@@ -1,3 +1,18 @@
+# 2026-03-05 作業メモ (フェーズD: kpwrite ヘッダフィールドの型安全化)
+
+- 目的:
+  - `kpwrite` のヘッダアクセスで使っていた生オフセット値（`0/4/8/12/16`）を列挙型に置換し、`kpread` と同じ安全モデルへ統一する。
+  - `mem/kpread/kpwrite` の公開API安全化で、ヘッダ境界の意味を型で表現する。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `WriterHeaderField` を追加（`BufPtr` / `Cap` / `WriteLen` / `IovPtr` / `NwPtr`）。
+    - `writer_header_off` を追加し、オフセット解決を一箇所に集約。
+    - `writer_header_ptr` / `writer_load_header` / `writer_store_header` / `writer_load_header_ptr` の第2引数を `i32` から `WriterHeaderField` に変更。
+    - 呼び出し側の生数値オフセットを全廃し、列挙値に置換。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl --no-tree -o /tmp/tests-kp-header-field-enum-unified.json -j 15` -> `226/226 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpwrite-header-field-enum.json -j 15` -> `785/785 pass`
+
 # 2026-03-05 作業メモ (フェーズD: kpread ヘッダフィールドの型安全化)
 
 - 目的:

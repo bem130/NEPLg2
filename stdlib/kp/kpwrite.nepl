@@ -33,6 +33,13 @@ struct WriterBuf:
     ptr <MemPtr<u8>>
     cap <i32>
 
+enum WriterHeaderField:
+    BufPtr
+    Cap
+    WriteLen
+    IovPtr
+    NwPtr
+
 fn writer_noncopy_marker <(i32)->i32> (x):
     x
 
@@ -42,11 +49,24 @@ fn writer_wrap <(MemPtr<u8>)->Writer> (raw):
 fn writer_header_region <(MemPtr<u8>)->RegionToken<u8>> (w_mem):
     region_new w_mem 20
 
-fn writer_header_ptr <(MemPtr<u8>,i32)->Result<MemPtr<i32>,str>> (w_mem, off):
-    region_ptr_at<u8,i32> writer_header_region w_mem off
+fn writer_header_off <(WriterHeaderField)->i32> (field):
+    match field:
+        WriterHeaderField::BufPtr:
+            0
+        WriterHeaderField::Cap:
+            4
+        WriterHeaderField::WriteLen:
+            8
+        WriterHeaderField::IovPtr:
+            12
+        WriterHeaderField::NwPtr:
+            16
 
-fn writer_load_header <(MemPtr<u8>,i32)->Result<i32,str>> (w_mem, off):
-    match writer_header_ptr w_mem off:
+fn writer_header_ptr <(MemPtr<u8>,WriterHeaderField)->Result<MemPtr<i32>,str>> (w_mem, field):
+    region_ptr_at<u8,i32> writer_header_region w_mem writer_header_off field
+
+fn writer_load_header <(MemPtr<u8>,WriterHeaderField)->Result<i32,str>> (w_mem, field):
+    match writer_header_ptr w_mem field:
         Result::Err _e:
             Result<i32,str>::Err "kpwrite.writer_load_header failed"
         Result::Ok p:
@@ -56,8 +76,8 @@ fn writer_load_header <(MemPtr<u8>,i32)->Result<i32,str>> (w_mem, off):
                 Option::None:
                     Result<i32,str>::Err "kpwrite.writer_load_header failed"
 
-fn writer_store_header <(MemPtr<u8>,i32,i32)->Result<(),str>> (w_mem, off, v):
-    match writer_header_ptr w_mem off:
+fn writer_store_header <(MemPtr<u8>,WriterHeaderField,i32)->Result<(),str>> (w_mem, field, v):
+    match writer_header_ptr w_mem field:
         Result::Err _e:
             Result<(),str>::Err "kpwrite.writer_store_header failed"
         Result::Ok p:
@@ -67,8 +87,8 @@ fn writer_store_header <(MemPtr<u8>,i32,i32)->Result<(),str>> (w_mem, off, v):
                 Result::Err _e:
                     Result<(),str>::Err "kpwrite.writer_store_header failed"
 
-fn writer_load_header_ptr <(MemPtr<u8>,i32)->Result<MemPtr<u8>,str>> (w_mem, off):
-    match writer_load_header w_mem off:
+fn writer_load_header_ptr <(MemPtr<u8>,WriterHeaderField)->Result<MemPtr<u8>,str>> (w_mem, field):
+    match writer_load_header w_mem field:
         Result::Ok v:
             Result<MemPtr<u8>,str>::Ok mem_ptr_wrap v
         Result::Err e:
@@ -136,7 +156,7 @@ fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
                                     writer_try_free_ptr<u8> buf cap;
                                     Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header alloc failed"
                                 Result::Ok w:
-                                    match writer_store_header w 0 mem_ptr_addr buf:
+                                    match writer_store_header w WriterHeaderField::BufPtr mem_ptr_addr buf:
                                         Result::Err _e:
                                             writer_try_free_ptr<u8> w 20;
                                             writer_try_free_ptr<u8> nw 4;
@@ -144,7 +164,7 @@ fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
                                             writer_try_free_ptr<u8> buf cap;
                                             Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
                                         Result::Ok _:
-                                            match writer_store_header w 4 cap:
+                                            match writer_store_header w WriterHeaderField::Cap cap:
                                                 Result::Err _e:
                                                     writer_try_free_ptr<u8> w 20;
                                                     writer_try_free_ptr<u8> nw 4;
@@ -152,7 +172,7 @@ fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
                                                     writer_try_free_ptr<u8> buf cap;
                                                     Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
                                                 Result::Ok _:
-                                                    match writer_store_header w 8 0:
+                                                    match writer_store_header w WriterHeaderField::WriteLen 0:
                                                         Result::Err _e:
                                                             writer_try_free_ptr<u8> w 20;
                                                             writer_try_free_ptr<u8> nw 4;
@@ -160,7 +180,7 @@ fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
                                                             writer_try_free_ptr<u8> buf cap;
                                                             Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
                                                         Result::Ok _:
-                                                            match writer_store_header w 12 mem_ptr_addr iov:
+                                                            match writer_store_header w WriterHeaderField::IovPtr mem_ptr_addr iov:
                                                                 Result::Err _e:
                                                                     writer_try_free_ptr<u8> w 20;
                                                                     writer_try_free_ptr<u8> nw 4;
@@ -168,7 +188,7 @@ fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
                                                                     writer_try_free_ptr<u8> buf cap;
                                                                     Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
                                                                 Result::Ok _:
-                                                                    match writer_store_header w 16 mem_ptr_addr nw:
+                                                                    match writer_store_header w WriterHeaderField::NwPtr mem_ptr_addr nw:
                                                                         Result::Err _e:
                                                                             writer_try_free_ptr<u8> w 20;
                                                                             writer_try_free_ptr<u8> nw 4;
@@ -201,28 +221,28 @@ fn writer_free_handle <(Writer)*>()> (w):
     let mut iov <MemPtr<u8>> mem_ptr_wrap 0;
     let mut nw  <MemPtr<u8>> mem_ptr_wrap 0;
 
-    match writer_load_header_ptr w_mem 0:
+    match writer_load_header_ptr w_mem WriterHeaderField::BufPtr:
         Result::Ok v:
             set buf v;
             ()
         Result::Err _e:
             set can_free_parts false;
             ();
-    match writer_load_header w_mem 4:
+    match writer_load_header w_mem WriterHeaderField::Cap:
         Result::Ok v:
             set cap v;
             ()
         Result::Err _e:
             set can_free_parts false;
             ();
-    match writer_load_header_ptr w_mem 12:
+    match writer_load_header_ptr w_mem WriterHeaderField::IovPtr:
         Result::Ok v:
             set iov v;
             ()
         Result::Err _e:
             set can_free_parts false;
             ();
-    match writer_load_header_ptr w_mem 16:
+    match writer_load_header_ptr w_mem WriterHeaderField::NwPtr:
         Result::Ok v:
             set nw v;
             ()
@@ -255,15 +275,15 @@ fn writer_free_handle <(Writer)*>()> (w):
 //: - O(len)
 fn writer_flush_handle <(Writer)*>Writer> (w):
     let w_mem <MemPtr<u8>> region_ptr get w "region";
-    match writer_load_header w_mem 0:
+    match writer_load_header w_mem WriterHeaderField::BufPtr:
         Result::Err _e:
             w
         Result::Ok buf:
-            match writer_load_header w_mem 4:
+            match writer_load_header w_mem WriterHeaderField::Cap:
                 Result::Err _e:
                     w
                 Result::Ok cap:
-                    match writer_load_header w_mem 8:
+                    match writer_load_header w_mem WriterHeaderField::WriteLen:
                         Result::Err _e:
                             w
                         Result::Ok write_len:
@@ -272,11 +292,11 @@ fn writer_flush_handle <(Writer)*>Writer> (w):
                                 then:
                                     w
                                 else:
-                                    match writer_load_header w_mem 12:
+                                    match writer_load_header w_mem WriterHeaderField::IovPtr:
                                         Result::Err _e:
                                             w
                                         Result::Ok iov:
-                                            match writer_load_header w_mem 16:
+                                            match writer_load_header w_mem WriterHeaderField::NwPtr:
                                                 Result::Err _e:
                                                     w
                                                 Result::Ok nw:
@@ -312,7 +332,7 @@ fn writer_flush_handle <(Writer)*>Writer> (w):
                                                                                 set off add off n;
                                                                                 ();
 
-                                                    match writer_store_header w_mem 8 0:
+                                                    match writer_store_header w_mem WriterHeaderField::WriteLen 0:
                                                         Result::Ok _:
                                                             ()
                                                         Result::Err _e:
@@ -325,11 +345,11 @@ fn writer_flush_handle <(Writer)*>Writer> (w):
 //: - need が cap を超えるケースは呼び出し側で避けてください（この版は最小実装）。
 fn writer_ensure_handle <(Writer,i32)*>Writer> (w, need):
     let w_mem <MemPtr<u8>> region_ptr get w "region";
-    match writer_load_header w_mem 4:
+    match writer_load_header w_mem WriterHeaderField::Cap:
         Result::Err _e:
             w
         Result::Ok cap:
-            match writer_load_header w_mem 8:
+            match writer_load_header w_mem WriterHeaderField::WriteLen:
                 Result::Err _e:
                     w
                 Result::Ok write_len:
@@ -347,7 +367,7 @@ fn writer_ensure_handle <(Writer,i32)*>Writer> (w, need):
 //: - O(1)（flush が入ると O(len)）
 fn writer_put_u8_handle <(Writer,i32)*>Writer> (w, b):
     let w_mem <MemPtr<u8>> region_ptr get w "region";
-    match writer_load_header w_mem 4:
+    match writer_load_header w_mem WriterHeaderField::Cap:
         Result::Err _e:
             w
         Result::Ok cap:
@@ -357,16 +377,16 @@ fn writer_put_u8_handle <(Writer,i32)*>Writer> (w, b):
                     w
                 else:
                     let w1 <Writer> writer_ensure_handle w 1;
-                    match writer_load_header w_mem 0:
+                    match writer_load_header w_mem WriterHeaderField::BufPtr:
                         Result::Err _e:
                             w1
                         Result::Ok buf:
-                            match writer_load_header w_mem 8:
+                            match writer_load_header w_mem WriterHeaderField::WriteLen:
                                 Result::Err _e:
                                     w1
                                 Result::Ok write_len:
                                     store_u8 add buf write_len b;
-                                    match writer_store_header w_mem 8 add write_len 1:
+                                    match writer_store_header w_mem WriterHeaderField::WriteLen add write_len 1:
                                         Result::Ok _:
                                             ()
                                         Result::Err _e:
@@ -384,7 +404,7 @@ fn writer_writeln_handle <(Writer)*>Writer> (w):
 fn writer_write_str_handle <(Writer,str)*>Writer> (w, s):
     let w_mem <MemPtr<u8>> region_ptr get w "region";
     let n <i32> load_i32 s;
-    match writer_load_header w_mem 4:
+    match writer_load_header w_mem WriterHeaderField::Cap:
         Result::Err _e:
             w
         Result::Ok cap:
@@ -395,11 +415,11 @@ fn writer_write_str_handle <(Writer,str)*>Writer> (w, s):
                 else:
                     let w1 <Writer> writer_ensure_handle w n;
 
-                    match writer_load_header w_mem 0:
+                    match writer_load_header w_mem WriterHeaderField::BufPtr:
                         Result::Err _e:
                             w1
                         Result::Ok buf:
-                            match writer_load_header w_mem 8:
+                            match writer_load_header w_mem WriterHeaderField::WriteLen:
                                 Result::Err _e:
                                     w1
                                 Result::Ok write_len:
@@ -416,7 +436,7 @@ fn writer_write_str_handle <(Writer,str)*>Writer> (w, s):
                                             set i add i 1;
 
                                     let new_len <i32> add write_len n;
-                                    match writer_store_header w_mem 8 new_len:
+                                    match writer_store_header w_mem WriterHeaderField::WriteLen new_len:
                                         Result::Ok _:
                                             ()
                                         Result::Err _e:
@@ -464,16 +484,16 @@ fn writer_write_i32_handle <(Writer,i32)*>Writer> (w, v):
                             set t div_s t 10;
 
                     set ww writer_ensure_handle ww d;
-                    match writer_load_header w_mem 0:
+                    match writer_load_header w_mem WriterHeaderField::BufPtr:
                         Result::Err _e:
                             ww
                         Result::Ok buf:
-                            match writer_load_header w_mem 8:
+                            match writer_load_header w_mem WriterHeaderField::WriteLen:
                                 Result::Err _e:
                                     ww
                                 Result::Ok old_len:
                                     let new_len <i32> add old_len d;
-                                    match writer_store_header w_mem 8 new_len:
+                                    match writer_store_header w_mem WriterHeaderField::WriteLen new_len:
                                         Result::Ok _:
                                             ()
                                         Result::Err _e:
@@ -528,16 +548,16 @@ fn writer_write_u64_handle <(Writer,i64)*>Writer> (w, v):
                     set t div_u t ten;
 
             set ww writer_ensure_handle ww d;
-            match writer_load_header w_mem 0:
+            match writer_load_header w_mem WriterHeaderField::BufPtr:
                 Result::Err _e:
                     ww
                 Result::Ok buf:
-                    match writer_load_header w_mem 8:
+                    match writer_load_header w_mem WriterHeaderField::WriteLen:
                         Result::Err _e:
                             ww
                         Result::Ok old_len:
                             let new_len <i32> add old_len d;
-                            match writer_store_header w_mem 8 new_len:
+                            match writer_store_header w_mem WriterHeaderField::WriteLen new_len:
                                 Result::Ok _:
                                     ()
                                 Result::Err _e:
