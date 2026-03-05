@@ -126,9 +126,11 @@ pub fn emit_ll_from_module_for_target(
                             }
                         }
                         Err(diag) => {
-                            return Err(LlvmCodegenError::TypecheckFailed {
-                                reason: summarize_diagnostics_for_message(&[diag]),
-                            });
+                            panic!(
+                                "internal compiler error: llvm codegen reached invalid active raw-body selection after precheck in function '{}' ({})",
+                                def.name.name,
+                                summarize_diagnostics_for_message(&[diag])
+                            );
                         }
                     }
                 }

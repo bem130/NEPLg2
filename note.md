@@ -1,3 +1,16 @@
+# 2026-03-06 作業メモ (フェーズD: llvm codegen 内の precheck 後診断返却を除去)
+
+- 目的:
+  - `precheck` 実行後に `codegen_llvm` が `TypecheckFailed` を返していた残存経路を除去し、前段検査不変条件へ統一する。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `emit_ll_from_module_for_target` 内の `select_active_raw_body(... )` `Err(diag)` 分岐を `TypecheckFailed` 返却から internal panic へ変更。
+    - これにより、raw-body 選択失敗は前段 `target_precheck::precheck_module_before_codegen` でのみ診断され、codegen 到達後は生成専任になる。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-after-llvm-invariant-2.json -j 15` -> `8/8 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-precheck-invariant.json -j 15` -> `791/791 pass`
+
 # 2026-03-06 作業メモ (フェーズD: allocator helper 解決の意味論修正)
 
 - 目的:
