@@ -56,11 +56,68 @@
 struct MemPtr<.T>:
     raw <i32>
 
+struct RegionToken<.T>:
+    ptr <MemPtr<.T>>
+    size <i32>
+
 fn mem_ptr_wrap <.T> <(i32)->MemPtr<.T>> (raw):
     MemPtr raw
 
 fn mem_ptr_addr <.T> <(MemPtr<.T>)->i32> (p):
     get p "raw"
+
+fn region_ptr <.T> <(RegionToken<.T>)->MemPtr<.T>> (token):
+    get token "ptr"
+
+fn region_size <.T> <(RegionToken<.T>)->i32> (token):
+    get token "size"
+
+fn region_new <.T> <(MemPtr<.T>,i32)->RegionToken<.T>> (ptr, size):
+    RegionToken ptr size
+
+fn region_in_bounds <.T> <(RegionToken<.T>,i32,i32)->bool> (token, off, bytes):
+    let total <i32> region_size token
+    if:
+        or lt off 0 lt bytes 0
+        then:
+            false
+        else:
+            let end <i32> add off bytes
+            and le end total ge end off
+
+fn region_ptr_at <.T, .U> <(RegionToken<.T>,i32)->Result<MemPtr<.U>,str>> (token, off):
+    let bytes <i32> size_of<.U>
+    if:
+        region_in_bounds token off bytes
+        then:
+            let base_raw <i32> mem_ptr_addr region_ptr token
+            Result<MemPtr<.U>,str>::Ok mem_ptr_wrap add base_raw off
+        else:
+            Result<MemPtr<.U>,str>::Err "mem.region_ptr_at out of bounds"
+
+fn alloc_region_bytes <.T> <(i32)->Result<RegionToken<.T>,str>> (bytes):
+    if:
+        lt bytes 0
+        then:
+            Result<RegionToken<.T>,str>::Err "mem.alloc_region_bytes invalid size"
+        else:
+            match alloc_ptr<.T> bytes:
+                Result::Ok ptr:
+                    Result<RegionToken<.T>,str>::Ok region_new ptr bytes
+                Result::Err _e:
+                    Result<RegionToken<.T>,str>::Err "mem.alloc_region_bytes failed"
+
+fn alloc_region <.T> <(i32)->Result<RegionToken<.T>,str>> (count):
+    if:
+        lt count 0
+        then:
+            Result<RegionToken<.T>,str>::Err "mem.alloc_region invalid count"
+        else:
+            let bytes <i32> mul count size_of<.T>
+            alloc_region_bytes<.T> bytes
+
+fn dealloc_region <.T> <(RegionToken<.T>)->Result<(),str>> (token):
+    dealloc_ptr<.T> region_ptr token region_size token
 
 #if[target=llvm]
 #llvmir:

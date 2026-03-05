@@ -1,3 +1,31 @@
+# 2026-03-05 作業メモ (フェーズC: core/mem に RegionToken 安全APIを追加)
+
+- 目的:
+  - `todo.md` フェーズCに沿って、`MemPtr<T>` と `RegionToken<T>` を使う安全APIを `core/mem` に追加し、`kpread/kpwrite` 移行の上流基盤を作る。
+- 根本原因:
+  - 既存 `mem` は `MemPtr<T>` までは整備済みだったが、領域所有を表す公開APIが不足しており、
+    境界情報付きアクセスを型として統一できていなかった。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `RegionToken<T>` 補助APIを追加:
+      - `region_new`
+      - `region_in_bounds`
+      - `region_ptr_at`
+      - `alloc_region_bytes`
+      - `alloc_region`
+      - `dealloc_region`
+    - これにより、領域サイズを伴う型付きオフセット取得を `Result` で扱えるようにした。
+  - `tests/memory_safety.n.md`
+    - `alloc_region/region_ptr_at/dealloc_region` の基本動作ケースを追加。
+    - 範囲外オフセットで `Result::Err` を返す回帰ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/block_semicolon_return.n.md -i tests/plan.n.md -i tests/block_single_line.n.md --no-stdlib --no-tree -o /tmp/tests-semicolon-focus.json -j 15`
+  - 結果: `67/67 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md --no-tree -o /tmp/tests-memory-safety-region-token.json -j 15`
+  - 結果: `211/211 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i tests/kp_i64.n.md --no-tree -o /tmp/tests-memory-kp-regression.json -j 15`
+  - 結果: `221/221 pass`
+
 # 2026-03-05 作業メモ (フェーズB2: trait capability の型付き保持へ移行)
 
 - 目的:
