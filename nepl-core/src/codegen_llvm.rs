@@ -1169,10 +1169,10 @@ fn lower_hir_function(
                 if v.ty == ret_ty {
                     ctx.push_line(&format!("  ret {} {}", ret_ty.ir(), v.repr));
                 } else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: func.name.clone(),
-                        reason: format!("return type mismatch {:?} -> {:?}", v.ty, ret_ty),
-                    });
+                    panic!(
+                        "internal compiler error: return type mismatch in '{}' ({:?} -> {:?})",
+                        func.name, v.ty, ret_ty
+                    );
                 }
             } else {
                 let zero = match ret_ty {
@@ -1679,10 +1679,10 @@ fn lower_hir_expr(
             };
 
             let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
-                LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("alloc function is required for enum construction"),
-                }
+                panic!(
+                    "internal compiler error: alloc function is required for enum construction in '{}'",
+                    ctx.function_name
+                )
             })?;
 
             let ptr = ctx.next_tmp();
@@ -1707,19 +1707,16 @@ fn lower_hir_expr(
                         }));
                     }
                     let Some(pv) = pv else {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: String::from("enum payload must produce a value"),
-                        });
+                        panic!(
+                            "internal compiler error: enum payload must produce a value in '{}'",
+                            ctx.function_name
+                        );
                     };
                     if pv.ty != vty {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: format!(
-                                "enum payload type mismatch: expected {:?}, got {:?}",
-                                vty, pv.ty
-                            ),
-                        });
+                        panic!(
+                            "internal compiler error: enum payload type mismatch in '{}' ({:?} vs {:?})",
+                            ctx.function_name, vty, pv.ty
+                        );
                     }
                     let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
                     let payload_ptr8 = ctx.next_tmp();
@@ -1765,10 +1762,10 @@ fn lower_hir_expr(
                 total_size += ll_storage_size(*ty) as i32;
             }
             let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
-                LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("alloc function is required for struct construction"),
-                }
+                panic!(
+                    "internal compiler error: alloc function is required for struct construction in '{}'",
+                    ctx.function_name
+                )
             })?;
             let ptr = ctx.next_tmp();
             ctx.push_line(&format!(
@@ -1784,19 +1781,16 @@ fn lower_hir_expr(
                     continue;
                 }
                 let Some(fv) = fv else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("struct field must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: struct field must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if fv.ty != fty {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!(
-                            "struct field type mismatch: expected {:?}, got {:?}",
-                            fty, fv.ty
-                        ),
-                    });
+                    panic!(
+                        "internal compiler error: struct field type mismatch in '{}' ({:?} vs {:?})",
+                        ctx.function_name, fty, fv.ty
+                    );
                 }
                 let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
                 let field_ptr8 = ctx.next_tmp();
@@ -1836,10 +1830,10 @@ fn lower_hir_expr(
                 total_size += ll_storage_size(*ty) as i32;
             }
             let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
-                LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("alloc function is required for tuple construction"),
-                }
+                panic!(
+                    "internal compiler error: alloc function is required for tuple construction in '{}'",
+                    ctx.function_name
+                )
             })?;
             let ptr = ctx.next_tmp();
             ctx.push_line(&format!(
@@ -1855,19 +1849,16 @@ fn lower_hir_expr(
                     continue;
                 }
                 let Some(iv) = iv else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("tuple item must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: tuple item must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if iv.ty != ity {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!(
-                            "tuple item type mismatch: expected {:?}, got {:?}",
-                            ity, iv.ty
-                        ),
-                    });
+                    panic!(
+                        "internal compiler error: tuple item type mismatch in '{}' ({:?} vs {:?})",
+                        ctx.function_name, ity, iv.ty
+                    );
                 }
                 let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
                 let item_ptr8 = ctx.next_tmp();
@@ -2013,13 +2004,10 @@ fn lower_hir_expr(
                         continue;
                     };
                     if v.ty != result_ty {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: format!(
-                                "match arm result type mismatch: expected {:?}, got {:?}",
-                                result_ty, v.ty
-                            ),
-                        });
+                        panic!(
+                            "internal compiler error: match arm result type mismatch in '{}' ({:?} vs {:?})",
+                            ctx.function_name, result_ty, v.ty
+                        );
                     }
                     ctx.push_line(&format!(
                         "  store {} {}, {}* {}, align 1",
@@ -2292,16 +2280,18 @@ fn lower_hir_expr(
                     repr: out,
                 }));
             }
-            Err(LlvmCodegenError::UnsupportedHirLowering {
-                function: ctx.function_name.to_string(),
-                reason: format!("unsupported intrinsic '{}'", name),
-            })
+            panic!(
+                "internal compiler error: unsupported intrinsic '{}' reached llvm lowering in '{}'",
+                name, ctx.function_name
+            );
         }
         HirExprKind::Drop { .. } => Ok(None),
-        other => Err(LlvmCodegenError::UnsupportedHirLowering {
-            function: ctx.function_name.to_string(),
-            reason: format!("unsupported expression kind {:?}", other),
-        }),
+        other => {
+            panic!(
+                "internal compiler error: unsupported expression kind reached llvm lowering in '{}' ({:?})",
+                ctx.function_name, other
+            );
+        }
     }
 }
 
@@ -2311,15 +2301,17 @@ fn lower_hir_string_literal(
     id: usize,
 ) -> Result<Option<LlValue>, LlvmCodegenError> {
     let Some(s) = ctx.strings.get(id) else {
-        return Err(LlvmCodegenError::UnsupportedHirLowering {
-            function: ctx.function_name.to_string(),
-            reason: format!("string literal id {} was out of bounds", id),
-        });
+        panic!(
+            "internal compiler error: string literal id {} was out of bounds in '{}'",
+            id, ctx.function_name
+        );
     };
     let bytes = s.as_bytes();
-    let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
-        function: ctx.function_name.to_string(),
-        reason: String::from("alloc function is required to materialize string literals"),
+    let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
+        panic!(
+            "internal compiler error: alloc function is required to materialize string literals in '{}'",
+            ctx.function_name
+        )
     })?;
     let ptr_tmp = ctx.next_tmp();
     let total_len = (bytes.len() + 4) as i32;

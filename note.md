@@ -1,3 +1,22 @@
+# 2026-03-05 作業メモ (フェーズD: llvm 残存 backend 診断の不変条件化 継続)
+
+- 目的:
+  - `codegen_llvm` に残っていた `UnsupportedHirLowering` を削減し、前段通過後は生成専任モデルへ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - 以下を `UnsupportedHirLowering` 返却から internal panic へ変更:
+      - 関数 return 型不一致
+      - enum/struct/tuple 構築時の `alloc` 必須判定
+      - enum payload / struct field / tuple item の値生成必須・型不一致
+      - `match` arm の結果型不一致
+      - unknown intrinsic 到達
+      - unsupported expression kind 到達
+      - 文字列リテラルID範囲外
+      - 文字列具体化時の `alloc` 必須判定
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v5.json -j 15` -> `8/8 pass`
+
 # 2026-03-05 作業メモ (フェーズD: llvm intrinsic 引数・型チェックの backend 診断を不変条件化)
 
 - 目的:
