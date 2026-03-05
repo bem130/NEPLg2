@@ -7,6 +7,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::hir::*;
+use crate::runtime_helpers::{
+    ALLOC_CANDIDATES, DEALLOC_CANDIDATES, REALLOC_CANDIDATES,
+};
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
 pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
@@ -56,11 +59,7 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
 
     // Ensure runtime-required helpers are retained even if not explicitly referenced.
     // Enum/struct/tuple codegen depends on allocator helper availability.
-    for candidates in [
-        ["alloc_raw", "alloc"],
-        ["dealloc_raw", "dealloc"],
-        ["realloc_raw", "realloc"],
-    ] {
+    for candidates in [ALLOC_CANDIDATES, DEALLOC_CANDIDATES, REALLOC_CANDIDATES] {
         let mut selected: Option<String> = None;
         for base in candidates {
             if let Some(name) = find_runtime_helper_name(&mono.funcs, base) {

@@ -7855,3 +7855,18 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-llvm-invariant-v1.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: monomorphize の runtime helper 候補ハードコード集約)
+
+- 目的:
+  - `_raw` 撤去フェーズに備え、`monomorphize` 内の runtime helper 候補名ハードコードを一箇所に集約する。
+- 変更:
+  - `nepl-core/src/runtime_helpers.rs` を追加。
+    - `ALLOC_CANDIDATES`
+    - `DEALLOC_CANDIDATES`
+    - `REALLOC_CANDIDATES`
+  - `nepl-core/src/lib.rs` に `runtime_helpers` を公開。
+  - `nepl-core/src/monomorphize.rs`
+    - runtime helper 選択ループの文字列配列リテラルを `runtime_helpers` 定数参照に置換。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success

@@ -33,6 +33,7 @@ pub mod module_graph;
 pub mod parser;
 pub mod passes;
 pub mod resolve;
+pub mod runtime_helpers;
 pub mod target_precheck;
 pub mod typecheck;
 pub mod types;
