@@ -608,33 +608,27 @@ fn fill_i32 <(i32,i32,i32)->()> (ptr, count, value):
             set i add i 1;
 
 fn alloc_ptr <.T> <(i32)->Result<MemPtr<.T>,str>> (size):
-    let raw <i32> alloc_raw size;
-    if:
-        lt 0 raw
-        then:
+    match alloc size:
+        Result::Ok raw:
             Result<MemPtr<.T>,str>::Ok mem_ptr_wrap raw
-        else:
+        Result::Err _e:
             Result<MemPtr<.T>,str>::Err "mem.alloc_ptr failed"
 
 fn realloc_ptr <.T> <(MemPtr<.T>,i32,i32)->Result<MemPtr<.T>,str>> (ptr, old_size, new_size):
     let raw <i32> mem_ptr_addr ptr;
-    let next_ptr <i32> realloc_raw raw old_size new_size;
-    if:
-        lt 0 next_ptr
-        then:
+    match realloc raw old_size new_size:
+        Result::Ok next_ptr:
             Result<MemPtr<.T>,str>::Ok mem_ptr_wrap next_ptr
-        else:
+        Result::Err _e:
             Result<MemPtr<.T>,str>::Err "mem.realloc_ptr failed"
 
 fn dealloc_ptr <.T> <(MemPtr<.T>,i32)->Result<(),str>> (ptr, size):
     let raw <i32> mem_ptr_addr ptr;
-    if:
-        lt raw 1
-        then:
-            Result<(),str>::Err "mem.dealloc_ptr invalid pointer"
-        else:
-            dealloc_raw raw size
+    match dealloc raw size:
+        Result::Ok _:
             Result<(),str>::Ok ()
+        Result::Err _e:
+            Result<(),str>::Err "mem.dealloc_ptr invalid pointer"
 
 fn mem_ptr_add <.T> <(MemPtr<.T>,i32)->MemPtr<.T>> (ptr, off):
     let raw <i32> mem_ptr_addr ptr;

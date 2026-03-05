@@ -1,3 +1,17 @@
+# 2026-03-05 作業メモ (フェーズC: `core/mem` の `*_ptr` を安全API経由へ統一)
+
+- 目的:
+  - `MemPtr` 系 API の内部実装を `alloc_raw/realloc_raw/dealloc_raw` 直結から分離し、`alloc/realloc/dealloc` を通る共通安全経路へ統一する。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `alloc_ptr` を `alloc` 経由へ変更。
+    - `realloc_ptr` を `realloc` 経由へ変更。
+    - `dealloc_ptr` を `dealloc` 経由へ変更。
+  - これにより `MemPtr` 系エラー経路は基底安全APIの前提検査結果と整合する。
+- 検証:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v2.json -j 15`
+  - 結果: `226/226 pass`
+
 # 2026-03-05 作業メモ (フェーズC: kpread_core 内部確保を `*_ptr` API に統一)
 
 - 目的:
