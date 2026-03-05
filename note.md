@@ -7169,3 +7169,25 @@
 - テスト:
   - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-core-boundary-v2.json -j 15`
   - 結果: `217/217 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpwrite ヘッダアクセスの MemPtr 境界統一)
+
+- 目的:
+  - `Writer.raw` が `MemPtr<u8>` である設計に合わせ、`kpwrite` 内部ヘッダアクセスの型境界を `i32` から `MemPtr<u8>` へ統一する。
+
+- 根本原因:
+  - `writer_header_ptr/load/store` が `i32` 受け取りのまま残っており、`Writer` から毎回 `mem_ptr_addr` へ降格していた。
+  - 境界降格が散在し、メモリ安全モデル（フェーズC）の「公開・内部ともに MemPtr 基準」の方針と不整合だった。
+
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_header_ptr` を `(MemPtr<u8>, i32)->MemPtr<i32>` へ変更。
+    - `writer_load_header` / `writer_store_header` を `MemPtr<u8>` 受け取りへ変更。
+    - `writer_free_handle` / `writer_flush_handle` / `writer_ensure_handle` / `writer_put_u8_handle` / `writer_write_str_handle` / `writer_write_i32_handle` / `writer_write_u64_handle` の内部で `w_mem:MemPtr<u8>` を使う形へ統一。
+    - `writer_free_handle` のヘッダ解放は `dealloc_ptr<u8> w_mem 20` を使用し、生 `i32` 経路を削減。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-memptr-v1.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v5.json -j 15`
+  - 結果: `226/226 pass`
