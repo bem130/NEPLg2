@@ -1,3 +1,24 @@
+# 2026-03-05 作業メモ (フェーズB2: trait capability 判定の自動推定を廃止)
+
+- 目的:
+  - `copy/clone` の trait 意味付けを明示 capability (`#capability`) のみに限定し、暗黙推定による誤判定を根本的に除去する。
+- 根本原因:
+  - `TraitSemantics::detect` が capability 未指定時に
+    - `Self -> Self` 単一メソッド trait を clone 候補
+    - marker trait を copy 候補
+    として推定していた。
+  - これにより trait 設計意図と無関係な構造一致だけで copy/clone 意味が付与される余地があった。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitSemantics::detect` から clone/copy の自動候補推定を削除。
+    - `#capability copy` / `#capability clone` の宣言結果のみを意味付けに使用。
+    - 不要化した `trait_has_single_unary_self_to_self_method` と `trait_is_marker` を削除。
+    - `TraitSemantics::detect` の未使用 `ctx` 引数を削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-v1.json -j 15`
+  - 結果: `269/269 pass`
+
 # 2026-03-05 作業メモ (フェーズC: kpread の header 直アクセスを共通安全ヘルパへ統一)
 
 - 目的:

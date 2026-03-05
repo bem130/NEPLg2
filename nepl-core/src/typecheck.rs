@@ -100,7 +100,7 @@ struct TraitSemantics {
 }
 
 impl TraitSemantics {
-    fn detect(traits: &BTreeMap<String, TraitInfo>, ctx: &TypeCtx) -> Self {
+    fn detect(traits: &BTreeMap<String, TraitInfo>) -> Self {
         let mut copy_trait: Option<(String, TypeId)> = None;
         let mut clone_trait: Option<(String, TypeId)> = None;
 
@@ -118,30 +118,6 @@ impl TraitSemantics {
                         }
                     }
                 }
-            }
-        }
-
-        if clone_trait.is_none() {
-            let mut clone_candidates: Vec<(String, TypeId)> = Vec::new();
-            for (name, info) in traits {
-                if trait_has_single_unary_self_to_self_method(info, ctx) {
-                    clone_candidates.push((name.clone(), info.self_ty));
-                }
-            }
-            if clone_candidates.len() == 1 {
-                clone_trait = clone_candidates.into_iter().next();
-            }
-        }
-
-        if copy_trait.is_none() {
-            let mut copy_candidates: Vec<(String, TypeId)> = Vec::new();
-            for (name, info) in traits {
-                if trait_is_marker(info) {
-                    copy_candidates.push((name.clone(), info.self_ty));
-                }
-            }
-            if copy_candidates.len() == 1 {
-                copy_trait = copy_candidates.into_iter().next();
             }
         }
 
@@ -208,37 +184,6 @@ fn detect_declared_trait_capabilities(caps: &[String]) -> Vec<TraitCapability> {
         }
     }
     out
-}
-
-fn trait_has_single_unary_self_to_self_method(
-    info: &TraitInfo,
-    ctx: &TypeCtx,
-) -> bool {
-    if info.methods.len() != 1 {
-        return false;
-    }
-    let Some((_, sig)) = info.methods.iter().next() else {
-        return false;
-    };
-    let resolved = ctx.resolve_id(*sig);
-    match ctx.get(resolved) {
-        TypeKind::Function {
-            params,
-            result,
-            type_params,
-            ..
-        } => {
-            type_params.is_empty()
-                && params.len() == 1
-                && ctx.same_type(params[0], info.self_ty)
-                && ctx.same_type(result, info.self_ty)
-        }
-        _ => false,
-    }
-}
-
-fn trait_is_marker(info: &TraitInfo) -> bool {
-    info.methods.is_empty()
 }
 
 fn collect_type_params(
@@ -707,7 +652,7 @@ pub fn typecheck(
         }
     }
 
-    let trait_semantics = TraitSemantics::detect(&traits, &ctx);
+    let trait_semantics = TraitSemantics::detect(&traits);
     ctx.set_copy_trait_enabled(trait_semantics.copy_trait_name().is_some());
 
     // Process Impls separately or in the same loop?
