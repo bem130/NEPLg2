@@ -316,3 +316,20 @@ ret: 99
 fn main <()->i32> ():
     block block block 99
 ```
+
+## block_sl_single_line_block_cannot_contain_multiline_if
+
+neplg2:test[compile_fail]
+diag_id: 2002
+```neplg2
+
+#entry main
+#indent 4
+#target core
+
+fn main <()->i32> ():
+    block if:
+        true
+        1
+        2
+```

@@ -37,6 +37,7 @@ fn main <()->i32> ():
 ## trailing_semicolon_makes_block_unit_and_errors_for_return
 
 neplg2:test[compile_fail]
+diag_id: 3003
 ```neplg2
 
 #entry main

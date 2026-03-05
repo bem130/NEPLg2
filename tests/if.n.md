@@ -1171,3 +1171,22 @@ fn main <()->i32> ():
         add i 1
     0
 ```
+
+## if_then_semicolon_turns_branch_into_unit_compile_fail
+
+neplg2:test[compile_fail]
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let v <i32> if:
+        true
+        then:
+            add 1 2;
+        else:
+            0
+    v
+```

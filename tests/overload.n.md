@@ -888,3 +888,58 @@ impl Show for i32:
 fn main <()->i32> ():
     Show::show true
 ```
+
+## overload_type_annotation_direct_block_colon
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn main <()->i32> ():
+    let v <i32>:
+        <i32>:
+            3
+            |> add 4
+    if eq v 7 1 0
+```
+
+## overload_type_annotation_block_colon_with_nested_calls
+
+neplg2:test
+ret: 1
+```neplg2
+#entry main
+#indent 4
+#target core
+#import "core/math" as *
+
+fn choose <(i32)->i32> (v):
+    add v 1
+
+fn choose <(i32)->bool> (v):
+    ne v 0
+
+fn main <()->i32> ():
+    let v <i32>:
+        <i32>:
+            <i32> choose add 2 3
+    if eq v 6 1 0
+```
+
+## overload_invalid_field_access_reports_field_diag
+
+neplg2:test[compile_fail]
+diag_id: 3011
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn main <()->i32> ():
+    let v <i32> 10;
+    v.len
+```

@@ -1,3 +1,31 @@
+# 2026-03-05 作業メモ (plan.md 全体再読: plan.n.md 拡充)
+
+- 目的:
+  - `plan.md` 全体を再読し、実装が誤りやすい仕様を `tests/plan.n.md` に集約して回帰可能にする。
+- 変更:
+  - `tests/plan.n.md` を拡充。
+  - 既存 `compile_fail` に `diag_id` を付与:
+    - `plan_block_trailing_semicolon_makes_unit_and_breaks_i32_return` -> `3003`
+    - `plan_semicolon_requires_exactly_one_value_growth` -> `3016`
+  - 追加した主な仕様テスト:
+    - `block:` 後ろはコメントのみ許可、トークン禁止
+    - 引数オフサイド（複数行引数）
+    - `while` の `cond/do` 記法（inline / block）
+    - 関数リテラル `():`、`fn` 糖衣 + `@` 関数値参照
+    - pipe の改行記法
+    - 単行ブロックの多段ネスト
+    - `if:` が3式必須
+    - 単行ブロック複文（`;`区切り）と末尾 `;` による `()` 化
+    - 1行2文（区切りなし）エラー
+    - `Tuple:` リテラル
+    - 型注釈が式に前置される挙動
+- 検証:
+  - `node nodesrc/tests.js -i tests/plan.n.md --no-tree -o /tmp/tests-plan-nmd-2.json -j 15`
+  - 結果: `240 total / 239 pass / 1 fail`
+- 差分（plan.md と実装）:
+  - `plan_single_line_block_cannot_contain_multiline_block` が `expected compile_fail` に対して compile success。
+  - これは plan.md の「単行ブロック内に複行ブロックを置けない」制約に対する未実装ギャップ。
+
 # 2026-03-04 作業メモ (フェーズB2継続: Copy/Clone 判定の trait識別子化)
 
 - 目的:

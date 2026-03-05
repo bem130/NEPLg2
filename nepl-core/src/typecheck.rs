@@ -139,6 +139,12 @@ struct ImplInfo {
 }
 
 #[derive(Debug, Clone)]
+struct TraitBoundRef {
+    name: String,
+    trait_self_ty: TypeId,
+}
+
+#[derive(Debug, Clone)]
 enum FieldIdx {
     Index(usize),
     Name(String),
@@ -194,7 +200,11 @@ fn collect_type_params(
     params: &[TypeParam],
     traits: &BTreeMap<String, TraitInfo>,
     diags: &mut Vec<Diagnostic>,
-) -> (Vec<TypeId>, Vec<Vec<String>>, BTreeMap<TypeId, Vec<String>>) {
+) -> (
+    Vec<TypeId>,
+    Vec<Vec<TraitBoundRef>>,
+    BTreeMap<TypeId, Vec<TraitBoundRef>>,
+) {
     let mut tps = Vec::new();
     let mut bounds_vec = Vec::new();
     let mut bounds_map = BTreeMap::new();
@@ -203,13 +213,16 @@ fn collect_type_params(
         labels.insert(p.name.name.clone(), id);
         let mut bounds = Vec::new();
         for b in &p.bounds {
-            if !traits.contains_key(b) {
+            if let Some(info) = traits.get(b) {
+                bounds.push(TraitBoundRef {
+                    name: b.clone(),
+                    trait_self_ty: info.self_ty,
+                });
+            } else {
                 diags.push(
                     Diagnostic::error(format!("unknown trait bound '{}'", b), p.name.span)
                         .with_id(DiagnosticId::TypeUnknownTraitBound),
                 );
-            } else {
-                bounds.push(b.clone());
             }
         }
         if !bounds.is_empty() {
@@ -1179,7 +1192,18 @@ pub fn typecheck(
                 for (p_node, p_id) in f.type_params.iter().zip(type_params.iter()) {
                     label_env.insert(p_node.name.name.clone(), *p_id);
                     if !p_node.bounds.is_empty() {
-                        type_param_bounds.insert(*p_id, p_node.bounds.clone());
+                        let mut bounds = Vec::new();
+                        for b in &p_node.bounds {
+                            if let Some(info) = traits.get(b) {
+                                bounds.push(TraitBoundRef {
+                                    name: b.clone(),
+                                    trait_self_ty: info.self_ty,
+                                });
+                            }
+                        }
+                        if !bounds.is_empty() {
+                            type_param_bounds.insert(*p_id, bounds);
+                        }
                     }
                 }
             }
@@ -1468,7 +1492,7 @@ fn check_function(
     enums: &BTreeMap<String, EnumInfo>,
     structs: &BTreeMap<String, StructInfo>,
     instantiations: &mut BTreeMap<String, Vec<Vec<TypeId>>>,
-    type_param_bounds: BTreeMap<TypeId, Vec<String>>,
+    type_param_bounds: BTreeMap<TypeId, Vec<TraitBoundRef>>,
     traits: &BTreeMap<String, TraitInfo>,
     impls: &Vec<ImplInfo>,
     generated_functions: &mut Vec<HirFunction>,
@@ -1655,7 +1679,7 @@ struct BlockChecker<'a> {
     enums: &'a BTreeMap<String, EnumInfo>,
     structs: &'a BTreeMap<String, StructInfo>,
     instantiations: &'a mut BTreeMap<String, Vec<Vec<TypeId>>>, // new
-    type_param_bounds: BTreeMap<TypeId, Vec<String>>,
+    type_param_bounds: BTreeMap<TypeId, Vec<TraitBoundRef>>,
     traits: &'a BTreeMap<String, TraitInfo>,
     impls: &'a Vec<ImplInfo>,
     generated_functions: &'a mut Vec<HirFunction>,
@@ -2154,16 +2178,17 @@ impl<'a> BlockChecker<'a> {
         !matches!(self.ctx.get(resolved), TypeKind::Var(v) if v.binding.is_none())
     }
 
-    fn type_param_has_bound(&self, ty: TypeId, trait_name: &str) -> bool {
+    fn type_param_has_bound(&self, ty: TypeId, trait_self_ty: TypeId) -> bool {
         let resolved = self.ctx.resolve_id(ty);
         if let Some(bounds) = self.type_param_bounds.get(&resolved) {
-            return bounds.iter().any(|b| b == trait_name);
+            return bounds.iter().any(|b| b.trait_self_ty == trait_self_ty);
         }
 
         // 型変数が他の型変数へ束縛された場合、resolve 後の TypeId が
         // 直接 type_param_bounds に存在しないことがあるため、正規化後 ID でも照合する。
         if self.type_param_bounds.iter().any(|(tp, bounds)| {
-            self.ctx.resolve_id(*tp) == resolved && bounds.iter().any(|b| b == trait_name)
+            self.ctx.resolve_id(*tp) == resolved
+                && bounds.iter().any(|b| b.trait_self_ty == trait_self_ty)
         }) {
             return true;
         }
@@ -2182,17 +2207,24 @@ impl<'a> BlockChecker<'a> {
                 TypeKind::Var(v) => v.label.as_deref() == Some(label.as_str()),
                 _ => false,
             };
-            same_label && bounds.iter().any(|b| b == trait_name)
+            same_label && bounds.iter().any(|b| b.trait_self_ty == trait_self_ty)
         })
     }
 
-    fn trait_bound_satisfied(&self, trait_name: &str, ty: TypeId) -> bool {
+    fn trait_bound_satisfied_by_ref(&self, bound: &TraitBoundRef, ty: TypeId) -> bool {
         if !self.is_concrete_type(ty) {
-            return self.type_param_has_bound(ty, trait_name);
+            return self.type_param_has_bound(ty, bound.trait_self_ty);
         }
         self.impls.iter().any(|imp| {
-            imp.trait_name.as_deref() == Some(trait_name)
+            imp.trait_self_ty == Some(bound.trait_self_ty)
                 && self.ctx.same_type(imp.target_ty, ty)
+        })
+    }
+
+    fn resolve_trait_bound_ref(&self, trait_name: &str) -> Option<TraitBoundRef> {
+        self.traits.get(trait_name).map(|info| TraitBoundRef {
+            name: trait_name.to_string(),
+            trait_self_ty: info.self_ty,
         })
     }
 
@@ -2838,7 +2870,18 @@ impl<'a> BlockChecker<'a> {
                         for (p_node, p_id) in f.type_params.iter().zip(type_params.iter()) {
                             self.labels.insert(p_node.name.name.clone(), *p_id);
                             if !p_node.bounds.is_empty() {
-                                nested_bounds.insert(*p_id, p_node.bounds.clone());
+                                let mut bounds = Vec::new();
+                                for b in &p_node.bounds {
+                                    if let Some(info) = self.traits.get(b) {
+                                        bounds.push(TraitBoundRef {
+                                            name: b.clone(),
+                                            trait_self_ty: info.self_ty,
+                                        });
+                                    }
+                                }
+                                if !bounds.is_empty() {
+                                    nested_bounds.insert(*p_id, bounds);
+                                }
                             }
                         }
                     }
@@ -5654,11 +5697,14 @@ impl<'a> BlockChecker<'a> {
                                 .zip(raw_type_args.iter().zip(resolved_args.iter()))
                             {
                                 for b in bounds {
-                                    if !self.trait_bound_satisfied(b, *raw_arg)
-                                        && !self.trait_bound_satisfied(b, *resolved_arg)
+                                    if !self.trait_bound_satisfied_by_ref(b, *raw_arg)
+                                        && !self.trait_bound_satisfied_by_ref(b, *resolved_arg)
                                     {
                                         self.diagnostics.push(Diagnostic::error(
-                                            format!("type does not satisfy trait bound '{}'", b),
+                                            format!(
+                                                "type does not satisfy trait bound '{}'",
+                                                b.name
+                                            ),
                                             func.expr.span,
                                         ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
                                     }
@@ -5879,7 +5925,18 @@ impl<'a> BlockChecker<'a> {
                                 return None;
                             }
                             let self_ty = self.ctx.resolve_id(args[0].ty);
-                            if !self.trait_bound_satisfied(trait_name, self_ty) {
+                            if let Some(bound) = self.resolve_trait_bound_ref(trait_name) {
+                                if !self.trait_bound_satisfied_by_ref(&bound, self_ty) {
+                                    self.diagnostics.push(Diagnostic::error(
+                                        format!(
+                                            "type does not satisfy trait bound '{}'",
+                                            trait_name
+                                        ),
+                                        func.expr.span,
+                                    ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
+                                    return None;
+                                }
+                            } else {
                                 self.diagnostics.push(Diagnostic::error(
                                     format!(
                                         "type does not satisfy trait bound '{}'",
@@ -6033,7 +6090,7 @@ enum BindingKind {
         effect: Effect,
         arity: usize,
         builtin: Option<BuiltinKind>,
-        type_param_bounds: Vec<Vec<String>>,
+        type_param_bounds: Vec<Vec<TraitBoundRef>>,
         captures: Vec<(String, TypeId)>,
     },
 }
