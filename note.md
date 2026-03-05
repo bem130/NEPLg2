@@ -7232,3 +7232,20 @@
   - 結果: `217/217 pass`
   - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v8.json -j 15`
   - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpwrite 解放経路のポインタ境界集約)
+
+- 目的:
+  - `writer_free_handle` で残っていた `i32 -> MemPtr` の都度変換をヘルパへ集約し、解放境界を単純化する。
+
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_load_header_ptr <(MemPtr<u8>,i32)->MemPtr<u8>>` を追加。
+    - `writer_free_handle` は `buf/iov/nw` を `writer_load_header_ptr` で取得して `writer_try_free_ptr` へ渡す構成へ変更。
+    - `mem_ptr_wrap` の直呼びを削減して、header 値のポインタ化責務を一箇所に集約。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-freeptr-v1.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v9.json -j 15`
+  - 結果: `226/226 pass`

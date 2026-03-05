@@ -56,6 +56,9 @@ fn writer_store_header <(MemPtr<u8>,i32,i32)->()> (w_mem, off, v):
         Result::Err _e:
             ()
 
+fn writer_load_header_ptr <(MemPtr<u8>,i32)->MemPtr<u8>> (w_mem, off):
+    mem_ptr_wrap writer_load_header w_mem off
+
 //: writer_try_free: 解放失敗を無視して領域を解放する内部補助
 //:
 //: 目的:
@@ -142,14 +145,14 @@ fn writer_new <()*>Result<Writer,str>> ():
 //: - O(1)
 fn writer_free_handle <(Writer)*>()> (w):
     let w_mem <MemPtr<u8>> get w "raw";
-    let buf <i32> writer_load_header w_mem 0;
+    let buf <MemPtr<u8>> writer_load_header_ptr w_mem 0;
     let cap <i32> writer_load_header w_mem 4;
-    let iov <i32> writer_load_header w_mem 12;
-    let nw  <i32> writer_load_header w_mem 16;
+    let iov <MemPtr<u8>> writer_load_header_ptr w_mem 12;
+    let nw  <MemPtr<u8>> writer_load_header_ptr w_mem 16;
 
-    writer_try_free_ptr<u8> mem_ptr_wrap buf cap;
-    writer_try_free_ptr<u8> mem_ptr_wrap iov 8;
-    writer_try_free_ptr<u8> mem_ptr_wrap nw 4;
+    writer_try_free_ptr<u8> buf cap;
+    writer_try_free_ptr<u8> iov 8;
+    writer_try_free_ptr<u8> nw 4;
     match dealloc_ptr<u8> w_mem 20:
         Result::Ok _:
             ()
