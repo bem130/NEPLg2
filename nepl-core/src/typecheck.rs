@@ -173,14 +173,6 @@ enum TraitCapability {
     Clone,
 }
 
-fn parse_trait_capability(name: &str) -> Option<TraitCapability> {
-    match name.trim() {
-        "copy" => Some(TraitCapability::Copy),
-        "clone" => Some(TraitCapability::Clone),
-        _ => None,
-    }
-}
-
 fn collect_type_params(
     ctx: &mut TypeCtx,
     labels: &mut LabelEnv,
@@ -571,16 +563,21 @@ pub fn typecheck(
                     collect_type_params(&mut ctx, &mut f_labels, &t.type_params, &traits, &mut diagnostics);
                 let mut capabilities = Vec::new();
                 for cap in &t.capabilities {
-                    match parse_trait_capability(cap) {
-                        Some(parsed) => {
-                            if !capabilities.contains(&parsed) {
-                                capabilities.push(parsed);
+                    match cap {
+                        crate::ast::TraitCapability::Copy => {
+                            if !capabilities.contains(&TraitCapability::Copy) {
+                                capabilities.push(TraitCapability::Copy);
                             }
                         }
-                        None => {
+                        crate::ast::TraitCapability::Clone => {
+                            if !capabilities.contains(&TraitCapability::Clone) {
+                                capabilities.push(TraitCapability::Clone);
+                            }
+                        }
+                        crate::ast::TraitCapability::Unknown(name) => {
                             diagnostics.push(
                                 Diagnostic::error(
-                                    format!("unknown trait capability '{}'", cap.trim()),
+                                    format!("unknown trait capability '{}'", name.trim()),
                                     t.name.span,
                                 )
                                 .with_id(DiagnosticId::TypeUnknownTraitCapability),

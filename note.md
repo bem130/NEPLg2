@@ -7481,3 +7481,22 @@
 - 実施テスト:
   - `node nodesrc/tests.js -i tests/move_check.n.md --no-tree -o /tmp/tests-move-check-after-fix.json -j 15` -> `217/217 pass`
   - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-movecheck-fix.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (trait capability の enum 化: typecheck 文字列依存の除去)
+
+- 目的:
+  - `todo.md` フェーズB2に沿って、trait capability 判定の責務を `typecheck` から前段へ寄せる。
+  - `typecheck` 内の `copy/clone` 文字列パースを削除し、AST の capability enum を直接処理する。
+- 変更:
+  - `nepl-core/src/ast.rs`
+    - `TraitCapability` enum を追加 (`Copy` / `Clone` / `Unknown(String)` )。
+    - `TraitDef.capabilities` を `Vec<String>` から `Vec<TraitCapability>` に変更。
+  - `nepl-core/src/parser.rs`
+    - `#capability` を parser 段で enum 化する `parse_trait_capability` を追加。
+  - `nepl-core/src/typecheck.rs`
+    - `parse_trait_capability(&str)` と文字列比較を削除。
+    - AST enum を直接読み、`Unknown` のみ `D3096` を出す構成に変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_check.n.md -i tests/overload.n.md -i tests/move_effect.n.md --no-tree -o /tmp/tests-trait-capability-targeted.json -j 15` -> `285/285 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-trait-cap-enum.json -j 15` -> `785/785 pass`

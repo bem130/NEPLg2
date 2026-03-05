@@ -1166,7 +1166,7 @@ impl Parser {
                 let cap = cap.clone();
                 self.next();
                 if !cap.is_empty() {
-                    capabilities.push(cap);
+                    capabilities.push(Self::parse_trait_capability(cap.as_str()));
                 }
                 self.consume_if(&TokenKind::Newline);
                 continue;
@@ -1190,6 +1190,17 @@ impl Parser {
             methods,
             span: kw_span.join(end_span).unwrap_or(kw_span),
         }))
+    }
+
+    fn parse_trait_capability(name: &str) -> TraitCapability {
+        let trimmed = name.trim();
+        if trimmed.eq_ignore_ascii_case("copy") {
+            TraitCapability::Copy
+        } else if trimmed.eq_ignore_ascii_case("clone") {
+            TraitCapability::Clone
+        } else {
+            TraitCapability::Unknown(trimmed.to_string())
+        }
     }
 
     fn parse_impl(&mut self) -> Option<Stmt> {
