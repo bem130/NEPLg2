@@ -3,21 +3,21 @@ extern crate alloc;
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
-use crate::codegen_wasm;
 use crate::diagnostic::Diagnostic;
 use crate::diagnostic_ids::DiagnosticId;
 use crate::hir::{HirBlock, HirBody, HirExpr, HirExprKind, HirModule};
 use crate::types::TypeCtx;
+use crate::wasm_shared;
 use wasm_encoder::ValType;
 
 type WasmSig = (Vec<ValType>, Vec<ValType>);
 
 pub fn precheck_wasm_codegen(ctx: &TypeCtx, module: &HirModule) -> Vec<Diagnostic> {
     let mut out = Vec::new();
-    let wasm_sig_set = codegen_wasm::collect_wasm_signature_set(ctx, module);
+    let wasm_sig_set = wasm_shared::collect_wasm_signature_set(ctx, module);
 
     for ext in &module.externs {
-        if codegen_wasm::wasm_sig_ids(ctx, ext.result, &ext.params).is_none() {
+        if wasm_shared::wasm_sig_ids(ctx, ext.result, &ext.params).is_none() {
             out.push(
                 Diagnostic::error("unsupported extern signature for wasm", ext.span)
                     .with_id(DiagnosticId::CodegenWasmUnsupportedExternSignature),
@@ -25,20 +25,20 @@ pub fn precheck_wasm_codegen(ctx: &TypeCtx, module: &HirModule) -> Vec<Diagnosti
         }
     }
 
-    let reachable_functions = codegen_wasm::collect_reachable_wasm_functions(module);
+    let reachable_functions = wasm_shared::collect_reachable_wasm_functions(module);
     for f in &module.functions {
         if !reachable_functions.contains(&f.name) {
             continue;
         }
-        if codegen_wasm::wasm_sig(ctx, f.result, &f.params).is_none()
-            && !codegen_wasm::should_skip_wasm_codegen_for_generic(ctx, f)
+        if wasm_shared::wasm_sig(ctx, f.result, &f.params).is_none()
+            && !wasm_shared::should_skip_wasm_codegen_for_generic(ctx, f)
         {
             out.push(
                 Diagnostic::error("unsupported function signature for wasm", f.span)
                     .with_id(DiagnosticId::CodegenWasmUnsupportedFunctionSignature),
             );
         }
-        if !codegen_wasm::should_skip_wasm_codegen_for_generic(ctx, f) {
+        if !wasm_shared::should_skip_wasm_codegen_for_generic(ctx, f) {
             let result_kind = ctx.get(ctx.resolve_id(f.result));
             if !matches!(result_kind, crate::types::TypeKind::Unit) {
                 if let HirBody::Block(block) = &f.body {
@@ -59,7 +59,7 @@ pub fn precheck_wasm_codegen(ctx: &TypeCtx, module: &HirModule) -> Vec<Diagnosti
             if let HirBody::Block(block) = &f.body {
                 precheck_wasm_indirect_signature(ctx, block, &wasm_sig_set, &mut out);
             }
-            out.extend(codegen_wasm::precheck_raw_wasm_body(f));
+            out.extend(crate::codegen_wasm::precheck_raw_wasm_body(f));
         }
     }
 
@@ -102,7 +102,7 @@ fn check_indirect_sig_expr(
             result,
             args,
         } => {
-            if let Some(sig) = codegen_wasm::wasm_sig_ids(ctx, *result, params) {
+            if let Some(sig) = wasm_shared::wasm_sig_ids(ctx, *result, params) {
                 if !wasm_sig_set.contains(&sig) {
                     out.push(
                         Diagnostic::error("missing wasm signature for indirect call", expr.span)
@@ -126,7 +126,7 @@ fn check_indirect_sig_expr(
             }
         }
         HirExprKind::Intrinsic { name, args, .. } => {
-            if !codegen_wasm::is_supported_wasm_intrinsic(name) {
+            if !wasm_shared::is_supported_wasm_intrinsic(name) {
                 out.push(
                     Diagnostic::error("unknown codegen intrinsic", expr.span)
                         .with_id(DiagnosticId::CodegenWasmUnknownIntrinsic),

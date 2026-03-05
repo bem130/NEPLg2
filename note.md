@@ -1,3 +1,28 @@
+# 2026-03-05 作業メモ (フェーズD: codegen_precheck の wasm 事前検査を共通モジュールへ分離)
+
+- 目的:
+  - `passes/codegen_precheck.rs` が `codegen_wasm.rs` 実装詳細へ直接依存していた状態を整理し、前段検査ロジックを共有モジュールへ分離する。
+  - 「codegen は正しい入力を生成するだけ」の方針に合わせ、backend の `skip`/診断蓄積を不変条件違反へ寄せる。
+- 変更:
+  - `nepl-core/src/wasm_shared.rs` を新規追加。
+    - wasm署名解決 (`wasm_sig`, `wasm_sig_ids`)
+    - generic skip 判定 (`should_skip_wasm_codegen_for_generic`)
+    - 到達関数解析 (`collect_reachable_wasm_functions`)
+    - 間接呼び出しを含む署名集合収集 (`collect_wasm_signature_set`)
+    - wasm intrinsic 対応判定 (`is_supported_wasm_intrinsic`)
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - 上記ロジックを `wasm_shared` 参照へ置換。
+    - `precheck_raw_wasm_body` のみ `codegen_wasm` 側を継続利用（次段で分離予定）。
+  - `nepl-core/src/codegen_wasm.rs`
+    - extern/function 署名不一致時の `skip` を廃止し internal panic 化。
+    - `lower_body` で backend 診断が返る経路を internal panic 化。
+    - 共有ロジックは `wasm_shared` 呼び出しへ委譲。
+  - `nepl-core/src/lib.rs`
+    - `pub mod wasm_shared;` を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v3.json -j 15` -> `8/8 pass`
+
 # 2026-03-05 作業メモ (フェーズD: llvm backend 診断を前段不変条件へ移行)
 
 - 目的:
