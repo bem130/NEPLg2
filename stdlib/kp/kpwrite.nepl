@@ -118,11 +118,11 @@ fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
                                     writer_try_free_ptr<u8> buf cap;
                                     Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header alloc failed"
                                 Result::Ok w:
-                                    store_i32 mem_ptr_addr w mem_ptr_addr buf;
-                                    store_i32 add mem_ptr_addr w 4 cap;
-                                    store_i32 add mem_ptr_addr w 8 0;
-                                    store_i32 add mem_ptr_addr w 12 mem_ptr_addr iov;
-                                    store_i32 add mem_ptr_addr w 16 mem_ptr_addr nw;
+                                    writer_store_header w 0 mem_ptr_addr buf;
+                                    writer_store_header w 4 cap;
+                                    writer_store_header w 8 0;
+                                    writer_store_header w 12 mem_ptr_addr iov;
+                                    writer_store_header w 16 mem_ptr_addr nw;
                                     Result<MemPtr<u8>,str>::Ok w
 
 fn writer_new <()*>Result<Writer,str>> ():

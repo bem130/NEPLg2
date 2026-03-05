@@ -7216,3 +7216,19 @@
   - 結果: `217/217 pass`
   - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v6.json -j 15`
   - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpwrite 初期化経路の header API 統一)
+
+- 目的:
+  - `writer_new_handle` で残っていた生 `store_i32` の直書きをなくし、`writer_store_header` 経由に統一する。
+
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_handle` の header 初期化（buf/cap/len/iov/nw）を `writer_store_header` 呼び出しに置換。
+    - 初期化時のポインタ境界変換は `mem_ptr_addr` のみを引数位置に限定。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-init-v1.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v8.json -j 15`
+  - 結果: `226/226 pass`
