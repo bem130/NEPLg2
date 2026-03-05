@@ -6812,3 +6812,40 @@
     - `281/281 pass`
   - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v4.json -j 15`
     - `837/837 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: `#capability` 仕様境界の回帰追加)
+
+- 目的:
+  - `#capability` が trait 本文内のみ有効である仕様をテストで固定する。
+
+- 実装:
+  - `tests/overload.n.md`
+    - `capability_directive_is_trait_local_only` を追加。
+    - `compile_fail + diag_id: 2002 (ParserUnexpectedToken)` で固定。
+
+- テスト:
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-b2-capability-targeted-v8.json -j 15`
+    - `282/282 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: trait bound 判定の TypeId 直参照化)
+
+- 目的:
+  - trait method 呼び出し時の bound 判定で、trait 名再解決を経由する経路を削減する。
+
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - trait method 呼び出し分岐で `resolve_trait_bound_ref(trait_name)` を廃止。
+    - すでに取得済みの `trait_info.self_ty` を使い、
+      - `type_param_has_bound(self_ty, trait_self_ty)`
+      - `impls` 上の `trait_self_ty + target_ty` 一致
+      の合成判定へ置換。
+    - 未使用化した `resolve_trait_bound_ref` を削除。
+  - `tests/overload.n.md`
+    - `capability_directive_is_trait_local_only` を追加して parser 境界を固定（`diag_id: 2002`）。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-b2-capability-targeted-v9.json -j 15`
+    - `282/282 pass`
+  - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v5.json -j 15`
+    - `838/838 pass`

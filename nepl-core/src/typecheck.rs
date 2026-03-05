@@ -2280,13 +2280,6 @@ impl<'a> BlockChecker<'a> {
         })
     }
 
-    fn resolve_trait_bound_ref(&self, trait_name: &str) -> Option<TraitBoundRef> {
-        self.traits.get(trait_name).map(|info| TraitBoundRef {
-            name: trait_name.to_string(),
-            trait_self_ty: info.self_ty,
-        })
-    }
-
     fn resolve_field_access(
         &mut self,
         base_ty: TypeId,
@@ -5984,18 +5977,12 @@ impl<'a> BlockChecker<'a> {
                                 return None;
                             }
                             let self_ty = self.ctx.resolve_id(args[0].ty);
-                            if let Some(bound) = self.resolve_trait_bound_ref(trait_name) {
-                                if !self.trait_bound_satisfied_by_ref(&bound, self_ty) {
-                                    self.diagnostics.push(Diagnostic::error(
-                                        format!(
-                                            "type does not satisfy trait bound '{}'",
-                                            trait_name
-                                        ),
-                                        func.expr.span,
-                                    ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
-                                    return None;
-                                }
-                            } else {
+                            let trait_ok = self.type_param_has_bound(self_ty, trait_info.self_ty)
+                                || self.impls.iter().any(|imp| {
+                                    imp.trait_self_ty == Some(trait_info.self_ty)
+                                        && self.ctx.same_type(imp.target_ty, self_ty)
+                                });
+                            if !trait_ok {
                                 self.diagnostics.push(Diagnostic::error(
                                     format!(
                                         "type does not satisfy trait bound '{}'",

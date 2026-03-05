@@ -943,3 +943,17 @@ fn main <()->i32> ():
     let v <i32> 10;
     v.len
 ```
+
+## capability_directive_is_trait_local_only
+
+neplg2:test[compile_fail]
+diag_id: 2002
+```neplg2
+#entry main
+#indent 4
+
+#capability copy
+
+fn main <()->i32> ():
+    0
+```
