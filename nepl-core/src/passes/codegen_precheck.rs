@@ -78,13 +78,25 @@ pub fn precheck_wasm_codegen(ctx: &TypeCtx, module: &HirModule) -> Vec<Diagnosti
     out
 }
 
-pub fn precheck_llvm_codegen(module: &HirModule, reachable: &BTreeSet<String>) -> Vec<Diagnostic> {
+pub fn precheck_llvm_codegen(
+    ctx: &TypeCtx,
+    module: &HirModule,
+    reachable: &BTreeSet<String>,
+) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for f in &module.functions {
         if !reachable.contains(&f.name) {
             continue;
         }
         if let HirBody::Block(block) = &f.body {
+            let result_kind = ctx.get(ctx.resolve_id(f.result));
+            if !matches!(result_kind, crate::types::TypeKind::Unit) && !block_produces_value(ctx, block)
+            {
+                out.push(
+                    Diagnostic::error("function expected to return value", f.span)
+                        .with_id(DiagnosticId::TypeReturnTypeMismatch),
+                );
+            }
             precheck_llvm_expr_tree(block, &mut out);
         }
     }

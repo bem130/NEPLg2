@@ -1,3 +1,24 @@
+# 2026-03-05 作業メモ (フェーズD: todo整理 + llvm precheck 返り値規約)
+
+- 目的:
+  - `todo.md` の完了済み項目（`UnsupportedHirLowering` 整理）を反映し、未完了だけを残す。
+  - LLVM 前段検査に「非 unit 関数は値を返す」規約を追加して、backend 依存失敗の前段化を進める。
+- 変更:
+  - `todo.md`
+    - フェーズDの完了済み行
+      - `llvm 経路でも backend 依存エラーを前段診断に寄せる（UnsupportedHirLowering の整理）`
+      を削除し、残課題として
+      - `llvm 経路の precheck を拡張し、intrinsic/戻り値規約など backend 依存失敗を前段で確定する。`
+      へ更新。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_llvm_codegen` に `TypeCtx` を渡す形へ変更。
+    - reachable な `HirBody::Block` 関数について、戻り値型が非 `unit` かつ block が値を返さない場合を `D3003` で診断。
+  - `nepl-core/src/codegen_llvm.rs`
+    - `precheck_llvm_codegen(&types, &hir, &reachable_set)` 呼び出しへ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v9.json -j 15` -> `8/8 pass`
+
 # 2026-03-05 作業メモ (フェーズD: llvm codegen_precheck に実検査を追加)
 
 - 目的:

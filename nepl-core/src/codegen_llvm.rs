@@ -423,7 +423,8 @@ fn try_lower_entry_from_hir(
     let mut reachable = collect_reachable_functions(&hir, resolved_entry.as_str());
     extend_reachable_with_runtime_helpers(&mut reachable, &hir, &sigs);
     let reachable_set: BTreeSet<String> = reachable.iter().cloned().collect();
-    let pre_codegen_diags = crate::passes::codegen_precheck::precheck_llvm_codegen(&hir, &reachable_set);
+    let pre_codegen_diags =
+        crate::passes::codegen_precheck::precheck_llvm_codegen(&types, &hir, &reachable_set);
     if pre_codegen_diags
         .iter()
         .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
