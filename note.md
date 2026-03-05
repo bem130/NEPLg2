@@ -1,3 +1,18 @@
+# 2026-03-05 作業メモ (フェーズD: llvm backend 診断を前段不変条件へ移行)
+
+- 目的:
+  - `todo.md` フェーズD方針に合わせ、`codegen_llvm` 側で発行していた「前段通過後に到達しないはず」の診断を廃止し、前段検証の不変条件として扱う。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `let` の型不一致 (`let type mismatch`) を `UnsupportedHirLowering` から internal panic へ変更。
+    - `set` の型不一致 (`set type mismatch`) を `UnsupportedHirLowering` から internal panic へ変更。
+    - 未解決 trait call の到達を `UnsupportedHirLowering` から internal panic へ変更。
+    - call 引数型不一致を `UnsupportedHirLowering` から internal panic へ変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-llvm-invariant-v2.json -j 15` -> `8/8 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-invariant-panic-v1.json -j 15` -> `707/791 pass`（`Maximum call stack size exceeded` が多数。今回の変更対象外の既存失敗として継続調査）
+
 # 2026-03-05 作業メモ (フェーズC/D接続: core/mem に MemPtr 初期化オーバーロード追加)
 
 - 目的:

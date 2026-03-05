@@ -1287,10 +1287,10 @@ fn lower_hir_expr(
                 (ptr, v.ty)
             };
             if v.ty != pty {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: format!("let type mismatch {:?} -> {:?}", v.ty, pty),
-                });
+                panic!(
+                    "internal compiler error: let type mismatch in llvm codegen ({:?} -> {:?})",
+                    v.ty, pty
+                );
             }
             ctx.push_line(&format!(
                 "  store {} {}, {}* {}",
@@ -1312,10 +1312,10 @@ fn lower_hir_expr(
                 return Ok(None);
             };
             if v.ty != binding.ty {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: format!("set type mismatch {:?} -> {:?}", v.ty, binding.ty),
-                });
+                panic!(
+                    "internal compiler error: set type mismatch in llvm codegen ({:?} -> {:?})",
+                    v.ty, binding.ty
+                );
             }
             ctx.push_line(&format!(
                 "  store {} {}, {}* {}",
@@ -1343,10 +1343,10 @@ fn lower_hir_expr(
             let callee_name = match callee {
                 FuncRef::Builtin(name) | FuncRef::User(name, _) => name.as_str(),
                 FuncRef::Trait { trait_name, method, .. } => {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!("trait call {}::{} is not yet supported", trait_name, method),
-                    });
+                    panic!(
+                        "internal compiler error: unresolved trait call {}::{} reached llvm codegen",
+                        trait_name, method
+                    );
                 }
             };
             let mut lowered_args = Vec::new();
@@ -1365,13 +1365,10 @@ fn lower_hir_expr(
             for (idx, v) in lowered_args.iter().enumerate() {
                 let ty = sig.params.get(idx).copied().unwrap_or(v.ty);
                 if ty != v.ty {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!(
-                            "call argument type mismatch on '{}': expected {:?}, got {:?}",
-                            callee_name, ty, v.ty
-                        ),
-                    });
+                    panic!(
+                        "internal compiler error: call argument type mismatch in llvm codegen for '{}' ({:?} vs {:?})",
+                        callee_name, ty, v.ty
+                    );
                 }
                 args_ir.push(format!("{} {}", ty.ir(), v.repr));
             }
