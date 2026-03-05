@@ -28,8 +28,8 @@
 struct Scanner:
     raw <MemPtr<u8>>
 
-fn scanner_wrap <(i32)->Scanner> (raw):
-    Scanner mem_ptr_wrap raw
+fn scanner_wrap <(MemPtr<u8>)->Scanner> (raw):
+    Scanner raw
 
 fn scanner_new_handle <()*>Result<i32,str>> ():
     scanner_new_impl
@@ -38,7 +38,7 @@ fn scanner_new <()*>Result<Scanner,str>> ():
     let raw_res <Result<i32,str>> scanner_new_handle;
     match raw_res:
         Result::Ok raw:
-            Result<Scanner,str>::Ok scanner_wrap raw
+            Result<Scanner,str>::Ok scanner_wrap mem_ptr_wrap raw
         Result::Err e:
             Result<Scanner,str>::Err e
 

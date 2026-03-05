@@ -1,3 +1,18 @@
+# 2026-03-05 作業メモ (フェーズC: kpread Scanner ラップ境界の型整合)
+
+- 目的:
+  - `todo.md` フェーズC（公開APIの生ポインタ露出削減）に沿って、`kpread` の `Scanner` 生成境界を `MemPtr<u8>` で統一する。
+- 根本原因:
+  - `Scanner.raw` は `MemPtr<u8>` なのに `scanner_wrap` が `(i32)->Scanner` で、生成境界で生ポインタを直接受けていた。
+  - これにより `Scanner` の公開型設計と生成シグネチャが不一致だった。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_wrap` を `(MemPtr<u8>)->Scanner` に変更。
+    - `scanner_new` で `raw:i32` を `mem_ptr_wrap` してから `scanner_wrap` へ渡すよう変更。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-memptr-wrap-v2.json -j 15`
+  - 結果: `216/216 pass`
+
 # 2026-03-05 作業メモ (compile_fail: diag_id + 位置検証の運用固定)
 
 - 目的:
