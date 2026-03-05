@@ -87,7 +87,7 @@ struct TraitInfo {
     doc: Option<String>,
     name: String,
     type_params: Vec<TypeId>,
-    capabilities: Vec<String>,
+    capabilities: Vec<TraitCapability>,
     methods: BTreeMap<String, TypeId>,
     self_ty: TypeId,
     span: Span,
@@ -105,7 +105,7 @@ impl TraitSemantics {
         let mut clone_trait: Option<(String, TypeId)> = None;
 
         for (name, info) in traits {
-            for cap in detect_declared_trait_capabilities(&info.capabilities) {
+            for cap in info.capabilities.iter().copied() {
                 match cap {
                     TraitCapability::Copy => {
                         if copy_trait.is_none() {
@@ -179,16 +179,6 @@ fn parse_trait_capability(name: &str) -> Option<TraitCapability> {
         "clone" => Some(TraitCapability::Clone),
         _ => None,
     }
-}
-
-fn detect_declared_trait_capabilities(caps: &[String]) -> Vec<TraitCapability> {
-    let mut out = Vec::new();
-    for cap in caps {
-        if let Some(parsed) = parse_trait_capability(cap) {
-            out.push(parsed);
-        }
-    }
-    out
 }
 
 fn collect_type_params(
@@ -579,15 +569,23 @@ pub fn typecheck(
                 let mut f_labels = LabelEnv::new();
                 let (tps, _bounds_vec, _bounds_map) =
                     collect_type_params(&mut ctx, &mut f_labels, &t.type_params, &traits, &mut diagnostics);
+                let mut capabilities = Vec::new();
                 for cap in &t.capabilities {
-                    if parse_trait_capability(cap).is_none() {
-                        diagnostics.push(
-                            Diagnostic::error(
-                                format!("unknown trait capability '{}'", cap.trim()),
-                                t.name.span,
-                            )
-                            .with_id(DiagnosticId::TypeUnknownTraitCapability),
-                        );
+                    match parse_trait_capability(cap) {
+                        Some(parsed) => {
+                            if !capabilities.contains(&parsed) {
+                                capabilities.push(parsed);
+                            }
+                        }
+                        None => {
+                            diagnostics.push(
+                                Diagnostic::error(
+                                    format!("unknown trait capability '{}'", cap.trim()),
+                                    t.name.span,
+                                )
+                                .with_id(DiagnosticId::TypeUnknownTraitCapability),
+                            );
+                        }
                     }
                 }
                 if !t.type_params.is_empty() {
@@ -622,7 +620,7 @@ pub fn typecheck(
                         doc: t.doc.clone(),
                         name: t.name.name.clone(),
                         type_params: tps,
-                        capabilities: t.capabilities.clone(),
+                        capabilities,
                         methods,
                         self_ty,
                         span: t.name.span,

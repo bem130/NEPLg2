@@ -1,3 +1,27 @@
+# 2026-03-05 作業メモ (フェーズB2: trait capability の型付き保持へ移行)
+
+- 目的:
+  - trait capability 判定の文字列再解析を減らし、型付きデータで一貫して扱う。
+- 根本原因:
+  - 既存実装では `TraitInfo.capabilities` が `Vec<String>` のため、
+    `TraitSemantics::detect` で毎回文字列を再パースしていた。
+  - この構造は capability 判定の責務が分散し、将来拡張時に不整合を生みやすい。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitInfo.capabilities` を `Vec<String>` から `Vec<TraitCapability>` へ変更。
+    - trait 定義処理 (`Stmt::Trait`) で capability を1回だけパースし、型付きで保持。
+    - 重複 capability 指定は同一trait内で重複登録しないよう整理。
+    - `TraitSemantics::detect` は `TraitInfo` 内の型付き capability を直接参照。
+    - 不要になった `detect_declared_trait_capabilities` を削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-after-capability-typed.json -j 15`
+  - 結果: `272/272 pass`
+  - `node nodesrc/tests.js -i tests/compile_fail_diag_location.n.md --no-tree -o /tmp/tests-compile-fail-diag-location-after-capability-typed.json -j 15`
+  - 結果: `207/207 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-capability-typed.json -j 15`
+  - 結果: `783/783 pass`
+
 # 2026-03-05 作業メモ (フェーズC: kpwrite header 読み取りの Result 化と None フォールバック廃止)
 
 - 目的:
