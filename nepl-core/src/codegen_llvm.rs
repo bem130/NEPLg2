@@ -22,8 +22,6 @@ use crate::types::{TypeCtx, TypeId, TypeKind};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LlvmCodegenError {
     MissingLlvmIrBlock,
-    UnsupportedParsedFunctionBody { function: String },
-    UnsupportedWasmBody { function: String },
     TypecheckFailed { reason: String },
     MissingEntryFunction { function: String },
 }
@@ -37,16 +35,6 @@ impl core::fmt::Display for LlvmCodegenError {
                     "llvm target requires at least one #llvmir block in module/function body"
                 )
             }
-            LlvmCodegenError::UnsupportedParsedFunctionBody { function } => write!(
-                f,
-                "llvm target currently supports only subset lowering for parsed functions; function '{}' is not in supported subset",
-                function
-            ),
-            LlvmCodegenError::UnsupportedWasmBody { function } => write!(
-                f,
-                "llvm target cannot lower #wasm function body; function '{}'",
-                function
-            ),
             LlvmCodegenError::TypecheckFailed { reason } => {
                 write!(f, "failed to typecheck module for llvm lowering: {}", reason)
             }
@@ -116,9 +104,10 @@ pub fn emit_ll_from_module_for_target(
                             append_llvmir_block(&mut out, raw);
                         }
                         Ok(Some(ActiveRawBody::Wasm(_))) => {
-                            return Err(LlvmCodegenError::UnsupportedWasmBody {
-                                function: def.name.name.clone(),
-                            });
+                            panic!(
+                                "internal compiler error: llvm codegen reached wasm raw body after precheck in function '{}'",
+                                def.name.name
+                            );
                         }
                         Ok(None) => {
                             if let Some(lowered) = lower_parsed_fn_with_gates(
@@ -142,13 +131,11 @@ pub fn emit_ll_from_module_for_target(
                     }
                 }
                 FnBody::Wasm(_) => {
-                    // `#wasm` は明示的な wasm backend 専用実装。
-                    // 非 entry 関数は移行期間のためスキップするが、
-                    // entry が #wasm のみの場合は LLVM 実行可能なモジュールを作れないためエラーとする。
                     if is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
-                        return Err(LlvmCodegenError::UnsupportedWasmBody {
-                            function: def.name.name.clone(),
-                        });
+                        panic!(
+                            "internal compiler error: llvm codegen reached wasm function body after precheck in function '{}'",
+                            def.name.name
+                        );
                     }
                 }
             },
@@ -589,9 +576,10 @@ fn try_lower_entry_from_hir(
                 }
             }
             HirBody::Wasm(_) => {
-                return Err(LlvmCodegenError::UnsupportedWasmBody {
-                    function: func.name.clone(),
-                });
+                panic!(
+                    "internal compiler error: llvm lowering reached wasm body after precheck in function '{}'",
+                    func.name
+                );
             }
             HirBody::Block(block) => {
                 out.push_str(&format!("; nepl: function {} (lowered block)\n", name));
@@ -2787,12 +2775,7 @@ fn main <()->i32> ():
 "#;
         let module = parse_module(src);
         let err = emit_ll_from_module(&module).expect_err("entry with #wasm body must fail");
-        assert_eq!(
-            err,
-            LlvmCodegenError::UnsupportedWasmBody {
-                function: "main".to_string()
-            }
-        );
+        assert!(matches!(err, LlvmCodegenError::TypecheckFailed { .. }));
     }
 
     #[test]

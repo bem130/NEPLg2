@@ -1,3 +1,18 @@
+# 2026-03-06 作業メモ (フェーズD: llvm backend の wasm-body 分岐を不変条件化)
+
+- 目的:
+  - `codegen_llvm` 側に残っていた backend 入力エラー分岐（`UnsupportedWasmBody`）を前段検査前提へ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `LlvmCodegenError` から `UnsupportedWasmBody` / `UnsupportedParsedFunctionBody` を削除。
+    - `emit_ll_from_module_for_target` 内で `ActiveRawBody::Wasm` 到達時の `Err` を internal panic に変更。
+    - `FnBody::Wasm` reachable 到達時の `Err` を internal panic に変更。
+    - HIR lowering 経路で `HirBody::Wasm` 到達時の `Err` を internal panic に変更。
+    - 対応テスト `emit_ll_rejects_entry_with_wasm_body` は `TypecheckFailed` を期待する形へ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-invariant.json -j 15` -> `791/791 pass`
+
 # 2026-03-06 作業メモ (フェーズD: wasm codegen 診断返却経路の撤去)
 
 - 目的:
