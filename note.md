@@ -1,3 +1,29 @@
+# 2026-03-05 作業メモ (フェーズC: kpread の header 直アクセスを共通安全ヘルパへ統一)
+
+- 目的:
+  - `kpread.nepl` で残っていた `sc_raw` ベースの header 直接読み書きを除去し、`Scanner` 境界の型安全性を上げる。
+- 根本原因:
+  - `scanner_header_ptr` / `scanner_load_header` / `scanner_store_header` を導入済みでも、主要パーサ関数が旧経路（`load_i32 add sc_raw ...` / `store_i32 add sc_raw ...`）を使い続けていた。
+  - これにより API 境界は `Scanner` でも、実装内部が生ポインタ前提のまま分岐していた。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - 以下の関数で header アクセスを `scanner_load_header` / `scanner_store_header` に統一:
+      - `scanner_skip_ws_handle`
+      - `scanner_is_eof_handle`
+      - `scanner_skip_token_handle`
+      - `scanner_read_token_handle`
+      - `scanner_read_i32_handle`
+      - `scanner_read_u64_handle`
+      - `scanner_read_i64_handle`
+      - `scanner_read_f64_handle`
+      - `scanner_read_all_i32_handle`
+    - 置換後、`kpread.nepl` 内の `sc_raw` 直接アクセスは `scanner_header_ptr` 内の実装一点のみに集約。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-safe-headers-v1.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v3.json -j 15`
+  - 結果: `226/226 pass`
+
 # 2026-03-05 作業メモ (フェーズC: kpread 基盤 handle の Scanner 型化)
 
 - 目的:
