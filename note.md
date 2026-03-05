@@ -7598,3 +7598,29 @@
 
 - メモ:
   - `fs` 単体の実行系テストは入力待ちケースを含むため、今後は非対話セットで回帰確認する。
+
+# 2026-03-05 作業メモ (tests.js: argv メタ対応追加)
+
+- 目的:
+  - `stdin/stdout` に加えて doctest から CLI 引数を注入できるようにし、`stdlib/tests/cliarg.n.md` をテスト可能にする。
+
+- 変更:
+  - `nodesrc/parser.js`
+    - doctest メタに `argv:` を追加。
+    - `parseMetaValue` が `[` / `{` 始まりの JSON も解釈するよう拡張（`argv: ["a","b"]` を配列として取得）。
+  - `nodesrc/tests.js`
+    - テストケース構造に `argv` を追加。
+    - wasm ワーカー要求へ `argv` を伝搬。
+    - llvm 実行時にも `argv` を実行引数として渡す。
+  - `nodesrc/run_test.js`
+    - WASI 実行時の args を `argv` から受け取り、`[wasmPath, ...argv]` で起動。
+  - `stdlib/tests/cliarg.n.md`
+    - `neplg2:test[assert_io]` + `argv` + `stdout` で `cliarg_count` 検証ケースを追加。
+
+- 検証:
+  - parser 単体確認:
+    - `node -e "const p=require('./nodesrc/parser'); const r=p.parseFile('stdlib/tests/cliarg.n.md'); console.log(Array.isArray(r.doctests[0].argv), JSON.stringify(r.doctests[0].argv));"`
+    - 結果: `true ["--flag","value"]`
+  - run_test 直実行確認:
+    - `argv=["a","b"]` で `cliarg_count` 出力が `"3"`
+    - `argv=[]` で `cliarg_count` 出力が `"1"`

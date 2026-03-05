@@ -12,6 +12,20 @@
 #import "core/cast" as *
 #import "core/option" as *
 
+fn cli_alloc <(i32)->Result<i32,i32>> (size):
+    match alloc size:
+        Result::Ok p:
+            Result<i32,i32>::Ok p
+        Result::Err _:
+            Result<i32,i32>::Err 12
+
+fn cli_free <(i32,i32)->()> (ptr, size):
+    match dealloc ptr size:
+        Result::Ok _:
+            ()
+        Result::Err _:
+            ()
+
 //: cliarg: コマンドライン引数取得（WASI / LLVM）
 //:
 //: 目的:
@@ -34,25 +48,35 @@
 fn __cli_copy_to_cstr <(str)*>i32> (s):
     let len <i32> load_i32 s;
     let src <i32> add s 4;
-    let dst <i32> alloc_raw add len 1;
-    let mut i <i32> 0;
-    while lt i len:
-        do:
-            store_u8 add dst i load_u8 add src i;
-            set i add i 1;
-    store_u8 add dst len 0;
-    dst
+    match cli_alloc add len 1:
+        Result::Err _:
+            0
+        Result::Ok dst:
+            let mut i <i32> 0;
+            while lt i len:
+                do:
+                    store_u8 add dst i load_u8 add src i;
+                    set i add i 1;
+            store_u8 add dst len 0;
+            dst
 
 #if[target=llvm]
 fn __cli_open_cmdline <()*>i32> ():
     let path <str> "/proc/self/cmdline";
     let cpath <i32> __cli_copy_to_cstr path;
-    let fd64 <i64> __cli_syscall <i64> cast 257 <i64> cast -100 <i64> cast cpath <i64> cast 0 <i64> cast 0 <i64> cast 0 <i64> cast 0;
     if:
         cond:
-            lt fd64 <i64> cast 0
-        then -1
-        else <i32> cast fd64
+            eq cpath 0
+        then:
+            -1
+        else:
+            let fd64 <i64> __cli_syscall <i64> cast 257 <i64> cast -100 <i64> cast cpath <i64> cast 0 <i64> cast 0 <i64> cast 0 <i64> cast 0;
+            cli_free cpath add load_i32 path 1;
+            if:
+                cond:
+                    lt fd64 <i64> cast 0
+                then -1
+                else <i32> cast fd64
 
 #if[target=llvm]
 fn __cli_read_cmdline <(i32,i32)*>i32> (buf, cap):
@@ -74,68 +98,78 @@ fn __cli_read_cmdline <(i32,i32)*>i32> (buf, cap):
 #if[target=llvm]
 fn args_sizes_get <(i32,i32)*>i32> (argc_ptr, buf_ptr):
     let cap <i32> 65536;
-    let tmp <i32> alloc_raw cap;
-    let n <i32> __cli_read_cmdline tmp cap;
-    if:
-        cond:
-            lt n 0
-        then:
+    match cli_alloc cap:
+        Result::Err _:
             1
-        else:
-            let mut argc <i32> 0;
-            let mut i <i32> 0;
-            while lt i n:
-                do:
-                    if:
-                        eq load_u8 add tmp i 0
-                        then set argc add argc 1
-                        else ()
-                    set i add i 1;
-            store_i32 argc_ptr argc;
-            store_i32 buf_ptr n;
-            0
+        Result::Ok tmp:
+            let n <i32> __cli_read_cmdline tmp cap;
+            if:
+                cond:
+                    lt n 0
+                then:
+                    cli_free tmp cap;
+                    1
+                else:
+                    let mut argc <i32> 0;
+                    let mut i <i32> 0;
+                    while lt i n:
+                        do:
+                            if:
+                                eq load_u8 add tmp i 0
+                                then set argc add argc 1
+                                else ()
+                            set i add i 1;
+                    store_i32 argc_ptr argc;
+                    store_i32 buf_ptr n;
+                    cli_free tmp cap;
+                    0
 
 #if[target=llvm]
 fn args_get <(i32,i32)*>i32> (argv_ptr, argv_buf):
     let cap <i32> 65536;
-    let tmp <i32> alloc_raw cap;
-    let n <i32> __cli_read_cmdline tmp cap;
-    if:
-        cond:
-            lt n 0
-        then:
+    match cli_alloc cap:
+        Result::Err _:
             1
-        else:
-            let mut i <i32> 0;
-            while lt i n:
-                do:
-                    store_u8 add argv_buf i load_u8 add tmp i;
-                    set i add i 1;
-
-            let mut argi <i32> 0;
+        Result::Ok tmp:
+            let n <i32> __cli_read_cmdline tmp cap;
             if:
                 cond:
-                    lt 0 n
+                    lt n 0
                 then:
-                    store_i32 argv_ptr argv_buf;
-                else ()
+                    cli_free tmp cap;
+                    1
+                else:
+                    let mut i <i32> 0;
+                    while lt i n:
+                        do:
+                            store_u8 add argv_buf i load_u8 add tmp i;
+                            set i add i 1;
 
-            let mut j <i32> 0;
-            while lt j n:
-                do:
+                    let mut argi <i32> 0;
                     if:
-                        eq load_u8 add argv_buf j 0
+                        cond:
+                            lt 0 n
                         then:
-                            set argi add argi 1;
-                            if:
-                                cond:
-                                    lt add j 1 n
-                                then:
-                                    store_i32 add argv_ptr mul argi 4 add argv_buf add j 1;
-                                else ()
+                            store_i32 argv_ptr argv_buf;
                         else ()
-                    set j add j 1;
-            0
+
+                    let mut j <i32> 0;
+                    while lt j n:
+                        do:
+                            if:
+                                eq load_u8 add argv_buf j 0
+                                then:
+                                    set argi add argi 1;
+                                    if:
+                                        cond:
+                                            lt add j 1 n
+                                        then:
+                                            store_i32 add argv_ptr mul argi 4 add argv_buf add j 1;
+                                        else ()
+                                else ()
+                            set j add j 1;
+                    cli_free tmp cap;
+                    0
 
 //: cstr_len: NUL 終端文字列の長さを求める
 //:
@@ -258,16 +292,21 @@ fn cstr_to_str <(i32)*>str> (p):
 //:     cliarg_count ();
 //: ```
 fn cliarg_count <()*>i32> ():
-    let meta <i32> alloc_raw 8
-    let argc_ptr <i32> meta
-    let buf_ptr <i32> add meta 4
-    let errno <i32> args_sizes_get argc_ptr buf_ptr
-    if:
-        eq errno 0
-        then:
-            load_i32 argc_ptr
-        else:
+    match cli_alloc 8:
+        Result::Err _:
             0
+        Result::Ok meta:
+            let argc_ptr <i32> meta
+            let buf_ptr <i32> add meta 4
+            let errno <i32> args_sizes_get argc_ptr buf_ptr
+            let res <i32> if:
+                eq errno 0
+                then:
+                    load_i32 argc_ptr
+                else:
+                    0
+            cli_free meta 8
+            res
 
 //: cliarg_get: 指定 index の引数を取得する
 //:
@@ -309,34 +348,49 @@ fn cliarg_get <(i32)*>Option<str>> (idx):
         then:
             none<str>
         else:
-            let meta <i32> alloc_raw 8
-            let argc_ptr <i32> meta
-            let buf_ptr <i32> add meta 4
-            let errno <i32> args_sizes_get argc_ptr buf_ptr
-            if:
-                eq errno 0
-                then:
-                    let argc <i32> load_i32 argc_ptr
-                    if:
-                        cond:
-                            lt idx argc
+            match cli_alloc 8:
+                Result::Err _:
+                    none<str>
+                Result::Ok meta:
+                    let argc_ptr <i32> meta
+                    let buf_ptr <i32> add meta 4
+                    let errno <i32> args_sizes_get argc_ptr buf_ptr
+                    let res <Option<str>> if:
+                        eq errno 0
                         then:
-                            let argv <i32> alloc_raw mul argc 4
-                            let buf_size <i32> load_i32 buf_ptr
-                            let argv_buf <i32> alloc_raw buf_size
-                            let errno2 <i32> args_get argv argv_buf
+                            let argc <i32> load_i32 argc_ptr
                             if:
-                                eq errno2 0
+                                cond:
+                                    lt idx argc
                                 then:
-                                    let offset <i32> mul idx 4
-                                    let arg_ptr <i32> load_i32 add argv offset
-                                    some<str> cstr_to_str arg_ptr
+                                    match cli_alloc mul argc 4:
+                                        Result::Err _:
+                                            none<str>
+                                        Result::Ok argv:
+                                            let buf_size <i32> load_i32 buf_ptr
+                                            match cli_alloc buf_size:
+                                                Result::Err _:
+                                                    cli_free argv mul argc 4
+                                                    none<str>
+                                                Result::Ok argv_buf:
+                                                    let errno2 <i32> args_get argv argv_buf
+                                                    let inner <Option<str>> if:
+                                                        eq errno2 0
+                                                        then:
+                                                            let offset <i32> mul idx 4
+                                                            let arg_ptr <i32> load_i32 add argv offset
+                                                            some<str> cstr_to_str arg_ptr
+                                                        else:
+                                                            none<str>
+                                                    cli_free argv_buf buf_size
+                                                    cli_free argv mul argc 4
+                                                    inner
                                 else:
                                     none<str>
                         else:
                             none<str>
-                else:
-                    none<str>
+                    cli_free meta 8
+                    res
 
 //: cliarg_program: argv[0] を返す
 //:
