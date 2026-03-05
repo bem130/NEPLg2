@@ -450,6 +450,24 @@ fn main <()->i32> ():
     0
 ```
 
+## 不明 capability 名は診断ID付きで拒否
+
+neplg2:test[compile_fail]
+diag_id: 3096
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait BadCap:
+    #capability cpoy
+    fn f <(Self)->Self> (x):
+        x
+
+fn main <()->i32> ():
+    0
+```
+
 ## RegionToken は非Copyとして move 後再利用不可
 
 neplg2:test[compile_fail]

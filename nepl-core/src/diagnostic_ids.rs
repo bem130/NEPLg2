@@ -217,6 +217,8 @@ pub enum DiagnosticId {
     TypeMultipleActiveRawBodies = 3094,
     /// raw body と target の組み合わせが不正。
     TypeRawBodyTargetMismatch = 3095,
+    /// trait capability 名が不正。
+    TypeUnknownTraitCapability = 3096,
     /// WASM backend が extern シグネチャを lower できない。
     CodegenWasmUnsupportedExternSignature = 4001,
     /// WASM backend が関数シグネチャを lower できない。
@@ -362,6 +364,7 @@ impl DiagnosticId {
             3093 => Some(DiagnosticId::TypeDuplicateImplForTraitTarget),
             3094 => Some(DiagnosticId::TypeMultipleActiveRawBodies),
             3095 => Some(DiagnosticId::TypeRawBodyTargetMismatch),
+            3096 => Some(DiagnosticId::TypeUnknownTraitCapability),
             4001 => Some(DiagnosticId::CodegenWasmUnsupportedExternSignature),
             4002 => Some(DiagnosticId::CodegenWasmUnsupportedFunctionSignature),
             4003 => Some(DiagnosticId::CodegenWasmMissingReturnValue),
@@ -578,6 +581,7 @@ impl DiagnosticId {
             DiagnosticId::TypeRawBodyTargetMismatch => {
                 "raw body does not match the active target"
             }
+            DiagnosticId::TypeUnknownTraitCapability => "unknown trait capability",
             DiagnosticId::CodegenWasmUnsupportedExternSignature => {
                 "unsupported extern signature for wasm"
             }

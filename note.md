@@ -16,12 +16,21 @@
     - `TraitSemantics::detect` の未使用 `ctx` 引数を削除。
   - `tests/move_effect.n.md`
     - `#capability` 未指定 trait が copy/clone として推定されないことを確認する回帰ケースを追加。
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D3096 TypeUnknownTraitCapability` を追加。
+  - `nepl-core/src/typecheck.rs`
+    - trait 定義で未知の `#capability` 名を検出し、`D3096` を返すよう変更。
+  - `tests/move_effect.n.md`
+    - `#capability cpoy` の compile_fail ケース（`diag_id: 3096`）を追加。
 - 検証:
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-v1.json -j 15`
   - 結果: `269/269 pass`
   - `node nodesrc/tests.js -i tests/move_effect.n.md --no-tree -o /tmp/tests-move-effect-capability-v2.json -j 15`
   - 結果: `227/227 pass`
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-v2.json -j 15`
+  - 結果: `272/272 pass`
 
 # 2026-03-05 作業メモ (フェーズC: kpread の header 直アクセスを共通安全ヘルパへ統一)
 

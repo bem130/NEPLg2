@@ -173,14 +173,19 @@ enum TraitCapability {
     Clone,
 }
 
+fn parse_trait_capability(name: &str) -> Option<TraitCapability> {
+    match name.trim() {
+        "copy" => Some(TraitCapability::Copy),
+        "clone" => Some(TraitCapability::Clone),
+        _ => None,
+    }
+}
+
 fn detect_declared_trait_capabilities(caps: &[String]) -> Vec<TraitCapability> {
     let mut out = Vec::new();
     for cap in caps {
-        let name = cap.trim();
-        if name == "copy" {
-            out.push(TraitCapability::Copy);
-        } else if name == "clone" {
-            out.push(TraitCapability::Clone);
+        if let Some(parsed) = parse_trait_capability(cap) {
+            out.push(parsed);
         }
     }
     out
@@ -574,6 +579,17 @@ pub fn typecheck(
                 let mut f_labels = LabelEnv::new();
                 let (tps, _bounds_vec, _bounds_map) =
                     collect_type_params(&mut ctx, &mut f_labels, &t.type_params, &traits, &mut diagnostics);
+                for cap in &t.capabilities {
+                    if parse_trait_capability(cap).is_none() {
+                        diagnostics.push(
+                            Diagnostic::error(
+                                format!("unknown trait capability '{}'", cap.trim()),
+                                t.name.span,
+                            )
+                            .with_id(DiagnosticId::TypeUnknownTraitCapability),
+                        );
+                    }
+                }
                 if !t.type_params.is_empty() {
                     diagnostics.push(
                         Diagnostic::error(
