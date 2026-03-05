@@ -7624,3 +7624,6 @@
   - run_test 直実行確認:
     - `argv=["a","b"]` で `cliarg_count` 出力が `"3"`
     - `argv=[]` で `cliarg_count` 出力が `"1"`
+  - tests.js 単体確認:
+    - `node nodesrc/tests.js -i stdlib/tests/cliarg.n.md --no-stdlib --no-tree -o /tmp/tests-cliarg-only-argv.json -j 1 --assert-io`
+    - 結果: `2/2 pass`
