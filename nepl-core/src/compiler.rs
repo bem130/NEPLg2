@@ -245,6 +245,13 @@ pub fn compile_module(
         return Err(CoreError::from_diagnostics(diags));
     }
     let profile = options.profile.unwrap_or(BuildProfile::detect());
+    let precheck_diags = crate::target_precheck::precheck_module_raw_bodies(&module, target, profile);
+    if precheck_diags
+        .iter()
+        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
+    {
+        return Err(CoreError::from_diagnostics(precheck_diags));
+    }
     let tc = run_typecheck(&module, target, profile)?;
     let mut types = tc.types;
     let mut hir_module = monomorphize::monomorphize(&mut types, tc.module);

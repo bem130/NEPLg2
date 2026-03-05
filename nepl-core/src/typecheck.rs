@@ -1520,6 +1520,17 @@ fn check_function(
         );
         return Err(diags);
     }
+    diags.extend(crate::target_precheck::precheck_function_raw_body_target(
+        f,
+        target,
+        profile,
+    ));
+    if diags
+        .iter()
+        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
+    {
+        return Err(diags);
+    }
 
     env.push_scope();
     for (name, ty) in captured_params.iter() {

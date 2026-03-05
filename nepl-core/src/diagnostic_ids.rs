@@ -213,6 +213,10 @@ pub enum DiagnosticId {
     TypeEntryFunctionMissingOrAmbiguous = 3092,
     /// 同一 trait と同一対象型への impl が重複。
     TypeDuplicateImplForTraitTarget = 3093,
+    /// 1関数内で有効化された raw body が複数ある。
+    TypeMultipleActiveRawBodies = 3094,
+    /// raw body と target の組み合わせが不正。
+    TypeRawBodyTargetMismatch = 3095,
     /// WASM backend が extern シグネチャを lower できない。
     CodegenWasmUnsupportedExternSignature = 4001,
     /// WASM backend が関数シグネチャを lower できない。
@@ -356,6 +360,8 @@ impl DiagnosticId {
             3091 => Some(DiagnosticId::TypeImplMissingTraitMethod),
             3092 => Some(DiagnosticId::TypeEntryFunctionMissingOrAmbiguous),
             3093 => Some(DiagnosticId::TypeDuplicateImplForTraitTarget),
+            3094 => Some(DiagnosticId::TypeMultipleActiveRawBodies),
+            3095 => Some(DiagnosticId::TypeRawBodyTargetMismatch),
             4001 => Some(DiagnosticId::CodegenWasmUnsupportedExternSignature),
             4002 => Some(DiagnosticId::CodegenWasmUnsupportedFunctionSignature),
             4003 => Some(DiagnosticId::CodegenWasmMissingReturnValue),
@@ -565,6 +571,12 @@ impl DiagnosticId {
             }
             DiagnosticId::TypeDuplicateImplForTraitTarget => {
                 "duplicate impl for same trait and target type"
+            }
+            DiagnosticId::TypeMultipleActiveRawBodies => {
+                "multiple active raw bodies in one function"
+            }
+            DiagnosticId::TypeRawBodyTargetMismatch => {
+                "raw body does not match the active target"
             }
             DiagnosticId::CodegenWasmUnsupportedExternSignature => {
                 "unsupported extern signature for wasm"

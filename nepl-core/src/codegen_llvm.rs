@@ -15,6 +15,7 @@ use crate::compiler::{BuildProfile, CompileTarget};
 use crate::ast::Directive;
 use crate::diagnostic_ids::DiagnosticId;
 use crate::hir::{FuncRef, HirBlock, HirBody, HirExpr, HirExprKind, HirFunction, HirModule};
+use crate::target_precheck::{self, ActiveRawBody};
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
 /// LLVM IR 生成時のエラー。
@@ -23,7 +24,6 @@ pub enum LlvmCodegenError {
     MissingLlvmIrBlock,
     UnsupportedParsedFunctionBody { function: String },
     UnsupportedWasmBody { function: String },
-    ConflictingRawBodies { function: String },
     TypecheckFailed { reason: String },
     MissingEntryFunction { function: String },
     UnsupportedHirLowering { function: String, reason: String },
@@ -48,11 +48,6 @@ impl core::fmt::Display for LlvmCodegenError {
                 "llvm target cannot lower #wasm function body; function '{}'",
                 function
             ),
-            LlvmCodegenError::ConflictingRawBodies { function } => write!(
-                f,
-                "function '{}' has multiple active raw bodies after #if gate evaluation",
-                function
-            ),
             LlvmCodegenError::TypecheckFailed { reason } => {
                 write!(f, "failed to typecheck module for llvm lowering: {}", reason)
             }
@@ -71,13 +66,6 @@ impl core::fmt::Display for LlvmCodegenError {
     }
 }
 
-enum RawBodySelection<'a> {
-    None,
-    Llvm(&'a crate::ast::LlvmIrBlock),
-    Wasm,
-    Conflict,
-}
-
 /// `#llvmir` ブロックを連結して LLVM IR テキストを生成する。
 ///
 /// 現段階では手書き `#llvmir` を主経路とし、Parsed 関数は最小 subset のみ lower する。
@@ -92,24 +80,21 @@ pub fn emit_ll_from_module_for_target(
     profile: BuildProfile,
 ) -> Result<String, LlvmCodegenError> {
     validate_target_directive_for_llvm(module)?;
+    let precheck_diags = target_precheck::precheck_module_raw_bodies(module, target, profile);
+    if precheck_diags
+        .iter()
+        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
+    {
+        return Err(LlvmCodegenError::TypecheckFailed {
+            reason: summarize_diagnostics_for_message(precheck_diags.as_slice()),
+        });
+    }
     let mut out = String::new();
     let entry_names = collect_active_entry_names(module, target, profile);
     let reachable_hint = compute_reachable_hint(module, target, profile, &entry_names);
     let mut emitted_functions: Vec<String> = Vec::new();
-    let mut pending_if: Option<bool> = None;
-
-    for stmt in &module.root.items {
-        if let Stmt::Directive(d) = stmt {
-            if let Some(allowed) = gate_allows(d, target, profile) {
-                pending_if = Some(allowed);
-                continue;
-            }
-        }
-        let allowed = pending_if.unwrap_or(true);
-        pending_if = None;
-        if !allowed {
-            continue;
-        }
+    for idx in target_precheck::active_stmt_indices(&module.root, target, profile) {
+        let stmt = &module.root.items[idx];
 
         match stmt {
             Stmt::LlvmIr(block) => {
@@ -128,22 +113,22 @@ pub fn emit_ll_from_module_for_target(
                     if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
                         continue;
                     }
-                    match select_raw_body_from_parsed_block(block, target, profile) {
-                        RawBodySelection::Llvm(raw) => {
+                    match target_precheck::select_active_raw_body(
+                        block,
+                        target,
+                        profile,
+                        def.name.name.as_str(),
+                    ) {
+                        Ok(Some(ActiveRawBody::LlvmIr(raw))) => {
                             collect_defined_functions_from_llvmir_block(raw, &mut emitted_functions);
                             append_llvmir_block(&mut out, raw);
                         }
-                        RawBodySelection::Wasm => {
+                        Ok(Some(ActiveRawBody::Wasm(_))) => {
                             return Err(LlvmCodegenError::UnsupportedWasmBody {
                                 function: def.name.name.clone(),
                             });
                         }
-                        RawBodySelection::Conflict => {
-                            return Err(LlvmCodegenError::ConflictingRawBodies {
-                                function: def.name.name.clone(),
-                            });
-                        }
-                        RawBodySelection::None => {
+                        Ok(None) => {
                             if let Some(lowered) = lower_parsed_fn_with_gates(
                                 def.name.name.as_str(),
                                 &def.signature,
@@ -156,6 +141,11 @@ pub fn emit_ll_from_module_for_target(
                                 out.push_str(&lowered);
                                 out.push('\n');
                             }
+                        }
+                        Err(diag) => {
+                            return Err(LlvmCodegenError::TypecheckFailed {
+                                reason: summarize_diagnostics_for_message(&[diag]),
+                            });
                         }
                     }
                 }
@@ -287,7 +277,7 @@ fn validate_target_directive_for_llvm(module: &Module) -> Result<(), LlvmCodegen
 }
 
 fn is_known_target_name(name: &str) -> bool {
-    matches!(name, "wasm" | "core" | "wasi" | "std" | "llvm")
+    matches!(name, "wasm" | "core" | "wasi" | "std" | "wasix" | "llvm")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2666,43 +2656,14 @@ fn collect_active_entry_names(
     target: CompileTarget,
     profile: BuildProfile,
 ) -> Vec<String> {
-    let mut pending_if: Option<bool> = None;
     let mut out = Vec::new();
-    for stmt in &module.root.items {
-        if let Stmt::Directive(d) = stmt {
-            if let Some(allowed) = gate_allows(d, target, profile) {
-                pending_if = Some(allowed);
-                continue;
-            }
-        }
-        let allowed = pending_if.unwrap_or(true);
-        pending_if = None;
-        if !allowed {
-            continue;
-        }
+    for idx in target_precheck::active_stmt_indices(&module.root, target, profile) {
+        let stmt = &module.root.items[idx];
         if let Stmt::Directive(Directive::Entry { name }) = stmt {
             out.push(name.name.clone());
         }
     }
     out
-}
-
-fn gate_allows(d: &Directive, target: CompileTarget, profile: BuildProfile) -> Option<bool> {
-    match d {
-        Directive::IfTarget { target: gate, .. } => {
-            Some(crate::compiler::target_gate_allows_expr(gate.as_str(), target))
-        }
-        Directive::IfProfile { profile: p, .. } => Some(profile_allows(p.as_str(), profile)),
-        _ => None,
-    }
-}
-
-fn profile_allows(profile: &str, active: BuildProfile) -> bool {
-    match profile {
-        "debug" => matches!(active, BuildProfile::Debug),
-        "release" => matches!(active, BuildProfile::Release),
-        _ => false,
-    }
 }
 
 fn append_llvmir_block(out: &mut String, block: &crate::ast::LlvmIrBlock) {
@@ -2711,52 +2672,6 @@ fn append_llvmir_block(out: &mut String, block: &crate::ast::LlvmIrBlock) {
         out.push('\n');
     }
     out.push('\n');
-}
-
-fn active_stmt_indices(block: &Block, target: CompileTarget, profile: BuildProfile) -> Vec<usize> {
-    let mut pending_if: Option<bool> = None;
-    let mut out = Vec::new();
-    for (idx, stmt) in block.items.iter().enumerate() {
-        if let Stmt::Directive(d) = stmt {
-            if let Some(allowed) = gate_allows(d, target, profile) {
-                pending_if = Some(allowed);
-                continue;
-            }
-        }
-        let allowed = pending_if.unwrap_or(true);
-        pending_if = None;
-        if allowed {
-            out.push(idx);
-        }
-    }
-    out
-}
-
-fn select_raw_body_from_parsed_block<'a>(
-    block: &'a Block,
-    target: CompileTarget,
-    profile: BuildProfile,
-) -> RawBodySelection<'a> {
-    let mut selected: Option<RawBodySelection<'a>> = None;
-    for idx in active_stmt_indices(block, target, profile) {
-        match &block.items[idx] {
-            Stmt::LlvmIr(raw) => {
-                if selected.is_some() {
-                    return RawBodySelection::Conflict;
-                }
-                selected = Some(RawBodySelection::Llvm(raw));
-            }
-            Stmt::Wasm(_) => {
-                if selected.is_some() {
-                    return RawBodySelection::Conflict;
-                }
-                selected = Some(RawBodySelection::Wasm);
-            }
-            Stmt::Directive(_) => {}
-            _ => return RawBodySelection::None,
-        }
-    }
-    selected.unwrap_or(RawBodySelection::None)
 }
 
 fn lower_parsed_fn_with_gates(
@@ -2779,7 +2694,7 @@ fn lower_parsed_fn_with_gates(
         return None;
     }
 
-    let active = active_stmt_indices(body, target, profile);
+    let active = target_precheck::active_stmt_indices(body, target, profile);
     if active.len() != 1 {
         return None;
     }

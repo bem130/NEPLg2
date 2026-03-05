@@ -497,7 +497,7 @@ fn main <()->i32> ():
 ## wasm_rejects_llvmir_body_with_diag_id
 
 neplg2:test[compile_fail]
-diag_id: 4005
+diag_id: 3095
 ```neplg2
 #entry main
 #indent 4
@@ -508,6 +508,27 @@ fn main <()->i32> ():
         define i32 @main() {
         entry:
             ret i32 1
+        }
+```
+
+## raw_body_conflict_reports_diag_id
+
+neplg2:test[compile_fail]
+diag_id: 3094
+```neplg2
+#entry main
+#indent 4
+#target core
+
+fn main <()->i32> ():
+    #if[target=core]
+    #wasm:
+        i32.const 1
+    #if[target=core]
+    #llvmir:
+        define i32 @main() {
+        entry:
+            ret i32 2
         }
 ```
 

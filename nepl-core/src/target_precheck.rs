@@ -1,0 +1,236 @@
+//! target/profile 条件を反映した raw body 事前検証。
+//!
+//! codegen backend に入る前段で `#wasm` / `#llvmir` の有効性を共通検証し、
+//! backend ごとの差分診断を減らすために利用する。
+
+extern crate alloc;
+
+use alloc::format;
+use alloc::vec::Vec;
+
+use crate::ast::{Block, Directive, FnBody, FnDef, LlvmIrBlock, Module, Stmt, WasmBlock};
+use crate::compiler::{BuildProfile, CompileTarget};
+use crate::diagnostic::Diagnostic;
+use crate::diagnostic_ids::DiagnosticId;
+use crate::span::Span;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RawBodyKind {
+    Wasm,
+    LlvmIr,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ActiveRawBody<'a> {
+    Wasm(&'a WasmBlock),
+    LlvmIr(&'a LlvmIrBlock),
+}
+
+impl<'a> ActiveRawBody<'a> {
+    pub fn kind(&self) -> RawBodyKind {
+        match self {
+            ActiveRawBody::Wasm(_) => RawBodyKind::Wasm,
+            ActiveRawBody::LlvmIr(_) => RawBodyKind::LlvmIr,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        match self {
+            ActiveRawBody::Wasm(b) => b.span,
+            ActiveRawBody::LlvmIr(b) => b.span,
+        }
+    }
+}
+
+fn profile_allows(profile: &str, active: BuildProfile) -> bool {
+    match profile {
+        "debug" => matches!(active, BuildProfile::Debug),
+        "release" => matches!(active, BuildProfile::Release),
+        _ => false,
+    }
+}
+
+pub fn gate_allows(
+    directive: &Directive,
+    target: CompileTarget,
+    active_profile: BuildProfile,
+) -> Option<bool> {
+    match directive {
+        Directive::IfTarget { target: gate, .. } => {
+            Some(crate::compiler::target_gate_allows_expr(gate.as_str(), target))
+        }
+        Directive::IfProfile { profile, .. } => {
+            Some(profile_allows(profile.as_str(), active_profile))
+        }
+        _ => None,
+    }
+}
+
+pub fn active_stmt_indices(
+    block: &Block,
+    target: CompileTarget,
+    profile: BuildProfile,
+) -> Vec<usize> {
+    let mut pending_if: Option<bool> = None;
+    let mut out = Vec::new();
+    for (idx, stmt) in block.items.iter().enumerate() {
+        if let Stmt::Directive(d) = stmt {
+            if let Some(allowed) = gate_allows(d, target, profile) {
+                pending_if = Some(allowed);
+                continue;
+            }
+        }
+        let allowed = pending_if.unwrap_or(true);
+        pending_if = None;
+        if allowed {
+            out.push(idx);
+        }
+    }
+    out
+}
+
+pub fn select_active_raw_body<'a>(
+    block: &'a Block,
+    target: CompileTarget,
+    profile: BuildProfile,
+    owner_name: &str,
+) -> Result<Option<ActiveRawBody<'a>>, Diagnostic> {
+    let mut selected: Option<ActiveRawBody<'a>> = None;
+    for idx in active_stmt_indices(block, target, profile) {
+        match &block.items[idx] {
+            Stmt::Wasm(w) => {
+                if selected.is_some() {
+                    return Err(multiple_active_raw_bodies_diagnostic(w.span, owner_name));
+                }
+                selected = Some(ActiveRawBody::Wasm(w));
+            }
+            Stmt::LlvmIr(l) => {
+                if selected.is_some() {
+                    return Err(multiple_active_raw_bodies_diagnostic(l.span, owner_name));
+                }
+                selected = Some(ActiveRawBody::LlvmIr(l));
+            }
+            Stmt::Directive(_) => {}
+            _ => return Ok(None),
+        }
+    }
+    Ok(selected)
+}
+
+pub fn is_raw_body_allowed_for_target(kind: RawBodyKind, target: CompileTarget) -> bool {
+    match target {
+        CompileTarget::Llvm => matches!(kind, RawBodyKind::LlvmIr),
+        CompileTarget::Wasm | CompileTarget::Wasi | CompileTarget::Wasix => {
+            matches!(kind, RawBodyKind::Wasm)
+        }
+    }
+}
+
+fn target_name(target: CompileTarget) -> &'static str {
+    match target {
+        CompileTarget::Wasm => "wasm",
+        CompileTarget::Wasi => "wasi",
+        CompileTarget::Wasix => "wasix",
+        CompileTarget::Llvm => "llvm",
+    }
+}
+
+fn raw_name(kind: RawBodyKind) -> &'static str {
+    match kind {
+        RawBodyKind::Wasm => "wasm",
+        RawBodyKind::LlvmIr => "llvmir",
+    }
+}
+
+pub fn multiple_active_raw_bodies_diagnostic(span: Span, owner_name: &str) -> Diagnostic {
+    Diagnostic::error(
+        format!(
+            "multiple active raw bodies are not allowed in function '{}'",
+            owner_name
+        ),
+        span,
+    )
+    .with_id(DiagnosticId::TypeMultipleActiveRawBodies)
+}
+
+pub fn raw_body_target_mismatch_diagnostic(
+    span: Span,
+    owner_name: &str,
+    target: CompileTarget,
+    raw_kind: RawBodyKind,
+) -> Diagnostic {
+    Diagnostic::error(
+        format!(
+            "function '{}' uses #{} body, but #target {} does not allow it",
+            owner_name,
+            raw_name(raw_kind),
+            target_name(target)
+        ),
+        span,
+    )
+    .with_id(DiagnosticId::TypeRawBodyTargetMismatch)
+}
+
+pub fn precheck_function_raw_body_target(
+    function: &FnDef,
+    target: CompileTarget,
+    profile: BuildProfile,
+) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    match &function.body {
+        FnBody::Parsed(block) => match select_active_raw_body(
+            block,
+            target,
+            profile,
+            function.name.name.as_str(),
+        ) {
+            Ok(Some(raw)) => {
+                if !is_raw_body_allowed_for_target(raw.kind(), target) {
+                    out.push(raw_body_target_mismatch_diagnostic(
+                        raw.span(),
+                        function.name.name.as_str(),
+                        target,
+                        raw.kind(),
+                    ));
+                }
+            }
+            Ok(None) => {}
+            Err(diag) => out.push(diag),
+        },
+        FnBody::Wasm(w) => {
+            if !is_raw_body_allowed_for_target(RawBodyKind::Wasm, target) {
+                out.push(raw_body_target_mismatch_diagnostic(
+                    w.span,
+                    function.name.name.as_str(),
+                    target,
+                    RawBodyKind::Wasm,
+                ));
+            }
+        }
+        FnBody::LlvmIr(l) => {
+            if !is_raw_body_allowed_for_target(RawBodyKind::LlvmIr, target) {
+                out.push(raw_body_target_mismatch_diagnostic(
+                    l.span,
+                    function.name.name.as_str(),
+                    target,
+                    RawBodyKind::LlvmIr,
+                ));
+            }
+        }
+    }
+    out
+}
+
+pub fn precheck_module_raw_bodies(
+    module: &Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    for idx in active_stmt_indices(&module.root, target, profile) {
+        if let Stmt::FnDef(function) = &module.root.items[idx] {
+            out.extend(precheck_function_raw_body_target(function, target, profile));
+        }
+    }
+    out
+}

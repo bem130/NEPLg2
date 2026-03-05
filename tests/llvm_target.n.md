@@ -30,6 +30,7 @@ fn c <()->i32> ():
 ## llvm_rejects_wasm_body
 
 neplg2:test[llvm_cli, compile_fail]
+diag_id: 3095
 ```neplg2
 #target llvm
 #entry main

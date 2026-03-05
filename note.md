@@ -1,3 +1,39 @@
+# 2026-03-05 作業メモ (codegen 前段共通 precheck 導入: raw body/target 診断の統一)
+
+- 目的:
+  - `codegen_wasm` / `codegen_llvm` が個別に `#wasm/#llvmir` の target 不整合を診断する構造をやめ、前段共通チェックで診断を確定する。
+- 根本原因:
+  - `#if[target=...]` 評価、active 文抽出、raw body 選択ロジックが `typecheck` と `codegen_llvm` に分散し、判定差分と backend 依存診断が発生していた。
+- 変更:
+  - 新規 `nepl-core/src/target_precheck.rs` を追加。
+    - `gate_allows`（`#if[target/profile]` 判定）
+    - `active_stmt_indices`（active 文抽出）
+    - `select_active_raw_body`（関数 body 内 `#wasm/#llvmir` 選択）
+    - `precheck_function_raw_body_target` / `precheck_module_raw_bodies`（target 整合検証）
+  - `nepl-core/src/diagnostic_ids.rs`
+    - `D3094 TypeMultipleActiveRawBodies`
+    - `D3095 TypeRawBodyTargetMismatch`
+  - `nepl-core/src/compiler.rs`
+    - `compile_module` の typecheck 前に `precheck_module_raw_bodies` を実行し、エラー時は早期終了。
+  - `nepl-core/src/typecheck.rs`
+    - `check_function` 冒頭で `precheck_function_raw_body_target` を実行し、`typecheck` 直接利用経路でも同一診断を保証。
+  - `nepl-core/src/codegen_llvm.rs`
+    - `emit_ll_from_module_for_target` 冒頭で `precheck_module_raw_bodies` を実行。
+    - `#if` active 文抽出を共通 `active_stmt_indices` に統一。
+    - Parsed 関数の raw body 選択を共通 `select_active_raw_body` に統一。
+    - 重複していた local gate/raw 選択関数群を削除。
+  - テスト:
+    - 既存更新:
+      - `tests/neplg2.n.md` の `wasm_rejects_llvmir_body_with_diag_id` を `diag_id: 3095` へ変更。
+      - `tests/neplg2.n.md` に `raw_body_conflict_reports_diag_id`（`diag_id: 3094`）追加。
+      - `tests/llvm_target.n.md` の `llvm_rejects_wasm_body` に `diag_id: 3095` 追加。
+    - 新規追加:
+      - `tests/raw_body_precheck.n.md`（3ケース、`D3094/D3095` を固定確認）。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md --no-stdlib --no-tree --runner all -o /tmp/tests-raw-body-precheck.json -j 15` -> `3/3 pass`
+  - 参考: `tests/neplg2.n.md` + `tests/llvm_target.n.md` を `--with-stdlib` で実行すると既知の stdlib 側失敗（list doctest）が混ざるが、追加した `D3094/D3095` ケース自体は通過していることを `/tmp/tests-codegen-precheck.json` で確認。
+
 # 2026-03-05 作業メモ (`;` 仕様先行修正: `stdlib/core/math.nepl`)
 
 - 目的:
