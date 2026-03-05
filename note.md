@@ -1,3 +1,18 @@
+# 2026-03-06 作業メモ (フェーズD: allocator helper 解決の意味論修正)
+
+- 目的:
+  - runtime helper 共通化後に発生した run-time 失敗 (`unreachable` / `memory access out of bounds`) を、間に合わせではなく helper 解決の意味論から修正する。
+- 原因:
+  - `alloc`（安全API）と `alloc_raw`（低レベルAPI）は現状の lowering では型互換になりうるため、`ALLOC_CANDIDATES=["alloc","alloc_raw"]` へ変更すると backend 内部確保で誤って `alloc` を掴む経路が発生する。
+  - その結果、内部確保の前提（生ポインタ返却）と合わず、実行時に `unreachable` / OOB が発生した。
+- 変更:
+  - `nepl-core/src/runtime_helpers.rs`
+    - `ALLOC_CANDIDATES` を `["alloc_raw", "alloc"]` に戻し、内部 helper 解決は生ポインタ意味論を優先するよう修正。
+    - 単体テスト期待値も raw 優先へ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-alloc-order-fix.json -j 15` -> `791/791 pass`
+
 # 2026-03-06 作業メモ (フェーズD: runtime helper 解決の共通化と raw 依存縮小)
 
 - 目的:

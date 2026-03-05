@@ -5,7 +5,7 @@ extern crate alloc;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 
-pub const ALLOC_CANDIDATES: &[&str] = &["alloc", "alloc_raw"];
+pub const ALLOC_CANDIDATES: &[&str] = &["alloc_raw", "alloc"];
 pub const DEALLOC_CANDIDATES: &[&str] = &["dealloc", "dealloc_raw"];
 pub const REALLOC_CANDIDATES: &[&str] = &["realloc", "realloc_raw"];
 
@@ -76,4 +76,41 @@ pub fn find_runtime_helper_index(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn helper_base_name_handles_namespaced_and_mangled_symbols() {
+        assert_eq!(helper_base_name("alloc"), "alloc");
+        assert_eq!(helper_base_name("alloc__i32"), "alloc");
+        assert_eq!(helper_base_name("::core/mem::alloc"), "alloc");
+        assert_eq!(helper_base_name("::core/mem::alloc__i32"), "alloc");
+    }
+
+    #[test]
+    fn find_runtime_helper_key_prefers_raw_allocator_for_internal_codegen() {
+        let mut map = BTreeMap::new();
+        map.insert(String::from("alloc_raw"), 1u32);
+        map.insert(String::from("alloc"), 2u32);
+        let found = find_runtime_helper_key(&map, RuntimeHelperKind::Alloc);
+        assert_eq!(found, Some("alloc_raw"));
+
+        let mut raw_only = BTreeMap::new();
+        raw_only.insert(String::from("::core/mem::alloc_raw__i32"), 10u32);
+        let found_raw = find_runtime_helper_key(&raw_only, RuntimeHelperKind::Alloc);
+        assert_eq!(found_raw, Some("::core/mem::alloc_raw__i32"));
+    }
+
+    #[test]
+    fn find_runtime_helper_index_skips_current_function_index() {
+        let mut map = BTreeMap::new();
+        map.insert(String::from("alloc"), 4u32);
+        map.insert(String::from("::core/mem::alloc_raw__i32"), 5u32);
+        map.insert(String::from("current"), 4u32);
+        let idx = find_runtime_helper_index(&map, RuntimeHelperKind::Alloc, Some("current"));
+        assert_eq!(idx, Some(5u32));
+    }
 }
