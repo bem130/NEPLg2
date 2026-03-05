@@ -1,3 +1,18 @@
+# 2026-03-05 作業メモ (フェーズD: llvm intrinsic 引数・型チェックの backend 診断を不変条件化)
+
+- 目的:
+  - `codegen_llvm` intrinsic lowering に残っていた backend 診断を削減し、前段通過後の生成専任モデルへ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - 以下を `UnsupportedHirLowering` 返却から internal panic へ変更:
+      - `load` の引数個数/型引数個数不一致、ポインタ値不在、ポインタ型不一致
+      - `store` の引数個数/型引数個数不一致、ポインタ/値不在、ポインタ型不一致、`u8` 値型不一致、格納型不一致
+      - `add` の引数個数不一致、lhs/rhs 不在、i32以外
+      - `f32_to_i32` / `i32_to_u8` / `u8_to_i32` の引数個数・値不在・型不一致
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v4.json -j 15` -> `8/8 pass`
+
 # 2026-03-05 作業メモ (フェーズD: llvm 制御構文の backend 診断を不変条件化)
 
 - 目的:

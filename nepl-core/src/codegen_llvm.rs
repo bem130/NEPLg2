@@ -2076,22 +2076,22 @@ fn lower_hir_expr(
             }
             if name == "load" {
                 if type_args.len() != 1 || args.len() != 1 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic load requires one type arg and one value arg"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic load requires one type arg and one value arg in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(ptr_v) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic load pointer must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic load pointer must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if ptr_v.ty != LlTy::I32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic load pointer must be i32"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic load pointer must be i32 in '{}' (got {:?})",
+                        ctx.function_name, ptr_v.ty
+                    );
                 }
                 let ty_id = types.resolve_id(type_args[0]);
                 let ty_kind = types.get(ty_id);
@@ -2123,37 +2123,37 @@ fn lower_hir_expr(
             }
             if name == "store" {
                 if type_args.len() != 1 || args.len() != 2 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic store requires one type arg and two value args"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic store requires one type arg and two value args in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(ptr_v) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic store pointer must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic store pointer must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 let Some(val_v) = lower_hir_expr(types, ctx, &args[1])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic store value must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic store value must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if ptr_v.ty != LlTy::I32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic store pointer must be i32"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic store pointer must be i32 in '{}' (got {:?})",
+                        ctx.function_name, ptr_v.ty
+                    );
                 }
                 let ty_id = types.resolve_id(type_args[0]);
                 let ty_kind = types.get(ty_id);
                 if matches!(ty_kind, TypeKind::U8) {
                     if val_v.ty != LlTy::I32 {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: String::from("intrinsic store<u8> expects i32 value"),
-                        });
+                        panic!(
+                            "internal compiler error: intrinsic store<u8> expects i32 value in '{}' (got {:?})",
+                            ctx.function_name, val_v.ty
+                        );
                     }
                     let p_ptr = ctx.linear_i8_ptr_from_i32(ptr_v.repr.as_str());
                     let b = ctx.next_tmp();
@@ -2163,13 +2163,10 @@ fn lower_hir_expr(
                 }
                 let store_ty = llty_for_type(types, ty_id);
                 if val_v.ty != store_ty {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!(
-                            "intrinsic store type mismatch: expected {:?}, got {:?}",
-                            store_ty, val_v.ty
-                        ),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic store type mismatch in '{}' ({:?} vs {:?})",
+                        ctx.function_name, store_ty, val_v.ty
+                    );
                 }
                 let p_ptr = ctx.linear_typed_ptr_from_i32(ptr_v.repr.as_str(), store_ty);
                 ctx.push_line(&format!(
@@ -2187,28 +2184,28 @@ fn lower_hir_expr(
             }
             if name == "add" {
                 if args.len() != 2 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic add expects two arguments"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic add expects two arguments in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(a) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic add lhs must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic add lhs must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 let Some(b) = lower_hir_expr(types, ctx, &args[1])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic add rhs must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic add rhs must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if a.ty != LlTy::I32 || b.ty != LlTy::I32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic add currently supports i32 only"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic add supports i32 only in '{}' ({:?}, {:?})",
+                        ctx.function_name, a.ty, b.ty
+                    );
                 }
                 let out = ctx.next_tmp();
                 ctx.push_line(&format!("  {} = add i32 {}, {}", out, a.repr, b.repr));
@@ -2219,22 +2216,22 @@ fn lower_hir_expr(
             }
             if name == "f32_to_i32" {
                 if args.len() != 1 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic f32_to_i32 expects one argument"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic f32_to_i32 expects one argument in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic f32_to_i32 value must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic f32_to_i32 value must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if v.ty != LlTy::F32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic f32_to_i32 expects f32"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic f32_to_i32 expects f32 in '{}' (got {:?})",
+                        ctx.function_name, v.ty
+                    );
                 }
                 let out = ctx.next_tmp();
                 ctx.push_line(&format!("  {} = fptosi float {} to i32", out, v.repr));
@@ -2245,22 +2242,22 @@ fn lower_hir_expr(
             }
             if name == "i32_to_u8" {
                 if args.len() != 1 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic i32_to_u8 expects one argument"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic i32_to_u8 expects one argument in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic i32_to_u8 value must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic i32_to_u8 value must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if v.ty != LlTy::I32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic i32_to_u8 expects i32"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic i32_to_u8 expects i32 in '{}' (got {:?})",
+                        ctx.function_name, v.ty
+                    );
                 }
                 let out = ctx.next_tmp();
                 ctx.push_line(&format!("  {} = and i32 {}, 255", out, v.repr));
@@ -2271,22 +2268,22 @@ fn lower_hir_expr(
             }
             if name == "u8_to_i32" {
                 if args.len() != 1 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic u8_to_i32 expects one argument"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic u8_to_i32 expects one argument in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic u8_to_i32 value must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic u8_to_i32 value must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if v.ty != LlTy::I32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic u8_to_i32 expects i32"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic u8_to_i32 expects i32 in '{}' (got {:?})",
+                        ctx.function_name, v.ty
+                    );
                 }
                 let out = ctx.next_tmp();
                 ctx.push_line(&format!("  {} = and i32 {}, 255", out, v.repr));
