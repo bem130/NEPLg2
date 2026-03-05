@@ -45,6 +45,12 @@ pub fn precheck_wasm_codegen(ctx: &TypeCtx, module: &HirModule) -> Vec<Diagnosti
                     }
                 }
             }
+            if matches!(f.body, HirBody::LlvmIr(_)) {
+                out.push(
+                    Diagnostic::error("llvm ir block cannot be compiled by wasm backend", f.span)
+                        .with_id(DiagnosticId::CodegenWasmLlvmIrBodyNotSupported),
+                );
+            }
         }
     }
 

@@ -927,9 +927,9 @@ fn lower_user(
             }
         }
         HirBody::LlvmIr(_) => {
-            diags.push(
-                Diagnostic::error("llvm ir block cannot be compiled by wasm backend", func.span)
-                    .with_id(DiagnosticId::CodegenWasmLlvmIrBodyNotSupported),
+            panic!(
+                "internal compiler error: wasm codegen reached llvmir body in function '{}' after precheck",
+                func.name
             );
         }
     }
