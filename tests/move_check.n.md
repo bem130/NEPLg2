@@ -98,52 +98,104 @@ fn main <()->i32> ():
 
 ## move_reassign_non_copy
 
-neplg2:test[skip]
+neplg2:test
+ret: 0
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn main <()->i32> ():
+    let mut x <RegionToken> RegionToken @token_id
+    let y <RegionToken> x
+    set x RegionToken @token_id
+    let z <RegionToken> x
     0
 ```
 
 ## move_reassign_copy
 
-neplg2:test[skip]
+neplg2:test
+ret: 0
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
+
+fn main <()->i32> ():
+    let mut x <i32> 1
+    let y <i32> x
+    set x 2
+    let z <i32> x
     0
 ```
 
 ## move_reference_ok
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
+diag_id: 3051
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn main <()->i32> ():
+    let x <RegionToken> RegionToken @token_id
+    let r <&RegionToken> &x
+    let y <RegionToken> x
     0
 ```
 
 ## move_borrow_after_move_err
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
+diag_id: 3063
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
-    0
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn main <()->()> ():
+    let x <RegionToken> RegionToken @token_id
+    let y <RegionToken> x
+    let r <&RegionToken> &x
 ```
 
 ## move_pass_to_function_err
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
+diag_id: 3053
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn consume <(RegionToken)->i32> (_w):
     0
+
+fn main <()->()> ():
+    let x <RegionToken> RegionToken @token_id
+    consume x
+    let y <RegionToken> x
 ```
 
 ## move_struct_field_err
@@ -152,36 +204,103 @@ neplg2:test[skip]
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
-    0
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+struct S:
+    f <RegionToken>
+
+fn main <()->()> ():
+    let s <S> S RegionToken @token_id
+    let a <RegionToken> s.f
+    let b <RegionToken> s.f
 ```
 
 ## move_branch_reinit_mixed
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
+diag_id: 3054
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
-    0
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+fn token_id <(i32)->i32> (x):
+    x
+
+fn main <()->()> ():
+    let mut x <RegionToken> RegionToken @token_id
+    let cnd <bool> true
+    if cnd:
+        then:
+            let y <RegionToken> x
+        else:
+            set x RegionToken @token_id
+    let z <RegionToken> x
 ```
 
 ## move_nested_match_potentially_moved
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
+diag_id: 3054
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
-    0
+
+struct RegionToken:
+    raw <(i32)->i32>
+fn token_id <(i32)->i32> (x):
+    x
+enum BoolWrap:
+    True
+    False
+
+fn main <()->()> ():
+    let x <RegionToken> RegionToken @token_id
+    let a <BoolWrap> BoolWrap::True
+    match a:
+        BoolWrap::True:
+            match a:
+                BoolWrap::True:
+                    let y <RegionToken> x
+                    ()
+                BoolWrap::False:
+                    ()
+        BoolWrap::False:
+            ()
+    let z <RegionToken> x
 ```
 
 ## move_in_match_arms
 
-neplg2:test[skip]
+neplg2:test[compile_fail]
+diag_id: 3054
 ```neplg2
 #entry main
 #indent 4
-fn main <()->i32>():
-    0
+
+struct RegionToken:
+    raw <(i32)->i32>
+fn token_id <(i32)->i32> (x):
+    x
+enum BoolWrap:
+    True
+    False
+
+fn main <()->()> ():
+    let x <RegionToken> RegionToken @token_id
+    let v <BoolWrap> BoolWrap::True
+    match v:
+        BoolWrap::True:
+            let y <RegionToken> x
+            ()
+        BoolWrap::False:
+            ()
+    let z <RegionToken> x
 ```

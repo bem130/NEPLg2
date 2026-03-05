@@ -6849,3 +6849,21 @@
     - `282/282 pass`
   - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v5.json -j 15`
     - `838/838 pass`
+
+# 2026-03-05 作業メモ (move_check の diag_id 検証精度修正)
+
+- 事象:
+  - `tests/move_check.n.md::doctest#7` が `diag_id: 3051` 期待で失敗。
+  - 実際は `D3003` が先に出ており、`diag_id` 検証として不正確だった。
+
+- 原因:
+  - `move_reference_ok` ケースで `fn main <()->i32>` に対して末尾式がなく、
+    move/borrow 診断より先に戻り値不一致診断が発生していた。
+
+- 修正:
+  - `tests/move_check.n.md` の `move_reference_ok` に末尾式 `0` を追加し、
+    目的の `D3051` が前面に出る形へ修正。
+
+- テスト:
+  - `node nodesrc/tests.js -i tests/move_check.n.md -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-movecheck-unskip-v5.json -j 15`
+    - `282/282 pass`
