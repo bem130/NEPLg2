@@ -1545,16 +1545,16 @@ fn lower_hir_expr(
             else_branch,
         } => {
             let Some(cond_v) = lower_hir_expr(types, ctx, cond)? else {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("if condition must produce a value"),
-                });
+                panic!(
+                    "internal compiler error: if condition must produce a value in '{}'",
+                    ctx.function_name
+                );
             };
             if cond_v.ty != LlTy::I32 {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("if condition must be i32/bool-compatible"),
-                });
+                panic!(
+                    "internal compiler error: if condition must be i32/bool-compatible in '{}' (got {:?})",
+                    ctx.function_name, cond_v.ty
+                );
             }
             let cond_i1 = ctx.next_tmp();
             ctx.push_line(&format!(
@@ -1581,10 +1581,10 @@ fn lower_hir_expr(
             if let Some(tv) = lower_hir_expr(types, ctx, then_branch)? {
                 if let Some(slot) = result_slot.as_ref() {
                     if tv.ty != result_ty {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: String::from("then branch result type mismatch"),
-                        });
+                        panic!(
+                            "internal compiler error: then branch result type mismatch in '{}' ({:?} vs {:?})",
+                            ctx.function_name, tv.ty, result_ty
+                        );
                     }
                     ctx.push_line(&format!(
                         "  store {} {}, {}* {}",
@@ -1601,10 +1601,10 @@ fn lower_hir_expr(
             if let Some(ev) = lower_hir_expr(types, ctx, else_branch)? {
                 if let Some(slot) = result_slot.as_ref() {
                     if ev.ty != result_ty {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: String::from("else branch result type mismatch"),
-                        });
+                        panic!(
+                            "internal compiler error: else branch result type mismatch in '{}' ({:?} vs {:?})",
+                            ctx.function_name, ev.ty, result_ty
+                        );
                     }
                     ctx.push_line(&format!(
                         "  store {} {}, {}* {}",
@@ -1641,16 +1641,16 @@ fn lower_hir_expr(
             ctx.push_line(&format!("  br label %{}", cond_label));
             ctx.push_line(&format!("{}:", cond_label));
             let Some(cond_v) = lower_hir_expr(types, ctx, cond)? else {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("while condition must produce a value"),
-                });
+                panic!(
+                    "internal compiler error: while condition must produce a value in '{}'",
+                    ctx.function_name
+                );
             };
             if cond_v.ty != LlTy::I32 {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("while condition must be i32/bool-compatible"),
-                });
+                panic!(
+                    "internal compiler error: while condition must be i32/bool-compatible in '{}' (got {:?})",
+                    ctx.function_name, cond_v.ty
+                );
             }
             let cmp = ctx.next_tmp();
             ctx.push_line(&format!("  {} = icmp ne i32 {}, 0", cmp, cond_v.repr));
@@ -1897,22 +1897,22 @@ fn lower_hir_expr(
         }
         HirExprKind::Match { scrutinee, arms } => {
             let Some(scr_v) = lower_hir_expr(types, ctx, scrutinee)? else {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("match scrutinee must produce a value"),
-                });
+                panic!(
+                    "internal compiler error: match scrutinee must produce a value in '{}'",
+                    ctx.function_name
+                );
             };
             if scr_v.ty != LlTy::I32 {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("match scrutinee must be enum pointer (i32)"),
-                });
+                panic!(
+                    "internal compiler error: match scrutinee must be enum pointer (i32) in '{}' (got {:?})",
+                    ctx.function_name, scr_v.ty
+                );
             }
             if arms.is_empty() {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("match must have at least one arm"),
-                });
+                panic!(
+                    "internal compiler error: match must have at least one arm in '{}'",
+                    ctx.function_name
+                );
             }
 
             let scr_ptr = ctx.linear_typed_ptr_from_i32(scr_v.repr.as_str(), LlTy::I32);

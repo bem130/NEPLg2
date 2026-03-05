@@ -1,3 +1,27 @@
+# 2026-03-05 作業メモ (フェーズD: llvm 制御構文の backend 診断を不変条件化)
+
+- 目的:
+  - `codegen_llvm` の `if/while/match` で残っていた backend 診断を削減し、型検査・前段検証通過後は生成専任へ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `if`:
+      - 条件が値を返さない
+      - 条件が `i32/bool` 互換でない
+      - then/else 分岐結果型不一致
+      を `UnsupportedHirLowering` 返却から internal panic へ変更。
+    - `while`:
+      - 条件が値を返さない
+      - 条件が `i32/bool` 互換でない
+      を internal panic へ変更。
+    - `match`:
+      - scrutinee が値を返さない
+      - scrutinee が enum pointer (`i32`) でない
+      - arm が0件
+      を internal panic へ変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v3.json -j 15` -> `8/8 pass`
+
 # 2026-03-05 作業メモ (フェーズD: llvm call_indirect の backend 診断を不変条件化)
 
 - 目的:
