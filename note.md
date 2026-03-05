@@ -6793,3 +6793,22 @@
 - 残課題:
   - `Copy/Clone` 検出の最終フォールバック（trait 名 `Copy` / `Clone`）はまだ残っている。
   - フェーズB2完了条件「文字列比較の完全撤廃」に向けて、次段で除去する。
+# 2026-03-05 作業メモ (フェーズB2: `Copy/Clone` 名フォールバック削除)
+
+- 目的:
+  - フェーズB2残課題だった `Copy` / `Clone` の trait 名ハードコードフォールバックを廃止する。
+
+- 実装:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitSemantics::detect` の末尾に残っていた
+      - `traits.get("Clone")` フォールバック
+      - `traits.get("Copy")` フォールバック
+      を削除。
+    - 能力判定は `#capability`（および構造ヒューリスティック）経路のみを使用する形に統一。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-b2-capability-targeted-v7.json -j 15`
+    - `281/281 pass`
+  - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v4.json -j 15`
+    - `837/837 pass`

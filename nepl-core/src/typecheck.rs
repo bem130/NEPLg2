@@ -145,22 +145,6 @@ impl TraitSemantics {
             }
         }
 
-        if clone_trait.is_none() {
-            if let Some(info) = traits.get("Clone") {
-                if trait_has_single_unary_self_to_self_method(info, ctx) {
-                    clone_trait = Some(("Clone".to_string(), info.self_ty));
-                }
-            }
-        }
-        if copy_trait.is_none() {
-            if let Some(info) = traits.get("Copy") {
-                if trait_is_marker(info) || trait_has_single_unary_self_to_self_method(info, ctx)
-                {
-                    copy_trait = Some(("Copy".to_string(), info.self_ty));
-                }
-            }
-        }
-
         Self {
             copy_trait,
             clone_trait,
