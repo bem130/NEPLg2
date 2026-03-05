@@ -1,3 +1,39 @@
+# 2026-03-05 作業メモ (フェーズD: web 実行時 `compile: unreachable` の根本修正)
+
+- 目的:
+  - `web/dist` 経路でのみ発生していた `phase=compile, error=unreachable` を根本原因から解消する。
+- 原因:
+  - `codegen_wasm.rs` の raw wasm 行パースで、ローカル解決クロージャが `parse_wasm_line_with_lookup` 側の `$` 正規化と二重処理になっていた。
+  - その結果、`#wasm` 本文の `$a`/`$b` が codegen 時のみ `unknown local` になり panic していた（precheck 側とは不整合）。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `parse_wasm_line` の lookup を `|name| locals.lookup(name)` に統一。
+    - 旧 `parse_local` ヘルパを削除。
+  - `nepl-web/src/lib.rs`
+    - `console_error_panic_hook::set_once()` を `#[wasm_bindgen(start)]` で有効化し、WASM panic の原因位置を可視化。
+  - `nodesrc/run_test.js`
+    - `formatError` を追加し、compile/run 失敗時に stack を保持して JSON 出力へ反映。
+- 検証:
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-after-rootfix.json -j 15` -> `8/8 pass`
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/list.nepl --no-stdlib --no-tree -o /tmp/tests-list-after-rootfix.json -j 15` -> `11/11 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-rootfix.json -j 15` -> `707/791 pass`（残り `84 fail` は run 時 `Maximum call stack size exceeded`。`compile: unreachable` は再現せず）
+
+# 2026-03-05 作業メモ (フェーズD: web 実行時 `unreachable` の切り分け)
+
+- 目的:
+  - 全体テスト (`tests + stdlib`) で多発する `phase=compile, error=unreachable` を、間に合わせではなく根本原因から切り分ける。
+- 実施:
+  - `trunk build` 後に
+    - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-baseline-after-revert-v1.json -j 15`
+    - 結果: `349/791 pass`、`442 fail`、上位失敗は `stdlib/alloc/collections/list.nepl` doctest 群の `unreachable`。
+  - 同じ入力を `nepl-cli` で単体コンパイル:
+    - `target/debug/nepl-cli -i /tmp/list_doctest1_clean.nepl --target std --emit wasm -o /tmp/list_doctest1_out -v`
+    - 結果: compile 成功 (`DEBUG: compile_module returned Ok`)。
+- 結論:
+  - 失敗は `web/dist`（WASM 上の compiler 実行）経路に限定される。
+  - `codegen_wasm` の今回差分を戻しても再現するため、単純な backend 変更起因ではない。
+  - 以降は `web` 側で panic を診断化して原因位置を可視化するタスクを上流課題として扱う。
+
 # 2026-03-05 作業メモ (フェーズD: todo整理 + llvm precheck 返り値規約)
 
 - 目的:

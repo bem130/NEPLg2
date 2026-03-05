@@ -1734,25 +1734,13 @@ impl LocalMap {
 // ---------------------------------------------------------------------
 
 fn parse_wasm_line(line: &str, locals: &LocalMap) -> Result<Vec<Instruction<'static>>, String> {
-    crate::wasm_shared::parse_wasm_line_with_lookup(line, |text| parse_local(text, locals))
+    crate::wasm_shared::parse_wasm_line_with_lookup(line, |name| locals.lookup(name))
 }
 
 pub(crate) fn is_supported_wasm_intrinsic(name: &str) -> bool {
     crate::wasm_shared::is_supported_wasm_intrinsic(name)
 }
 
-
-fn parse_local(text: &str, locals: &LocalMap) -> Option<u32> {
-    if let Some(stripped) = text.strip_prefix('$') {
-        if let Ok(idx) = stripped.parse::<u32>() {
-            Some(idx)
-        } else {
-            locals.lookup(stripped)
-        }
-    } else {
-        text.parse::<u32>().ok()
-    }
-}
 
 fn enum_variant_tag(ctx: &TypeCtx, enum_ty: TypeId, variant: &str) -> u32 {
     let name = if let Some(pos) = variant.rfind("::") {

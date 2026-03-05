@@ -37,6 +37,16 @@ function safeUnlink(p) {
     try { fs.unlinkSync(p); } catch {}
 }
 
+function formatError(e) {
+    if (!e) return 'unknown error';
+    const name = typeof e.name === 'string' && e.name.length > 0 ? e.name : null;
+    const message = typeof e.message === 'string' && e.message.length > 0 ? e.message : String(e);
+    const stack = typeof e.stack === 'string' && e.stack.length > 0 ? e.stack : null;
+    if (stack) return stack;
+    if (name && message) return `${name}: ${message}`;
+    return message;
+}
+
 function runWasiBytes(wasmBytes, stdinText, argv = []) {
     const wasmPath = mkTmpPath('nepl-doctest') + '.wasm';
     const stdinPath = mkTmpPath('wasi-stdin');
@@ -88,7 +98,7 @@ function runWasiBytes(wasmBytes, stdinText, argv = []) {
 
     return {
         trapped,
-        trapError: trapError ? String(trapError?.message || trapError) : null,
+        trapError: trapError ? formatError(trapError) : null,
         stdout: out,
         stderr: err,
     };
@@ -284,7 +294,7 @@ async function runSingle(req, preloaded) {
             const vfs = collectVfsSources(source, req.file);
             wasmU8 = compileWithFsStdlib(api, source, vfs, 'debug');
         } catch (e) {
-            compileError = String(e?.message || e);
+            compileError = formatError(e);
         }
 
         if (hasTag(tags, 'compile_fail')) {
