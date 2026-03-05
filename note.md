@@ -6691,3 +6691,24 @@
 
 - 補足:
   - `--no-stdlib` なし実行時は既知の `stdlib/alloc/collections/list.nepl` 失敗が混在するため、今回タスクの局所検証では除外した。
+
+# 2026-03-05 作業メモ (diag_id 検証の厳密化)
+
+- 目的:
+  - `compile_fail` の `diag_id` を「テスト通過のための値合わせ」ではなく、実際に検証したい失敗原因に一致させる。
+
+- 実施:
+  - `tests/move_effect.n.md`
+    - 「shared borrow 中 move 拒否」を、関数値呼び出し由来の副次診断が混ざらない最小再現へ書き換え（`diag_id: 3051`）。
+    - 「非複合型 field access 拒否」を `v.len` 形式の最小再現へ書き換え（`diag_id: 3011`）。
+    - 「グローバル set」ケースは現在実装の診断挙動（`TypeUndefinedVariable`, `3002`）を明示する形に説明を更新。
+
+- 検証:
+  - `node nodesrc/tests.js -i tests/move_effect.n.md --no-tree -o /tmp/tests-move-effect-audit2.json -j 15` -> `225/225 pass`
+  - `node nodesrc/tests.js -i tests/neplg2.n.md --no-tree -o /tmp/tests-neplg2-fix2.json -j 15` -> `249/249 pass`
+  - `node nodesrc/tests.js -i tests/kp.n.md --no-tree -o /tmp/tests-kp-fix2.json -j 15` -> `211/211 pass`
+  - `node nodesrc/tests.js -i tests -o /tmp/tests-current-full8.json -j 15` -> `797/797 pass`
+
+- 補足:
+  - `diag_id` の変更は、各ケースを単体再現して実診断を確認したもののみ反映した。
+  - 失敗原因が複数混在するケースは、テストコード側を「狙った診断だけが出る形」に分解して再構成した。

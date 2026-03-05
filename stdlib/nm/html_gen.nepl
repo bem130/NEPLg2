@@ -157,7 +157,7 @@ fn render_nodes <(Vec<Node>)->str> (nodes):
                             set sb sb_append sb escape_html get cb "info";
                             set sb sb_append sb "\"";
                             ()
-                        else ();
+                        else ()
                     set sb sb_append sb ">";
                     set sb sb_append sb escape_html get cb "code";
                     set sb sb_append sb "</code></pre>";

@@ -647,7 +647,7 @@ fn scanner_read_f64_handle <(i32)*>f64> (sc):
                     if:
                         eq load_u8 add buf p 46
                         then set has_dot 1
-                        else ();
+                        else ()
                 else:
                     ();
             if:
@@ -689,7 +689,7 @@ fn scanner_read_f64_handle <(i32)*>f64> (sc):
                     if:
                         or eq ec 101 eq ec 69
                         then set has_exp 1
-                        else ();
+                        else ()
                 else:
                     ();
             if:

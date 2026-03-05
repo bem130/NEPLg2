@@ -88,8 +88,8 @@ fn args_sizes_get <(i32,i32)*>i32> (argc_ptr, buf_ptr):
                 do:
                     if:
                         eq load_u8 add tmp i 0
-                        then set argc add argc 1;
-                        else ();
+                        then set argc add argc 1
+                        else ()
                     set i add i 1;
             store_i32 argc_ptr argc;
             store_i32 buf_ptr n;
@@ -118,7 +118,7 @@ fn args_get <(i32,i32)*>i32> (argv_ptr, argv_buf):
                     lt 0 n
                 then:
                     store_i32 argv_ptr argv_buf;
-                else ();
+                else ()
 
             let mut j <i32> 0;
             while lt j n:
@@ -132,8 +132,8 @@ fn args_get <(i32,i32)*>i32> (argv_ptr, argv_buf):
                                     lt add j 1 n
                                 then:
                                     store_i32 add argv_ptr mul argi 4 add argv_buf add j 1;
-                                else ();
-                        else ();
+                                else ()
+                        else ()
                     set j add j 1;
             0
 

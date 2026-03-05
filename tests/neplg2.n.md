@@ -608,7 +608,7 @@ fn main <()* >i32> ():
 ## non_exhaustive_match_is_error
 
 neplg2:test[compile_fail]
-diag_id: 3069
+diag_id: 3009
 ```neplg2
 
 #entry main
@@ -777,7 +777,7 @@ fn main <()->i32> ():
 ## trait_bound_missing_impl_is_error
 
 neplg2:test[compile_fail]
-diag_id: 3068
+diag_id: 3069
 ```neplg2
 
 #entry main
@@ -797,7 +797,7 @@ fn main <()->i32> ():
 ## trait_method_arity_mismatch_is_error
 
 neplg2:test[compile_fail]
-diag_id: 3073
+diag_id: 3016
 ```neplg2
 
 #entry main

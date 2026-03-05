@@ -18,13 +18,13 @@ fn main <()*>i32> ():
         list_nil<i32>
         |> list_push_front<i32> 3
         |> list_push_front<i32> 2
-        |> list_push_front<i32> 1;
+        |> list_push_front<i32> 1
     let ok0 <bool> eq list_len<i32> xs0 3;
     let xs1 <List<i32>>:
         list_nil<i32>
         |> list_push_front<i32> 3
         |> list_push_front<i32> 2
-        |> list_push_front<i32> 1;
+        |> list_push_front<i32> 1
     let ok1 <bool> match list_get<i32> xs1 1:
         Option::Some v:
             eq v 2
@@ -56,7 +56,7 @@ fn main <()*>i32> ():
         |> stack_push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 20
-        |> unwrap_ok<Stack<i32>, Diag>;
+        |> unwrap_ok<Stack<i32>, Diag>
     let ok0 <bool> eq stack_len<i32> s0 2;
     let s1 <Stack<i32>>:
         stack_new<i32>
@@ -64,7 +64,7 @@ fn main <()*>i32> ():
         |> stack_push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 20
-        |> unwrap_ok<Stack<i32>, Diag>;
+        |> unwrap_ok<Stack<i32>, Diag>
     let p stack_pop<i32> s1;
     let ok1 <bool> match p:
         Option::Some v:
@@ -91,12 +91,12 @@ fn main <()*>i32> ():
     let m0 <BTreeMap<i32>>:
         btreemap_new<i32>
         |> btreemap_insert<i32> 3 30
-        |> btreemap_insert<i32> 1 10;
+        |> btreemap_insert<i32> 1 10
     let ok0 <bool> eq btreemap_len<i32> m0 2;
     let m1 <BTreeMap<i32>>:
         btreemap_new<i32>
         |> btreemap_insert<i32> 3 30
-        |> btreemap_insert<i32> 1 10;
+        |> btreemap_insert<i32> 1 10
     let ok1 <bool> match btreemap_get<i32> m1 3:
         Option::Some v:
             eq v 30
@@ -105,7 +105,7 @@ fn main <()*>i32> ():
     let m2 <BTreeMap<i32>>:
         btreemap_new<i32>
         |> btreemap_insert<i32> 3 30
-        |> btreemap_insert<i32> 1 10;
+        |> btreemap_insert<i32> 1 10
     let ok2 <bool> btreemap_contains<i32> m2 1;
     if and ok0 and ok1 ok2 1 0
 ```
@@ -126,18 +126,18 @@ fn main <()*>i32> ():
     let s0 <BTreeSet>:
         btreeset_new
         |> btreeset_insert 5
-        |> btreeset_insert 2;
+        |> btreeset_insert 2
     let ok0 <bool> btreeset_contains s0 5;
     let s1 <BTreeSet>:
         btreeset_new
         |> btreeset_insert 5
-        |> btreeset_insert 2;
+        |> btreeset_insert 2
     let ok1 <bool> eq btreeset_len s1 2;
     let s2 <BTreeSet>:
         btreeset_new
         |> btreeset_insert 5
         |> btreeset_insert 2
-        |> btreeset_remove 5;
+        |> btreeset_remove 5
     let ok2 <bool> if btreeset_contains s2 5 false true;
     if and ok0 and ok1 ok2 1 0
 ```
@@ -171,7 +171,7 @@ fn main <()*>i32> ():
         |> hashmap_insert<i32> 7 70
         |> must_hm
         |> hashmap_insert<i32> 9 90
-        |> must_hm;
+        |> must_hm
     let ok0 <bool> eq hashmap_len<i32> hm0 2;
     let hm1 <HashMap<i32>>:
         hashmap_new<i32>
@@ -179,7 +179,7 @@ fn main <()*>i32> ():
         |> hashmap_insert<i32> 7 70
         |> must_hm
         |> hashmap_insert<i32> 9 90
-        |> must_hm;
+        |> must_hm
     let ok1 <bool> match hashmap_get<i32> hm1 9:
         Option::Some v:
             eq v 90
@@ -191,7 +191,7 @@ fn main <()*>i32> ():
         |> hashmap_insert<i32> 7 70
         |> must_hm
         |> hashmap_insert<i32> 9 90
-        |> must_hm;
+        |> must_hm
     let ok2 <bool> hashmap_contains<i32> hm2 7;
     if and ok0 and ok1 ok2 1 0
 ```
@@ -224,7 +224,7 @@ fn main <()*>i32> ():
         |> hashset_insert 4
         |> must_hs
         |> hashset_insert 8
-        |> must_hs;
+        |> must_hs
     let ok2 <bool> eq hashset_len hs0 2;
     let hs1 <HashSet>:
         hashset_new
@@ -232,7 +232,7 @@ fn main <()*>i32> ():
         |> hashset_insert 4
         |> must_hs
         |> hashset_insert 8
-        |> must_hs;
+        |> must_hs
     let ok3 <bool> hashset_contains hs1 8;
     if and ok2 ok3 1 0
 ```
@@ -259,7 +259,7 @@ fn main <()*>i32> ():
         |> ringbuffer_push_back<i32> 11
         |> unwrap_ok<RingBuffer<i32>, Diag>
         |> ringbuffer_push_back<i32> 22
-        |> unwrap_ok<RingBuffer<i32>, Diag>;
+        |> unwrap_ok<RingBuffer<i32>, Diag>
     let ok0 <bool> eq ringbuffer_len<i32> rb 2;
     let rb2 <RingBuffer<i32>>:
         ringbuffer_new<i32>
@@ -267,7 +267,7 @@ fn main <()*>i32> ():
         |> ringbuffer_push_back<i32> 11
         |> unwrap_ok<RingBuffer<i32>, Diag>
         |> ringbuffer_push_back<i32> 22
-        |> unwrap_ok<RingBuffer<i32>, Diag>;
+        |> unwrap_ok<RingBuffer<i32>, Diag>
     let ok1 <bool> match rb2 |> ringbuffer_peek_front<i32>:
         Option::Some v:
             eq v 11
@@ -298,7 +298,7 @@ fn main <()*>i32> ():
         |> queue_push<i32> 3
         |> unwrap_ok<Queue<i32>, Diag>
         |> queue_push<i32> 4
-        |> unwrap_ok<Queue<i32>, Diag>;
+        |> unwrap_ok<Queue<i32>, Diag>
     let ok0 <bool> eq queue_len<i32> q 2;
     let q2 <Queue<i32>>:
         queue_new<i32>
@@ -306,7 +306,7 @@ fn main <()*>i32> ():
         |> queue_push<i32> 3
         |> unwrap_ok<Queue<i32>, Diag>
         |> queue_push<i32> 4
-        |> unwrap_ok<Queue<i32>, Diag>;
+        |> unwrap_ok<Queue<i32>, Diag>
     let ok1 <bool> match q2 |> queue_peek<i32>:
         Option::Some v:
             eq v 3

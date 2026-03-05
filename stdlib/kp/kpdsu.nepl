@@ -98,7 +98,7 @@ fn dsu_unite <(i32,i32,i32)*>()> (d, a, b):
                     let t <i32> ra;
                     set ra rb;
                     set rb t;
-                else ();
+                else ()
             let parent <i32> load_i32 add d 4;
             store_i32 add parent mul rb 4 ra;
             store_i32 add size mul ra 4 add load_i32 add size mul ra 4 load_i32 add size mul rb 4;

@@ -21,7 +21,7 @@ fn main <()*>()> ():
         vec_new<i32>
         |> push<i32> 5
         |> push<i32> 1
-        |> push<i32> 3;
+        |> push<i32> 3
     let v sort_quick_ret<i32> v0;
     assert sort_is_sorted<i32> v;
     test_checked "sort_quick on Vec<i32>"
@@ -57,7 +57,7 @@ fn lower_bound_i32 <(i32,i32,i32)*>i32> (data, len, x):
                 let cur <i32> load_i32 cur_ptr;
                 if lt cur x:
                     then set j add j 1
-                    else set done 1;
+                    else set done 1
     j
 |
 fn main <()*>()> ():
@@ -106,7 +106,7 @@ fn lower_bound_i32_bin <(i32,i32,i32)*>i32> (data, len, x):
             let mv <i32> load_i32 mv_ptr;
             if lt mv x:
                 then set lo add mid 1
-                else set hi mid;
+                else set hi mid
     lo
 |
 fn main <()*>()> ():

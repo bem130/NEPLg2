@@ -95,7 +95,7 @@ fn print_fizzbuzz_1_to_n <(i32)*>()> (n):
                             if:
                                 cond eq code 3
                                 then println "FizzBuzz"
-                                else println_i32 i;
+                                else println_i32 i
             set i add i 1;
 
 fn main <()*> ()> ():

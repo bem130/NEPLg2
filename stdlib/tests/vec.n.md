@@ -22,20 +22,20 @@ fn main <()*> ()> ():
 
     let v2:
         vec_new<i32>
-        |> push<i32> 10;
+        |> push<i32> 10
     assert_eq_i32 1 vec_len<i32> v2;
 
     let v6:
         vec_new<i32>
         |> push<i32> 10
         |> push<i32> 20
-        |> push<i32> 30;
+        |> push<i32> 30
     assert_eq_i32 3 vec_len<i32> v6;
 
     let g2:
         vec_new<i32>
         |> push<i32> 10
-        |> push<i32> 20;
+        |> push<i32> 20
     match vec_get<i32> g2 0:
         Option::Some x:
             assert_eq_i32 10 x
@@ -45,23 +45,23 @@ fn main <()*> ()> ():
     let s2:
         vec_new<i32>
         |> push<i32> 10
-        |> push<i32> 20;
+        |> push<i32> 20
     vec_set<i32> s2 1 21;
 
     let o1:
         vec_new<i32>
-        |> push<i32> 10;
+        |> push<i32> 10
     assert is_none<i32> vec_get<i32> o1 2;
 
     let p1:
         vec_new<i32>
-        |> push<i32> 10;
+        |> push<i32> 10
     assert is_none<i32> vec_get<i32> p1 -1;
 
     let u8_65 <u8> cast 65;
     let b1:
         vec_new<u8>
-        |> push<u8> u8_65;
+        |> push<u8> u8_65
     match vec_get<u8> b1 0:
         Option::Some x:
             assert_eq_i32 65 cast x

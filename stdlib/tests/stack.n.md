@@ -44,7 +44,7 @@ fn main <()*>i32> ():
         |> stack_push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 20
-        |> unwrap_ok<Stack<i32>, Diag>;
+        |> unwrap_ok<Stack<i32>, Diag>
     let ok0 <bool> match stack_peek<i32> s0:
         Option::Some v:
             eq v 20
@@ -56,7 +56,7 @@ fn main <()*>i32> ():
         |> stack_push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 20
-        |> unwrap_ok<Stack<i32>, Diag>;
+        |> unwrap_ok<Stack<i32>, Diag>
     let p stack_pop<i32> s1;
     let ok1 <bool> match p:
         Option::Some v:
@@ -113,7 +113,7 @@ fn main <()*>i32> ():
         |> stack_push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 20
-        |> unwrap_ok<Stack<i32>, Diag>;
+        |> unwrap_ok<Stack<i32>, Diag>
     if eq stack_len<i32> s 2 1 0
 ```
 
@@ -140,7 +140,7 @@ fn main <()*>i32> ():
         |> stack_push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 20
-        |> unwrap_ok<Stack<i32>, Diag>;
+        |> unwrap_ok<Stack<i32>, Diag>
     let ok0 <bool> match s0 |> stack_peek<i32>:
         Option::Some v:
             eq v 20
@@ -152,8 +152,8 @@ fn main <()*>i32> ():
         |> stack_push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> stack_push<i32> 20
-        |> unwrap_ok<Stack<i32>, Diag>;
-    let p s1 |> stack_pop<i32>;
+        |> unwrap_ok<Stack<i32>, Diag>
+    let p s1 |> stack_pop<i32>
     let ok1 <bool> match p:
         Option::Some v:
             eq v 20
@@ -180,7 +180,7 @@ ret: 1
 
 fn main <()*>i32> ():
     let s <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
-    let p s |> stack_pop<i32>;
+    let p s |> stack_pop<i32>
     match p:
         Option::Some _:
             0
@@ -211,7 +211,7 @@ fn main <()*>i32> ():
         |> push 1
         |> unwrap_ok<Stack<i32>, Diag>
         |> push 2
-        |> unwrap_ok<Stack<i32>, Diag>;
+        |> unwrap_ok<Stack<i32>, Diag>
     let p pop s0;
     let ok0 <bool> match p:
         Option::Some v:
@@ -222,7 +222,7 @@ fn main <()*>i32> ():
         new
         |> unwrap_ok<Stack<i32>, Diag>
         |> push 5
-        |> unwrap_ok<Stack<i32>, Diag>;
+        |> unwrap_ok<Stack<i32>, Diag>
     let ok1 <bool> eq len s1 1;
     if and ok0 ok1 1 0
 ```

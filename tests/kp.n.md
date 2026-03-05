@@ -229,7 +229,7 @@ fn main <()*>()> ():
         do:
             if gt i 0:
                 then print " "
-                else ();
+                else ()
             let off <i32> mul i 4;
             let ptr <i32> add data off;
             print_i32 load_i32 ptr;

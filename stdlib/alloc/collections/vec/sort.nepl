@@ -298,7 +298,7 @@ fn sort_is_sorted <.T: Ord> <(Vec<.T>)->bool> (v):
                     if:
                         sort_lt<.T> b a
                         then set ok false
-                        else ();
+                        else ()
                     set i add i 1;
             ok
 
@@ -340,7 +340,7 @@ fn sort_insertion <.T: Ord> <(Vec<.T>)->()> (v):
                                     let x <.T> sort_get_unchecked<.T> v j;
                                     sort_set_unchecked<.T> v add j 1 x;
                                     set j sub j 1;
-                                else set done 1;
+                                else set done 1
                     sort_set_unchecked<.T> v add j 1 key;
                     set i add i 1;
             ()
@@ -380,7 +380,7 @@ fn sort_selection <.T: Ord> <(Vec<.T>)->()> (v):
                             if:
                                 sort_lt<.T> a b
                                 then set min_idx j
-                                else ();
+                                else ()
                             set j add j 1;
                     sort_swap<.T> v i min_idx;
                     set i add i 1;
@@ -420,7 +420,7 @@ fn sort_bubble <.T: Ord> <(Vec<.T>)->()> (v):
                             if:
                                 sort_lt<.T> b a
                                 then sort_swap<.T> v i add i 1
-                                else ();
+                                else ()
                             set i add i 1;
                     set end sub end 1;
             ()
@@ -468,7 +468,7 @@ fn sort_cocktail <.T: Ord> <(Vec<.T>)->()> (v):
                                     sort_swap<.T> v i add i 1;
                                     set swapped 1;
                                     ()
-                                else ();
+                                else ()
                             set i add i 1;
 
                     set end sub end 1;
@@ -491,7 +491,7 @@ fn sort_cocktail <.T: Ord> <(Vec<.T>)->()> (v):
                                     sort_swap<.T> v sub j 1 j;
                                     set swapped 1;
                                     ()
-                                else ();
+                                else ()
                             set j sub j 1;
 
                     set start add start 1;
@@ -574,7 +574,7 @@ fn sort_shell <.T: Ord> <(Vec<.T>)->()> (v):
                                             let x <.T> sort_get_unchecked<.T> v sub j gap;
                                             sort_set_unchecked<.T> v j x;
                                             set j sub j gap;
-                                        else set done 1;
+                                        else set done 1
 
                             sort_set_unchecked<.T> v j temp;
                             set i add i 1;
@@ -616,12 +616,12 @@ fn sort_comb <.T: Ord> <(Vec<.T>)->()> (v):
                     if:
                         lt gap 1
                         then set gap 1
-                        else ();
+                        else ()
 
                     if:
                         eq gap 1
                         then set sorted 1
-                        else ();
+                        else ()
 
                     let mut i <i32> 0;
                     let mut done_scan <i32> 0;
@@ -639,10 +639,10 @@ fn sort_comb <.T: Ord> <(Vec<.T>)->()> (v):
                                             sort_swap<.T> v i next_i;
                                             set sorted 0;
                                             ()
-                                        else ();
+                                        else ()
                                     set i add i 1;
                                     ()
-                                else set done_scan 1;
+                                else set done_scan 1
             ()
 
 
@@ -676,7 +676,7 @@ fn sort_quick_partition_data <.T: Ord> <(i32,i32,i32)->i32> (data_ptr, lo, hi):
                     sort_swap_data<.T> data_ptr i j;
                     set i add i 1;
                     ()
-                else ();
+                else ()
             set j add j 1;
 
     sort_swap_data<.T> data_ptr i hi;
@@ -763,7 +763,7 @@ fn sort_heap_sift_down_data <.T: Ord> <(i32,i32,i32)->()> (data_ptr, start, end)
                     if:
                         sort_lt<.T> swap_v child_v
                         then set swap_idx child
-                        else ();
+                        else ()
 
                     let right <i32> add child 1;
                     if:
@@ -774,9 +774,9 @@ fn sort_heap_sift_down_data <.T: Ord> <(i32,i32,i32)->()> (data_ptr, start, end)
                             if:
                                 sort_lt<.T> swap_v2 right_v
                                 then set swap_idx right
-                                else ();
+                                else ()
                             ()
-                        else ();
+                        else ()
 
                     if:
                         eq swap_idx root
@@ -786,7 +786,7 @@ fn sort_heap_sift_down_data <.T: Ord> <(i32,i32,i32)->()> (data_ptr, start, end)
                             set root swap_idx;
                             ();
                     ()
-                else set done 1;
+                else set done 1
 
     ()
 
@@ -926,7 +926,7 @@ fn sort_merge_range_data <.T: Ord> <(i32,i32,i32,i32)->()> (data_ptr, buf, l, r)
                                     ();
                             set k add k 1;
                             ()
-                        else set done_merge 1;
+                        else set done_merge 1
 
             while lt i mid:
                 do:

@@ -22,7 +22,7 @@ fn main <()*>i32> ():
         |> queue_push<i32> 7
         |> unwrap_ok<Queue<i32>, Diag>
         |> queue_push<i32> 8
-        |> unwrap_ok<Queue<i32>, Diag>;
+        |> unwrap_ok<Queue<i32>, Diag>
     let ok0 <bool> eq queue_len<i32> q 2;
     let q2 <Queue<i32>>:
         queue_new<i32>
@@ -30,7 +30,7 @@ fn main <()*>i32> ():
         |> queue_push<i32> 7
         |> unwrap_ok<Queue<i32>, Diag>
         |> queue_push<i32> 8
-        |> unwrap_ok<Queue<i32>, Diag>;
+        |> unwrap_ok<Queue<i32>, Diag>
     let ok1 <bool> match q2 |> queue_pop<i32>:
         Option::Some v:
             eq v 7
