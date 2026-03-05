@@ -7318,3 +7318,25 @@
   - 結果: `217/217 pass`
   - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v10.json -j 15`
   - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: fn定義時オーバーロード照合のジェネリクス同値修正)
+
+- 目的:
+  - `D3087`（function signature does not match any overload）の誤検出を、ジェネリクス署名照合の根本から解消する。
+- 根本原因:
+  - `fn` 定義照合で `same_type` を直接使うと、未束縛型変数のラベル一致に依存し、α同値（型パラメータ名の差）を許容できず失敗した。
+  - さらに照合用に作る署名型 `sig_ty` が `type_params` なしで構築されており、ジェネリクス関数の署名キーと不整合を起こしていた。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `function_signature_string` をジェネリクス正規化キー生成へ変更（`$T0, $T1...` へ正規化）。
+    - `signature_type_string` を追加し、関数シグネチャ比較専用の型文字列化を導入。
+    - `fn` 定義照合時の `sig_ty` を、`f.type_params` を含む `ctx.function(type_params, params, result, effect)` で構築するよう修正。
+    - 既存のオーバーロード候補照合（`function_signature_string` 比較）を維持しつつ、ジェネリクス同値比較の精度を改善。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-after-final-fix.json -j 15`
+  - 結果: `272/272 pass`
+  - `node nodesrc/tests.js -i tests/compile_fail_diag_location.n.md --no-tree -o /tmp/tests-compile-fail-diag-location-after-final-fix.json -j 15`
+  - 結果: `207/207 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-final-fix.json -j 15`
+  - 結果: `783/783 pass`

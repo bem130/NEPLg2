@@ -1166,15 +1166,34 @@ pub fn typecheck(
                     funcs[0].ty
                 } else {
                     let mut tmp_labels = LabelEnv::new();
+                    let mut sig_type_params = Vec::new();
                     for tp in &f.type_params {
                         let tv = ctx.fresh_var(Some(tp.name.name.clone()));
                         tmp_labels.insert(tp.name.name.clone(), tv);
+                        sig_type_params.push(tv);
                     }
-                    let sig_ty = type_from_expr(&mut ctx, &mut tmp_labels, &f.signature);
+                    let sig_ty = match &f.signature {
+                        TypeExpr::Function {
+                            params,
+                            result,
+                            effect,
+                        } => {
+                            let mut sig_params = Vec::new();
+                            for p in params {
+                                sig_params.push(type_from_expr(&mut ctx, &mut tmp_labels, p));
+                            }
+                            let sig_result = type_from_expr(&mut ctx, &mut tmp_labels, result);
+                            ctx.function(sig_type_params, sig_params, sig_result, *effect)
+                        }
+                        _ => type_from_expr(&mut ctx, &mut tmp_labels, &f.signature),
+                    };
                     let sig_key = function_signature_string(&ctx, sig_ty);
                     let mut matched: Option<TypeId> = None;
+                    let mut candidate_keys: Vec<String> = Vec::new();
                     for binding in funcs.drain(..) {
-                        if function_signature_string(&ctx, binding.ty) == sig_key {
+                        let key = function_signature_string(&ctx, binding.ty);
+                        candidate_keys.push(key.clone());
+                        if key == sig_key {
                             matched = Some(binding.ty);
                             break;
                         }
@@ -1189,6 +1208,12 @@ pub fn typecheck(
                                 )
                                 .with_id(DiagnosticId::TypeFunctionSignatureOverloadNotFound),
                             );
+                            if dump_enabled() {
+                                std::eprintln!(
+                                    "D3087 debug: name={} sig_key={} candidates={:?}",
+                                    f.name.name, sig_key, candidate_keys
+                                );
+                            }
                             continue;
                         }
                     }
@@ -6708,12 +6733,22 @@ fn function_signature_string(ctx: &TypeCtx, ty: TypeId) -> String {
     let resolved = ctx.resolve_id(ty);
     match ctx.get(resolved) {
         TypeKind::Function {
+            type_params,
             params,
             result,
             effect,
-            ..
         } => {
+            let mut generics = BTreeMap::new();
+            for (i, tp) in type_params.iter().enumerate() {
+                let mut name = String::from("$T");
+                name.push_str(&i.to_string());
+                generics.insert(ctx.resolve_id(*tp), name);
+            }
             let mut s = String::from("func");
+            if !type_params.is_empty() {
+                s.push_str("_gen_");
+                s.push_str(&type_params.len().to_string());
+            }
             s.push_str("__");
             if params.is_empty() {
                 s.push_str("unit");
@@ -6722,11 +6757,11 @@ fn function_signature_string(ctx: &TypeCtx, ty: TypeId) -> String {
                     if i > 0 {
                         s.push('_');
                     }
-                    s.push_str(&ctx.type_to_string(*p));
+                    s.push_str(&signature_type_string(ctx, *p, &generics));
                 }
             }
             s.push_str("__");
-            s.push_str(&ctx.type_to_string(result));
+            s.push_str(&signature_type_string(ctx, result, &generics));
             match effect {
                 Effect::Pure => s.push_str("__pure"),
                 Effect::Impure => s.push_str("__imp"),
@@ -6734,6 +6769,123 @@ fn function_signature_string(ctx: &TypeCtx, ty: TypeId) -> String {
             s
         }
         _ => ctx.type_to_string(resolved),
+    }
+}
+
+fn signature_type_string(ctx: &TypeCtx, ty: TypeId, generics: &BTreeMap<TypeId, String>) -> String {
+    let resolved = ctx.resolve_id(ty);
+    if let Some(name) = generics.get(&resolved) {
+        return name.clone();
+    }
+    match ctx.get(resolved) {
+        TypeKind::Unit => String::from("unit"),
+        TypeKind::I32 => String::from("i32"),
+        TypeKind::U8 => String::from("u8"),
+        TypeKind::F32 => String::from("f32"),
+        TypeKind::Bool => String::from("bool"),
+        TypeKind::Str => String::from("str"),
+        TypeKind::Never => String::from("never"),
+        TypeKind::Named(name) => name,
+        TypeKind::Var(tv) => {
+            if let Some(binding) = tv.binding {
+                signature_type_string(ctx, binding, generics)
+            } else {
+                tv.label.unwrap_or_else(|| format!("var_{}", resolved.0))
+            }
+        }
+        TypeKind::Tuple { items } => {
+            let mut s = String::from("tuple_");
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    s.push('_');
+                }
+                s.push_str(&signature_type_string(ctx, *item, generics));
+            }
+            s
+        }
+        TypeKind::Apply { base, args } => {
+            let mut s = signature_type_string(ctx, base, generics);
+            s.push('_');
+            for (i, arg) in args.iter().enumerate() {
+                if i > 0 {
+                    s.push('_');
+                }
+                s.push_str(&signature_type_string(ctx, *arg, generics));
+            }
+            s
+        }
+        TypeKind::Box(inner) => {
+            let mut s = String::from("box_");
+            s.push_str(&signature_type_string(ctx, inner, generics));
+            s
+        }
+        TypeKind::Reference(inner, is_mut) => {
+            let mut s = String::from("ref_");
+            if is_mut {
+                s.push_str("mut_");
+            }
+            s.push_str(&signature_type_string(ctx, inner, generics));
+            s
+        }
+        TypeKind::Function {
+            params,
+            result,
+            effect,
+            ..
+        } => {
+            let mut s = String::from("fn__");
+            for (i, p) in params.iter().enumerate() {
+                if i > 0 {
+                    s.push('_');
+                }
+                s.push_str(&signature_type_string(ctx, *p, generics));
+            }
+            s.push_str("__");
+            s.push_str(&signature_type_string(ctx, result, generics));
+            match effect {
+                Effect::Pure => s.push_str("__pure"),
+                Effect::Impure => s.push_str("__imp"),
+            }
+            s
+        }
+        TypeKind::Enum {
+            name,
+            type_params,
+            ..
+        } => {
+            if type_params.is_empty() {
+                name
+            } else {
+                let mut s = name;
+                s.push('_');
+                for (i, tp) in type_params.iter().enumerate() {
+                    if i > 0 {
+                        s.push('_');
+                    }
+                    s.push_str(&signature_type_string(ctx, *tp, generics));
+                }
+                s
+            }
+        }
+        TypeKind::Struct {
+            name,
+            type_params,
+            ..
+        } => {
+            if type_params.is_empty() {
+                name
+            } else {
+                let mut s = name;
+                s.push('_');
+                for (i, tp) in type_params.iter().enumerate() {
+                    if i > 0 {
+                        s.push('_');
+                    }
+                    s.push_str(&signature_type_string(ctx, *tp, generics));
+                }
+                s
+            }
+        }
     }
 }
 
