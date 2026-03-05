@@ -1254,10 +1254,10 @@ fn lower_hir_expr(
                         repr: format!("{}", fid),
                     }));
                 }
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: format!("unknown variable '{}'", name),
-                });
+                panic!(
+                    "internal compiler error: unknown variable '{}' reached llvm codegen",
+                    name
+                );
             };
             let bty = binding.ty;
             let bptr = binding.ptr.clone();
@@ -1303,10 +1303,10 @@ fn lower_hir_expr(
         }
         HirExprKind::Set { name, value } => {
             let Some(binding) = ctx.lookup_local_fuzzy(name.as_str()).cloned() else {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: format!("set on unknown variable '{}'", name),
-                });
+                panic!(
+                    "internal compiler error: set on unknown variable '{}' reached llvm codegen",
+                    name
+                );
             };
             let Some(v) = lower_hir_expr(types, ctx, value)? else {
                 return Ok(None);
@@ -1333,10 +1333,10 @@ fn lower_hir_expr(
                     repr: format!("{}", fid),
                 }))
             } else {
-                Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: format!("unknown function value '{}'", name),
-                })
+                panic!(
+                    "internal compiler error: unknown function value '{}' reached llvm codegen",
+                    name
+                )
             }
         }
         HirExprKind::Call { callee, args } => {
@@ -1355,10 +1355,12 @@ fn lower_hir_expr(
                     lowered_args.push(v);
                 }
             }
-            let sig = ctx.sigs.get(callee_name).ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
-                function: ctx.function_name.to_string(),
-                reason: format!("missing function signature for '{}'", callee_name),
-            })?;
+            let Some(sig) = ctx.sigs.get(callee_name) else {
+                panic!(
+                    "internal compiler error: missing function signature for '{}' in llvm codegen",
+                    callee_name
+                );
+            };
             let mut args_ir = Vec::new();
             for (idx, v) in lowered_args.iter().enumerate() {
                 let ty = sig.params.get(idx).copied().unwrap_or(v.ty);

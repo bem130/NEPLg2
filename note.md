@@ -7841,3 +7841,17 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-backend-diag-clean-v1.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm backend の解決済み参照エラーを内部不整合化)
+
+- 目的:
+  - wasm 側と同様に、名前解決/署名解決済みであるべき参照系エラーを backend 診断責務から外す。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `Var` の unknown 変数分岐を `panic!` 化。
+    - `Set` の unknown 変数分岐を `panic!` 化。
+    - `FnValue` の unknown 関数値分岐を `panic!` 化。
+    - `Call` の missing function signature 分岐を `panic!` 化。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-llvm-invariant-v1.json -j 15` -> `8/8 pass`
