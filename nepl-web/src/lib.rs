@@ -16,6 +16,11 @@ use nepl_core::{compile_module, BuildProfile, CompileOptions, CompileTarget};
 use wasmprinter::print_bytes;
 use wasm_bindgen::prelude::*;
 
+#[wasm_bindgen(start)]
+pub fn wasm_start() {
+    console_error_panic_hook::set_once();
+}
+
 const NEPLG2_REPO_URL: &str = "https://github.com/neknaj/NEPLg2/";
 const NEPLG2_COMMIT_BASE_URL: &str = "https://github.com/neknaj/NEPLg2/commit/";
 

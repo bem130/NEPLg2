@@ -49,15 +49,18 @@ fn fs_free <(i32,i32)->()> (ptr, size):
 //: - 読み込みバイト数に比例 (O(n))
 
 #if[target=llvm]
-fn __fs_copy_to_cstr <(i32,i32)*>i32> (src_ptr, src_len):
-    let dst <i32> alloc_raw add src_len 1;
-    let mut i <i32> 0;
-    while lt i src_len:
-        do:
-            store_u8 add dst i load_u8 add src_ptr i;
-            set i add i 1;
-    store_u8 add dst src_len 0;
-    dst
+fn __fs_copy_to_cstr <(i32,i32)*>Result<i32,i32>> (src_ptr, src_len):
+    match fs_alloc add src_len 1:
+        Result::Err e:
+            Result::Err e
+        Result::Ok dst:
+            let mut i <i32> 0;
+            while lt i src_len:
+                do:
+                    store_u8 add dst i load_u8 add src_ptr i;
+                    set i add i 1;
+            store_u8 add dst src_len 0;
+            Result<i32,i32>::Ok dst
 
 #if[target=llvm]
 fn __linux_syscall_read <(i32,i32,i32)*>i64> (fd,ptr,len):
@@ -65,17 +68,21 @@ fn __linux_syscall_read <(i32,i32,i32)*>i64> (fd,ptr,len):
 
 #if[target=llvm]
 fn wasi_path_open <(i32,i32,i32,i32,i32,i64,i64,i32,i32)*>i32> (_dirfd,_dirflags,path_ptr,path_len,_oflags,_rights_base,_rights_inheriting,_fdflags,fd_out):
-    let cpath <i32> __fs_copy_to_cstr path_ptr path_len;
-    // Linux x86_64: openat(AT_FDCWD=-100, path, O_RDONLY=0, mode=0)
-    let fd64 <i64> __fs_syscall <i64> cast 257 <i64> cast -100 <i64> cast cpath <i64> cast 0 <i64> cast 0 <i64> cast 0 <i64> cast 0;
-    if:
-        cond:
-            lt fd64 <i64> cast 0
-        then:
-            1
-        else:
-            store_i32 fd_out <i32> cast fd64;
-            0
+    match __fs_copy_to_cstr path_ptr path_len:
+        Result::Err e:
+            e
+        Result::Ok cpath:
+            // Linux x86_64: openat(AT_FDCWD=-100, path, O_RDONLY=0, mode=0)
+            let fd64 <i64> __fs_syscall <i64> cast 257 <i64> cast -100 <i64> cast cpath <i64> cast 0 <i64> cast 0 <i64> cast 0 <i64> cast 0;
+            fs_free cpath add path_len 1;
+            if:
+                cond:
+                    lt fd64 <i64> cast 0
+                then:
+                    1
+                else:
+                    store_i32 fd_out <i32> cast fd64;
+                    0
 
 #if[target=llvm]
 fn wasi_fd_read <(i32,i32,i32,i32)*>i32> (fd,iovs,iovs_len,nread_ptr):
@@ -171,7 +178,7 @@ fn fs_open_read <(str)*>Result<i32,i32>> (path):
             let res <Result<i32,i32>> if:
                 eq errno 0
                 then Result<i32,i32>::Ok load_i32 fd_out
-                else Result<i32,i32>::Err errno;
+                else Result<i32,i32>::Err errno
             fs_free fd_out 4;
             res
 
@@ -254,7 +261,7 @@ fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
                             let res <Result<Vec<u8>,i32>> if:
                                 eq err 0
                                 then Result<Vec<u8>,i32>::Ok buf
-                                else Result<Vec<u8>,i32>::Err err;
+                                else Result<Vec<u8>,i32>::Err err
                             fs_free nread 4;
                             fs_free iov 8;
                             fs_free tmp cap;
@@ -293,18 +300,21 @@ fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
 //: ```
 fn fs_bytes_to_string <(Vec<u8>)*>str> (buf):
     let len <i32> buf.len;
-    let out <i32> alloc_raw add 4 len;
-    store_i32 out len;
-    let data <i32> buf.data;
-    let mut i <i32> 0;
-    while lt i len:
-        do:
-            let b <i32> load_u8 add data i;
-            let out_data <i32> add out 4;
-            let dst <i32> add out_data i;
-            store_u8 dst b;
-            set i add i 1;
-    out
+    match fs_alloc add 4 len:
+        Result::Err _:
+            ""
+        Result::Ok out:
+            store_i32 out len;
+            let data <i32> buf.data;
+            let mut i <i32> 0;
+            while lt i len:
+                do:
+                    let b <i32> load_u8 add data i;
+                    let out_data <i32> add out 4;
+                    let dst <i32> add out_data i;
+                    store_u8 dst b;
+                    set i add i 1;
+            out
 
 //: fs_read_to_bytes: ファイルを読み込んで Vec<u8> を返す
 //:

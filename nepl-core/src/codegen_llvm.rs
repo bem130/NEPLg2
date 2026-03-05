@@ -11,10 +11,12 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::ast::{Block, FnBody, Ident, Literal, Module, PrefixExpr, PrefixItem, Stmt, TypeExpr};
-use crate::compiler::{BuildProfile, CompileTarget};
 use crate::ast::Directive;
-use crate::diagnostic_ids::DiagnosticId;
+use crate::compiler::{BuildProfile, CompileTarget};
 use crate::hir::{FuncRef, HirBlock, HirBody, HirExpr, HirExprKind, HirFunction, HirModule};
+use crate::runtime_helpers::{
+    helper_base_name, helper_candidates, RuntimeHelperKind,
+};
 use crate::target_precheck::{self, ActiveRawBody};
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
@@ -22,11 +24,8 @@ use crate::types::{TypeCtx, TypeId, TypeKind};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LlvmCodegenError {
     MissingLlvmIrBlock,
-    UnsupportedParsedFunctionBody { function: String },
-    UnsupportedWasmBody { function: String },
     TypecheckFailed { reason: String },
     MissingEntryFunction { function: String },
-    UnsupportedHirLowering { function: String, reason: String },
 }
 
 impl core::fmt::Display for LlvmCodegenError {
@@ -38,16 +37,6 @@ impl core::fmt::Display for LlvmCodegenError {
                     "llvm target requires at least one #llvmir block in module/function body"
                 )
             }
-            LlvmCodegenError::UnsupportedParsedFunctionBody { function } => write!(
-                f,
-                "llvm target currently supports only subset lowering for parsed functions; function '{}' is not in supported subset",
-                function
-            ),
-            LlvmCodegenError::UnsupportedWasmBody { function } => write!(
-                f,
-                "llvm target cannot lower #wasm function body; function '{}'",
-                function
-            ),
             LlvmCodegenError::TypecheckFailed { reason } => {
                 write!(f, "failed to typecheck module for llvm lowering: {}", reason)
             }
@@ -55,12 +44,6 @@ impl core::fmt::Display for LlvmCodegenError {
                 f,
                 "entry function '{}' was not found in lowered module",
                 function
-            ),
-            LlvmCodegenError::UnsupportedHirLowering { function, reason } => write!(
-                f,
-                "failed to lower function '{}' to llvm: {}",
-                function,
-                reason
             ),
         }
     }
@@ -79,8 +62,7 @@ pub fn emit_ll_from_module_for_target(
     target: CompileTarget,
     profile: BuildProfile,
 ) -> Result<String, LlvmCodegenError> {
-    validate_target_directive_for_llvm(module)?;
-    let precheck_diags = target_precheck::precheck_module_raw_bodies(module, target, profile);
+    let precheck_diags = target_precheck::precheck_module_before_codegen(module, target, profile);
     if precheck_diags
         .iter()
         .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
@@ -92,6 +74,10 @@ pub fn emit_ll_from_module_for_target(
     let mut out = String::new();
     let entry_names = collect_active_entry_names(module, target, profile);
     let reachable_hint = compute_reachable_hint(module, target, profile, &entry_names);
+    let raw_call_requirements = collect_required_raw_calls_fixed_point(module, target, profile);
+    let raw_name_counts = collect_active_ast_raw_name_counts(module, target, profile);
+    let mut raw_canonical_taken: BTreeSet<String> = BTreeSet::new();
+    let mut selected_raw_ll_sigs: BTreeSet<String> = BTreeSet::new();
     let mut emitted_functions: Vec<String> = Vec::new();
     for idx in target_precheck::active_stmt_indices(&module.root, target, profile) {
         let stmt = &module.root.items[idx];
@@ -103,11 +89,30 @@ pub fn emit_ll_from_module_for_target(
             }
             Stmt::FnDef(def) => match &def.body {
                 FnBody::LlvmIr(block) => {
-                    if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
+                    if !should_emit_ast_llvmir_fn(
+                        def,
+                        reachable_hint.as_ref(),
+                        raw_call_requirements.as_slice(),
+                    ) {
                         continue;
                     }
-                    collect_defined_functions_from_llvmir_block(block, &mut emitted_functions);
-                    append_llvmir_block(&mut out, block);
+                    if !raw_call_requirements.is_empty() {
+                        if let Some((ps, ret)) = ast_fn_signature_llty(&def.signature) {
+                            let key = raw_abi_signature_key(def.name.name.as_str(), ps.as_slice(), ret);
+                            if selected_raw_ll_sigs.contains(key.as_str()) {
+                                continue;
+                            }
+                            selected_raw_ll_sigs.insert(key);
+                        }
+                    }
+                    let normalized = normalize_ast_raw_llvmir_block(
+                        def,
+                        block,
+                        &raw_name_counts,
+                        &mut raw_canonical_taken,
+                    );
+                    collect_defined_functions_from_llvmir_block(&normalized, &mut emitted_functions);
+                    append_llvmir_block(&mut out, &normalized);
                 }
                 FnBody::Parsed(block) => {
                     if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
@@ -120,13 +125,20 @@ pub fn emit_ll_from_module_for_target(
                         def.name.name.as_str(),
                     ) {
                         Ok(Some(ActiveRawBody::LlvmIr(raw))) => {
-                            collect_defined_functions_from_llvmir_block(raw, &mut emitted_functions);
-                            append_llvmir_block(&mut out, raw);
+                            let normalized = normalize_ast_raw_llvmir_block(
+                                def,
+                                raw,
+                                &raw_name_counts,
+                                &mut raw_canonical_taken,
+                            );
+                            collect_defined_functions_from_llvmir_block(&normalized, &mut emitted_functions);
+                            append_llvmir_block(&mut out, &normalized);
                         }
                         Ok(Some(ActiveRawBody::Wasm(_))) => {
-                            return Err(LlvmCodegenError::UnsupportedWasmBody {
-                                function: def.name.name.clone(),
-                            });
+                            panic!(
+                                "internal compiler error: llvm codegen reached wasm raw body after precheck in function '{}'",
+                                def.name.name
+                            );
                         }
                         Ok(None) => {
                             if let Some(lowered) = lower_parsed_fn_with_gates(
@@ -143,20 +155,20 @@ pub fn emit_ll_from_module_for_target(
                             }
                         }
                         Err(diag) => {
-                            return Err(LlvmCodegenError::TypecheckFailed {
-                                reason: summarize_diagnostics_for_message(&[diag]),
-                            });
+                            panic!(
+                                "internal compiler error: llvm codegen reached invalid active raw-body selection after precheck in function '{}' ({})",
+                                def.name.name,
+                                summarize_diagnostics_for_message(&[diag])
+                            );
                         }
                     }
                 }
                 FnBody::Wasm(_) => {
-                    // `#wasm` は明示的な wasm backend 専用実装。
-                    // 非 entry 関数は移行期間のためスキップするが、
-                    // entry が #wasm のみの場合は LLVM 実行可能なモジュールを作れないためエラーとする。
                     if is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
-                        return Err(LlvmCodegenError::UnsupportedWasmBody {
-                            function: def.name.name.clone(),
-                        });
+                        panic!(
+                            "internal compiler error: llvm codegen reached wasm function body after precheck in function '{}'",
+                            def.name.name
+                        );
                     }
                 }
             },
@@ -192,7 +204,7 @@ pub fn emit_ll_from_module_for_target(
         }
     }
 
-    Ok(out)
+    Ok(deduplicate_overloaded_llvm_symbols(out.as_str()))
 }
 
 fn compute_reachable_hint(
@@ -225,59 +237,422 @@ fn is_ast_fn_reachable(name: &str, reachable_hint: Option<&BTreeSet<String>>) ->
     }
 }
 
-fn validate_target_directive_for_llvm(module: &Module) -> Result<(), LlvmCodegenError> {
-    let mut found = false;
-    for d in &module.directives {
-        if let Directive::Target { target, .. } = d {
-            if !is_known_target_name(target.as_str()) {
-                return Err(LlvmCodegenError::TypecheckFailed {
-                    reason: format!(
-                        "[D{}] unknown target in #target: {}",
-                        DiagnosticId::UnknownTargetDirective.as_u32(),
-                        target
-                    ),
-                });
-            }
-            if found {
-                return Err(LlvmCodegenError::TypecheckFailed {
-                    reason: format!(
-                        "[D{}] multiple #target directives are not allowed",
-                        DiagnosticId::MultipleTargetDirective.as_u32()
-                    ),
-                });
-            }
-            found = true;
-        }
-    }
-    if !found {
-        for stmt in &module.root.items {
-            if let Stmt::Directive(Directive::Target { target, .. }) = stmt {
-                if !is_known_target_name(target.as_str()) {
-                    return Err(LlvmCodegenError::TypecheckFailed {
-                        reason: format!(
-                            "[D{}] unknown target in #target: {}",
-                            DiagnosticId::UnknownTargetDirective.as_u32(),
-                            target
-                        ),
-                    });
-                }
-                if found {
-                    return Err(LlvmCodegenError::TypecheckFailed {
-                        reason: format!(
-                            "[D{}] multiple #target directives are not allowed",
-                            DiagnosticId::MultipleTargetDirective.as_u32()
-                        ),
-                    });
-                }
-                found = true;
-            }
-        }
-    }
-    Ok(())
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RawCallRequirement {
+    name: String,
+    params: Vec<LlTy>,
+    ret: LlTy,
 }
 
-fn is_known_target_name(name: &str) -> bool {
-    matches!(name, "wasm" | "core" | "wasi" | "std" | "wasix" | "llvm")
+fn should_emit_ast_llvmir_fn(
+    def: &crate::ast::FnDef,
+    reachable_hint: Option<&BTreeSet<String>>,
+    raw_reqs: &[RawCallRequirement],
+) -> bool {
+    if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint) {
+        return false;
+    }
+    if raw_reqs.is_empty() {
+        return true;
+    }
+    let reqs_for_name = raw_reqs
+        .iter()
+        .filter(|r| r.name == def.name.name)
+        .collect::<Vec<_>>();
+    if reqs_for_name.is_empty() {
+        return false;
+    }
+    let Some((params, ret)) = ast_fn_signature_llty(&def.signature) else {
+        return false;
+    };
+    reqs_for_name
+        .iter()
+        .any(|r| r.ret == ret && r.params.as_slice() == params.as_slice())
+}
+
+fn ast_fn_signature_llty(sig: &TypeExpr) -> Option<(Vec<LlTy>, LlTy)> {
+    let TypeExpr::Function { params, result, .. } = sig else {
+        return None;
+    };
+    let mut ps = Vec::new();
+    for p in params {
+        ps.push(llty_for_type_expr(p)?);
+    }
+    let ret = llty_for_type_expr(result.as_ref())?;
+    Some((ps, ret))
+}
+
+fn llty_for_type_expr(ty: &TypeExpr) -> Option<LlTy> {
+    match ty {
+        TypeExpr::Unit | TypeExpr::Never => Some(LlTy::Void),
+        TypeExpr::I32 | TypeExpr::U8 | TypeExpr::Bool | TypeExpr::Str => Some(LlTy::I32),
+        TypeExpr::F32 => Some(LlTy::F32),
+        TypeExpr::Named(name) if name == "i64" => Some(LlTy::I64),
+        TypeExpr::Named(name) if name == "f64" => Some(LlTy::F64),
+        TypeExpr::Reference(_, _)
+        | TypeExpr::Boxed(_)
+        | TypeExpr::Tuple(_)
+        | TypeExpr::Apply(_, _)
+        | TypeExpr::Named(_)
+        | TypeExpr::Label(_) => Some(LlTy::I32),
+        TypeExpr::Function { .. } => Some(LlTy::I32),
+    }
+}
+
+fn collect_required_raw_calls_fixed_point(
+    module: &Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+) -> Vec<RawCallRequirement> {
+    #[derive(Debug, Clone)]
+    struct Candidate<'a> {
+        name: &'a str,
+        params: Vec<LlTy>,
+        ret: LlTy,
+        block: &'a crate::ast::LlvmIrBlock,
+    }
+    let mut candidates: Vec<Candidate<'_>> = Vec::new();
+    let mut reqs = Vec::new();
+    for idx in target_precheck::active_stmt_indices(&module.root, target, profile) {
+        let stmt = &module.root.items[idx];
+        match stmt {
+            Stmt::LlvmIr(block) => {
+                collect_call_requirements_from_llvmir_block(block, &mut reqs);
+            }
+            Stmt::FnDef(def) => match &def.body {
+                FnBody::LlvmIr(block) => {
+                    if let Some((params, ret)) = ast_fn_signature_llty(&def.signature) {
+                        candidates.push(Candidate {
+                            name: def.name.name.as_str(),
+                            params,
+                            ret,
+                            block,
+                        });
+                    }
+                }
+                FnBody::Parsed(block) => {
+                    if let Ok(Some(ActiveRawBody::LlvmIr(raw))) = target_precheck::select_active_raw_body(
+                        block,
+                        target,
+                        profile,
+                        def.name.name.as_str(),
+                    ) {
+                        if let Some((params, ret)) = ast_fn_signature_llty(&def.signature) {
+                            candidates.push(Candidate {
+                                name: def.name.name.as_str(),
+                                params,
+                                ret,
+                                block: raw,
+                            });
+                        }
+                    }
+                }
+                FnBody::Wasm(_) => {}
+            },
+            _ => {}
+        }
+    }
+    loop {
+        let mut changed = false;
+        for c in &candidates {
+            let selected = reqs.iter().any(|r| {
+                r.name == c.name && r.ret == c.ret && r.params.as_slice() == c.params.as_slice()
+            });
+            if !selected {
+                continue;
+            }
+            let before = reqs.len();
+            collect_call_requirements_from_llvmir_block(c.block, &mut reqs);
+            if reqs.len() != before {
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    reqs
+}
+
+fn collect_active_ast_raw_name_counts(
+    module: &Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+) -> BTreeMap<String, usize> {
+    let mut out = BTreeMap::new();
+    for idx in target_precheck::active_stmt_indices(&module.root, target, profile) {
+        let stmt = &module.root.items[idx];
+        let Some(def) = (match stmt {
+            Stmt::FnDef(def) => Some(def),
+            _ => None,
+        }) else {
+            continue;
+        };
+        let has_raw = match &def.body {
+            FnBody::LlvmIr(_) => true,
+            FnBody::Parsed(block) => matches!(
+                target_precheck::select_active_raw_body(block, target, profile, def.name.name.as_str()),
+                Ok(Some(ActiveRawBody::LlvmIr(_)))
+            ),
+            FnBody::Wasm(_) => false,
+        };
+        if !has_raw {
+            continue;
+        }
+        let entry = out.entry(def.name.name.clone()).or_insert(0);
+        *entry += 1;
+    }
+    out
+}
+
+fn normalize_ast_raw_llvmir_block(
+    def: &crate::ast::FnDef,
+    block: &crate::ast::LlvmIrBlock,
+    raw_name_counts: &BTreeMap<String, usize>,
+    raw_canonical_taken: &mut BTreeSet<String>,
+) -> crate::ast::LlvmIrBlock {
+    let name = def.name.name.as_str();
+    let Some(count) = raw_name_counts.get(name) else {
+        return block.clone();
+    };
+    if *count <= 1 {
+        return block.clone();
+    }
+    if !raw_canonical_taken.contains(name) {
+        raw_canonical_taken.insert(String::from(name));
+        return block.clone();
+    }
+    let suffix = ast_signature_suffix(&def.signature);
+    let target_symbol = format!("{}__raw_{}", name, suffix);
+    rewrite_llvmir_symbol(block, name, target_symbol.as_str())
+}
+
+fn ast_signature_suffix(sig: &TypeExpr) -> String {
+    let Some((params, ret)) = ast_fn_signature_llty(sig) else {
+        return String::from("unknown");
+    };
+    let mut s = String::new();
+    for (i, p) in params.iter().enumerate() {
+        if i > 0 {
+            s.push('_');
+        }
+        s.push_str(p.ir());
+    }
+    s.push_str("_to_");
+    s.push_str(ret.ir());
+    s
+}
+
+fn rewrite_llvmir_symbol(
+    block: &crate::ast::LlvmIrBlock,
+    from: &str,
+    to: &str,
+) -> crate::ast::LlvmIrBlock {
+    let from_plain = format!("@{}(", from);
+    let from_quoted = format!("@\"{}\"(", from);
+    let to_quoted = format!("@\"{}\"(", to);
+    let mut lines = Vec::new();
+    for line in &block.lines {
+        let mut replaced = String::from(line);
+        replaced = replaced.replace(from_plain.as_str(), to_quoted.as_str());
+        replaced = replaced.replace(from_quoted.as_str(), to_quoted.as_str());
+        lines.push(replaced);
+    }
+    crate::ast::LlvmIrBlock {
+        lines,
+        span: block.span,
+    }
+}
+
+fn collect_call_requirements_from_llvmir_block(
+    block: &crate::ast::LlvmIrBlock,
+    out: &mut Vec<RawCallRequirement>,
+) {
+    for line in &block.lines {
+        if let Some(req) = parse_llvm_call_requirement(line) {
+            if !out.iter().any(|e| e == &req) {
+                out.push(req);
+            }
+        }
+    }
+}
+
+fn parse_llvm_call_requirement(line: &str) -> Option<RawCallRequirement> {
+    let trimmed = line.trim();
+    let call_idx = trimmed.find("call ")?;
+    let rest = &trimmed[(call_idx + 5)..];
+    let at = rest.find('@')?;
+    let ret_str = rest[..at].trim();
+    let ret = parse_llty_token(ret_str)?;
+    let after_at = &rest[(at + 1)..];
+    let open = after_at.find('(')?;
+    let close = after_at.rfind(')')?;
+    if close < open {
+        return None;
+    }
+    let mut name = after_at[..open].trim();
+    if name.starts_with('"') && name.ends_with('"') && name.len() >= 2 {
+        name = &name[1..name.len() - 1];
+    }
+    if name.is_empty() {
+        return None;
+    }
+    let args = &after_at[(open + 1)..close];
+    let mut params = Vec::new();
+    for raw_arg in args.split(',') {
+        let arg = raw_arg.trim();
+        if arg.is_empty() {
+            continue;
+        }
+        let ty_tok = arg.split_whitespace().next()?;
+        params.push(parse_llty_token(ty_tok)?);
+    }
+    Some(RawCallRequirement {
+        name: String::from(name),
+        params,
+        ret,
+    })
+}
+
+fn parse_llty_token(tok: &str) -> Option<LlTy> {
+    match tok.trim() {
+        "void" => Some(LlTy::Void),
+        "i32" | "i8" | "i1" => Some(LlTy::I32),
+        "i64" => Some(LlTy::I64),
+        "float" => Some(LlTy::F32),
+        "double" => Some(LlTy::F64),
+        _ => None,
+    }
+}
+
+fn deduplicate_overloaded_llvm_symbols(src: &str) -> String {
+    #[derive(Debug, Clone)]
+    struct DefLine {
+        idx: usize,
+        name: String,
+        ret: LlTy,
+        params: Vec<LlTy>,
+    }
+    let mut lines = src.lines().map(String::from).collect::<Vec<_>>();
+    let mut defs_by_name: BTreeMap<String, Vec<DefLine>> = BTreeMap::new();
+    for (idx, line) in lines.iter().enumerate() {
+        if let Some((name, ret, params)) = parse_define_signature(line.as_str()) {
+            defs_by_name
+                .entry(String::from(name))
+                .or_default()
+                .push(DefLine {
+                    idx,
+                    name: String::from(name),
+                    ret,
+                    params,
+                });
+        }
+    }
+
+    let mut rename_map: BTreeMap<String, String> = BTreeMap::new();
+    for (name, defs) in defs_by_name {
+        if defs.len() <= 1 {
+            continue;
+        }
+        let canonical = 0usize;
+        let mut serial = 0usize;
+        for (i, d) in defs.iter().enumerate() {
+            if i == canonical {
+                continue;
+            }
+            let new_name = format!(
+                "{}__ov{}_{}",
+                name,
+                serial,
+                raw_abi_signature_key("", d.params.as_slice(), d.ret)
+                    .trim_start_matches('|')
+                    .replace("->", "_to_")
+            );
+            serial += 1;
+            rename_map.insert(
+                ir_sig_key(d.name.as_str(), d.params.as_slice(), d.ret),
+                new_name.clone(),
+            );
+            if let Some(line) = lines.get_mut(d.idx) {
+                *line = replace_signature_symbol_name(line.as_str(), d.name.as_str(), new_name.as_str());
+            }
+        }
+    }
+    if rename_map.is_empty() {
+        return src.to_string();
+    }
+    for line in &mut lines {
+        if let Some(req) = parse_llvm_call_requirement(line.as_str()) {
+            let k = ir_sig_key(req.name.as_str(), req.params.as_slice(), req.ret);
+            if let Some(new_name) = rename_map.get(k.as_str()) {
+                *line = replace_call_symbol_name(line.as_str(), req.name.as_str(), new_name.as_str());
+            }
+        }
+    }
+    lines.join("\n")
+}
+
+fn ir_sig_key(name: &str, params: &[LlTy], ret: LlTy) -> String {
+    raw_abi_signature_key(name, params, ret)
+}
+
+fn parse_define_signature(line: &str) -> Option<(&str, LlTy, Vec<LlTy>)> {
+    let trimmed = line.trim_start();
+    if !trimmed.starts_with("define ") {
+        return None;
+    }
+    let at = trimmed.find('@')?;
+    let ret_str = trimmed["define ".len()..at].trim();
+    let ret = parse_llty_token(ret_str)?;
+    let rest = &trimmed[(at + 1)..];
+    let open = rest.find('(')?;
+    let close = rest.rfind(')')?;
+    if close < open {
+        return None;
+    }
+    let mut name = rest[..open].trim();
+    if name.starts_with('"') && name.ends_with('"') && name.len() >= 2 {
+        name = &name[1..name.len() - 1];
+    }
+    if name.is_empty() {
+        return None;
+    }
+    let args = &rest[(open + 1)..close];
+    let mut params = Vec::new();
+    for raw_arg in args.split(',') {
+        let arg = raw_arg.trim();
+        if arg.is_empty() {
+            continue;
+        }
+        let ty_tok = arg.split_whitespace().next()?;
+        params.push(parse_llty_token(ty_tok)?);
+    }
+    Some((name, ret, params))
+}
+
+fn replace_signature_symbol_name(line: &str, from: &str, to: &str) -> String {
+    let from_plain = format!("@{}(", from);
+    let from_quoted = format!("@\"{}\"(", from);
+    let to_quoted = format!("@\"{}\"(", to);
+    let mut out = String::from(line);
+    out = out.replace(from_plain.as_str(), to_quoted.as_str());
+    out.replace(from_quoted.as_str(), to_quoted.as_str())
+}
+
+fn replace_call_symbol_name(line: &str, from: &str, to: &str) -> String {
+    replace_signature_symbol_name(line, from, to)
+}
+
+fn raw_abi_signature_key(name: &str, params: &[LlTy], ret: LlTy) -> String {
+    let mut s = String::from(name);
+    s.push('|');
+    for p in params {
+        s.push_str(p.ir());
+        s.push(',');
+    }
+    s.push_str("->");
+    s.push_str(ret.ir());
+    s
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -486,9 +861,19 @@ fn try_lower_entry_from_hir(
     let mut reachable = collect_reachable_functions(&hir, resolved_entry.as_str());
     extend_reachable_with_runtime_helpers(&mut reachable, &hir, &sigs);
     let reachable_set: BTreeSet<String> = reachable.iter().cloned().collect();
+    let pre_codegen_diags =
+        crate::passes::codegen_precheck::precheck_llvm_codegen(&types, &hir, &reachable_set);
+    if pre_codegen_diags
+        .iter()
+        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
+    {
+        return Err(LlvmCodegenError::TypecheckFailed {
+            reason: summarize_diagnostics_for_message(pre_codegen_diags.as_slice()),
+        });
+    }
     let fallback_alloc_symbol = resolve_runtime_helper_symbol(
         &sigs,
-        &["alloc_raw", "alloc"],
+        helper_candidates(RuntimeHelperKind::Alloc),
         &[LlTy::I32],
         LlTy::I32,
     )
@@ -642,9 +1027,10 @@ fn try_lower_entry_from_hir(
                 }
             }
             HirBody::Wasm(_) => {
-                return Err(LlvmCodegenError::UnsupportedWasmBody {
-                    function: func.name.clone(),
-                });
+                panic!(
+                    "internal compiler error: llvm lowering reached wasm body after precheck in function '{}'",
+                    func.name
+                );
             }
             HirBody::Block(block) => {
                 out.push_str(&format!("; nepl: function {} (lowered block)\n", name));
@@ -954,13 +1340,18 @@ fn extend_reachable_with_runtime_helpers(
     };
     push_root(
         &mut helper_roots,
-        resolve_runtime_helper_symbol(sigs, &["alloc_raw", "alloc"], &[LlTy::I32], LlTy::I32),
+        resolve_runtime_helper_symbol(
+            sigs,
+            helper_candidates(RuntimeHelperKind::Alloc),
+            &[LlTy::I32],
+            LlTy::I32,
+        ),
     );
     push_root(
         &mut helper_roots,
         resolve_runtime_helper_symbol(
             sigs,
-            &["dealloc_raw", "dealloc"],
+            helper_candidates(RuntimeHelperKind::Dealloc),
             &[LlTy::I32, LlTy::I32],
             LlTy::Void,
         ),
@@ -969,7 +1360,7 @@ fn extend_reachable_with_runtime_helpers(
         &mut helper_roots,
         resolve_runtime_helper_symbol(
             sigs,
-            &["realloc_raw", "realloc"],
+            helper_candidates(RuntimeHelperKind::Realloc),
             &[LlTy::I32, LlTy::I32, LlTy::I32],
             LlTy::I32,
         ),
@@ -1225,10 +1616,10 @@ fn lower_hir_function(
                 if v.ty == ret_ty {
                     ctx.push_line(&format!("  ret {} {}", ret_ty.ir(), v.repr));
                 } else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: func.name.clone(),
-                        reason: format!("return type mismatch {:?} -> {:?}", v.ty, ret_ty),
-                    });
+                    panic!(
+                        "internal compiler error: return type mismatch in '{}' ({:?} -> {:?})",
+                        func.name, v.ty, ret_ty
+                    );
                 }
             } else {
                 let zero = match ret_ty {
@@ -1310,10 +1701,10 @@ fn lower_hir_expr(
                         repr: format!("{}", fid),
                     }));
                 }
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: format!("unknown variable '{}'", name),
-                });
+                panic!(
+                    "internal compiler error: unknown variable '{}' reached llvm codegen",
+                    name
+                );
             };
             let bty = binding.ty;
             let bptr = binding.ptr.clone();
@@ -1343,10 +1734,10 @@ fn lower_hir_expr(
                 (ptr, v.ty)
             };
             if v.ty != pty {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: format!("let type mismatch {:?} -> {:?}", v.ty, pty),
-                });
+                panic!(
+                    "internal compiler error: let type mismatch in llvm codegen ({:?} -> {:?})",
+                    v.ty, pty
+                );
             }
             ctx.push_line(&format!(
                 "  store {} {}, {}* {}",
@@ -1359,19 +1750,19 @@ fn lower_hir_expr(
         }
         HirExprKind::Set { name, value } => {
             let Some(binding) = ctx.lookup_local_fuzzy(name.as_str()).cloned() else {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: format!("set on unknown variable '{}'", name),
-                });
+                panic!(
+                    "internal compiler error: set on unknown variable '{}' reached llvm codegen",
+                    name
+                );
             };
             let Some(v) = lower_hir_expr(types, ctx, value)? else {
                 return Ok(None);
             };
             if v.ty != binding.ty {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: format!("set type mismatch {:?} -> {:?}", v.ty, binding.ty),
-                });
+                panic!(
+                    "internal compiler error: set type mismatch in llvm codegen ({:?} -> {:?})",
+                    v.ty, binding.ty
+                );
             }
             ctx.push_line(&format!(
                 "  store {} {}, {}* {}",
@@ -1389,20 +1780,20 @@ fn lower_hir_expr(
                     repr: format!("{}", fid),
                 }))
             } else {
-                Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: format!("unknown function value '{}'", name),
-                })
+                panic!(
+                    "internal compiler error: unknown function value '{}' reached llvm codegen",
+                    name
+                )
             }
         }
         HirExprKind::Call { callee, args } => {
             let callee_name = match callee {
                 FuncRef::Builtin(name) | FuncRef::User(name, _) => name.as_str(),
                 FuncRef::Trait { trait_name, method, .. } => {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!("trait call {}::{} is not yet supported", trait_name, method),
-                    });
+                    panic!(
+                        "internal compiler error: unresolved trait call {}::{} reached llvm codegen",
+                        trait_name, method
+                    );
                 }
             };
             let mut lowered_args = Vec::new();
@@ -1411,21 +1802,20 @@ fn lower_hir_expr(
                     lowered_args.push(v);
                 }
             }
-            let sig = ctx.sigs.get(callee_name).ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
-                function: ctx.function_name.to_string(),
-                reason: format!("missing function signature for '{}'", callee_name),
-            })?;
+            let Some(sig) = ctx.sigs.get(callee_name) else {
+                panic!(
+                    "internal compiler error: missing function signature for '{}' in llvm codegen",
+                    callee_name
+                );
+            };
             let mut args_ir = Vec::new();
             for (idx, v) in lowered_args.iter().enumerate() {
                 let ty = sig.params.get(idx).copied().unwrap_or(v.ty);
                 if ty != v.ty {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!(
-                            "call argument type mismatch on '{}': expected {:?}, got {:?}",
-                            callee_name, ty, v.ty
-                        ),
-                    });
+                    panic!(
+                        "internal compiler error: call argument type mismatch in llvm codegen for '{}' ({:?} vs {:?})",
+                        callee_name, ty, v.ty
+                    );
                 }
                 args_ir.push(format!("{} {}", ty.ir(), v.repr));
             }
@@ -1459,25 +1849,25 @@ fn lower_hir_expr(
             args,
         } => {
             let Some(callee_v) = lower_hir_expr(types, ctx, callee)? else {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("call_indirect callee must produce a value"),
-                });
+                panic!(
+                    "internal compiler error: call_indirect callee must produce a value in '{}'",
+                    ctx.function_name
+                );
             };
             if callee_v.ty != LlTy::I32 {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("call_indirect callee must be i32 function id"),
-                });
+                panic!(
+                    "internal compiler error: call_indirect callee must be i32 function id in '{}'",
+                    ctx.function_name
+                );
             }
 
             let mut lowered_args = Vec::new();
             for a in args {
                 let Some(v) = lower_hir_expr(types, ctx, a)? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("call_indirect argument must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: call_indirect argument must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 lowered_args.push(v);
             }
@@ -1487,20 +1877,17 @@ fn lower_hir_expr(
                 .collect::<Vec<_>>();
             let ret_ll = llty_for_type(types, *result);
             if lowered_args.len() != param_ll.len() {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("call_indirect argument length mismatch"),
-                });
+                panic!(
+                    "internal compiler error: call_indirect argument length mismatch in '{}'",
+                    ctx.function_name
+                );
             }
             for (idx, v) in lowered_args.iter().enumerate() {
                 if v.ty != param_ll[idx] {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!(
-                            "call_indirect argument type mismatch at {}: expected {:?}, got {:?}",
-                            idx, param_ll[idx], v.ty
-                        ),
-                    });
+                    panic!(
+                        "internal compiler error: call_indirect argument type mismatch at {} in '{}' ({:?} vs {:?})",
+                        idx, ctx.function_name, param_ll[idx], v.ty
+                    );
                 }
             }
 
@@ -1516,10 +1903,10 @@ fn lower_hir_expr(
                 }
             }
             if candidates.is_empty() {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("call_indirect has no matching candidate"),
-                });
+                panic!(
+                    "internal compiler error: call_indirect has no matching candidate in '{}'",
+                    ctx.function_name
+                );
             }
 
             let end_label = ctx.next_label("calli_end");
@@ -1605,16 +1992,16 @@ fn lower_hir_expr(
             else_branch,
         } => {
             let Some(cond_v) = lower_hir_expr(types, ctx, cond)? else {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("if condition must produce a value"),
-                });
+                panic!(
+                    "internal compiler error: if condition must produce a value in '{}'",
+                    ctx.function_name
+                );
             };
             if cond_v.ty != LlTy::I32 {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("if condition must be i32/bool-compatible"),
-                });
+                panic!(
+                    "internal compiler error: if condition must be i32/bool-compatible in '{}' (got {:?})",
+                    ctx.function_name, cond_v.ty
+                );
             }
             let cond_i1 = ctx.next_tmp();
             ctx.push_line(&format!(
@@ -1641,10 +2028,10 @@ fn lower_hir_expr(
             if let Some(tv) = lower_hir_expr(types, ctx, then_branch)? {
                 if let Some(slot) = result_slot.as_ref() {
                     if tv.ty != result_ty {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: String::from("then branch result type mismatch"),
-                        });
+                        panic!(
+                            "internal compiler error: then branch result type mismatch in '{}' ({:?} vs {:?})",
+                            ctx.function_name, tv.ty, result_ty
+                        );
                     }
                     ctx.push_line(&format!(
                         "  store {} {}, {}* {}",
@@ -1661,10 +2048,10 @@ fn lower_hir_expr(
             if let Some(ev) = lower_hir_expr(types, ctx, else_branch)? {
                 if let Some(slot) = result_slot.as_ref() {
                     if ev.ty != result_ty {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: String::from("else branch result type mismatch"),
-                        });
+                        panic!(
+                            "internal compiler error: else branch result type mismatch in '{}' ({:?} vs {:?})",
+                            ctx.function_name, ev.ty, result_ty
+                        );
                     }
                     ctx.push_line(&format!(
                         "  store {} {}, {}* {}",
@@ -1701,16 +2088,16 @@ fn lower_hir_expr(
             ctx.push_line(&format!("  br label %{}", cond_label));
             ctx.push_line(&format!("{}:", cond_label));
             let Some(cond_v) = lower_hir_expr(types, ctx, cond)? else {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("while condition must produce a value"),
-                });
+                panic!(
+                    "internal compiler error: while condition must produce a value in '{}'",
+                    ctx.function_name
+                );
             };
             if cond_v.ty != LlTy::I32 {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("while condition must be i32/bool-compatible"),
-                });
+                panic!(
+                    "internal compiler error: while condition must be i32/bool-compatible in '{}' (got {:?})",
+                    ctx.function_name, cond_v.ty
+                );
             }
             let cmp = ctx.next_tmp();
             ctx.push_line(&format!("  {} = icmp ne i32 {}, 0", cmp, cond_v.repr));
@@ -1739,10 +2126,10 @@ fn lower_hir_expr(
             };
 
             let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
-                LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("alloc function is required for enum construction"),
-                }
+                panic!(
+                    "internal compiler error: alloc function is required for enum construction in '{}'",
+                    ctx.function_name
+                )
             })?;
 
             let ptr = ctx.next_tmp();
@@ -1767,19 +2154,16 @@ fn lower_hir_expr(
                         }));
                     }
                     let Some(pv) = pv else {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: String::from("enum payload must produce a value"),
-                        });
+                        panic!(
+                            "internal compiler error: enum payload must produce a value in '{}'",
+                            ctx.function_name
+                        );
                     };
                     if pv.ty != vty {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: format!(
-                                "enum payload type mismatch: expected {:?}, got {:?}",
-                                vty, pv.ty
-                            ),
-                        });
+                        panic!(
+                            "internal compiler error: enum payload type mismatch in '{}' ({:?} vs {:?})",
+                            ctx.function_name, vty, pv.ty
+                        );
                     }
                     let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
                     let payload_ptr8 = ctx.next_tmp();
@@ -1825,10 +2209,10 @@ fn lower_hir_expr(
                 total_size += ll_storage_size(*ty) as i32;
             }
             let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
-                LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("alloc function is required for struct construction"),
-                }
+                panic!(
+                    "internal compiler error: alloc function is required for struct construction in '{}'",
+                    ctx.function_name
+                )
             })?;
             let ptr = ctx.next_tmp();
             ctx.push_line(&format!(
@@ -1844,19 +2228,16 @@ fn lower_hir_expr(
                     continue;
                 }
                 let Some(fv) = fv else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("struct field must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: struct field must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if fv.ty != fty {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!(
-                            "struct field type mismatch: expected {:?}, got {:?}",
-                            fty, fv.ty
-                        ),
-                    });
+                    panic!(
+                        "internal compiler error: struct field type mismatch in '{}' ({:?} vs {:?})",
+                        ctx.function_name, fty, fv.ty
+                    );
                 }
                 let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
                 let field_ptr8 = ctx.next_tmp();
@@ -1896,10 +2277,10 @@ fn lower_hir_expr(
                 total_size += ll_storage_size(*ty) as i32;
             }
             let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
-                LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("alloc function is required for tuple construction"),
-                }
+                panic!(
+                    "internal compiler error: alloc function is required for tuple construction in '{}'",
+                    ctx.function_name
+                )
             })?;
             let ptr = ctx.next_tmp();
             ctx.push_line(&format!(
@@ -1915,19 +2296,16 @@ fn lower_hir_expr(
                     continue;
                 }
                 let Some(iv) = iv else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("tuple item must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: tuple item must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if iv.ty != ity {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!(
-                            "tuple item type mismatch: expected {:?}, got {:?}",
-                            ity, iv.ty
-                        ),
-                    });
+                    panic!(
+                        "internal compiler error: tuple item type mismatch in '{}' ({:?} vs {:?})",
+                        ctx.function_name, ity, iv.ty
+                    );
                 }
                 let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
                 let item_ptr8 = ctx.next_tmp();
@@ -1957,22 +2335,22 @@ fn lower_hir_expr(
         }
         HirExprKind::Match { scrutinee, arms } => {
             let Some(scr_v) = lower_hir_expr(types, ctx, scrutinee)? else {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("match scrutinee must produce a value"),
-                });
+                panic!(
+                    "internal compiler error: match scrutinee must produce a value in '{}'",
+                    ctx.function_name
+                );
             };
             if scr_v.ty != LlTy::I32 {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("match scrutinee must be enum pointer (i32)"),
-                });
+                panic!(
+                    "internal compiler error: match scrutinee must be enum pointer (i32) in '{}' (got {:?})",
+                    ctx.function_name, scr_v.ty
+                );
             }
             if arms.is_empty() {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("match must have at least one arm"),
-                });
+                panic!(
+                    "internal compiler error: match must have at least one arm in '{}'",
+                    ctx.function_name
+                );
             }
 
             let scr_ptr = ctx.linear_typed_ptr_from_i32(scr_v.repr.as_str(), LlTy::I32);
@@ -2073,13 +2451,10 @@ fn lower_hir_expr(
                         continue;
                     };
                     if v.ty != result_ty {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: format!(
-                                "match arm result type mismatch: expected {:?}, got {:?}",
-                                result_ty, v.ty
-                            ),
-                        });
+                        panic!(
+                            "internal compiler error: match arm result type mismatch in '{}' ({:?} vs {:?})",
+                            ctx.function_name, result_ty, v.ty
+                        );
                     }
                     ctx.push_line(&format!(
                         "  store {} {}, {}* {}, align 1",
@@ -2136,22 +2511,22 @@ fn lower_hir_expr(
             }
             if name == "load" {
                 if type_args.len() != 1 || args.len() != 1 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic load requires one type arg and one value arg"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic load requires one type arg and one value arg in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(ptr_v) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic load pointer must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic load pointer must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if ptr_v.ty != LlTy::I32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic load pointer must be i32"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic load pointer must be i32 in '{}' (got {:?})",
+                        ctx.function_name, ptr_v.ty
+                    );
                 }
                 let ty_id = types.resolve_id(type_args[0]);
                 let ty_kind = types.get(ty_id);
@@ -2183,37 +2558,37 @@ fn lower_hir_expr(
             }
             if name == "store" {
                 if type_args.len() != 1 || args.len() != 2 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic store requires one type arg and two value args"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic store requires one type arg and two value args in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(ptr_v) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic store pointer must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic store pointer must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 let Some(val_v) = lower_hir_expr(types, ctx, &args[1])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic store value must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic store value must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if ptr_v.ty != LlTy::I32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic store pointer must be i32"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic store pointer must be i32 in '{}' (got {:?})",
+                        ctx.function_name, ptr_v.ty
+                    );
                 }
                 let ty_id = types.resolve_id(type_args[0]);
                 let ty_kind = types.get(ty_id);
                 if matches!(ty_kind, TypeKind::U8) {
                     if val_v.ty != LlTy::I32 {
-                        return Err(LlvmCodegenError::UnsupportedHirLowering {
-                            function: ctx.function_name.to_string(),
-                            reason: String::from("intrinsic store<u8> expects i32 value"),
-                        });
+                        panic!(
+                            "internal compiler error: intrinsic store<u8> expects i32 value in '{}' (got {:?})",
+                            ctx.function_name, val_v.ty
+                        );
                     }
                     let p_ptr = ctx.linear_i8_ptr_from_i32(ptr_v.repr.as_str());
                     let b = ctx.next_tmp();
@@ -2223,13 +2598,10 @@ fn lower_hir_expr(
                 }
                 let store_ty = llty_for_type(types, ty_id);
                 if val_v.ty != store_ty {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!(
-                            "intrinsic store type mismatch: expected {:?}, got {:?}",
-                            store_ty, val_v.ty
-                        ),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic store type mismatch in '{}' ({:?} vs {:?})",
+                        ctx.function_name, store_ty, val_v.ty
+                    );
                 }
                 let p_ptr = ctx.linear_typed_ptr_from_i32(ptr_v.repr.as_str(), store_ty);
                 ctx.push_line(&format!(
@@ -2247,28 +2619,28 @@ fn lower_hir_expr(
             }
             if name == "add" {
                 if args.len() != 2 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic add expects two arguments"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic add expects two arguments in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(a) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic add lhs must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic add lhs must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 let Some(b) = lower_hir_expr(types, ctx, &args[1])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic add rhs must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic add rhs must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if a.ty != LlTy::I32 || b.ty != LlTy::I32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic add currently supports i32 only"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic add supports i32 only in '{}' ({:?}, {:?})",
+                        ctx.function_name, a.ty, b.ty
+                    );
                 }
                 let out = ctx.next_tmp();
                 ctx.push_line(&format!("  {} = add i32 {}, {}", out, a.repr, b.repr));
@@ -2279,22 +2651,22 @@ fn lower_hir_expr(
             }
             if name == "f32_to_i32" {
                 if args.len() != 1 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic f32_to_i32 expects one argument"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic f32_to_i32 expects one argument in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic f32_to_i32 value must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic f32_to_i32 value must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if v.ty != LlTy::F32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic f32_to_i32 expects f32"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic f32_to_i32 expects f32 in '{}' (got {:?})",
+                        ctx.function_name, v.ty
+                    );
                 }
                 let out = ctx.next_tmp();
                 ctx.push_line(&format!("  {} = fptosi float {} to i32", out, v.repr));
@@ -2305,22 +2677,22 @@ fn lower_hir_expr(
             }
             if name == "i32_to_u8" {
                 if args.len() != 1 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic i32_to_u8 expects one argument"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic i32_to_u8 expects one argument in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic i32_to_u8 value must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic i32_to_u8 value must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if v.ty != LlTy::I32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic i32_to_u8 expects i32"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic i32_to_u8 expects i32 in '{}' (got {:?})",
+                        ctx.function_name, v.ty
+                    );
                 }
                 let out = ctx.next_tmp();
                 ctx.push_line(&format!("  {} = and i32 {}, 255", out, v.repr));
@@ -2331,22 +2703,22 @@ fn lower_hir_expr(
             }
             if name == "u8_to_i32" {
                 if args.len() != 1 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic u8_to_i32 expects one argument"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic u8_to_i32 expects one argument in '{}'",
+                        ctx.function_name
+                    );
                 }
                 let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic u8_to_i32 value must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic u8_to_i32 value must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 if v.ty != LlTy::I32 {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("intrinsic u8_to_i32 expects i32"),
-                    });
+                    panic!(
+                        "internal compiler error: intrinsic u8_to_i32 expects i32 in '{}' (got {:?})",
+                        ctx.function_name, v.ty
+                    );
                 }
                 let out = ctx.next_tmp();
                 ctx.push_line(&format!("  {} = and i32 {}, 255", out, v.repr));
@@ -2355,16 +2727,18 @@ fn lower_hir_expr(
                     repr: out,
                 }));
             }
-            Err(LlvmCodegenError::UnsupportedHirLowering {
-                function: ctx.function_name.to_string(),
-                reason: format!("unsupported intrinsic '{}'", name),
-            })
+            panic!(
+                "internal compiler error: unsupported intrinsic '{}' reached llvm lowering in '{}'",
+                name, ctx.function_name
+            );
         }
         HirExprKind::Drop { .. } => Ok(None),
-        other => Err(LlvmCodegenError::UnsupportedHirLowering {
-            function: ctx.function_name.to_string(),
-            reason: format!("unsupported expression kind {:?}", other),
-        }),
+        other => {
+            panic!(
+                "internal compiler error: unsupported expression kind reached llvm lowering in '{}' ({:?})",
+                ctx.function_name, other
+            );
+        }
     }
 }
 
@@ -2374,15 +2748,17 @@ fn lower_hir_string_literal(
     id: usize,
 ) -> Result<Option<LlValue>, LlvmCodegenError> {
     let Some(s) = ctx.strings.get(id) else {
-        return Err(LlvmCodegenError::UnsupportedHirLowering {
-            function: ctx.function_name.to_string(),
-            reason: format!("string literal id {} was out of bounds", id),
-        });
+        panic!(
+            "internal compiler error: string literal id {} was out of bounds in '{}'",
+            id, ctx.function_name
+        );
     };
     let bytes = s.as_bytes();
-    let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| LlvmCodegenError::UnsupportedHirLowering {
-        function: ctx.function_name.to_string(),
-        reason: String::from("alloc function is required to materialize string literals"),
+    let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
+        panic!(
+            "internal compiler error: alloc function is required to materialize string literals in '{}'",
+            ctx.function_name
+        )
     })?;
     let ptr_tmp = ctx.next_tmp();
     let total_len = (bytes.len() + 4) as i32;
@@ -2457,9 +2833,14 @@ fn llvm_f32_literal(v: f32) -> String {
 }
 
 fn resolve_alloc_symbol(ctx: &LowerCtx<'_>) -> Option<String> {
-    resolve_runtime_helper_symbol(ctx.sigs, &["alloc_raw", "alloc"], &[LlTy::I32], LlTy::I32)
-        .map(String::from)
-        .or_else(|| ctx.fallback_alloc_symbol.map(String::from))
+    resolve_runtime_helper_symbol(
+        ctx.sigs,
+        helper_candidates(RuntimeHelperKind::Alloc),
+        &[LlTy::I32],
+        LlTy::I32,
+    )
+    .map(String::from)
+    .or_else(|| ctx.fallback_alloc_symbol.map(String::from))
 }
 
 fn resolve_runtime_helper_symbol<'a>(
@@ -2496,7 +2877,7 @@ fn resolve_symbol_name<'a>(
             if !signature_matches(sig) {
                 return None;
             }
-            if name == preferred || name.starts_with(&format!("{}__", preferred)) {
+            if helper_base_name(name.as_str()) == preferred {
                 Some(name.as_str())
             } else {
                 None
@@ -2855,12 +3236,7 @@ fn main <()->i32> ():
 "#;
         let module = parse_module(src);
         let err = emit_ll_from_module(&module).expect_err("entry with #wasm body must fail");
-        assert_eq!(
-            err,
-            LlvmCodegenError::UnsupportedWasmBody {
-                function: "main".to_string()
-            }
-        );
+        assert!(matches!(err, LlvmCodegenError::TypecheckFailed { .. }));
     }
 
     #[test]

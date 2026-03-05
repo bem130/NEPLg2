@@ -76,3 +76,16 @@ neplg2:test[llvm_cli]
         ret i32 %v
     }
 ```
+
+## llvm_precheck_rejects_wasm_only_intrinsic
+
+neplg2:test[llvm_cli, compile_fail]
+diag_id: 3012
+```neplg2
+#target llvm
+#entry main
+#indent 4
+
+fn main <()->i32> ():
+    #intrinsic "i32_add" <> (1, 2)
+```

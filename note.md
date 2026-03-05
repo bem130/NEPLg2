@@ -1,3 +1,371 @@
+# 2026-03-06 作業メモ (フェーズD: llvm `add/sub` 再定義リンク失敗の根本修正)
+
+- 目的:
+  - `--runner all --llvm-all` 実行時に `tests/llvm_target.n.md::doctest#4/#5` が `invalid redefinition of function 'add'/'sub'` で失敗する問題を、後付け回避ではなく生成IR構造から解消する。
+- 原因:
+  - `stdlib/core/math.nepl` の overload 群（`add/sub` など）が `#llvmir` 内で同一シンボル名（`@add`, `@sub`）を使っていた。
+  - LLVM はシンボル名で overloading できないため、同一モジュールへ複数型版を同名定義するとリンク時に衝突する。
+  - さらに `u8` と `i32` は LLVM ABI で同じ `i32` に落ちるため、型別 overload をそのままシンボル名で共存させる設計が成立しない。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - 生成完了直前に `deduplicate_overloaded_llvm_symbols` を追加し、同名 `define` をシグネチャ単位で一意化。
+    - `define` 側の重複を `name__ovN_<sig>` へ正規化し、対応する `call` 参照も同一シグネチャで張り替える。
+    - 前段として `#llvmir` 呼び出し要件抽出と AST raw-body 選別補助を追加し、不要な overload 出力を抑制。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `cargo build -p nepl-cli` -> success
+  - `node nodesrc/tests.js -i tests/llvm_target.n.md --no-stdlib --no-tree --runner all --llvm-all -o /tmp/tests-llvm-target-after-dedup-pass.json -j 15` -> `6/6 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-dedup.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: llvm codegen 内の precheck 後診断返却を除去)
+
+- 目的:
+  - `precheck` 実行後に `codegen_llvm` が `TypecheckFailed` を返していた残存経路を除去し、前段検査不変条件へ統一する。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `emit_ll_from_module_for_target` 内の `select_active_raw_body(... )` `Err(diag)` 分岐を `TypecheckFailed` 返却から internal panic へ変更。
+    - これにより、raw-body 選択失敗は前段 `target_precheck::precheck_module_before_codegen` でのみ診断され、codegen 到達後は生成専任になる。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-after-llvm-invariant-2.json -j 15` -> `8/8 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-precheck-invariant.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: llvm precheck 回帰ケースの追加)
+
+- 目的:
+  - LLVM backend 到達前に未対応 intrinsic を診断できることを回帰固定する。
+- 変更:
+  - `tests/llvm_target.n.md`
+    - `llvm_precheck_rejects_wasm_only_intrinsic` を追加。
+    - `#intrinsic "i32_add"` を `#target llvm` で使った場合に `diag_id: 3012` を期待する compile_fail ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/llvm_target.n.md --no-stdlib --no-tree --runner all --llvm-all -o /tmp/tests-llvm-target-after-precheck-case.json -j 15`
+    - 追加ケース（`doctest#6::llvm`）は pass。
+    - 既存ケース `doctest#4/#5` は `invalid redefinition of function 'add'` で fail（既知未解決）。
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-test-add.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: allocator helper 解決の意味論修正)
+
+- 目的:
+  - runtime helper 共通化後に発生した run-time 失敗 (`unreachable` / `memory access out of bounds`) を、間に合わせではなく helper 解決の意味論から修正する。
+- 原因:
+  - `alloc`（安全API）と `alloc_raw`（低レベルAPI）は現状の lowering では型互換になりうるため、`ALLOC_CANDIDATES=["alloc","alloc_raw"]` へ変更すると backend 内部確保で誤って `alloc` を掴む経路が発生する。
+  - その結果、内部確保の前提（生ポインタ返却）と合わず、実行時に `unreachable` / OOB が発生した。
+- 変更:
+  - `nepl-core/src/runtime_helpers.rs`
+    - `ALLOC_CANDIDATES` を `["alloc_raw", "alloc"]` に戻し、内部 helper 解決は生ポインタ意味論を優先するよう修正。
+    - 単体テスト期待値も raw 優先へ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-alloc-order-fix.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: runtime helper 解決の共通化と raw 依存縮小)
+
+- 目的:
+  - `nepl-core` 内で重複していた runtime helper（alloc/dealloc/realloc）解決ロジックを共通化し、`_raw` 名依存を段階縮小する。
+  - helper 名の優先順位を安全API名（suffixなし）優先へ統一する。
+- 変更:
+  - `nepl-core/src/runtime_helpers.rs`
+    - `ALLOC_CANDIDATES` を `["alloc", "alloc_raw"]` に変更（安全API優先）。
+    - `RuntimeHelperKind` / `helper_candidates` / `helper_base_name` を追加。
+    - `find_runtime_helper_key`（名前解決）と `find_runtime_helper_index`（index解決）を追加。
+  - `nepl-core/src/codegen_wasm.rs`
+    - ローカル実装だった helper 名解決を削除し、`runtime_helpers::find_runtime_helper_index` に統一。
+  - `nepl-core/src/monomorphize.rs`
+    - helper 保持ルート探索を `find_runtime_helper_key` + `RuntimeHelperKind` へ置換。
+    - 重複していた名前マッチ関数を削除。
+  - `nepl-core/src/codegen_llvm.rs`
+    - helper 候補取得を `helper_candidates(RuntimeHelperKind::...)` に統一。
+    - `resolve_symbol_name` の候補一致を `helper_base_name` ベースへ変更し、namespaced/mangled 名でも同一規則で解決。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-helper-unify.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: llvm backend の wasm-body 分岐を不変条件化)
+
+- 目的:
+  - `codegen_llvm` 側に残っていた backend 入力エラー分岐（`UnsupportedWasmBody`）を前段検査前提へ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `LlvmCodegenError` から `UnsupportedWasmBody` / `UnsupportedParsedFunctionBody` を削除。
+    - `emit_ll_from_module_for_target` 内で `ActiveRawBody::Wasm` 到達時の `Err` を internal panic に変更。
+    - `FnBody::Wasm` reachable 到達時の `Err` を internal panic に変更。
+    - HIR lowering 経路で `HirBody::Wasm` 到達時の `Err` を internal panic に変更。
+    - 対応テスト `emit_ll_rejects_entry_with_wasm_body` は `TypecheckFailed` を期待する形へ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-invariant.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: wasm codegen 診断返却経路の撤去)
+
+- 目的:
+  - `codegen` 到達後は生成専任にする方針に合わせ、`codegen_wasm` の `Vec<Diagnostic>` 返却経路を撤去する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `lower_body` / `lower_user` の戻り値を `Result<Function, Vec<Diagnostic>>` から `Function` へ変更。
+    - `gen_block` / `gen_expr` の `diags` 引数を削除。
+    - `generate_wasm` の code section 生成で `Err(ds)` 分岐を削除し、前段検査通過後は直接生成する形に統一。
+    - backend 内診断として残っていた未使用関数 `validate_wasm_stack` を削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-after-wasm-no-diag.json -j 15` -> `8/8 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-wasm-no-diag.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: wasm helper 解決の自己再帰バグ修正)
+
+- 目的:
+  - `tests + stdlib` で発生していた `RangeError: Maximum call stack size exceeded` を根本原因から解消する。
+- 再現と切り分け:
+  - `option.nepl` doctest を単独再現すると `wasm-function[4]` の自己再帰で停止。
+  - 同一ソースを `nepl-cli` で生成した wasm は正常実行。
+  - `web` 生成 WAT と `native` 生成 WAT を比較すると、同一箇所で `call 5` が `call 4`（自己呼び出し）に化けていた。
+- 原因:
+  - `codegen_wasm` の runtime helper 解決が曖昧な文字列一致（prefix/contains）依存だった。
+  - allocator helper 解決時に `alloc` と `alloc_raw` の取り違えが発生し、enum/tuple 構築時の内部確保で自己再帰が起きていた。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - helper 名の基底名抽出 `helper_base_name` を追加。
+    - runtime helper 解決を基底名一致へ変更し、曖昧一致を廃止。
+    - 現在 lowering 中の関数インデックスは helper 候補から除外。
+    - `LocalMap` に `alloc_helper_idx` を保持し、関数ごとに一度だけ helper を確定。
+  - `nepl-core/src/runtime_helpers.rs`
+    - `ALLOC_CANDIDATES` を `["alloc_raw", "alloc"]` の順へ変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i stdlib/core/option.nepl -i stdlib/alloc/collections/vec.nepl -i stdlib/alloc/collections/vec/sort.nepl --no-stdlib --no-tree -o /tmp/tests-vec-option-after-alloc-helper-fix.json -j 15` -> `22/22 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-alloc-helper-fix.json -j 15` -> `791/791 pass`
+
+# 2026-03-05 作業メモ (フェーズD: web 実行時 `compile: unreachable` の根本修正)
+
+- 目的:
+  - `web/dist` 経路でのみ発生していた `phase=compile, error=unreachable` を根本原因から解消する。
+- 原因:
+  - `codegen_wasm.rs` の raw wasm 行パースで、ローカル解決クロージャが `parse_wasm_line_with_lookup` 側の `$` 正規化と二重処理になっていた。
+  - その結果、`#wasm` 本文の `$a`/`$b` が codegen 時のみ `unknown local` になり panic していた（precheck 側とは不整合）。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `parse_wasm_line` の lookup を `|name| locals.lookup(name)` に統一。
+    - 旧 `parse_local` ヘルパを削除。
+  - `nepl-web/src/lib.rs`
+    - `console_error_panic_hook::set_once()` を `#[wasm_bindgen(start)]` で有効化し、WASM panic の原因位置を可視化。
+  - `nodesrc/run_test.js`
+    - `formatError` を追加し、compile/run 失敗時に stack を保持して JSON 出力へ反映。
+- 検証:
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-after-rootfix.json -j 15` -> `8/8 pass`
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/list.nepl --no-stdlib --no-tree -o /tmp/tests-list-after-rootfix.json -j 15` -> `11/11 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-rootfix.json -j 15` -> `707/791 pass`（残り `84 fail` は run 時 `Maximum call stack size exceeded`。`compile: unreachable` は再現せず）
+
+# 2026-03-05 作業メモ (フェーズD: web 実行時 `unreachable` の切り分け)
+
+- 目的:
+  - 全体テスト (`tests + stdlib`) で多発する `phase=compile, error=unreachable` を、間に合わせではなく根本原因から切り分ける。
+- 実施:
+  - `trunk build` 後に
+    - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-baseline-after-revert-v1.json -j 15`
+    - 結果: `349/791 pass`、`442 fail`、上位失敗は `stdlib/alloc/collections/list.nepl` doctest 群の `unreachable`。
+  - 同じ入力を `nepl-cli` で単体コンパイル:
+    - `target/debug/nepl-cli -i /tmp/list_doctest1_clean.nepl --target std --emit wasm -o /tmp/list_doctest1_out -v`
+    - 結果: compile 成功 (`DEBUG: compile_module returned Ok`)。
+- 結論:
+  - 失敗は `web/dist`（WASM 上の compiler 実行）経路に限定される。
+  - `codegen_wasm` の今回差分を戻しても再現するため、単純な backend 変更起因ではない。
+  - 以降は `web` 側で panic を診断化して原因位置を可視化するタスクを上流課題として扱う。
+
+# 2026-03-05 作業メモ (フェーズD: todo整理 + llvm precheck 返り値規約)
+
+- 目的:
+  - `todo.md` の完了済み項目（`UnsupportedHirLowering` 整理）を反映し、未完了だけを残す。
+  - LLVM 前段検査に「非 unit 関数は値を返す」規約を追加して、backend 依存失敗の前段化を進める。
+- 変更:
+  - `todo.md`
+    - フェーズDの完了済み行
+      - `llvm 経路でも backend 依存エラーを前段診断に寄せる（UnsupportedHirLowering の整理）`
+      を削除し、残課題として
+      - `llvm 経路の precheck を拡張し、intrinsic/戻り値規約など backend 依存失敗を前段で確定する。`
+      へ更新。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_llvm_codegen` に `TypeCtx` を渡す形へ変更。
+    - reachable な `HirBody::Block` 関数について、戻り値型が非 `unit` かつ block が値を返さない場合を `D3003` で診断。
+  - `nepl-core/src/codegen_llvm.rs`
+    - `precheck_llvm_codegen(&types, &hir, &reachable_set)` 呼び出しへ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v9.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm codegen_precheck に実検査を追加)
+
+- 目的:
+  - `codegen` 到達後は生成専任に寄せるため、LLVM 側でも前段検査で弾ける入力を増やす。
+- 変更:
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_llvm_codegen` を追加。
+    - 到達関数（reachable set）に対して expression tree を走査し、LLVM 未対応 intrinsic を前段診断化。
+    - 未対応 intrinsic は `D3012 (TypeUnknownIntrinsic)` で報告。
+  - `nepl-core/src/codegen_llvm.rs`
+    - HIR lower 前に `precheck_llvm_codegen` を実行し、error があれば `TypecheckFailed` で早期終了。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v8.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm backend 診断型の整理)
+
+- 目的:
+  - `codegen_llvm` から `UnsupportedHirLowering` 返却経路が消えた状態を型定義にも反映する。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `LlvmCodegenError::UnsupportedHirLowering` を enum / Display から削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v6.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm 残存 backend 診断の不変条件化 継続)
+
+- 目的:
+  - `codegen_llvm` に残っていた `UnsupportedHirLowering` を削減し、前段通過後は生成専任モデルへ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - 以下を `UnsupportedHirLowering` 返却から internal panic へ変更:
+      - 関数 return 型不一致
+      - enum/struct/tuple 構築時の `alloc` 必須判定
+      - enum payload / struct field / tuple item の値生成必須・型不一致
+      - `match` arm の結果型不一致
+      - unknown intrinsic 到達
+      - unsupported expression kind 到達
+      - 文字列リテラルID範囲外
+      - 文字列具体化時の `alloc` 必須判定
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v5.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm intrinsic 引数・型チェックの backend 診断を不変条件化)
+
+- 目的:
+  - `codegen_llvm` intrinsic lowering に残っていた backend 診断を削減し、前段通過後の生成専任モデルへ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - 以下を `UnsupportedHirLowering` 返却から internal panic へ変更:
+      - `load` の引数個数/型引数個数不一致、ポインタ値不在、ポインタ型不一致
+      - `store` の引数個数/型引数個数不一致、ポインタ/値不在、ポインタ型不一致、`u8` 値型不一致、格納型不一致
+      - `add` の引数個数不一致、lhs/rhs 不在、i32以外
+      - `f32_to_i32` / `i32_to_u8` / `u8_to_i32` の引数個数・値不在・型不一致
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v4.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm 制御構文の backend 診断を不変条件化)
+
+- 目的:
+  - `codegen_llvm` の `if/while/match` で残っていた backend 診断を削減し、型検査・前段検証通過後は生成専任へ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `if`:
+      - 条件が値を返さない
+      - 条件が `i32/bool` 互換でない
+      - then/else 分岐結果型不一致
+      を `UnsupportedHirLowering` 返却から internal panic へ変更。
+    - `while`:
+      - 条件が値を返さない
+      - 条件が `i32/bool` 互換でない
+      を internal panic へ変更。
+    - `match`:
+      - scrutinee が値を返さない
+      - scrutinee が enum pointer (`i32`) でない
+      - arm が0件
+      を internal panic へ変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v3.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm call_indirect の backend 診断を不変条件化)
+
+- 目的:
+  - `codegen_llvm` の `call_indirect` で残っていた backend 診断（`UnsupportedHirLowering`）を削減し、前段通過後は生成専任に寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `call_indirect` について以下の `UnsupportedHirLowering` 返却を internal panic 化:
+      - callee が値を返さない
+      - callee が `i32` 関数IDでない
+      - 引数が値を返さない
+      - 引数個数不一致
+      - 引数型不一致
+      - 候補関数未検出
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v2.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: raw wasm 行検査の前段分離を完了)
+
+- 目的:
+  - `codegen_precheck` が `codegen_wasm` 実装詳細へ依存する経路を解消し、前段検査の責務を `wasm_shared` へ集約する。
+  - 「codegen 到達時は生成専任」の方針を維持し、raw wasm 行パース失敗を前段で確定する。
+- 変更:
+  - `nepl-core/src/wasm_shared.rs`
+    - `parse_wasm_line_with_lookup` を共有化。
+    - `precheck_raw_wasm_body` を追加し、`HirBody::Wasm` 行を前段で検査して `D4004` を返すように変更。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - raw wasm 事前検査呼び出し先を `codegen_wasm` から `wasm_shared` へ変更。
+  - `todo.md`
+    - フェーズDの「`codegen_precheck` の wasm 側ヘルパ依存整理」項目を完了として削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v1.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: #wasm のスタック検証を前段検査へ移動)
+
+- 目的:
+  - 「codegen は正しい入力を生成するだけ」の方針に合わせ、`#wasm` ボディ検証を backend 実行時ではなく `codegen_precheck` 側で完了させる。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `precheck_raw_wasm_body` シグネチャを `precheck_raw_wasm_body(ctx, func)` に変更。
+    - raw 行のパース成功時に命令列を蓄積し、前段で `validate_wasm_stack` を実行するよう変更。
+    - `lower_user` の `HirBody::Wasm` 経路から `validate_wasm_stack` を削除。
+    - `generate_wasm` の診断集約を実質空に整理（codegen 内診断を発生させない方向に統一）。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_raw_wasm_body` 呼び出しを新シグネチャへ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v4.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: codegen_precheck の wasm 事前検査を共通モジュールへ分離)
+
+- 目的:
+  - `passes/codegen_precheck.rs` が `codegen_wasm.rs` 実装詳細へ直接依存していた状態を整理し、前段検査ロジックを共有モジュールへ分離する。
+  - 「codegen は正しい入力を生成するだけ」の方針に合わせ、backend の `skip`/診断蓄積を不変条件違反へ寄せる。
+- 変更:
+  - `nepl-core/src/wasm_shared.rs` を新規追加。
+    - wasm署名解決 (`wasm_sig`, `wasm_sig_ids`)
+    - generic skip 判定 (`should_skip_wasm_codegen_for_generic`)
+    - 到達関数解析 (`collect_reachable_wasm_functions`)
+    - 間接呼び出しを含む署名集合収集 (`collect_wasm_signature_set`)
+    - wasm intrinsic 対応判定 (`is_supported_wasm_intrinsic`)
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - 上記ロジックを `wasm_shared` 参照へ置換。
+    - `precheck_raw_wasm_body` のみ `codegen_wasm` 側を継続利用（次段で分離予定）。
+  - `nepl-core/src/codegen_wasm.rs`
+    - extern/function 署名不一致時の `skip` を廃止し internal panic 化。
+    - `lower_body` で backend 診断が返る経路を internal panic 化。
+    - 共有ロジックは `wasm_shared` 呼び出しへ委譲。
+  - `nepl-core/src/lib.rs`
+    - `pub mod wasm_shared;` を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v3.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm backend 診断を前段不変条件へ移行)
+
+- 目的:
+  - `todo.md` フェーズD方針に合わせ、`codegen_llvm` 側で発行していた「前段通過後に到達しないはず」の診断を廃止し、前段検証の不変条件として扱う。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `let` の型不一致 (`let type mismatch`) を `UnsupportedHirLowering` から internal panic へ変更。
+    - `set` の型不一致 (`set type mismatch`) を `UnsupportedHirLowering` から internal panic へ変更。
+    - 未解決 trait call の到達を `UnsupportedHirLowering` から internal panic へ変更。
+    - call 引数型不一致を `UnsupportedHirLowering` から internal panic へ変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-llvm-invariant-v2.json -j 15` -> `8/8 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-invariant-panic-v1.json -j 15` -> `707/791 pass`（`Maximum call stack size exceeded` が多数。今回の変更対象外の既存失敗として継続調査）
+
 # 2026-03-05 作業メモ (フェーズC/D接続: core/mem に MemPtr 初期化オーバーロード追加)
 
 - 目的:
@@ -7598,3 +7966,275 @@
 
 - メモ:
   - `fs` 単体の実行系テストは入力待ちケースを含むため、今後は非対話セットで回帰確認する。
+
+# 2026-03-05 作業メモ (フェーズD: codegen 前段診断の共通化・第一段)
+
+- 目的:
+  - `codegen_llvm` 内に残っていた `#target` 個別検証を backend から撤去し、前段共通 precheck へ集約する。
+  - `compile_module` と LLVM IR 生成経路で同じ検証入口を使い、wasm/llvm の診断規則差分を縮小する。
+
+- 変更:
+  - `nepl-core/src/target_precheck.rs`
+    - `precheck_module_target_directives` を追加（`UnknownTargetDirective` / `MultipleTargetDirective` を共通生成）。
+    - `precheck_module_before_codegen` を追加（target directive + raw body precheck の合成）。
+  - `nepl-core/src/codegen_llvm.rs`
+    - `validate_target_directive_for_llvm` / `is_known_target_name` を削除。
+    - `emit_ll_from_module_for_target` 入口を `precheck_module_before_codegen` へ統一。
+  - `nepl-core/src/compiler.rs`
+    - `compile_module` の precheck 呼び出しを `precheck_module_before_codegen` へ置換。
+
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/llvm_target.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-unify-step2-focus.json -j 15`
+    - 結果: `5/5 pass`
+  - 補足:
+    - `tests/neplg2.n.md` では既知の runtime 側 `Maximum call stack size exceeded` が残存（今回変更範囲外）。
+
+# 2026-03-05 作業メモ (tests.js: argv メタ対応追加)
+
+- 目的:
+  - `stdin/stdout` に加えて doctest から CLI 引数を注入できるようにし、`stdlib/tests/cliarg.n.md` をテスト可能にする。
+
+- 変更:
+  - `nodesrc/parser.js`
+    - doctest メタに `argv:` を追加。
+    - `parseMetaValue` が `[` / `{` 始まりの JSON も解釈するよう拡張（`argv: ["a","b"]` を配列として取得）。
+  - `nodesrc/tests.js`
+    - テストケース構造に `argv` を追加。
+    - wasm ワーカー要求へ `argv` を伝搬。
+    - llvm 実行時にも `argv` を実行引数として渡す。
+  - `nodesrc/run_test.js`
+    - WASI 実行時の args を `argv` から受け取り、`[wasmPath, ...argv]` で起動。
+  - `stdlib/tests/cliarg.n.md`
+    - `neplg2:test[assert_io]` + `argv` + `stdout` で `cliarg_count` 検証ケースを追加。
+
+- 検証:
+  - parser 単体確認:
+    - `node -e "const p=require('./nodesrc/parser'); const r=p.parseFile('stdlib/tests/cliarg.n.md'); console.log(Array.isArray(r.doctests[0].argv), JSON.stringify(r.doctests[0].argv));"`
+    - 結果: `true ["--flag","value"]`
+  - run_test 直実行確認:
+    - `argv=["a","b"]` で `cliarg_count` 出力が `"3"`
+    - `argv=[]` で `cliarg_count` 出力が `"1"`
+  - tests.js 単体確認:
+    - `node nodesrc/tests.js -i stdlib/tests/cliarg.n.md --no-stdlib --no-tree -o /tmp/tests-cliarg-only-argv.json -j 1 --assert-io`
+    - 結果: `2/2 pass`
+
+# 2026-03-05 作業メモ (フェーズD: stdlib/std 安全化の完了と全体回帰)
+
+- 目的:
+  - `stdlib/std` の安全化対象（`fs` / `stdio` / `env/cliarg`）を `Result` ベースへ揃え、`alloc_raw` 直接利用の削減と失敗経路の明示化を完了する。
+
+- 変更:
+  - `stdlib/std/fs.nepl`
+    - `__fs_copy_to_cstr` を `Result<i32,i32>` 化。
+    - `wasi_path_open` で確保失敗を `Err` で返し、成功時 `cpath` を必ず解放。
+    - `fs_bytes_to_string` を `fs_alloc` ベースへ変更。
+    - if レイアウト内の不要 `;` を除去（式戻り値整合）。
+  - `stdlib/std/stdio.nepl`
+    - `print_i32` の一時領域確保を `std_alloc/std_free` ベースへ変更。
+    - `read_all` の if 式で `else out;` になっていた箇所を `out` に修正し、`expr; -> ()` による型不整合を解消。
+  - `stdlib/std/env/cliarg.nepl`
+    - `cstr_to_str` の確保を `cli_alloc` ベースへ変更し、失敗時フォールバックを明示。
+
+- 根本原因と修正方針:
+  - 全体回帰で `tests/stdin.n.md` のみ wasm stack mismatch が発生。
+  - 原因は `read_all` の `if` 式 else 側が `out;` となっており、仕様どおり `()` に化けていたこと。
+  - 場当たりでコード分解せず、式の戻り値規則（plan.md の `;` 仕様）に沿って `out` へ修正して根本解消。
+
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/fs.n.md --no-stdlib --no-tree -o /tmp/tests-fs-safe-phase.json -j 15` -> `1/1 pass`
+  - `node nodesrc/tests.js -i stdlib/tests/cliarg.n.md -i tests/stdout.n.md -i stdlib/tests/fs.n.md --no-stdlib --no-tree -o /tmp/tests-std-safe-regression.json -j 15 --assert-io` -> `9/9 pass`
+  - `node nodesrc/tests.js -i tests/stdin.n.md --no-tree -o /tmp/tests-stdin-focus.json -j 15 --assert-io` -> `210/210 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-stdlib-std-safety-phase.json -j 15` -> `788/788 pass`
+
+# 2026-03-05 作業メモ (MemPtr/RegionToken 再調査と _raw 廃止方針の再整理)
+
+- 調査目的:
+  - `MemPtr/RegionToken` 導入後の残存生ポインタ依存と `_raw` 依存を全体で棚卸しし、上流優先での移行順を再確定する。
+
+- 現状要約:
+  - `core/mem.nepl` には `MemPtr<T>` / `RegionToken<T>` と `region_ptr_at/alloc_region/dealloc_region` が実装済み。
+  - `kpread/kpwrite` は公開構造体が `RegionToken<u8>` を保持する形まで移行済み。
+  - ただし `core/mem` 公開面には `alloc_raw/dealloc_raw/realloc_raw` と `load/store(i32)` 生ポインタ版が残存。
+  - `stdlib/alloc` / `stdlib/kp` / `stdlib/nm` / `platforms/wasix` / examples/tests には `_raw` 呼び出しが多数残存。
+  - `nepl-core` 側にも `_raw` 名依存が残存（`monomorphize.rs`, `codegen_wasm.rs`, `codegen_llvm.rs`）。
+
+- 根本課題:
+  - `_raw` 廃止は stdlib 側だけでは完了せず、compiler 側の helper 解決ロジックを先に一般化する必要がある。
+  - `core/mem` の生ポインタAPIを先に削除すると、下流ライブラリと codegen が同時崩壊するため、段階移行が必要。
+
+- 再確定した実装順序（上流優先）:
+  1. compiler 側 `_raw` 名依存の除去（`monomorphize` / `codegen_wasm` / `codegen_llvm`）。
+  2. `core/mem` を安全API公開面に統一し、生ポインタAPIを内部互換層へ隔離。
+  3. `stdlib/alloc` と `kp` を `MemPtr/RegionToken` + `Result/Option` 前提へ全面移行。
+  4. `stdlib/std` / `stdlib/nm` / tutorials/examples の順で追随移行。
+  5. 最後に `_raw` と生ポインタ公開関数を削除し、compile_fail 回帰を固定。
+# 2026-03-05 作業メモ (フェーズD: wasm signature 診断を codegen 前段へ移動)
+
+- 目的:
+  - `codegen_wasm` 内で出していた署名系診断を前段パスへ移し、`codegen到達時は検証済み` の設計へ寄せる。
+  - wasm/llvm 共通化方針の第一段として、backend 直下診断の削減を進める。
+- 変更:
+  - `nepl-core/src/passes/codegen_precheck.rs` を追加。
+    - `precheck_wasm_codegen` を実装し、以下を前段で検査:
+      - extern 署名 (`D4001`)
+      - 到達可能関数の署名 (`D4002`)
+  - `nepl-core/src/compiler.rs`
+    - `insert_drops` 後・wasm emit 前に `precheck_wasm_codegen` を実行。
+    - エラー診断があれば codegen へ進まず `CoreError::Diagnostics` を返す。
+  - `nepl-core/src/codegen_wasm.rs`
+    - 署名不一致時の `D4001/D4002` 生成を削除し、前段検査前提でスキップ処理に変更。
+  - `tests/raw_body_precheck.n.md`
+    - `D4001/D4002` を安定再現する `compile_fail` ケースを追加・調整。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v5.json -j 15` -> `4/4 pass`
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v6.json -j 15` -> `7/7 pass`
+# 2026-03-05 作業メモ (フェーズD: D4003 を codegen 前段へ移動)
+
+- 目的:
+  - `CodegenWasmMissingReturnValue (D4003)` を backend 依存診断から前段診断へ移し、codegen 到達時の前提を強化する。
+- 変更:
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - 到達可能関数の `HirBody::Block` について、
+      - 戻り型が `Unit` 以外
+      - 最終的な非 drop 行が値を返さない
+      場合に `D4003` を前段で出す検査を追加。
+  - `nepl-core/src/codegen_wasm.rs`
+    - `lower_user` 内の `D4003` 診断生成を削除。
+    - ここに到達した場合は内部不整合として `panic!`（precheck で弾かれる前提）に変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v7.json -j 15` -> `7/7 pass`
+# 2026-03-05 作業メモ (フェーズD: D4005 を codegen 前段へ移動)
+
+- 目的:
+  - `CodegenWasmLlvmIrBodyNotSupported (D4005)` を backend 側診断から前段診断へ移し、codegen の責務を縮小する。
+- 変更:
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - 到達可能関数で `HirBody::LlvmIr` が残っている場合に `D4005` を前段で出す検査を追加。
+  - `nepl-core/src/codegen_wasm.rs`
+    - `HirBody::LlvmIr` 分岐で `D4005` を生成する処理を削除。
+    - precheck 通過後の内部不整合として `panic!` に変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v8.json -j 15` -> `7/7 pass`
+# 2026-03-05 作業メモ (フェーズD: D4011 を codegen 前段へ移動)
+
+- 目的:
+  - `CodegenWasmUnsupportedIndirectSignature (D4011)` を backend 側から前段へ移し、`call_indirect` の署名妥当性を codegen 前に確定する。
+- 変更:
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - HIR 式を再帰走査し、`CallIndirect` の `params/result` から `wasm_sig_ids` を評価。
+    - wasm 非対応署名を検出した場合に `D4011` を前段で返す検査を追加。
+  - `nepl-core/src/codegen_wasm.rs`
+    - `CallIndirect` 分岐の `D4011` 診断生成を削除し、precheck 通過後の内部不整合として `panic!` に変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-indirect-v5.json -j 15` -> `7/7 pass`
+
+# 2026-03-05 作業メモ (フェーズD: D4004 を codegen 前段へ移動)
+
+- 目的:
+  - `CodegenWasmRawLineParseError (D4004)` を backend 側診断から前段診断へ移し、`#wasm` 生行パース失敗を codegen 前に確定する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `HirBody::Wasm` 分岐での `D4004` 生成を削除。
+    - precheck 通過後の内部不整合として `panic!` に変更。
+    - `precheck_raw_wasm_body(func)` を追加し、`parse_wasm_line` 失敗時に `D4004` を返す前段用ヘルパを実装。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_wasm_codegen` から `codegen_wasm::precheck_raw_wasm_body` を呼び出すよう変更。
+  - `tests/raw_body_precheck.n.md`
+    - `wasm_precheck_rejects_invalid_raw_line` を追加（`diag_id: 4004`）。
+- 検証:
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-rawline-v1.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: D4010 を codegen 前段へ移動)
+
+- 目的:
+  - `CodegenWasmMissingIndirectSignature (D4010)` を backend 側診断から前段へ移し、`CallIndirect` の型セクション不整合を codegen 前に検査する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `collect_wasm_signature_set` を追加し、wasm codegen で使う関数/extern/間接呼び出し署名集合を共通化。
+    - `CallIndirect` 分岐の `D4010` 診断生成を削除し、precheck 通過後の内部不整合として `panic!` へ変更。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `collect_wasm_signature_set` の結果を使い、`CallIndirect` の署名が型セクション候補に存在するかを前段で検査。
+    - 欠落時は `D4010`、非対応署名は `D4011` として分離して返す。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-indirect-missing-v1.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: 参照解決系 wasm backend 診断の削減)
+
+- 目的:
+  - `CodegenWasmStringLiteralNotFound (4006)` / `CodegenWasmUnknownVariable (4007)` /
+    `CodegenWasmUnknownFunctionValue (4008)` / `CodegenWasmUnknownFunction (4009)` を
+    backend 診断から外し、上流通過後の内部不整合として扱う。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `LiteralStr/Var/FnValue/Call/Set` での上記診断生成を削除。
+    - 同箇所は `panic!` に変更し、codegen 到達時は解決済み前提を強制。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-ref-invariant-v2.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: unknown intrinsic 診断の前段化整合)
+
+- 目的:
+  - `CodegenWasmUnknownIntrinsic (4012)` を backend 診断から外し、intrinsic 判定責務を前段へ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `is_supported_wasm_intrinsic` を追加して wasm backend が受理する intrinsic 名を明示化。
+    - intrinsic 未知分岐の `D4012` 生成を削除し、内部不整合 `panic!` へ変更。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `HirExprKind::Intrinsic` で `is_supported_wasm_intrinsic` を使用し、未知 intrinsic を前段検査。
+  - `tests/raw_body_precheck.n.md`
+    - 追加した `diag_id:4012` ケースは、実際には上流の `D3012`（unknown intrinsic）で先に失敗するため削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-unknown-intrinsic-v2.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: 構築型 payload/field の backend 診断削減)
+
+- 目的:
+  - `CodegenWasmUnsupportedEnumPayloadType (4013)` /
+    `CodegenWasmUnsupportedStructFieldType (4014)` /
+    `CodegenWasmUnsupportedTupleElementType (4015)` を backend 診断から外し、codegen 到達時の型整合前提を明確化する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `EnumConstruct` と `Match` の enum payload load/store、`StructConstruct`、`TupleConstruct` の
+      非対応 valtype 分岐を `panic!` に変更。
+    - 上記 4013/4014/4015 の `diags.push(...with_id(...))` を削除。
+    - これにより、`codegen_wasm` 内の `CodegenWasm*` 診断生成は precheck ヘルパ内（D4004）のみに限定。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-backend-diag-clean-v1.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm backend の解決済み参照エラーを内部不整合化)
+
+- 目的:
+  - wasm 側と同様に、名前解決/署名解決済みであるべき参照系エラーを backend 診断責務から外す。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `Var` の unknown 変数分岐を `panic!` 化。
+    - `Set` の unknown 変数分岐を `panic!` 化。
+    - `FnValue` の unknown 関数値分岐を `panic!` 化。
+    - `Call` の missing function signature 分岐を `panic!` 化。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-llvm-invariant-v1.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: monomorphize の runtime helper 候補ハードコード集約)
+
+- 目的:
+  - `_raw` 撤去フェーズに備え、`monomorphize` 内の runtime helper 候補名ハードコードを一箇所に集約する。
+- 変更:
+  - `nepl-core/src/runtime_helpers.rs` を追加。
+    - `ALLOC_CANDIDATES`
+    - `DEALLOC_CANDIDATES`
+    - `REALLOC_CANDIDATES`
+  - `nepl-core/src/lib.rs` に `runtime_helpers` を公開。
+  - `nepl-core/src/monomorphize.rs`
+    - runtime helper 選択ループの文字列配列リテラルを `runtime_helpers` 定数参照に置換。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success

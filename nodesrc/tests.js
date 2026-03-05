@@ -202,6 +202,7 @@ function collectTestsFromPath(inputPath) {
                 tags: dt.tags,
                 source: dt.code,
                 stdin: dt.stdin ?? '',
+                argv: Array.isArray(dt.argv) ? dt.argv.map((v) => String(v)) : [],
                 expected_stdout: dt.stdout ?? null,
                 expected_stderr: dt.stderr ?? null,
                 expected_diag_ids: Array.isArray(dt.diag_ids) ? dt.diag_ids : [],
@@ -287,6 +288,7 @@ async function runAllLegacy(cases, jobs, distHint) {
                 source: c.source,
                 tags: c.tags,
                 stdin: c.stdin || '',
+                argv: Array.isArray(c.argv) ? c.argv : [],
                 distHint,
             };
             const r = await runSingle(req, loaded);
@@ -348,6 +350,7 @@ async function runAllThreadPool(cases, jobs, distHint) {
                     source: c.source,
                     tags: c.tags,
                     stdin: c.stdin || '',
+                    argv: Array.isArray(c.argv) ? c.argv : [],
                     distHint,
                 },
             });
@@ -836,14 +839,15 @@ async function runSingleLlvmCli(c, workerId, cliPath, options = {}) {
                     duration_ms: Date.now() - t0,
                 };
             } else {
-                const run = await runCommand(exePath, [], {
+                const runArgs = Array.isArray(c.argv) ? c.argv.map((v) => String(v)) : [];
+                const runWithArgs = await runCommand(exePath, runArgs, {
                     env: { ...process.env, NO_COLOR: 'true' },
                     stdinText: c.stdin || '',
                 });
-                const signaled = !!run.signal;
+                const signaled = !!runWithArgs.signal;
                 const abnormal = signaled;
                 if (hasTag(c.tags, 'should_panic')) {
-                    const ok = abnormal || (run.code !== 0);
+                    const ok = abnormal || (runWithArgs.code !== 0);
                     result = {
                         ok,
                         id: `${c.id}::llvm`,
@@ -852,10 +856,10 @@ async function runSingleLlvmCli(c, workerId, cliPath, options = {}) {
                         tags: c.tags,
                         status: ok ? 'pass' : 'fail',
                         phase: 'run_llvm_cli',
-                        stdout: String(run.stdout || ''),
-                        stderr: String(run.stderr || ''),
+                        stdout: String(runWithArgs.stdout || ''),
+                        stderr: String(runWithArgs.stderr || ''),
                         error: ok ? null : 'expected should_panic, but llvm program finished successfully',
-                        runtime: { code: run.code, signal: run.signal },
+                        runtime: { code: runWithArgs.code, signal: runWithArgs.signal },
                         worker: workerId,
                         compiler: { runner: 'nepl-cli-llvm', ll_path: llPath, exe_path: exePath },
                         duration_ms: Date.now() - t0,
@@ -870,10 +874,10 @@ async function runSingleLlvmCli(c, workerId, cliPath, options = {}) {
                         tags: c.tags,
                         status: ok ? 'pass' : 'fail',
                         phase: 'run_llvm_cli',
-                        stdout: String(run.stdout || ''),
-                        stderr: String(run.stderr || ''),
-                        error: ok ? null : `llvm program terminated by signal=${run.signal ?? 'null'}`,
-                        runtime: { code: run.code, signal: run.signal },
+                        stdout: String(runWithArgs.stdout || ''),
+                        stderr: String(runWithArgs.stderr || ''),
+                        error: ok ? null : `llvm program terminated by signal=${runWithArgs.signal ?? 'null'}`,
+                        runtime: { code: runWithArgs.code, signal: runWithArgs.signal },
                         worker: workerId,
                         compiler: { runner: 'nepl-cli-llvm', ll_path: llPath, exe_path: exePath },
                         duration_ms: Date.now() - t0,

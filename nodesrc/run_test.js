@@ -37,7 +37,17 @@ function safeUnlink(p) {
     try { fs.unlinkSync(p); } catch {}
 }
 
-function runWasiBytes(wasmBytes, stdinText) {
+function formatError(e) {
+    if (!e) return 'unknown error';
+    const name = typeof e.name === 'string' && e.name.length > 0 ? e.name : null;
+    const message = typeof e.message === 'string' && e.message.length > 0 ? e.message : String(e);
+    const stack = typeof e.stack === 'string' && e.stack.length > 0 ? e.stack : null;
+    if (stack) return stack;
+    if (name && message) return `${name}: ${message}`;
+    return message;
+}
+
+function runWasiBytes(wasmBytes, stdinText, argv = []) {
     const wasmPath = mkTmpPath('nepl-doctest') + '.wasm';
     const stdinPath = mkTmpPath('wasi-stdin');
     const stdoutPath = mkTmpPath('wasi-stdout');
@@ -54,7 +64,7 @@ function runWasiBytes(wasmBytes, stdinText) {
 
     const wasi = new WASI({
         version: 'preview1',
-        args: [wasmPath],
+        args: [wasmPath, ...(Array.isArray(argv) ? argv.map((v) => String(v)) : [])],
         env: {},
         stdin: stdinFd,
         stdout: stdoutFd,
@@ -88,7 +98,7 @@ function runWasiBytes(wasmBytes, stdinText) {
 
     return {
         trapped,
-        trapError: trapError ? String(trapError?.message || trapError) : null,
+        trapError: trapError ? formatError(trapError) : null,
         stdout: out,
         stderr: err,
     };
@@ -262,6 +272,7 @@ async function runSingle(req, preloaded) {
         const source = req.source || '';
         const tags = Array.isArray(req.tags) ? req.tags : [];
         const stdinText = req.stdin || '';
+        const argv = Array.isArray(req.argv) ? req.argv.map((v) => String(v)) : [];
         const loaded = preloaded || await createRunner(req.distHint || '');
         const { api, meta } = loaded;
         if (hasTag(tags, 'skip')) {
@@ -283,7 +294,7 @@ async function runSingle(req, preloaded) {
             const vfs = collectVfsSources(source, req.file);
             wasmU8 = compileWithFsStdlib(api, source, vfs, 'debug');
         } catch (e) {
-            compileError = String(e?.message || e);
+            compileError = formatError(e);
         }
 
         if (hasTag(tags, 'compile_fail')) {
@@ -312,7 +323,7 @@ async function runSingle(req, preloaded) {
             };
         }
 
-        const runRes = runWasiBytes(wasmU8, stdinText);
+        const runRes = runWasiBytes(wasmU8, stdinText, argv);
 
         if (hasTag(tags, 'should_panic')) {
             const ok = runRes.trapped;

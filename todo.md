@@ -1,47 +1,67 @@
-2026-03-03 move/effect/memory 本格実装計画（最優先）
+2026-03-05 move/effect/memory 本格実装計画（最優先）
 
 実装方針
 - `doc/move_effect_spec.md` と `doc/memory_safety_compiler_design.md` を正として実装する。
-- 上流から順に修正する（型システム/effect判定 -> move_check -> stdlib -> tests）。
+- 上流から順に修正する（compiler前段/型検査/effect判定 -> move_check -> stdlib -> tests）。
 - 間に合わせ修正を禁止し、失敗を `Result/Option` へ収束させる。
-- 旧API互換は維持しない。公開APIは安全版へ一本化する。
+- 旧API互換は維持しない。最終的に `_raw` 公開APIと生ポインタ公開APIを廃止する。
 
-フェーズB: move/borrow/copy/clone 規則の確定実装
+フェーズB: move/borrow/copy/clone 規則の確定実装（継続）
+- 分岐/ループ合流時の `PossiblyMoved` 判定を安定化する。
+- token の二重消費/解放後利用を検出する。
+- copy/clone 判定はハードコードでなく trait capability ベースに統一する。
 - 完了条件:
   - 分岐/ループ合流時の move 誤判定が解消される。
   - token の二重消費/解放後利用が検出される。
 
-フェーズC: メモリ安全型モデル導入
-- `core/mem` に `MemPtr<T>` / `RegionToken` モデルを導入。
-- 公開APIから生 `i32` ポインタを段階的に除去。
-- `load/store` の境界/生存検査を `Result/Option` ベースで統一。
+フェーズC: メモリ安全型モデル導入（継続）
+- `core/mem` の公開面を `MemPtr<T>` / `RegionToken<T>` 前提へ統一する。
+- 生 `i32` ポインタ受け取りの公開関数を段階的に除去する。
+- `load/store` の境界/生存検査を `Result/Option` ベースで統一する。
 - 完了条件:
   - 公開関数シグネチャに生ポインタが残らない。
   - OOB/UAF/double free が `Result::Err` またはコンパイルエラーで表現される。
 
-フェーズD: stdlib移行（mem/kpread/kpwrite 優先）
+フェーズD: compiler 側 `_raw` 依存の撤去（新設・最優先）
+- `nepl-core` 内の `_raw` 名依存と生ポインタ前提解決を棚卸しする。
+- `monomorphize.rs` / `codegen_wasm.rs` / 関連前処理の `_raw` ハードコードを廃止する。
+- codegen 前段で検証と診断を完結させる（codegen は原則診断を出さない）。
+- wasm/llvm の診断規則を共通化し、backend ごとの差分診断を廃止する。
+- `#wasm/#llvmir` の前段検証を共通化し、codegen 到達時は基本的に生成成功を前提にする。
+- llvm 経路の precheck を拡張し、intrinsic/戻り値規約など backend 依存失敗を前段で確定する。
+- runtime helper 名解決から `_raw` フォールバックを段階的に除去する（stdlib 移行完了後）。
+- 完了条件:
+- compiler が `_raw` 名へ依存せずに安全APIを解決できる。
+- raw 名称変更で backend が壊れない。
+- 診断は codegen 前段で一貫して決定され、wasm/llvm で同一入力に同一診断が出る。
+
+フェーズE: stdlib移行（mem/kpread/kpwrite -> alloc -> std/nm）
+- `mem/kpread/kpwrite` の公開APIを Result/Option 前提で統一する。
 - `_safe` 接尾辞を廃止し、安全APIを標準名へ統一する。
 - 生ポインタ前提APIは段階的に `*_raw` へ隔離し、最終的に公開面から削除する。
-- trait 境界（`MemReadable<T>`, `MemWritable<T>`, `RegionOwned`）を導入可能な箇所から適用。
-- `mem/kpread/kpwrite` 完了後に、`stdlib/std`（`stdio` / `fs` / `env/cliarg`）を同じ安全モデルへ移行する。
-- `stdlib/std/fs.nepl` の生 `alloc_raw` 直接利用を `core/mem` の `Result` ベース API へ置換する。
-- `stdlib/std/stdio.nepl` の一時バッファ確保・iovec 確保を失敗ハンドリング付き API へ置換する。
-- `stdlib/std/env/cliarg.nepl` の argv 読み出し経路を `Result/Option` ベースへ統一し、失敗時フォールバックを明示する。
-- API/ライブラリ安全化完了後に、`tutorials` を新APIへ全面書き直しする。
-  - pipe演算子と式指向を活かし、不要な中間変数を削減する。
-  - 記述の簡潔さとメモリ安全性が両立するスタイルへ統一する。
+- `alloc/collections` と `alloc/string` の `alloc_raw/realloc_raw/dealloc_raw` 依存を安全APIへ置換する。
+- `stdlib/std`（`stdio/fs/env/cliarg`）と `stdlib/nm` を同一安全モデルへ移行する。
 - 完了条件:
-  - `mem/kpread/kpwrite` の公開APIが Result/Option 前提で統一。
-  - 既存 examples/tests/tutorials が新APIへ更新済み。
+  - `core/mem` と主要stdlibの公開面に `_raw` が残らない。
+  - `tests + stdlib + tutorials` が新APIで通過する。
 
-フェーズE: テスト・診断の固定化
+フェーズF: tutorials・examples の全面移行
+- 新しい安全APIへ tutorials/examples を書き直す。
+- pipe演算子と式指向を活かし、不要な中間変数を削減する。
+- 記述の簡潔さとメモリ安全性が両立するスタイルへ統一する。
+- `tutorials/getting_started` の既存説明を監査し、誤り・不足を修正する。
+- `tutorials/getting_started` Part6 を拡充し、短く簡潔で安全で読みやすい書き方へ更新する。
+- 既存ライブラリ活用で書ける箇所は library 使用へ統一し、不足があれば library を先に改良する。
+
+フェーズG: テスト・診断の固定化
 - `compile_fail` は `diag_id` を必須化する。
+- compile error テストで診断位置（行・列）も検証できる仕組みを追加する。
 - 完了条件:
-  - 仕様に対応する回帰テストが揃い、失敗理由が診断IDで固定される。
+  - 仕様に対応する回帰テストが揃い、失敗理由が診断IDと位置で固定される。
 
 コミット方針
-- 各フェーズ完了時に1コミット（必要なら中間で2分割）。
-- コミット前に対象範囲テストを実行し、結果を `note.md` に記録。
+- 各フェーズの区切りでコミットする（必要なら中間で分割）。
+- コミット前に対象範囲テストを実行し、結果を `note.md` に記録する。
 
 2026-02-22 今後の実装計画（未完了のみ）
 

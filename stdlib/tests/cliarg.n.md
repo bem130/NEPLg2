@@ -21,3 +21,20 @@ fn main <()*>i32> ():
     let _p cliarg_program;
     if ge c 0 1 0
 ```
+
+## cliarg_argv_stdout_count
+
+neplg2:test[assert_io]
+argv: ["--flag", "value"]
+stdout: "3"
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/env/cliarg" as *
+#import "std/stdio" as *
+
+fn main <()*>()> ():
+    print_i32 cliarg_count;
+```

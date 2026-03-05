@@ -234,3 +234,60 @@ pub fn precheck_module_raw_bodies(
     }
     out
 }
+
+fn is_known_target_name(name: &str) -> bool {
+    matches!(name, "wasm" | "core" | "wasi" | "std" | "wasix" | "llvm")
+}
+
+pub fn precheck_module_target_directives(module: &Module) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    let mut found = false;
+    for d in &module.directives {
+        if let Directive::Target { target, span } = d {
+            if !is_known_target_name(target.as_str()) {
+                out.push(
+                    Diagnostic::error("unknown target in #target", *span)
+                        .with_id(DiagnosticId::UnknownTargetDirective),
+                );
+            } else if found {
+                out.push(
+                    Diagnostic::error("multiple #target directives are not allowed", *span)
+                        .with_id(DiagnosticId::MultipleTargetDirective),
+                );
+            } else {
+                found = true;
+            }
+        }
+    }
+
+    if !found {
+        for stmt in &module.root.items {
+            if let Stmt::Directive(Directive::Target { target, span }) = stmt {
+                if !is_known_target_name(target.as_str()) {
+                    out.push(
+                        Diagnostic::error("unknown target in #target", *span)
+                            .with_id(DiagnosticId::UnknownTargetDirective),
+                    );
+                } else if found {
+                    out.push(
+                        Diagnostic::error("multiple #target directives are not allowed", *span)
+                            .with_id(DiagnosticId::MultipleTargetDirective),
+                    );
+                } else {
+                    found = true;
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn precheck_module_before_codegen(
+    module: &Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+) -> Vec<Diagnostic> {
+    let mut out = precheck_module_target_directives(module);
+    out.extend(precheck_module_raw_bodies(module, target, profile));
+    out
+}

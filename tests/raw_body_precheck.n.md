@@ -51,3 +51,48 @@ fn main <()->i32> ():
             ret i32 2
         }
 ```
+
+## wasm_precheck_rejects_invalid_raw_line
+
+neplg2:test[compile_fail]
+diag_id: 4004
+```neplg2
+#target core
+#entry main
+#indent 4
+
+fn main <()->i32> ():
+    #wasm:
+        i32.unknown
+```
+
+## wasm_precheck_rejects_unsupported_extern_signature
+
+neplg2:test[compile_fail]
+diag_id: 4001
+```neplg2
+#target core
+#entry main
+#indent 4
+
+#extern "env" "f" fn f <()->never>
+
+fn main <()->i32> ():
+    1
+```
+
+## wasm_precheck_rejects_unsupported_function_signature
+
+neplg2:test[compile_fail]
+diag_id: 4002
+```neplg2
+#target core
+#entry main
+#indent 4
+
+fn bad <(())->i32> (u):
+    1
+
+fn main <()->i32> ():
+    bad ()
+```

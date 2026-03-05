@@ -36,7 +36,7 @@ function parseMetaValue(raw) {
     const s = String(raw || '').trim();
     if (!s) return '';
     // 優先: JSON 文字列として解釈（"\\n" などを正しく展開）
-    if (s.startsWith('"') || s.startsWith("'")) {
+    if (s.startsWith('"') || s.startsWith("'") || s.startsWith('[') || s.startsWith('{')) {
         try {
             if (s.startsWith("'")) {
                 const body = s.slice(1, s.endsWith("'") ? -1 : undefined);
@@ -122,6 +122,7 @@ function scanForDoctests(lines, opts) {
 
         const meta = {
             stdin: null,
+            argv: null,
             stdout: null,
             stderr: null,
             diag_ids: [],
@@ -132,7 +133,7 @@ function scanForDoctests(lines, opts) {
         let j = i + 1;
         while (j < lines.length) {
             const l2 = opts.lineTransform(lines[j]);
-            const mm = l2.match(/^\s*(stdin|stdout|stderr|diag_id|diag_ids|diag_span|diag_spans)\s*:\s*(.*?)\s*$/);
+            const mm = l2.match(/^\s*(stdin|argv|stdout|stderr|diag_id|diag_ids|diag_span|diag_spans)\s*:\s*(.*?)\s*$/);
             if (mm) {
                 const k = mm[1];
                 if (k === 'diag_id') {
@@ -185,6 +186,7 @@ function scanForDoctests(lines, opts) {
             code: codeLines.join('\n') + '\n',
             hiddenMap,
             stdin: meta.stdin,
+            argv: meta.argv,
             stdout: meta.stdout,
             stderr: meta.stderr,
             diag_ids: meta.diag_ids,
