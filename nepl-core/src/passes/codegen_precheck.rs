@@ -54,6 +54,7 @@ pub fn precheck_wasm_codegen(ctx: &TypeCtx, module: &HirModule) -> Vec<Diagnosti
             if let HirBody::Block(block) = &f.body {
                 precheck_wasm_indirect_signature(ctx, block, &mut out);
             }
+            out.extend(codegen_wasm::precheck_raw_wasm_body(f));
         }
     }
 

@@ -914,10 +914,12 @@ fn lower_user(
             for line in &wb.lines {
                 match parse_wasm_line(line, &locals) {
                     Ok(mut v) => insts.append(&mut v),
-                    Err(msg) => diags.push(
-                        Diagnostic::error(msg, func.span)
-                            .with_id(DiagnosticId::CodegenWasmRawLineParseError),
-                    ),
+                    Err(msg) => {
+                        panic!(
+                            "internal compiler error: wasm raw line parse failed after precheck in function '{}': {}",
+                            func.name, msg
+                        );
+                    }
                 }
             }
             if diags.is_empty() {
@@ -2221,6 +2223,26 @@ fn parse_wasm_line(line: &str, locals: &LocalMap) -> Result<Vec<Instruction<'sta
         other => return Err(format!("unsupported wasm instruction: {}", other)),
     }
     Ok(insts)
+}
+
+pub(crate) fn precheck_raw_wasm_body(func: &HirFunction) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    let HirBody::Wasm(wb) = &func.body else {
+        return out;
+    };
+    let mut locals = LocalMap::new(func.params.len());
+    for p in &func.params {
+        locals.register_param(p.name.clone(), p.ty);
+    }
+    for line in &wb.lines {
+        if let Err(msg) = parse_wasm_line(line, &locals) {
+            out.push(
+                Diagnostic::error(msg, func.span)
+                    .with_id(DiagnosticId::CodegenWasmRawLineParseError),
+            );
+        }
+    }
+    out
 }
 
 

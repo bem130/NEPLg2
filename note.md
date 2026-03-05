@@ -7764,3 +7764,19 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-indirect-v5.json -j 15` -> `7/7 pass`
+
+# 2026-03-05 作業メモ (フェーズD: D4004 を codegen 前段へ移動)
+
+- 目的:
+  - `CodegenWasmRawLineParseError (D4004)` を backend 側診断から前段診断へ移し、`#wasm` 生行パース失敗を codegen 前に確定する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `HirBody::Wasm` 分岐での `D4004` 生成を削除。
+    - precheck 通過後の内部不整合として `panic!` に変更。
+    - `precheck_raw_wasm_body(func)` を追加し、`parse_wasm_line` 失敗時に `D4004` を返す前段用ヘルパを実装。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_wasm_codegen` から `codegen_wasm::precheck_raw_wasm_body` を呼び出すよう変更。
+  - `tests/raw_body_precheck.n.md`
+    - `wasm_precheck_rejects_invalid_raw_line` を追加（`diag_id: 4004`）。
+- 検証:
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-rawline-v1.json -j 15` -> `8/8 pass`
