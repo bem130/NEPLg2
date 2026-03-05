@@ -1,3 +1,22 @@
+# 2026-03-05 作業メモ (フェーズD先行: kpread_core の内部ヘッダアクセスを RegionToken 化)
+
+- 目的:
+  - `kpread_core` の内部メモリアクセスも `RegionToken` 経由に統一し、`MemPtr + off` の直接算術依存を減らす。
+- 根本原因:
+  - `store_i32_u8_at` / `load_i32_u8_at` が `MemPtr<u8>` と `off` から直接 `MemPtr<i32>` を作る設計で、
+    領域境界の前提がヘルパ外へ漏れていた。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `mem_i32_region_ptr` を追加し、`region_ptr_at<u8,i32>` を使用。
+    - `store_i32_u8_at` / `load_i32_u8_at` の引数を `RegionToken<u8>` に変更。
+    - `sc0(12)`, `iov(8)`, `nread(4)`, `sc(12)` で `RegionToken` を構築してヘルパへ渡す形に更新。
+  - 途中修正:
+    - `match dealloc_ptr<u8> buf cap` の `Result::Err` アームのインデント崩れにより
+      `D3009/D3008/D3045` が発生したため、分岐構造を正しく修正。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-kpread-core-regiontoken-v2.json -j 15`
+  - 結果: `221/221 pass`
+
 # 2026-03-05 作業メモ (フェーズD先行: kpwrite ヘッダアクセスを RegionToken 経由へ移行)
 
 - 目的:
