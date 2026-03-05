@@ -14,10 +14,14 @@
     - `#capability copy` / `#capability clone` の宣言結果のみを意味付けに使用。
     - 不要化した `trait_has_single_unary_self_to_self_method` と `trait_is_marker` を削除。
     - `TraitSemantics::detect` の未使用 `ctx` 引数を削除。
+  - `tests/move_effect.n.md`
+    - `#capability` 未指定 trait が copy/clone として推定されないことを確認する回帰ケースを追加。
 - 検証:
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-v1.json -j 15`
   - 結果: `269/269 pass`
+  - `node nodesrc/tests.js -i tests/move_effect.n.md --no-tree -o /tmp/tests-move-effect-capability-v2.json -j 15`
+  - 結果: `227/227 pass`
 
 # 2026-03-05 作業メモ (フェーズC: kpread の header 直アクセスを共通安全ヘルパへ統一)
 

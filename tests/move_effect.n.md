@@ -405,6 +405,51 @@ impl Mark for i32:
         x
 ```
 
+## marker trait は #capability copy 未指定なら Copy 扱いしない
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Marker:
+    fn tag <(Self)->Self> (x):
+        x
+
+struct RegionToken:
+    raw <(i32)->i32>
+
+impl Marker for RegionToken:
+    fn tag <(RegionToken)->RegionToken> (x):
+        x
+
+fn main <()->i32> ():
+    0
+```
+
+## clone 形状の trait も #capability clone 未指定なら Clone 扱いしない
+
+neplg2:test
+ret: 0
+```neplg2
+#entry main
+#indent 4
+#target core
+
+trait Dup:
+    fn dup <(Self)->Self> (x):
+        x
+
+impl Dup for i32:
+    fn dup <(i32)->i32> (x):
+        x
+
+fn main <()->i32> ():
+    0
+```
+
 ## RegionToken は非Copyとして move 後再利用不可
 
 neplg2:test[compile_fail]
