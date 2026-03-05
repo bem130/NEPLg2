@@ -7191,3 +7191,28 @@
   - 結果: `217/217 pass`
   - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v5.json -j 15`
   - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpwrite 内部確保/解放の MemPtr 化)
+
+- 目的:
+  - `kpwrite` の内部実装で、確保・解放経路を `alloc_ptr/dealloc_ptr` ベースに統一する。
+  - syscall 境界以外の生 `i32` ポインタ操作を減らし、型安全境界を明確化する。
+
+- 根本原因:
+  - `writer_alloc_buf` と `writer_new_handle` が `alloc/dealloc` (`i32`) ベースで実装されており、`Writer.raw: MemPtr<u8>` と内部経路が二重化していた。
+  - 失敗時巻き戻しも `i32` 解放経路に寄っていて、MemPtr 系の安全API統一方針と不整合だった。
+
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `WriterBuf.ptr` を `i32` から `MemPtr<u8>` へ変更。
+    - `writer_try_free` を `writer_try_free_ptr<.T>` に置換し、`dealloc_ptr` 経由へ統一。
+    - `writer_alloc_buf` を `alloc_ptr<u8>` ベースへ変更。
+    - `writer_new_handle` の `buf/iov/nw/w` 確保を `alloc_ptr<u8>` ベースへ変更し、失敗時巻き戻しも `writer_try_free_ptr` に統一。
+    - header へ格納する値だけを `mem_ptr_addr` で明示的に境界変換（syscall/ヘッダ構造との接続点）。
+    - `writer_free_handle` の `buf/iov/nw` 解放を `writer_try_free_ptr<u8> mem_ptr_wrap ...` 経由へ変更。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-memptr-v2.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v6.json -j 15`
+  - 結果: `226/226 pass`

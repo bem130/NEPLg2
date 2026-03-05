@@ -30,7 +30,7 @@ struct Writer:
     marker <(i32)->i32>
 
 struct WriterBuf:
-    ptr <i32>
+    ptr <MemPtr<u8>>
     cap <i32>
 
 fn writer_noncopy_marker <(i32)->i32> (x):
@@ -64,16 +64,11 @@ fn writer_store_header <(MemPtr<u8>,i32,i32)->()> (w_mem, off, v):
 //: 注意:
 //: - ptr<=0 は何もしません。
 //: - この関数は内部補助用途です。
-fn writer_try_free <(i32,i32)*>()> (ptr, size):
-    if:
-        lt 0 ptr
-        then:
-            match dealloc ptr size:
-                Result::Ok _:
-                    ()
-                Result::Err _e:
-                    ()
-        else:
+fn writer_try_free_ptr <.T> <(MemPtr<.T>,i32)*>()> (ptr, size):
+    match dealloc_ptr<.T> ptr size:
+        Result::Ok _:
+            ()
+        Result::Err _e:
             ()
 
 //: writer_alloc_buf: writer 用バッファを段階的に確保する内部補助
@@ -84,15 +79,15 @@ fn writer_try_free <(i32,i32)*>()> (ptr, size):
 //: 注意:
 //: - すべて失敗した場合は `Result::Err` を返します。
 fn writer_alloc_buf <()*>Result<WriterBuf,str>> ():
-    match alloc 4096:
+    match alloc_ptr<u8> 4096:
         Result::Ok p0:
             Result<WriterBuf,str>::Ok WriterBuf p0 4096
         Result::Err _e0:
-            match alloc 1024:
+            match alloc_ptr<u8> 1024:
                 Result::Ok p1:
                     Result<WriterBuf,str>::Ok WriterBuf p1 1024
                 Result::Err _e1:
-                    match alloc 256:
+                    match alloc_ptr<u8> 256:
                         Result::Ok p2:
                             Result<WriterBuf,str>::Ok WriterBuf p2 256
                         Result::Err _e2:
@@ -103,32 +98,32 @@ fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
         Result::Err e:
             Result<MemPtr<u8>,str>::Err e
         Result::Ok b:
-            let buf <i32> get b "ptr";
+            let buf <MemPtr<u8>> get b "ptr";
             let cap <i32> get b "cap";
-            match alloc 8:
+            match alloc_ptr<u8> 8:
                 Result::Err _e:
-                    writer_try_free buf cap;
+                    writer_try_free_ptr<u8> buf cap;
                     Result<MemPtr<u8>,str>::Err "kpwrite.writer_new iov alloc failed"
                 Result::Ok iov:
-                    match alloc 4:
+                    match alloc_ptr<u8> 4:
                         Result::Err _e:
-                            writer_try_free iov 8;
-                            writer_try_free buf cap;
+                            writer_try_free_ptr<u8> iov 8;
+                            writer_try_free_ptr<u8> buf cap;
                             Result<MemPtr<u8>,str>::Err "kpwrite.writer_new nw alloc failed"
                         Result::Ok nw:
-                            match alloc 20:
+                            match alloc_ptr<u8> 20:
                                 Result::Err _e:
-                                    writer_try_free nw 4;
-                                    writer_try_free iov 8;
-                                    writer_try_free buf cap;
+                                    writer_try_free_ptr<u8> nw 4;
+                                    writer_try_free_ptr<u8> iov 8;
+                                    writer_try_free_ptr<u8> buf cap;
                                     Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header alloc failed"
                                 Result::Ok w:
-                                    store_i32 w buf;
-                                    store_i32 add w 4 cap;
-                                    store_i32 add w 8 0;
-                                    store_i32 add w 12 iov;
-                                    store_i32 add w 16 nw;
-                                    Result<MemPtr<u8>,str>::Ok mem_ptr_wrap w
+                                    store_i32 mem_ptr_addr w mem_ptr_addr buf;
+                                    store_i32 add mem_ptr_addr w 4 cap;
+                                    store_i32 add mem_ptr_addr w 8 0;
+                                    store_i32 add mem_ptr_addr w 12 mem_ptr_addr iov;
+                                    store_i32 add mem_ptr_addr w 16 mem_ptr_addr nw;
+                                    Result<MemPtr<u8>,str>::Ok w
 
 fn writer_new <()*>Result<Writer,str>> ():
     let raw_res <Result<MemPtr<u8>,str>> writer_new_handle;
@@ -152,9 +147,9 @@ fn writer_free_handle <(Writer)*>()> (w):
     let iov <i32> writer_load_header w_mem 12;
     let nw  <i32> writer_load_header w_mem 16;
 
-    writer_try_free buf cap;
-    writer_try_free iov 8;
-    writer_try_free nw 4;
+    writer_try_free_ptr<u8> mem_ptr_wrap buf cap;
+    writer_try_free_ptr<u8> mem_ptr_wrap iov 8;
+    writer_try_free_ptr<u8> mem_ptr_wrap nw 4;
     match dealloc_ptr<u8> w_mem 20:
         Result::Ok _:
             ()
