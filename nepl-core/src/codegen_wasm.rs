@@ -1113,9 +1113,8 @@ fn gen_expr(
                     );
                 }
             } else {
-                diags.push(
-                    Diagnostic::error("unsupported indirect call signature for wasm", expr.span)
-                        .with_id(DiagnosticId::CodegenWasmUnsupportedIndirectSignature),
+                panic!(
+                    "internal compiler error: wasm codegen reached unsupported indirect signature after precheck"
                 );
             }
             valtype(&ctx.get(expr.ty))

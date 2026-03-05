@@ -7751,3 +7751,16 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v8.json -j 15` -> `7/7 pass`
+# 2026-03-05 作業メモ (フェーズD: D4011 を codegen 前段へ移動)
+
+- 目的:
+  - `CodegenWasmUnsupportedIndirectSignature (D4011)` を backend 側から前段へ移し、`call_indirect` の署名妥当性を codegen 前に確定する。
+- 変更:
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - HIR 式を再帰走査し、`CallIndirect` の `params/result` から `wasm_sig_ids` を評価。
+    - wasm 非対応署名を検出した場合に `D4011` を前段で返す検査を追加。
+  - `nepl-core/src/codegen_wasm.rs`
+    - `CallIndirect` 分岐の `D4011` 診断生成を削除し、precheck 通過後の内部不整合として `panic!` に変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-indirect-v5.json -j 15` -> `7/7 pass`
