@@ -7145,3 +7145,27 @@
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/move_check.n.md -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-movecheck-unskip-v6.json -j 15`
     - `282/282 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpread_core syscall境界の MemPtr 統一)
+
+- 目的:
+  - `kpread_core` で syscall 境界以外の `MemPtr<u8> -> i32` 変換を局所化し、ポインタ境界を明示する。
+
+- 根本原因:
+  - `fd_read` 呼び出し箇所で `mem_ptr_addr` を呼び出し側に直接展開しており、境界責務が分散していた。
+  - これにより effect/pointer 仕様の見通しが悪く、将来の共通化で誤用が再発しやすい状態だった。
+
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `mem_u8_addr <(MemPtr<u8>)->i32>` を追加し、`MemPtr<u8>` からのアドレス取得を一箇所へ集約。
+    - `fd_read_mem <(i32,MemPtr<u8>,i32,MemPtr<u8>)*>i32>` を追加し、`fd_read` 呼び出し境界を共通化。
+    - `scanner_new_impl` 内の `fd_read` 呼び出しを `fd_read_mem 0 iov 1 nread_ptr` に置換。
+    - `buf` アドレス取得の直接 `mem_ptr_addr` を `mem_u8_addr` に置換。
+
+- 実装上の注意:
+  - `fd_read_mem` は syscall 呼び出しを含むため `*>`（impure）シグネチャで定義。
+  - 一時的に pure 定義として `D3025` が発生したが、effect 仕様に合わせて impure へ修正し再検証した。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-core-boundary-v2.json -j 15`
+  - 結果: `217/217 pass`

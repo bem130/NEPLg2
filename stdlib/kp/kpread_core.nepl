@@ -8,6 +8,9 @@
 fn mem_i32_ptr <(MemPtr<u8>,i32)->MemPtr<i32>> (p, off):
     mem_ptr_wrap add mem_ptr_addr p off
 
+fn mem_u8_addr <(MemPtr<u8>)->i32> (p):
+    mem_ptr_addr p
+
 fn store_i32_u8_at <(MemPtr<u8>,i32,i32)->Result<(),str>> (p, off, v):
     store_i32 mem_i32_ptr p off v
 
@@ -17,6 +20,9 @@ fn load_i32_u8_at <(MemPtr<u8>,i32)->Result<i32,str>> (p, off):
             Result<i32,str>::Ok v
         Option::None:
             Result<i32,str>::Err "kpread_core.mem load_i32 failed"
+
+fn fd_read_mem <(i32,MemPtr<u8>,i32,MemPtr<u8>)*>i32> (fd, iov, iovcnt, nread):
+    fd_read fd mem_u8_addr iov iovcnt mem_u8_addr nread
 
 //: kpread_core: kpread の上流入出力処理を分離した内部モジュール
 //:
@@ -122,7 +128,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                     if:
                                         eq done 0
                                         then:
-                                            let buf_raw <i32> mem_ptr_addr buf;
+                                            let buf_raw <i32> mem_u8_addr buf;
                                             let write_ptr <i32> add buf_raw read_len;
                                             let rem <i32> sub cap read_len;
                                             match store_i32_u8_at iov 0 write_ptr:
@@ -140,9 +146,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                                                     set mem_failed 1;
                                                                     set done 1;
                                                                 Result::Ok _:
-                                                                    let iov_raw <i32> mem_ptr_addr iov;
-                                                                    let nread_raw <i32> mem_ptr_addr nread_ptr;
-                                                                    let errno <i32> fd_read 0 iov_raw 1 nread_raw;
+                                                                    let errno <i32> fd_read_mem 0 iov 1 nread_ptr;
                                                                     if:
                                                                         ne errno 0
                                                                         then:
@@ -207,7 +211,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                                     ();
                                             Result<MemPtr<u8>,str>::Err "kpread_core.scanner alloc failed"
                                         Result::Ok sc:
-                                            let buf_raw <i32> mem_ptr_addr buf;
+                                            let buf_raw <i32> mem_u8_addr buf;
                                             match store_i32_u8_at sc 0 buf_raw:
                                                 Result::Err _:
                                                     match dealloc_ptr<u8> sc 12:
