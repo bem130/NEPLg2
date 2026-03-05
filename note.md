@@ -1,3 +1,14 @@
+# 2026-03-05 作業メモ (フェーズD: llvm backend 診断型の整理)
+
+- 目的:
+  - `codegen_llvm` から `UnsupportedHirLowering` 返却経路が消えた状態を型定義にも反映する。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `LlvmCodegenError::UnsupportedHirLowering` を enum / Display から削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v6.json -j 15` -> `8/8 pass`
+
 # 2026-03-05 作業メモ (フェーズD: llvm 残存 backend 診断の不変条件化 継続)
 
 - 目的:

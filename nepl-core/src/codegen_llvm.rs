@@ -26,7 +26,6 @@ pub enum LlvmCodegenError {
     UnsupportedWasmBody { function: String },
     TypecheckFailed { reason: String },
     MissingEntryFunction { function: String },
-    UnsupportedHirLowering { function: String, reason: String },
 }
 
 impl core::fmt::Display for LlvmCodegenError {
@@ -55,12 +54,6 @@ impl core::fmt::Display for LlvmCodegenError {
                 f,
                 "entry function '{}' was not found in lowered module",
                 function
-            ),
-            LlvmCodegenError::UnsupportedHirLowering { function, reason } => write!(
-                f,
-                "failed to lower function '{}' to llvm: {}",
-                function,
-                reason
             ),
         }
     }
