@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use crate::codegen_wasm;
 use crate::diagnostic::Diagnostic;
 use crate::diagnostic_ids::DiagnosticId;
-use crate::hir::HirModule;
+use crate::hir::{HirBlock, HirBody, HirModule};
 use crate::types::TypeCtx;
 
 pub fn precheck_wasm_codegen(ctx: &TypeCtx, module: &HirModule) -> Vec<Diagnostic> {
@@ -33,7 +33,32 @@ pub fn precheck_wasm_codegen(ctx: &TypeCtx, module: &HirModule) -> Vec<Diagnosti
                     .with_id(DiagnosticId::CodegenWasmUnsupportedFunctionSignature),
             );
         }
+        if !codegen_wasm::should_skip_wasm_codegen_for_generic(ctx, f) {
+            let result_kind = ctx.get(ctx.resolve_id(f.result));
+            if !matches!(result_kind, crate::types::TypeKind::Unit) {
+                if let HirBody::Block(block) = &f.body {
+                    if !block_produces_value(ctx, block) {
+                        out.push(
+                            Diagnostic::error("function expected to return value", f.span)
+                                .with_id(DiagnosticId::CodegenWasmMissingReturnValue),
+                        );
+                    }
+                }
+            }
+        }
     }
 
     out
+}
+
+fn block_produces_value(ctx: &TypeCtx, block: &HirBlock) -> bool {
+    let mut last_non_drop_line_ty_is_value = false;
+    for line in &block.lines {
+        if line.drop_result {
+            continue;
+        }
+        let ty = ctx.get(ctx.resolve_id(line.expr.ty));
+        last_non_drop_line_ty_is_value = !matches!(ty, crate::types::TypeKind::Unit);
+    }
+    last_non_drop_line_ty_is_value
 }

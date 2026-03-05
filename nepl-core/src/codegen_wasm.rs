@@ -904,27 +904,10 @@ fn lower_user(
             );
             let expected = valtype(&ctx.get(func.result));
             if expected.is_some() && produced.flatten().is_none() {
-                diags.push(
-                    Diagnostic::error("function expected to return value", func.span)
-                        .with_id(DiagnosticId::CodegenWasmMissingReturnValue),
+                panic!(
+                    "internal compiler error: wasm codegen reached function '{}' without return value after precheck",
+                    func.name
                 );
-                // Dump the HIR for this function to aid debugging of
-                // missing-return problems. This is only emitted when the
-                // error occurs so it doesn't clutter normal output.
-                let mut dump = String::new();
-                for (i, line) in block.lines.iter().enumerate() {
-                    let kind = format!("{:?}", &line.expr.kind);
-                    let ty = format!("{:?}", ctx.get(line.expr.ty));
-                    let entry = format!(
-                        "line {}: kind={} ty={} drop_result={}\n",
-                        i, kind, ty, line.drop_result
-                    );
-                    dump.push_str(&entry);
-                }
-                diags.push(Diagnostic::warning(
-                    format!("HIR dump for {}:\n{}", func.name, dump),
-                    func.span,
-                ));
             }
         }
         HirBody::Wasm(wb) => {

@@ -7722,3 +7722,19 @@
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v5.json -j 15` -> `4/4 pass`
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v6.json -j 15` -> `7/7 pass`
+# 2026-03-05 作業メモ (フェーズD: D4003 を codegen 前段へ移動)
+
+- 目的:
+  - `CodegenWasmMissingReturnValue (D4003)` を backend 依存診断から前段診断へ移し、codegen 到達時の前提を強化する。
+- 変更:
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - 到達可能関数の `HirBody::Block` について、
+      - 戻り型が `Unit` 以外
+      - 最終的な非 drop 行が値を返さない
+      場合に `D4003` を前段で出す検査を追加。
+  - `nepl-core/src/codegen_wasm.rs`
+    - `lower_user` 内の `D4003` 診断生成を削除。
+    - ここに到達した場合は内部不整合として `panic!`（precheck で弾かれる前提）に変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v7.json -j 15` -> `7/7 pass`
