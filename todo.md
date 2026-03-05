@@ -10,12 +10,10 @@
 - 完了条件:
   - 分岐/ループ合流時の move 誤判定が解消される。
   - token の二重消費/解放後利用が検出される。
-  - `Copy` 判定の名前ハードコードを廃止し、trait 実装情報に基づく判定へ移行される。
 
 フェーズB2: trait 設計の実装反映（coherence/能力trait）
 - `doc/trait_system_design.md` を正として実装する。
 - trait 実装整合チェック（シグネチャ一致・重複 impl）を `same_type` ベースで統一する。
-- `Copy/Clone` の能力判定を能力テーブル化し、型名ハードコードを完全撤廃する。
 - 完了条件:
   - trait 契約判定に文字列比較が残らない。
   - `tests/overload.n.md` の trait ケースで診断が安定する。
