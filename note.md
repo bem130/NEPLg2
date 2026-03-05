@@ -68,6 +68,23 @@
   - 一時 `writer_wrap` を都度作る呼び出しは move エラー回避としては機能するが、線形 API 設計として不明瞭だったため採用しない。
   - `Writer -> Writer` の更新連鎖を handle 層で明示し、move 規則と API 契約を一致させる方針に統一した。
 
+# 2026-03-05 作業メモ (フェーズC: kpread_core の生メモリアクセス安全API化)
+
+- 目的:
+  - syscall 境界以外の生メモリアクセスを `MemPtr` + `Result/Option` 経由へ寄せ、失敗検出を上流化する。
+- 根本原因:
+  - `kpread_core` 内で `mem_ptr_addr` + 生 `store_i32/load_i32` を直接実行しており、境界不整合時に失敗を型で扱えなかった。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `mem_i32_ptr`, `store_i32_u8_at`, `load_i32_u8_at` を追加。
+    - scanner header 初期化 (`sc0`, `sc`) を `store_i32_u8_at` 経由へ変更し、失敗時は確保済み領域を解放して `Err` 返却。
+    - `iov/nread` 構築時の書き込みと `nread` 読み取りを安全ヘルパ経由へ変更。
+    - メモリアクセス失敗時は `mem_failed` を立て、後段で一括解放して `Result::Err \"kpread_core.memory access failed\"` を返す経路を追加。
+    - `fd_read` 呼び出し自体は syscall 仕様上 `i32` ポインタが必要なため、境界点でのみ `mem_ptr_addr` を使用。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-core-safe-v1.json -j 15`
+  - 結果: `217/217 pass`
+
 # 2026-03-05 作業メモ (フェーズC: `core/mem` の `*_ptr` を安全API経由へ統一)
 
 - 目的:

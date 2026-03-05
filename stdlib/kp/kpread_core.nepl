@@ -5,6 +5,19 @@
 #import "core/math" as *
 #import "std/stdio" as *
 
+fn mem_i32_ptr <(MemPtr<u8>,i32)->MemPtr<i32>> (p, off):
+    mem_ptr_wrap add mem_ptr_addr p off
+
+fn store_i32_u8_at <(MemPtr<u8>,i32,i32)->Result<(),str>> (p, off, v):
+    store_i32 mem_i32_ptr p off v
+
+fn load_i32_u8_at <(MemPtr<u8>,i32)->Result<i32,str>> (p, off):
+    match load_i32 mem_i32_ptr p off:
+        Option::Some v:
+            Result<i32,str>::Ok v
+        Option::None:
+            Result<i32,str>::Err "kpread_core.mem load_i32 failed"
+
 //: kpread_core: kpread の上流入出力処理を分離した内部モジュール
 //:
 //: [目的/もくてき]:
@@ -29,11 +42,34 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                 Result::Err _:
                     Result<MemPtr<u8>,str>::Err "kpread_core.scanner header alloc failed"
                 Result::Ok sc0:
-                    let sc0_raw <i32> mem_ptr_addr sc0;
-                    store_i32 sc0_raw 0;
-                    store_i32 add sc0_raw 4 0;
-                    store_i32 add sc0_raw 8 0;
-                    Result<MemPtr<u8>,str>::Ok sc0
+                    match store_i32_u8_at sc0 0 0:
+                        Result::Err _:
+                            match dealloc_ptr<u8> sc0 12:
+                                Result::Ok _:
+                                    ()
+                                Result::Err _e:
+                                    ();
+                            Result<MemPtr<u8>,str>::Err "kpread_core.scanner header init failed"
+                        Result::Ok _:
+                            match store_i32_u8_at sc0 4 0:
+                                Result::Err _:
+                                    match dealloc_ptr<u8> sc0 12:
+                                        Result::Ok _:
+                                            ()
+                                        Result::Err _e:
+                                            ();
+                                    Result<MemPtr<u8>,str>::Err "kpread_core.scanner header init failed"
+                                Result::Ok _:
+                                    match store_i32_u8_at sc0 8 0:
+                                        Result::Err _:
+                                            match dealloc_ptr<u8> sc0 12:
+                                                Result::Ok _:
+                                                    ()
+                                                Result::Err _e:
+                                                    ();
+                                            Result<MemPtr<u8>,str>::Err "kpread_core.scanner header init failed"
+                                        Result::Ok _:
+                                            Result<MemPtr<u8>,str>::Ok sc0
         Result::Ok buf0:
             let mut buf <MemPtr<u8>> buf0;
             let iov_res <Result<MemPtr<u8>,str>> alloc_ptr<u8> 8;
@@ -64,6 +100,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                             let mut read_len <i32> 0;
                             let mut done <i32> 0;
                             let mut alloc_failed <i32> 0;
+                            let mut mem_failed <i32> 0;
 
                             while eq done 0:
                                 do:
@@ -85,32 +122,48 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                     if:
                                         eq done 0
                                         then:
-                                            let iov_raw <i32> mem_ptr_addr iov;
-                                            let nread_raw <i32> mem_ptr_addr nread_ptr;
                                             let buf_raw <i32> mem_ptr_addr buf;
                                             let write_ptr <i32> add buf_raw read_len;
                                             let rem <i32> sub cap read_len;
-                                            store_i32 iov_raw write_ptr;
-                                            store_i32 add iov_raw 4 rem;
-                                            store_i32 nread_raw 0;
-                                            let errno <i32> fd_read 0 iov_raw 1 nread_raw;
-                                            if:
-                                                ne errno 0
-                                                then:
+                                            match store_i32_u8_at iov 0 write_ptr:
+                                                Result::Err _:
+                                                    set mem_failed 1;
                                                     set done 1;
-                                                else:
-                                                    let n <i32> load_i32 nread_raw;
-                                                    if:
-                                                        eq n 0
-                                                        then:
+                                                Result::Ok _:
+                                                    match store_i32_u8_at iov 4 rem:
+                                                        Result::Err _:
+                                                            set mem_failed 1;
                                                             set done 1;
-                                                        else:
-                                                            set read_len add read_len n;
+                                                        Result::Ok _:
+                                                            match store_i32_u8_at nread_ptr 0 0:
+                                                                Result::Err _:
+                                                                    set mem_failed 1;
+                                                                    set done 1;
+                                                                Result::Ok _:
+                                                                    let iov_raw <i32> mem_ptr_addr iov;
+                                                                    let nread_raw <i32> mem_ptr_addr nread_ptr;
+                                                                    let errno <i32> fd_read 0 iov_raw 1 nread_raw;
+                                                                    if:
+                                                                        ne errno 0
+                                                                        then:
+                                                                            set done 1;
+                                                                        else:
+                                                                            match load_i32_u8_at nread_ptr 0:
+                                                                                Result::Err _:
+                                                                                    set mem_failed 1;
+                                                                                    set done 1;
+                                                                                Result::Ok n:
+                                                                                    if:
+                                                                                        eq n 0
+                                                                                        then:
+                                                                                            set done 1;
+                                                                                        else:
+                                                                                            set read_len add read_len n;
                                         else:
                                             ();
 
                             if:
-                                eq alloc_failed 1
+                                or eq alloc_failed 1 eq mem_failed 1
                                 then:
                                     match dealloc_ptr<u8> iov 8:
                                         Result::Ok _:
@@ -127,7 +180,12 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                             ()
                                         Result::Err _e:
                                             ();
-                                    Result<MemPtr<u8>,str>::Err "kpread_core.realloc failed"
+                                    if:
+                                        eq mem_failed 1
+                                        then:
+                                            Result<MemPtr<u8>,str>::Err "kpread_core.memory access failed"
+                                        else:
+                                            Result<MemPtr<u8>,str>::Err "kpread_core.realloc failed"
                                 else:
                                     let sc_res <Result<MemPtr<u8>,str>> alloc_ptr<u8> 12;
                                     match sc_res:
@@ -149,19 +207,87 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                                     ();
                                             Result<MemPtr<u8>,str>::Err "kpread_core.scanner alloc failed"
                                         Result::Ok sc:
-                                            let sc_raw <i32> mem_ptr_addr sc;
                                             let buf_raw <i32> mem_ptr_addr buf;
-                                            store_i32 sc_raw buf_raw;
-                                            store_i32 add sc_raw 4 read_len;
-                                            store_i32 add sc_raw 8 0;
-                                            match dealloc_ptr<u8> iov 8:
+                                            match store_i32_u8_at sc 0 buf_raw:
+                                                Result::Err _:
+                                                    match dealloc_ptr<u8> sc 12:
+                                                        Result::Ok _:
+                                                            ()
+                                                        Result::Err _e:
+                                                            ();
+                                                    match dealloc_ptr<u8> iov 8:
+                                                        Result::Ok _:
+                                                            ()
+                                                        Result::Err _e:
+                                                            ();
+                                                    match dealloc_ptr<u8> nread_ptr 4:
+                                                        Result::Ok _:
+                                                            ()
+                                                        Result::Err _e:
+                                                            ();
+                                                    match dealloc_ptr<u8> buf cap:
+                                                        Result::Ok _:
+                                                            ()
+                                                        Result::Err _e:
+                                                            ();
+                                                    Result<MemPtr<u8>,str>::Err "kpread_core.scanner header init failed"
                                                 Result::Ok _:
-                                                    ()
-                                                Result::Err _e:
-                                                    ();
-                                            match dealloc_ptr<u8> nread_ptr 4:
-                                                Result::Ok _:
-                                                    ()
-                                                Result::Err _e:
-                                                    ();
-                                            Result<MemPtr<u8>,str>::Ok sc
+                                                    match store_i32_u8_at sc 4 read_len:
+                                                        Result::Err _:
+                                                            match dealloc_ptr<u8> sc 12:
+                                                                Result::Ok _:
+                                                                    ()
+                                                                Result::Err _e:
+                                                                    ();
+                                                            match dealloc_ptr<u8> iov 8:
+                                                                Result::Ok _:
+                                                                    ()
+                                                                Result::Err _e:
+                                                                    ();
+                                                            match dealloc_ptr<u8> nread_ptr 4:
+                                                                Result::Ok _:
+                                                                    ()
+                                                                Result::Err _e:
+                                                                    ();
+                                                            match dealloc_ptr<u8> buf cap:
+                                                                Result::Ok _:
+                                                                    ()
+                                                                Result::Err _e:
+                                                                    ();
+                                                            Result<MemPtr<u8>,str>::Err "kpread_core.scanner header init failed"
+                                                        Result::Ok _:
+                                                            match store_i32_u8_at sc 8 0:
+                                                                Result::Err _:
+                                                                    match dealloc_ptr<u8> sc 12:
+                                                                        Result::Ok _:
+                                                                            ()
+                                                                        Result::Err _e:
+                                                                            ();
+                                                                    match dealloc_ptr<u8> iov 8:
+                                                                        Result::Ok _:
+                                                                            ()
+                                                                        Result::Err _e:
+                                                                            ();
+                                                                    match dealloc_ptr<u8> nread_ptr 4:
+                                                                        Result::Ok _:
+                                                                            ()
+                                                                        Result::Err _e:
+                                                                            ();
+                                                                    match dealloc_ptr<u8> buf cap:
+                                                                        Result::Ok _:
+                                                                            ()
+                                                                        Result::Err _e:
+                                                                            ();
+                                                                    Result<MemPtr<u8>,str>::Err "kpread_core.scanner header init failed"
+                                                                Result::Ok _:
+                                                                    match dealloc_ptr<u8> iov 8:
+                                                                        Result::Ok _:
+                                                                            ()
+                                                                        Result::Err _e:
+                                                                            ();
+                                                                    match dealloc_ptr<u8> nread_ptr 4:
+                                                                        Result::Ok _:
+                                                                            ()
+                                                                        Result::Err _e:
+                                                                            ();
+                                                                    Result<MemPtr<u8>,str>::Ok sc
