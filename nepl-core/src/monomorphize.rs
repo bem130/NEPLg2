@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 
 use crate::hir::*;
 use crate::runtime_helpers::{
-    ALLOC_CANDIDATES, DEALLOC_CANDIDATES, REALLOC_CANDIDATES,
+    find_runtime_helper_key, RuntimeHelperKind,
 };
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
@@ -59,17 +59,14 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
 
     // Ensure runtime-required helpers are retained even if not explicitly referenced.
     // Enum/struct/tuple codegen depends on allocator helper availability.
-    for candidates in [ALLOC_CANDIDATES, DEALLOC_CANDIDATES, REALLOC_CANDIDATES] {
-        let mut selected: Option<String> = None;
-        for base in candidates {
-            if let Some(name) = find_runtime_helper_name(&mono.funcs, base) {
-                selected = Some(name);
-                break;
-            }
-        }
-        if let Some(name) = selected {
+    for kind in [
+        RuntimeHelperKind::Alloc,
+        RuntimeHelperKind::Dealloc,
+        RuntimeHelperKind::Realloc,
+    ] {
+        if let Some(name) = find_runtime_helper_key(&mono.funcs, kind) {
             if !initial.iter().any(|n| n == &name) {
-                initial.push(name);
+                initial.push(String::from(name));
             }
         }
     }
@@ -107,31 +104,6 @@ struct Monomorphizer<'a> {
     worklist: Vec<(String, Vec<TypeId>)>,
     queued: BTreeSet<String>,
     impl_map: BTreeMap<(String, String, TypeId), String>,
-}
-
-fn find_runtime_helper_name(
-    funcs: &BTreeMap<String, HirFunction>,
-    base: &str,
-) -> Option<String> {
-    if funcs.contains_key(base) {
-        return Some(String::from(base));
-    }
-    let mut plain_prefix = String::from(base);
-    plain_prefix.push_str("__");
-    let mut namespaced_prefix = String::from("::");
-    namespaced_prefix.push_str(base);
-    namespaced_prefix.push_str("__");
-    let mut namespaced_exact = String::from("::");
-    namespaced_exact.push_str(base);
-    for name in funcs.keys() {
-        if name.starts_with(&plain_prefix)
-            || name.contains(&namespaced_prefix)
-            || name.ends_with(&namespaced_exact)
-        {
-            return Some(name.clone());
-        }
-    }
-    None
 }
 
 impl<'a> Monomorphizer<'a> {

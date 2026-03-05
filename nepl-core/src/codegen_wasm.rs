@@ -20,7 +20,7 @@ use wasm_encoder::{
 
 use crate::diagnostic::Diagnostic;
 use crate::hir::*;
-use crate::runtime_helpers::ALLOC_CANDIDATES;
+use crate::runtime_helpers::{self, RuntimeHelperKind};
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
 #[derive(Debug)]
@@ -590,48 +590,12 @@ fn valtype(kind: &TypeKind) -> Option<ValType> {
     }
 }
 
-fn helper_base_name(name: &str) -> &str {
-    let tail = if let Some(pos) = name.rfind("::") {
-        &name[pos + 2..]
-    } else {
-        name
-    };
-    if let Some(pos) = tail.find("__") {
-        &tail[..pos]
-    } else {
-        tail
-    }
-}
-
-fn find_runtime_helper_index(
-    name_map: &BTreeMap<String, u32>,
-    base: &str,
-    skip_idx: Option<u32>,
-) -> Option<u32> {
-    if let Some(idx) = name_map.get(base) {
-        if Some(*idx) != skip_idx {
-            return Some(*idx);
-        }
-    }
-    for (name, idx) in name_map {
-        if Some(*idx) == skip_idx {
-            continue;
-        }
-        if helper_base_name(name) == base {
-            return Some(*idx);
-        }
-    }
-    None
-}
-
 fn find_alloc_index(name_map: &BTreeMap<String, u32>, current_func: &str) -> Option<u32> {
-    let skip_idx = name_map.get(current_func).copied();
-    for base in ALLOC_CANDIDATES {
-        if let Some(idx) = find_runtime_helper_index(name_map, base, skip_idx) {
-            return Some(idx);
-        }
-    }
-    None
+    runtime_helpers::find_runtime_helper_index(
+        name_map,
+        RuntimeHelperKind::Alloc,
+        Some(current_func),
+    )
 }
 
 pub(crate) fn collect_wasm_signature_set(

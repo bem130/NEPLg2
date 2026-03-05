@@ -1,3 +1,25 @@
+# 2026-03-06 作業メモ (フェーズD: runtime helper 解決の共通化と raw 依存縮小)
+
+- 目的:
+  - `nepl-core` 内で重複していた runtime helper（alloc/dealloc/realloc）解決ロジックを共通化し、`_raw` 名依存を段階縮小する。
+  - helper 名の優先順位を安全API名（suffixなし）優先へ統一する。
+- 変更:
+  - `nepl-core/src/runtime_helpers.rs`
+    - `ALLOC_CANDIDATES` を `["alloc", "alloc_raw"]` に変更（安全API優先）。
+    - `RuntimeHelperKind` / `helper_candidates` / `helper_base_name` を追加。
+    - `find_runtime_helper_key`（名前解決）と `find_runtime_helper_index`（index解決）を追加。
+  - `nepl-core/src/codegen_wasm.rs`
+    - ローカル実装だった helper 名解決を削除し、`runtime_helpers::find_runtime_helper_index` に統一。
+  - `nepl-core/src/monomorphize.rs`
+    - helper 保持ルート探索を `find_runtime_helper_key` + `RuntimeHelperKind` へ置換。
+    - 重複していた名前マッチ関数を削除。
+  - `nepl-core/src/codegen_llvm.rs`
+    - helper 候補取得を `helper_candidates(RuntimeHelperKind::...)` に統一。
+    - `resolve_symbol_name` の候補一致を `helper_base_name` ベースへ変更し、namespaced/mangled 名でも同一規則で解決。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-helper-unify.json -j 15` -> `791/791 pass`
+
 # 2026-03-06 作業メモ (フェーズD: llvm backend の wasm-body 分岐を不変条件化)
 
 - 目的:

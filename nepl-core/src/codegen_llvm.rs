@@ -14,7 +14,9 @@ use crate::ast::{Block, FnBody, Ident, Literal, Module, PrefixExpr, PrefixItem, 
 use crate::ast::Directive;
 use crate::compiler::{BuildProfile, CompileTarget};
 use crate::hir::{FuncRef, HirBlock, HirBody, HirExpr, HirExprKind, HirFunction, HirModule};
-use crate::runtime_helpers::{ALLOC_CANDIDATES, DEALLOC_CANDIDATES, REALLOC_CANDIDATES};
+use crate::runtime_helpers::{
+    helper_base_name, helper_candidates, RuntimeHelperKind,
+};
 use crate::target_precheck::{self, ActiveRawBody};
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
@@ -422,7 +424,7 @@ fn try_lower_entry_from_hir(
     }
     let fallback_alloc_symbol = resolve_runtime_helper_symbol(
         &sigs,
-        ALLOC_CANDIDATES,
+        helper_candidates(RuntimeHelperKind::Alloc),
         &[LlTy::I32],
         LlTy::I32,
     )
@@ -889,13 +891,18 @@ fn extend_reachable_with_runtime_helpers(
     };
     push_root(
         &mut helper_roots,
-        resolve_runtime_helper_symbol(sigs, ALLOC_CANDIDATES, &[LlTy::I32], LlTy::I32),
+        resolve_runtime_helper_symbol(
+            sigs,
+            helper_candidates(RuntimeHelperKind::Alloc),
+            &[LlTy::I32],
+            LlTy::I32,
+        ),
     );
     push_root(
         &mut helper_roots,
         resolve_runtime_helper_symbol(
             sigs,
-            DEALLOC_CANDIDATES,
+            helper_candidates(RuntimeHelperKind::Dealloc),
             &[LlTy::I32, LlTy::I32],
             LlTy::Void,
         ),
@@ -904,7 +911,7 @@ fn extend_reachable_with_runtime_helpers(
         &mut helper_roots,
         resolve_runtime_helper_symbol(
             sigs,
-            REALLOC_CANDIDATES,
+            helper_candidates(RuntimeHelperKind::Realloc),
             &[LlTy::I32, LlTy::I32, LlTy::I32],
             LlTy::I32,
         ),
@@ -2377,9 +2384,14 @@ fn llvm_f32_literal(v: f32) -> String {
 }
 
 fn resolve_alloc_symbol(ctx: &LowerCtx<'_>) -> Option<String> {
-    resolve_runtime_helper_symbol(ctx.sigs, ALLOC_CANDIDATES, &[LlTy::I32], LlTy::I32)
-        .map(String::from)
-        .or_else(|| ctx.fallback_alloc_symbol.map(String::from))
+    resolve_runtime_helper_symbol(
+        ctx.sigs,
+        helper_candidates(RuntimeHelperKind::Alloc),
+        &[LlTy::I32],
+        LlTy::I32,
+    )
+    .map(String::from)
+    .or_else(|| ctx.fallback_alloc_symbol.map(String::from))
 }
 
 fn resolve_runtime_helper_symbol<'a>(
@@ -2416,7 +2428,7 @@ fn resolve_symbol_name<'a>(
             if !signature_matches(sig) {
                 return None;
             }
-            if name == preferred || name.starts_with(&format!("{}__", preferred)) {
+            if helper_base_name(name.as_str()) == preferred {
                 Some(name.as_str())
             } else {
                 None
