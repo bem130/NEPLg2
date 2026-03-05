@@ -4461,7 +4461,7 @@ fn add <(u128,u128)->u128> (a, b):
     let lo <i64> add a_lo b_lo;
     let carry <i64> if lt_u lo a_lo:
         then extend_s_i32_to_i64 1
-        else extend_s_i32_to_i64 0;
+        else extend_s_i32_to_i64 0
     let hi0 <i64> add a_hi b_hi;
     let hi <i64> add hi0 carry;
     u128 hi lo
@@ -4475,7 +4475,7 @@ fn sub <(u128,u128)->u128> (a, b):
     let lo <i64> sub a_lo b_lo;
     let borrow <i64> if lt_u a_lo b_lo:
         then extend_s_i32_to_i64 1
-        else extend_s_i32_to_i64 0;
+        else extend_s_i32_to_i64 0
     let hi0 <i64> sub a_hi b_hi;
     let hi <i64> sub hi0 borrow;
     u128 hi lo
@@ -4507,7 +4507,7 @@ fn new <(i64,i64)->i128> (hi, lo):
 fn to_i128 <(i64)->i128> (v):
     let hi <i64> if lt v extend_s_i32_to_i64 0:
         then extend_s_i32_to_i64 -1
-        else extend_s_i32_to_i64 0;
+        else extend_s_i32_to_i64 0
     i128 hi v
 
 //: add: i128 の加算（mod 2^128）
@@ -4519,7 +4519,7 @@ fn add <(i128,i128)->i128> (a, b):
     let lo <i64> add a_lo b_lo;
     let carry <i64> if lt_u lo a_lo:
         then extend_s_i32_to_i64 1
-        else extend_s_i32_to_i64 0;
+        else extend_s_i32_to_i64 0
     let hi0 <i64> add a_hi b_hi;
     let hi <i64> add hi0 carry;
     i128 hi lo
@@ -4533,7 +4533,7 @@ fn sub <(i128,i128)->i128> (a, b):
     let lo <i64> sub a_lo b_lo;
     let borrow <i64> if lt_u a_lo b_lo:
         then extend_s_i32_to_i64 1
-        else extend_s_i32_to_i64 0;
+        else extend_s_i32_to_i64 0
     let hi0 <i64> sub a_hi b_hi;
     let hi <i64> sub hi0 borrow;
     i128 hi lo
@@ -4569,13 +4569,13 @@ fn mul_wide <(i64,i64)->u128> (a, b):
     let mid <i64> add p1 p2;
     let carry_mid <i64> if lt_u mid p1:
         then extend_s_i32_to_i64 1
-        else extend_s_i32_to_i64 0;
+        else extend_s_i32_to_i64 0
 
     let lo_add <i64> shl mid sh32;
     let lo <i64> add p0 lo_add;
     let carry_lo <i64> if lt_u lo p0:
         then extend_s_i32_to_i64 1
-        else extend_s_i32_to_i64 0;
+        else extend_s_i32_to_i64 0
 
     let mid_hi <i64> shr_u mid sh32;
     let hi0 <i64> add p3 mid_hi;

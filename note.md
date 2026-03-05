@@ -1,3 +1,17 @@
+# 2026-03-05 作業メモ (`;` 仕様先行修正: `stdlib/core/math.nepl`)
+
+- 目的:
+  - `plan.md` の「複行文には末尾 `;` を付けない」制約に合わせ、`overload` 失敗の根本原因を先に解消する。
+- 根本原因:
+  - `stdlib/core/math.nepl` の `i128/u128` 周辺で、複行 `if:` を右辺に持つ `let` 文の末尾に `;` が残っていた。
+  - これが式の `()` 化を誘発し、wasm 検証段で `invalid wasm generated: expected i64 but nothing on stack` を引き起こしていた。
+- 変更:
+  - `stdlib/core/math.nepl` の該当箇所で、複行 `if:` 右辺 `let` の末尾 `;` を除去。
+  - 対象: `to_i128`, `u128/i128` の `carry/borrow` 計算、`mul_wide` の `carry_mid/carry_lo` 計算。
+- 検証:
+  - `node nodesrc/tests.js -i tests/overload.n.md --no-stdlib --no-tree -o /tmp/tests-overload-nostd.json -j 15`
+  - 結果: `43/43 pass`
+
 # 2026-03-05 作業メモ (パーサ根本修正: 単行 block 制約と `ExprSemi` 意味論保持)
 
 - 目的:
