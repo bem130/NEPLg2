@@ -49,12 +49,12 @@ fn writer_load_header <(MemPtr<u8>,i32)->i32> (w_mem, off):
         Option::None:
             0
 
-fn writer_store_header <(MemPtr<u8>,i32,i32)->()> (w_mem, off, v):
+fn writer_store_header <(MemPtr<u8>,i32,i32)->Result<(),str>> (w_mem, off, v):
     match store_i32 writer_header_ptr w_mem off v:
         Result::Ok _:
-            ()
+            Result<(),str>::Ok ()
         Result::Err _e:
-            ()
+            Result<(),str>::Err "kpwrite.writer_store_header failed"
 
 fn writer_load_header_ptr <(MemPtr<u8>,i32)->MemPtr<u8>> (w_mem, off):
     mem_ptr_wrap writer_load_header w_mem off
@@ -121,12 +121,47 @@ fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
                                     writer_try_free_ptr<u8> buf cap;
                                     Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header alloc failed"
                                 Result::Ok w:
-                                    writer_store_header w 0 mem_ptr_addr buf;
-                                    writer_store_header w 4 cap;
-                                    writer_store_header w 8 0;
-                                    writer_store_header w 12 mem_ptr_addr iov;
-                                    writer_store_header w 16 mem_ptr_addr nw;
-                                    Result<MemPtr<u8>,str>::Ok w
+                                    match writer_store_header w 0 mem_ptr_addr buf:
+                                        Result::Err _e:
+                                            writer_try_free_ptr<u8> w 20;
+                                            writer_try_free_ptr<u8> nw 4;
+                                            writer_try_free_ptr<u8> iov 8;
+                                            writer_try_free_ptr<u8> buf cap;
+                                            Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
+                                        Result::Ok _:
+                                            match writer_store_header w 4 cap:
+                                                Result::Err _e:
+                                                    writer_try_free_ptr<u8> w 20;
+                                                    writer_try_free_ptr<u8> nw 4;
+                                                    writer_try_free_ptr<u8> iov 8;
+                                                    writer_try_free_ptr<u8> buf cap;
+                                                    Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
+                                                Result::Ok _:
+                                                    match writer_store_header w 8 0:
+                                                        Result::Err _e:
+                                                            writer_try_free_ptr<u8> w 20;
+                                                            writer_try_free_ptr<u8> nw 4;
+                                                            writer_try_free_ptr<u8> iov 8;
+                                                            writer_try_free_ptr<u8> buf cap;
+                                                            Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
+                                                        Result::Ok _:
+                                                            match writer_store_header w 12 mem_ptr_addr iov:
+                                                                Result::Err _e:
+                                                                    writer_try_free_ptr<u8> w 20;
+                                                                    writer_try_free_ptr<u8> nw 4;
+                                                                    writer_try_free_ptr<u8> iov 8;
+                                                                    writer_try_free_ptr<u8> buf cap;
+                                                                    Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
+                                                                Result::Ok _:
+                                                                    match writer_store_header w 16 mem_ptr_addr nw:
+                                                                        Result::Err _e:
+                                                                            writer_try_free_ptr<u8> w 20;
+                                                                            writer_try_free_ptr<u8> nw 4;
+                                                                            writer_try_free_ptr<u8> iov 8;
+                                                                            writer_try_free_ptr<u8> buf cap;
+                                                                            Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
+                                                                        Result::Ok _:
+                                                                            Result<MemPtr<u8>,str>::Ok w
 
 fn writer_new <()*>Result<Writer,str>> ():
     let raw_res <Result<MemPtr<u8>,str>> writer_new_handle;
@@ -213,7 +248,11 @@ fn writer_flush_handle <(Writer)*>Writer> (w):
                                         set off add off n;
                                         ();
 
-            writer_store_header w_mem 8 0;
+            match writer_store_header w_mem 8 0:
+                Result::Ok _:
+                    ()
+                Result::Err _e:
+                    ();
             w
 
 //: writer_ensure: need バイト分の空きを確保する（足りなければ flush）
@@ -248,7 +287,11 @@ fn writer_put_u8_handle <(Writer,i32)*>Writer> (w, b):
             let buf <i32> writer_load_header w_mem 0;
             let write_len <i32> writer_load_header w_mem 8;
             store_u8 add buf write_len b;
-            writer_store_header w_mem 8 add write_len 1;
+            match writer_store_header w_mem 8 add write_len 1:
+                Result::Ok _:
+                    ()
+                Result::Err _e:
+                    ();
             w1
 
 //: writer_writeln: 改行 '\n' を出力する
@@ -286,7 +329,11 @@ fn writer_write_str_handle <(Writer,str)*>Writer> (w, s):
                     set i add i 1;
 
             let new_len <i32> add write_len n;
-            writer_store_header w_mem 8 new_len;
+            match writer_store_header w_mem 8 new_len:
+                Result::Ok _:
+                    ()
+                Result::Err _e:
+                    ();
             w1
 
 //: writer_write_i32: i32 を 10 進で出力する（ヒープ確保なし）
@@ -334,7 +381,11 @@ fn writer_write_i32_handle <(Writer,i32)*>Writer> (w, v):
                     let buf <i32> writer_load_header w_mem 0;
                     let old_len <i32> writer_load_header w_mem 8;
                     let new_len <i32> add old_len d;
-                    writer_store_header w_mem 8 new_len;
+                    match writer_store_header w_mem 8 new_len:
+                        Result::Ok _:
+                            ()
+                        Result::Err _e:
+                            ();
 
                     let mut n <i32> x;
                     let mut i <i32> 0;
@@ -389,7 +440,11 @@ fn writer_write_u64_handle <(Writer,i64)*>Writer> (w, v):
             let buf <i32> writer_load_header w_mem 0;
             let old_len <i32> writer_load_header w_mem 8;
             let new_len <i32> add old_len d;
-            writer_store_header w_mem 8 new_len;
+            match writer_store_header w_mem 8 new_len:
+                Result::Ok _:
+                    ()
+                Result::Err _e:
+                    ();
 
             let mut n <i64> v;
             let mut i <i32> 0;

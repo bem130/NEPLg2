@@ -7249,3 +7249,24 @@
   - 結果: `217/217 pass`
   - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v9.json -j 15`
   - 結果: `226/226 pass`
+
+# 2026-03-05 作業メモ (フェーズD: writer ヘッダ書き込み失敗の握り潰し廃止)
+
+- 目的:
+  - `writer_store_header` が失敗を黙殺していた設計を修正し、writer 構築時の不整合状態を防ぐ。
+
+- 根本原因:
+  - 旧実装では `writer_store_header` が常に `()` を返し、`store_i32` 失敗時でも呼び出し側が異常を検出できなかった。
+  - `writer_new_handle` でヘッダ初期化に失敗しても成功扱いになりうる設計だった。
+
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_store_header` の返り値を `Result<(),str>` に変更。
+    - `writer_new_handle` の 5 つのヘッダ書き込みを逐次 `match` で検証し、失敗時は確保済み領域を解放して `Err` 返却。
+    - `flush/put/write` 系の長さ更新箇所も `Result` を明示的に受ける構造へ統一。
+
+- テスト:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-header-result-v1.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-v10.json -j 15`
+  - 結果: `226/226 pass`
