@@ -1,3 +1,19 @@
+# 2026-03-05 作業メモ (フェーズC: kpread/kpwrite の `*_new_handle` 返り値を MemPtr 化)
+
+- 目的:
+  - 生成系 API の境界から生 `i32` を減らし、`MemPtr<u8>` による型境界を明確化する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_handle` を `Result<MemPtr<u8>,str>` へ変更。
+    - `scanner_new` は `MemPtr<u8>` をそのまま `scanner_wrap` に渡す形へ変更。
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_new_handle` を `Result<MemPtr<u8>,str>` へ変更。
+    - 内部確保で得た `w:i32` は `mem_ptr_wrap` して `Ok` 返却。
+    - `writer_new` は `MemPtr<u8>` をそのまま `writer_wrap` に渡す形へ変更。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-memptr-wrap-v4.json -j 15`
+  - 結果: `216/216 pass`
+
 # 2026-03-05 作業メモ (フェーズC: kpwrite Writer ラップ境界の型整合)
 
 - 目的:

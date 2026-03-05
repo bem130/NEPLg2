@@ -31,14 +31,18 @@ struct Scanner:
 fn scanner_wrap <(MemPtr<u8>)->Scanner> (raw):
     Scanner raw
 
-fn scanner_new_handle <()*>Result<i32,str>> ():
-    scanner_new_impl
+fn scanner_new_handle <()*>Result<MemPtr<u8>,str>> ():
+    match scanner_new_impl:
+        Result::Ok raw:
+            Result<MemPtr<u8>,str>::Ok mem_ptr_wrap raw
+        Result::Err e:
+            Result<MemPtr<u8>,str>::Err e
 
 fn scanner_new <()*>Result<Scanner,str>> ():
-    let raw_res <Result<i32,str>> scanner_new_handle;
+    let raw_res <Result<MemPtr<u8>,str>> scanner_new_handle;
     match raw_res:
         Result::Ok raw:
-            Result<Scanner,str>::Ok scanner_wrap mem_ptr_wrap raw
+            Result<Scanner,str>::Ok scanner_wrap raw
         Result::Err e:
             Result<Scanner,str>::Err e
 

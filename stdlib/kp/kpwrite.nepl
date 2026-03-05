@@ -81,43 +81,43 @@ fn writer_alloc_buf <()*>Result<WriterBuf,str>> ():
                         Result::Err _e2:
                             Result<WriterBuf,str>::Err "kpwrite.writer_new buffer alloc failed"
 
-fn writer_new_handle <()*>Result<i32,str>> ():
+fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
     match writer_alloc_buf:
         Result::Err e:
-            Result<i32,str>::Err e
+            Result<MemPtr<u8>,str>::Err e
         Result::Ok b:
             let buf <i32> get b "ptr";
             let cap <i32> get b "cap";
             match alloc 8:
                 Result::Err _e:
                     writer_try_free buf cap;
-                    Result<i32,str>::Err "kpwrite.writer_new iov alloc failed"
+                    Result<MemPtr<u8>,str>::Err "kpwrite.writer_new iov alloc failed"
                 Result::Ok iov:
                     match alloc 4:
                         Result::Err _e:
                             writer_try_free iov 8;
                             writer_try_free buf cap;
-                            Result<i32,str>::Err "kpwrite.writer_new nw alloc failed"
+                            Result<MemPtr<u8>,str>::Err "kpwrite.writer_new nw alloc failed"
                         Result::Ok nw:
                             match alloc 20:
                                 Result::Err _e:
                                     writer_try_free nw 4;
                                     writer_try_free iov 8;
                                     writer_try_free buf cap;
-                                    Result<i32,str>::Err "kpwrite.writer_new header alloc failed"
+                                    Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header alloc failed"
                                 Result::Ok w:
                                     store_i32 w buf;
                                     store_i32 add w 4 cap;
                                     store_i32 add w 8 0;
                                     store_i32 add w 12 iov;
                                     store_i32 add w 16 nw;
-                                    Result<i32,str>::Ok w
+                                    Result<MemPtr<u8>,str>::Ok mem_ptr_wrap w
 
 fn writer_new <()*>Result<Writer,str>> ():
-    let raw_res <Result<i32,str>> writer_new_handle;
+    let raw_res <Result<MemPtr<u8>,str>> writer_new_handle;
     match raw_res:
         Result::Ok raw:
-            Result<Writer,str>::Ok writer_wrap mem_ptr_wrap raw
+            Result<Writer,str>::Ok writer_wrap raw
         Result::Err e:
             Result<Writer,str>::Err e
 
