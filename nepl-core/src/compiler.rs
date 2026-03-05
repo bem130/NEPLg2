@@ -259,6 +259,14 @@ pub fn compile_module(
     let mut diagnostics = tc.diagnostics;
     run_move_check(&hir_module, &types, &mut diagnostics)?;
     passes::insert_drops(&mut hir_module, types.unit());
+    let pre_codegen_diags = passes::codegen_precheck::precheck_wasm_codegen(&types, &hir_module);
+    if pre_codegen_diags
+        .iter()
+        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
+    {
+        diagnostics.extend(pre_codegen_diags);
+        return Err(CoreError::from_diagnostics(diagnostics));
+    }
 
     emit_wasm(&types, &hir_module, diagnostics)
 }

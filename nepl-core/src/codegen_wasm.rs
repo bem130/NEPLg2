@@ -21,6 +21,7 @@ use wasm_encoder::{
 use crate::diagnostic::Diagnostic;
 use crate::diagnostic_ids::DiagnosticId;
 use crate::hir::*;
+use crate::runtime_helpers::ALLOC_CANDIDATES;
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
 #[derive(Debug)]
@@ -201,10 +202,10 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
                 sig.0,
                 sig.1,
             ));
-        } else {
-            diags.push(
-                Diagnostic::error("unsupported extern signature for wasm", ext.span)
-                    .with_id(DiagnosticId::CodegenWasmUnsupportedExternSignature),
+        } else if crate::log::is_verbose() {
+            std::eprintln!(
+                "codegen_wasm: skipping extern '{}' due to unsupported signature (must be prechecked)",
+                ext.local_name
             );
         }
     }
@@ -219,21 +220,15 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
         if let Some(sig) = wasm_sig(ctx, f.result, &f.params) {
             functions.push(FuncLower::user(f, sig));
         } else {
-            if should_skip_wasm_codegen_for_generic(ctx, f) {
-                continue;
-            }
             if crate::log::is_verbose() {
                 std::eprintln!(
-                    "codegen: failed to lower signature for {}: result={:?}, params={:?}",
+                    "codegen_wasm: skipping function '{}' due to unsupported signature (must be prechecked): result={:?}, params={:?}",
                     f.name,
                     ctx.get(f.result),
                     f.params.iter().map(|p| ctx.get(p.ty)).collect::<Vec<_>>()
                 );
             }
-            diags.push(
-                Diagnostic::error("unsupported function signature for wasm", f.span)
-                    .with_id(DiagnosticId::CodegenWasmUnsupportedFunctionSignature),
-            );
+            continue;
         }
     }
 
@@ -398,7 +393,7 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
     }
 }
 
-fn should_skip_wasm_codegen_for_generic(ctx: &TypeCtx, f: &HirFunction) -> bool {
+pub(crate) fn should_skip_wasm_codegen_for_generic(ctx: &TypeCtx, f: &HirFunction) -> bool {
     let fty = ctx.get(ctx.resolve_id(f.func_ty));
     if let TypeKind::Function {
         type_params,
@@ -538,7 +533,7 @@ fn collect_called_functions_from_expr(
     }
 }
 
-fn collect_reachable_wasm_functions(module: &HirModule) -> BTreeSet<String> {
+pub(crate) fn collect_reachable_wasm_functions(module: &HirModule) -> BTreeSet<String> {
     let all_names: BTreeSet<String> = module.functions.iter().map(|f| f.name.clone()).collect();
     if all_names.is_empty() {
         return all_names;
@@ -664,7 +659,7 @@ impl ImportLower {
     }
 }
 
-fn wasm_sig(
+pub(crate) fn wasm_sig(
     ctx: &TypeCtx,
     result: TypeId,
     params: &[HirParam],
@@ -697,7 +692,7 @@ fn wasm_sig(
     Some((param_types, res))
 }
 
-fn wasm_sig_ids(
+pub(crate) fn wasm_sig_ids(
     ctx: &TypeCtx,
     result: TypeId,
     params: &[TypeId],
@@ -785,8 +780,12 @@ fn find_runtime_helper_index(name_map: &BTreeMap<String, u32>, base: &str) -> Op
 }
 
 fn find_alloc_index(name_map: &BTreeMap<String, u32>) -> Option<u32> {
-    find_runtime_helper_index(name_map, "alloc_raw")
-        .or_else(|| find_runtime_helper_index(name_map, "alloc"))
+    for base in ALLOC_CANDIDATES {
+        if let Some(idx) = find_runtime_helper_index(name_map, base) {
+            return Some(idx);
+        }
+    }
+    None
 }
 
 fn emit_inline_alloc(locals: &mut LocalMap, insts: &mut Vec<Instruction<'static>>) {

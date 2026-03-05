@@ -7701,3 +7701,24 @@
   3. `stdlib/alloc` と `kp` を `MemPtr/RegionToken` + `Result/Option` 前提へ全面移行。
   4. `stdlib/std` / `stdlib/nm` / tutorials/examples の順で追随移行。
   5. 最後に `_raw` と生ポインタ公開関数を削除し、compile_fail 回帰を固定。
+# 2026-03-05 作業メモ (フェーズD: wasm signature 診断を codegen 前段へ移動)
+
+- 目的:
+  - `codegen_wasm` 内で出していた署名系診断を前段パスへ移し、`codegen到達時は検証済み` の設計へ寄せる。
+  - wasm/llvm 共通化方針の第一段として、backend 直下診断の削減を進める。
+- 変更:
+  - `nepl-core/src/passes/codegen_precheck.rs` を追加。
+    - `precheck_wasm_codegen` を実装し、以下を前段で検査:
+      - extern 署名 (`D4001`)
+      - 到達可能関数の署名 (`D4002`)
+  - `nepl-core/src/compiler.rs`
+    - `insert_drops` 後・wasm emit 前に `precheck_wasm_codegen` を実行。
+    - エラー診断があれば codegen へ進まず `CoreError::Diagnostics` を返す。
+  - `nepl-core/src/codegen_wasm.rs`
+    - 署名不一致時の `D4001/D4002` 生成を削除し、前段検査前提でスキップ処理に変更。
+  - `tests/raw_body_precheck.n.md`
+    - `D4001/D4002` を安定再現する `compile_fail` ケースを追加・調整。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v5.json -j 15` -> `4/4 pass`
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v6.json -j 15` -> `7/7 pass`
