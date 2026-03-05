@@ -1,3 +1,20 @@
+# 2026-03-05 作業メモ (フェーズD: llvm call_indirect の backend 診断を不変条件化)
+
+- 目的:
+  - `codegen_llvm` の `call_indirect` で残っていた backend 診断（`UnsupportedHirLowering`）を削減し、前段通過後は生成専任に寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `call_indirect` について以下の `UnsupportedHirLowering` 返却を internal panic 化:
+      - callee が値を返さない
+      - callee が `i32` 関数IDでない
+      - 引数が値を返さない
+      - 引数個数不一致
+      - 引数型不一致
+      - 候補関数未検出
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v2.json -j 15` -> `8/8 pass`
+
 # 2026-03-05 作業メモ (フェーズD: raw wasm 行検査の前段分離を完了)
 
 - 目的:

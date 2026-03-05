@@ -1402,25 +1402,25 @@ fn lower_hir_expr(
             args,
         } => {
             let Some(callee_v) = lower_hir_expr(types, ctx, callee)? else {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("call_indirect callee must produce a value"),
-                });
+                panic!(
+                    "internal compiler error: call_indirect callee must produce a value in '{}'",
+                    ctx.function_name
+                );
             };
             if callee_v.ty != LlTy::I32 {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("call_indirect callee must be i32 function id"),
-                });
+                panic!(
+                    "internal compiler error: call_indirect callee must be i32 function id in '{}'",
+                    ctx.function_name
+                );
             }
 
             let mut lowered_args = Vec::new();
             for a in args {
                 let Some(v) = lower_hir_expr(types, ctx, a)? else {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: String::from("call_indirect argument must produce a value"),
-                    });
+                    panic!(
+                        "internal compiler error: call_indirect argument must produce a value in '{}'",
+                        ctx.function_name
+                    );
                 };
                 lowered_args.push(v);
             }
@@ -1430,20 +1430,17 @@ fn lower_hir_expr(
                 .collect::<Vec<_>>();
             let ret_ll = llty_for_type(types, *result);
             if lowered_args.len() != param_ll.len() {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("call_indirect argument length mismatch"),
-                });
+                panic!(
+                    "internal compiler error: call_indirect argument length mismatch in '{}'",
+                    ctx.function_name
+                );
             }
             for (idx, v) in lowered_args.iter().enumerate() {
                 if v.ty != param_ll[idx] {
-                    return Err(LlvmCodegenError::UnsupportedHirLowering {
-                        function: ctx.function_name.to_string(),
-                        reason: format!(
-                            "call_indirect argument type mismatch at {}: expected {:?}, got {:?}",
-                            idx, param_ll[idx], v.ty
-                        ),
-                    });
+                    panic!(
+                        "internal compiler error: call_indirect argument type mismatch at {} in '{}' ({:?} vs {:?})",
+                        idx, ctx.function_name, param_ll[idx], v.ty
+                    );
                 }
             }
 
@@ -1459,10 +1456,10 @@ fn lower_hir_expr(
                 }
             }
             if candidates.is_empty() {
-                return Err(LlvmCodegenError::UnsupportedHirLowering {
-                    function: ctx.function_name.to_string(),
-                    reason: String::from("call_indirect has no matching candidate"),
-                });
+                panic!(
+                    "internal compiler error: call_indirect has no matching candidate in '{}'",
+                    ctx.function_name
+                );
             }
 
             let end_label = ctx.next_label("calli_end");
