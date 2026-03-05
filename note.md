@@ -1,3 +1,24 @@
+# 2026-03-05 作業メモ (フェーズD先行: Writer を RegionToken 保持へ移行)
+
+- 目的:
+  - `kpread` と同様に `kpwrite` でも公開ハンドルが領域情報を持つようにし、メモリ安全APIを統一する。
+- 根本原因:
+  - `Writer` は `MemPtr<u8>` を直接保持し、ヘッダ領域サイズ（20byte）が型に表現されていなかった。
+  - 途中で追加した `writer_mem(Writer)->MemPtr<u8>` ヘルパは `Writer` を値渡しで受けるため、
+    non-copy な `Writer` の move を発生させ `D3053` を引き起こした。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `Writer.raw` を `Writer.region: RegionToken<u8>` に変更。
+    - `writer_wrap` で `region_new raw 20` を構築。
+    - `writer_mem` ヘルパは削除し、`region_ptr get w "region"` を直接展開して move を回避。
+  - `stdlib/kp/kpread_core.nepl`
+    - `store_i32_u8_at/load_i32_u8_at` を `RegionToken<u8>` 受け取りへ変更。
+    - `sc0/iov/nread/sc` の各領域を `RegionToken` 化してアクセス経路を統一。
+    - 途中で発生した `match` アーム崩れ（`D3009/D3008/D3045`）を修正。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-writer-regiontoken-v3.json -j 15`
+  - 結果: `221/221 pass`
+
 # 2026-03-05 作業メモ (フェーズD先行: kpread_core の内部ヘッダアクセスを RegionToken 化)
 
 - 目的:
