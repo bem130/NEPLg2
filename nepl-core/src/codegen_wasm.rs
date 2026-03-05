@@ -1464,13 +1464,9 @@ fn gen_expr(
                                 memory_index: 0,
                             })),
                             _ => {
-                                diags.push(
-                                    Diagnostic::error("unsupported enum payload type", expr.span)
-                                        .with_id(
-                                            DiagnosticId::CodegenWasmUnsupportedEnumPayloadType,
-                                        ),
+                                panic!(
+                                    "internal compiler error: unsupported enum payload valtype reached wasm codegen"
                                 );
-                                return None;
                             }
                         }
                     }
@@ -1550,14 +1546,9 @@ fn gen_expr(
                                 }))
                             }
                             _ => {
-                                diags.push(
-                                    Diagnostic::error(
-                                        "unsupported struct field type for codegen",
-                                        expr.span,
-                                    )
-                                    .with_id(DiagnosticId::CodegenWasmUnsupportedStructFieldType),
+                                panic!(
+                                    "internal compiler error: unsupported struct field valtype reached wasm codegen"
                                 );
-                                return None;
                             }
                         }
                     }
@@ -1640,14 +1631,9 @@ fn gen_expr(
                                 }))
                             }
                             _ => {
-                                diags.push(
-                                    Diagnostic::error(
-                                        "unsupported tuple element type for codegen",
-                                        expr.span,
-                                    )
-                                    .with_id(DiagnosticId::CodegenWasmUnsupportedTupleElementType),
+                                panic!(
+                                    "internal compiler error: unsupported tuple element valtype reached wasm codegen"
                                 );
-                                return None;
                             }
                         }
                     }
@@ -1735,11 +1721,8 @@ fn gen_expr(
                                     align: 3,
                                     memory_index: 0,
                                 })),
-                                _ => diags.push(
-                                    Diagnostic::error("unsupported enum payload type", arm.body.span)
-                                        .with_id(
-                                            DiagnosticId::CodegenWasmUnsupportedEnumPayloadType,
-                                        ),
+                                _ => panic!(
+                                    "internal compiler error: unsupported enum payload valtype in match reached wasm codegen"
                                 ),
                             }
                             insts.push(Instruction::LocalSet(lidx));

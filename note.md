@@ -7825,3 +7825,19 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-unknown-intrinsic-v2.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: 構築型 payload/field の backend 診断削減)
+
+- 目的:
+  - `CodegenWasmUnsupportedEnumPayloadType (4013)` /
+    `CodegenWasmUnsupportedStructFieldType (4014)` /
+    `CodegenWasmUnsupportedTupleElementType (4015)` を backend 診断から外し、codegen 到達時の型整合前提を明確化する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `EnumConstruct` と `Match` の enum payload load/store、`StructConstruct`、`TupleConstruct` の
+      非対応 valtype 分岐を `panic!` に変更。
+    - 上記 4013/4014/4015 の `diags.push(...with_id(...))` を削除。
+    - これにより、`codegen_wasm` 内の `CodegenWasm*` 診断生成は precheck ヘルパ内（D4004）のみに限定。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-backend-diag-clean-v1.json -j 15` -> `8/8 pass`
