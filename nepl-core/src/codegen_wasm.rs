@@ -1404,11 +1404,10 @@ fn gen_expr(
                 insts.push(Instruction::Unreachable);
                 None
             } else {
-                diags.push(
-                    Diagnostic::error("unknown codegen intrinsic", expr.span)
-                        .with_id(DiagnosticId::CodegenWasmUnknownIntrinsic),
-                );
-                None
+                panic!(
+                    "internal compiler error: unknown intrinsic '{}' reached wasm codegen",
+                    name
+                )
             }
         }
         HirExprKind::EnumConstruct {
@@ -2269,6 +2268,25 @@ pub(crate) fn precheck_raw_wasm_body(func: &HirFunction) -> Vec<Diagnostic> {
         }
     }
     out
+}
+
+pub(crate) fn is_supported_wasm_intrinsic(name: &str) -> bool {
+    matches!(
+        name,
+        "size_of"
+            | "align_of"
+            | "load"
+            | "store"
+            | "callsite_span"
+            | "i32_to_f32"
+            | "i32_to_u8"
+            | "f32_to_i32"
+            | "u8_to_i32"
+            | "reinterpret_i32_f32"
+            | "reinterpret_f32_i32"
+            | "add"
+            | "unreachable"
+    )
 }
 
 

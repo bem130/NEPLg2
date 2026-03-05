@@ -7809,3 +7809,19 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-ref-invariant-v2.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: unknown intrinsic 診断の前段化整合)
+
+- 目的:
+  - `CodegenWasmUnknownIntrinsic (4012)` を backend 診断から外し、intrinsic 判定責務を前段へ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `is_supported_wasm_intrinsic` を追加して wasm backend が受理する intrinsic 名を明示化。
+    - intrinsic 未知分岐の `D4012` 生成を削除し、内部不整合 `panic!` へ変更。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `HirExprKind::Intrinsic` で `is_supported_wasm_intrinsic` を使用し、未知 intrinsic を前段検査。
+  - `tests/raw_body_precheck.n.md`
+    - 追加した `diag_id:4012` ケースは、実際には上流の `D3012`（unknown intrinsic）で先に失敗するため削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-unknown-intrinsic-v2.json -j 15` -> `8/8 pass`

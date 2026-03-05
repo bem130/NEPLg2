@@ -120,7 +120,18 @@ fn check_indirect_sig_expr(
                 check_indirect_sig_expr(ctx, arg, wasm_sig_set, out);
             }
         }
-        HirExprKind::Call { args, .. } | HirExprKind::Intrinsic { args, .. } => {
+        HirExprKind::Call { args, .. } => {
+            for arg in args {
+                check_indirect_sig_expr(ctx, arg, wasm_sig_set, out);
+            }
+        }
+        HirExprKind::Intrinsic { name, args, .. } => {
+            if !codegen_wasm::is_supported_wasm_intrinsic(name) {
+                out.push(
+                    Diagnostic::error("unknown codegen intrinsic", expr.span)
+                        .with_id(DiagnosticId::CodegenWasmUnknownIntrinsic),
+                );
+            }
             for arg in args {
                 check_indirect_sig_expr(ctx, arg, wasm_sig_set, out);
             }
