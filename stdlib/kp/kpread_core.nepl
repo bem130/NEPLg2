@@ -21,35 +21,40 @@
 //: ```
 fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
     let mut cap <i32> 65536;
-    let buf_res <Result<i32,str>> alloc cap;
+    let buf_res <Result<MemPtr<u8>,str>> alloc_ptr<u8> cap;
     match buf_res:
         Result::Err _:
-            let sc0_res <Result<i32,str>> alloc 12;
+            let sc0_res <Result<MemPtr<u8>,str>> alloc_ptr<u8> 12;
             match sc0_res:
                 Result::Err _:
                     Result<MemPtr<u8>,str>::Err "kpread_core.scanner header alloc failed"
                 Result::Ok sc0:
-                    store_i32 sc0 0;
-                    store_i32 add sc0 4 0;
-                    store_i32 add sc0 8 0;
-                    Result<MemPtr<u8>,str>::Ok mem_ptr_wrap sc0
+                    let sc0_raw <i32> mem_ptr_addr sc0;
+                    store_i32 sc0_raw 0;
+                    store_i32 add sc0_raw 4 0;
+                    store_i32 add sc0_raw 8 0;
+                    Result<MemPtr<u8>,str>::Ok sc0
         Result::Ok buf0:
-            let mut buf <i32> buf0;
-            let iov_res <Result<i32,str>> alloc 8;
+            let mut buf <MemPtr<u8>> buf0;
+            let iov_res <Result<MemPtr<u8>,str>> alloc_ptr<u8> 8;
             match iov_res:
                 Result::Err _:
-                    dealloc_raw buf cap;
+                    match dealloc_ptr<u8> buf cap:
+                        Result::Ok _:
+                            ()
+                        Result::Err _e:
+                            ();
                     Result<MemPtr<u8>,str>::Err "kpread_core.iov alloc failed"
                 Result::Ok iov:
-                    let nread_res <Result<i32,str>> alloc 4;
+                    let nread_res <Result<MemPtr<u8>,str>> alloc_ptr<u8> 4;
                     match nread_res:
                         Result::Err _:
-                            match dealloc iov 8:
+                            match dealloc_ptr<u8> iov 8:
                                 Result::Ok _:
                                     ()
                                 Result::Err _e:
                                     ();
-                            match dealloc buf cap:
+                            match dealloc_ptr<u8> buf cap:
                                 Result::Ok _:
                                     ()
                                 Result::Err _e:
@@ -66,7 +71,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                         eq read_len cap
                                         then:
                                             let new_cap <i32> mul cap 2;
-                                            let new_buf_res <Result<i32,str>> realloc buf cap new_cap;
+                                            let new_buf_res <Result<MemPtr<u8>,str>> realloc_ptr<u8> buf cap new_cap;
                                             match new_buf_res:
                                                 Result::Ok new_buf:
                                                     set buf new_buf;
@@ -80,18 +85,21 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                     if:
                                         eq done 0
                                         then:
-                                            let write_ptr <i32> add buf read_len;
+                                            let iov_raw <i32> mem_ptr_addr iov;
+                                            let nread_raw <i32> mem_ptr_addr nread_ptr;
+                                            let buf_raw <i32> mem_ptr_addr buf;
+                                            let write_ptr <i32> add buf_raw read_len;
                                             let rem <i32> sub cap read_len;
-                                            store_i32 iov write_ptr;
-                                            store_i32 add iov 4 rem;
-                                            store_i32 nread_ptr 0;
-                                            let errno <i32> fd_read 0 iov 1 nread_ptr;
+                                            store_i32 iov_raw write_ptr;
+                                            store_i32 add iov_raw 4 rem;
+                                            store_i32 nread_raw 0;
+                                            let errno <i32> fd_read 0 iov_raw 1 nread_raw;
                                             if:
                                                 ne errno 0
                                                 then:
                                                     set done 1;
                                                 else:
-                                                    let n <i32> load_i32 nread_ptr;
+                                                    let n <i32> load_i32 nread_raw;
                                                     if:
                                                         eq n 0
                                                         then:
@@ -104,54 +112,56 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                             if:
                                 eq alloc_failed 1
                                 then:
-                                    match dealloc iov 8:
+                                    match dealloc_ptr<u8> iov 8:
                                         Result::Ok _:
                                             ()
                                         Result::Err _e:
                                             ();
-                                    match dealloc nread_ptr 4:
+                                    match dealloc_ptr<u8> nread_ptr 4:
                                         Result::Ok _:
                                             ()
                                         Result::Err _e:
                                             ();
-                                    match dealloc buf cap:
+                                    match dealloc_ptr<u8> buf cap:
                                         Result::Ok _:
                                             ()
                                         Result::Err _e:
                                             ();
                                     Result<MemPtr<u8>,str>::Err "kpread_core.realloc failed"
                                 else:
-                                    let sc_res <Result<i32,str>> alloc 12;
+                                    let sc_res <Result<MemPtr<u8>,str>> alloc_ptr<u8> 12;
                                     match sc_res:
                                         Result::Err _:
-                                            match dealloc iov 8:
+                                            match dealloc_ptr<u8> iov 8:
                                                 Result::Ok _:
                                                     ()
                                                 Result::Err _e:
                                                     ();
-                                            match dealloc nread_ptr 4:
+                                            match dealloc_ptr<u8> nread_ptr 4:
                                                 Result::Ok _:
                                                     ()
                                                 Result::Err _e:
                                                     ();
-                                            match dealloc buf cap:
+                                            match dealloc_ptr<u8> buf cap:
                                                 Result::Ok _:
                                                     ()
                                                 Result::Err _e:
                                                     ();
                                             Result<MemPtr<u8>,str>::Err "kpread_core.scanner alloc failed"
                                         Result::Ok sc:
-                                            store_i32 sc buf;
-                                            store_i32 add sc 4 read_len;
-                                            store_i32 add sc 8 0;
-                                            match dealloc iov 8:
+                                            let sc_raw <i32> mem_ptr_addr sc;
+                                            let buf_raw <i32> mem_ptr_addr buf;
+                                            store_i32 sc_raw buf_raw;
+                                            store_i32 add sc_raw 4 read_len;
+                                            store_i32 add sc_raw 8 0;
+                                            match dealloc_ptr<u8> iov 8:
                                                 Result::Ok _:
                                                     ()
                                                 Result::Err _e:
                                                     ();
-                                            match dealloc nread_ptr 4:
+                                            match dealloc_ptr<u8> nread_ptr 4:
                                                 Result::Ok _:
                                                     ()
                                                 Result::Err _e:
                                                     ();
-                                            Result<MemPtr<u8>,str>::Ok mem_ptr_wrap sc
+                                            Result<MemPtr<u8>,str>::Ok sc

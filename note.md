@@ -1,3 +1,18 @@
+# 2026-03-05 作業メモ (フェーズC: kpread_core 内部確保を `*_ptr` API に統一)
+
+- 目的:
+  - `kpread_core` 内部での生ポインタ管理を減らし、`MemPtr<u8>` を使った確保/再確保/解放へ寄せる。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `buf/iov/nread/scanner header` の確保を `alloc_ptr<u8>` に変更。
+    - バッファ拡張を `realloc_ptr<u8>` に変更。
+    - 解放を `dealloc_ptr<u8>` に変更。
+    - `fd_read` や `store_i32/load_i32` へ渡す箇所のみ `mem_ptr_addr` で `i32` に明示変換。
+  - `scanner_new_impl` は既存どおり `Result<MemPtr<u8>,str>` を返し、API互換を維持。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-memptr-wrap-v6.json -j 15`
+  - 結果: `217/217 pass`
+
 # 2026-03-05 作業メモ (フェーズC: kpread_core の返却型を MemPtr 化)
 
 - 目的:
