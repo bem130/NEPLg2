@@ -3,6 +3,7 @@
 
 #import "core/math" as *
 #import "core/mem" as *
+#import "alloc/collections/vec" as *
 
 //: kpsearch: 競技プログラミング向け探索ユーティリティ
 //:
@@ -200,3 +201,19 @@ fn unique_sorted_i32 <(i32,i32)*>i32> (data, len):
                         else ()
                     set read add read 1;
             write
+
+//: lower_bound_vec_i32: Vec<i32> を対象に lower_bound を返す
+fn lower_bound_vec_i32 <(Vec<i32>,i32)*>i32> (v, x):
+    lower_bound_i32 vec_data_ptr<i32> v vec_len<i32> v x
+
+//: upper_bound_vec_i32: Vec<i32> を対象に upper_bound を返す
+fn upper_bound_vec_i32 <(Vec<i32>,i32)*>i32> (v, x):
+    upper_bound_i32 vec_data_ptr<i32> v vec_len<i32> v x
+
+//: contains_vec_i32: Vec<i32> に値 x が存在するか判定する
+fn contains_vec_i32 <(Vec<i32>,i32)*>bool> (v, x):
+    contains_i32 vec_data_ptr<i32> v vec_len<i32> v x
+
+//: count_equal_range_vec_i32: Vec<i32> における x の個数を返す
+fn count_equal_range_vec_i32 <(Vec<i32>,i32)*>i32> (v, x):
+    count_equal_range_i32 vec_data_ptr<i32> v vec_len<i32> v x

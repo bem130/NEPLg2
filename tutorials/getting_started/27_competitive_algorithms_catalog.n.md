@@ -1,182 +1,105 @@
-# [競/きょう]プロ[定番/ていばん] 20 サンプル[集/しゅう]
+# [競/きょう]プロ[定番/ていばん]カタログ（Part 6 [総まとめ/そうまとめ]）
 
-※未完成
-この章は、競技プログラミングで頻出のアルゴリズム・データ構造を「どこで使うか」と「最小コード雛形」で素早く参照するためのカタログです。  
-ここに載せたコードは、問題ごとに入力部と境界条件を差し替えて使う前提です。
+この章は、Part 6（22〜26）で使った実装パターンを、問題投入前に見返せる形で整理した実戦メモです。  
+ポイントは「短いが安全」「標準ライブラリ優先」「入力/出力の雛形を固定」の 3 つです。
 
-関連ライブラリ:
-- `kp/kpread`, `kp/kpwrite`: 高速入出力
-- `kp/kpprefix`: 累積和
-- `kp/kpsearch`: 二分探索
-- `kp/kpgraph`: BFS（密行列表現）
-- `kp/kpdsu`: Union-Find
-- `kp/kpfenwick`: BIT
+## まず使うテンプレート
 
-## 1. 高速入力（整数 2 個）
-
+neplg2:test[stdio, normalize_newlines]
+stdin: "3 10 20 30\n"
+stdout: "60\n"
 ```neplg2
-#import "kp/kpread" as *
+| #entry main
+| #indent 4
+| #target std
+|
+#import "core/math" as *
 #import "core/result" as *
-let sc <Scanner> unwrap_ok scanner_new;
-let a <i32> scanner_read_i32 sc;
-let b <i32> scanner_read_i32 sc;
-```
-
-## 2. 高速出力（空白区切り）
-
-```neplg2
+#import "kp/kpread" as *
 #import "kp/kpwrite" as *
-let mut w <Writer> unwrap_ok writer_new;
-set w writer_write_i32 w 10;
-set w writer_write_space w;
-set w writer_write_i32 w 20;
-set w writer_writeln w;
-set w writer_flush w;
-writer_free w;
-```
+#import "alloc/collections/vec" as *
 
-## 3. 累積和（1D）
-
-```neplg2
-#import "kp/kpprefix" as *
-let pref <i32> prefix_build_i32 data n;
-let s <i32> prefix_range_sum_i32 pref l r;
-```
-
-## 4. 2D 累積和（雛形）
-
-```neplg2
-// pref[y+1][x+1] = a[y][x] + pref[y][x+1] + pref[y+1][x] - pref[y][x]
-```
-
-## 5. いもす法（差分配列）
-
-```neplg2
-// diff[l] += x; diff[r] -= x; 最後に prefix を取る
-```
-
-## 6. lower_bound
-
-```neplg2
-#import "kp/kpsearch" as *
-let i <i32> lower_bound_i32 data len x;
-```
-
-## 7. upper_bound
-
-```neplg2
-#import "kp/kpsearch" as *
-let j <i32> upper_bound_i32 data len x;
-```
-
-## 8. 値が存在するか（binary search）
-
-```neplg2
-#import "kp/kpsearch" as *
-if contains_i32 data len x then ... else ...
-```
-
-## 9. 尺取り法（two pointers）
-
-```neplg2
-let mut l <i32> 0;
-let mut r <i32> 0;
-while lt l n:
-    do:
-        while and lt r n cond:
-            do: set r add r 1;
-        // [l, r) を処理
-        set l add l 1;
-```
-
-## 10. 座標圧縮（雛形）
-
-```neplg2
-// 値を配列に集める -> sort -> unique -> lower_bound で圧縮ID化
-```
-
-## 11. BFS（単一始点最短距離）
-
-```neplg2
-#import "kp/kpgraph" as *
-let dist <Vec<i32>> dense_graph_bfs_dist_raw n mat start;
-```
-
-## 12. DFS（再帰）
-
-```neplg2
-fn dfs <(i32)*>()> (v):
-    // 訪問処理
-    // 子へ再帰
-```
-
-## 13. Union-Find（連結判定）
-
-```neplg2
-#import "kp/kpdsu" as *
-let d <i32> dsu_new n;
-dsu_unite d u v;
-if dsu_same d a b then ... else ...
-```
-
-## 14. Fenwick Tree（BIT）
-
-```neplg2
-#import "kp/kpfenwick" as *
-let f <i32> fenwick_new n;
-fenwick_add f idx delta;
-let ans <i32> fenwick_sum_range f l r;
-```
-
-## 15. セグメント木（雛形）
-
-```neplg2
-// point update / range query を O(log N)
-```
-
-## 16. Dijkstra（雛形）
-
-```neplg2
-// dist 配列と優先度付きキューで最短路
-```
-
-## 17. トポロジカルソート（雛形）
-
-```neplg2
-// 入次数 0 キューを使って DAG を線形順序化
-```
-
-## 18. mod べき乗（繰り返し二乗法）
-
-```neplg2
-fn mod_pow <(i64,i64,i64)->i64> (a, e, m):
-    let mut x <i64> a;
-    let mut k <i64> e;
-    let mut r <i64> cast 1;
-    while lt_u <i64> cast 0 k:
+fn main <()*> ()> ():
+    let sc <Scanner> unwrap_ok scanner_new;
+    let n <i32> scanner_read_i32 sc;
+    let mut a <Vec<i32>> new<i32>;
+    let mut i <i32> 0;
+    while lt i n:
         do:
-            if eq and k <i64> cast 1 <i64> cast 1:
-                then set r rem_u mul r x m
-                else ();
-            set x rem_u mul x x m;
-            set k shr_u k <i64> cast 1;
-    r
+            set a push a scanner_read_i32 sc;
+            set i add i 1;
+    let mut sum <i32> 0;
+    let mut j <i32> 0;
+    while lt j vec_len<i32> a:
+        do:
+            set sum add sum unwrap<i32> vec_get<i32> a j;
+            set j add j 1;
+    let w <Writer>:
+        unwrap_ok writer_new
+        |> writer_write_i32 sum
+        |> writer_writeln
+        |> writer_flush
+    writer_free w
 ```
 
-## 19. 組合せ前計算（雛形）
+## 典型パターンと対応ライブラリ
 
-```neplg2
-// fact, inv_fact を前計算して nCk を O(1) で求める
-```
+### 入出力
 
-## 20. DP（一次元/二次元）
+- 入力: `kp/kpread` の `scanner_new`, `scanner_read_i32`, `scanner_read_i64`
+- 出力: `kp/kpwrite` の `writer_new`, `writer_write_*`, `writer_writeln`, `writer_flush`, `writer_free`
 
-```neplg2
-// 状態定義 -> 初期値 -> 遷移 -> ループ順序を固定
-```
+### 配列・ソート・探索
 
-## 使い方の目安
+- 配列構築: `alloc/collections/vec` の `new`, `push`, `len`, `vec_get`
+- ソート: `alloc/collections/vec/sort` の `sort_quick_ret`
+- 二分探索: `kp/kpsearch` の `lower_bound_vec_i32`, `upper_bound_vec_i32`, `count_equal_range_vec_i32`
 
-- まず 1〜3 と 6〜9 を安定化すると、多くの A〜D 問題に対応しやすくなります。
-- 11, 13, 14 はグラフ/データ構造問題の基礎セットです。
-- 16〜20 は問題依存の実装差が大きいため、雛形を元に逐次調整する運用が安全です。
+### 区間和・2 ポインタ
+
+- 累積和: `kp/kpprefix` の `prefix_build_vec_i32`, `prefix_sum_i32`, `prefix_free_i32`
+- 2 ポインタ: `Vec` + `while` で `l,r` を単調増加させる
+
+### グラフ
+
+- 密行列 BFS: `kp/kpgraph` の `dense_graph_new`, `dense_graph_add_undirected`, `dense_graph_bfs_dist_raw`
+- 入力形式付き構築: `dense_graph_read_undirected_1indexed`
+
+### データ構造
+
+- Union-Find: `kp/kpdsu`
+- Fenwick Tree: `kp/kpfenwick`
+
+## 解法フロー（提出前チェック）
+
+1. 入力を `Scanner` で読み切る（型は i32 / i64 を先に確定）。
+2. 状態を `Vec` や専用構造へ入れる（手書きヒープ操作を避ける）。
+3. 本体ロジックを `sort` / `search` / `prefix` / `graph` 補助で短く保つ。
+4. 出力を `Writer` でまとめて flush する。
+5. 境界ケース（空配列、1要素、同値多数、最大値付近）を `neplg2:test` で固定する。
+
+## 20 テーマの使い分けメモ
+
+1. 高速入力: `scanner_read_*`
+2. 高速出力: `writer_write_*`
+3. 1D 累積和: `prefix_build_vec_i32`
+4. 2D 累積和: 問題ごとに実装（行列サイズ注意）
+5. いもす法: 差分配列 + 累積和
+6. lower_bound: `lower_bound_vec_i32`
+7. upper_bound: `upper_bound_vec_i32`
+8. 存在判定: `contains_vec_i32`
+9. 尺取り法: `l,r` 単調増加
+10. 座標圧縮: sort + unique + lower_bound
+11. BFS: `dense_graph_bfs_dist_raw`（小〜中規模）
+12. DFS: 再帰深さに注意
+13. Union-Find: `kp/kpdsu`
+14. BIT: `kp/kpfenwick`
+15. セグ木: 問題別モノイド設計
+16. Dijkstra: 優先度付きキュー
+17. トポソ: 入次数管理
+18. mod べき乗: 繰り返し二乗法
+19. 組合せ前計算: `fact/inv_fact`
+20. DP: 状態・遷移・初期値を固定
+
+Part 6 の目的は「全部を暗記すること」ではなく、  
+「問題文を見たらどの型・どの補助 API を使うかをすぐ選べる状態」にすることです。

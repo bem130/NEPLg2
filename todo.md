@@ -49,9 +49,6 @@
 - 新しい安全APIへ tutorials/examples を書き直す。
 - pipe演算子と式指向を活かし、不要な中間変数を削減する。
 - 記述の簡潔さとメモリ安全性が両立するスタイルへ統一する。
-- `tutorials/getting_started` の既存説明を監査し、誤り・不足を修正する。
-- `tutorials/getting_started` Part6 を拡充し、短く簡潔で安全で読みやすい書き方へ更新する。
-- 既存ライブラリ活用で書ける箇所は library 使用へ統一し、不足があれば library を先に改良する。
 
 フェーズG: テスト・診断の固定化
 - `compile_fail` は `diag_id` を必須化する。

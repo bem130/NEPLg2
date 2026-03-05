@@ -1,11 +1,10 @@
 # DP の[基本/きほん]パターン
 
-この章では、競プロで頻出の一次元 DP を最小コードで扱います。
-ポイントは「状態定義」と「遷移式」を先に固定することです。
+この章は「状態定義 -> 初期値 -> 遷移」の順で一次元 DP を固定する練習です。
 
 ## 例: 1 段 or 2 段で階段を登る通り数
 
-- `dp[n]` = `n` 段目に到達する通り数
+- `dp[n]`: `n` 段目に到達する通り数
 - 遷移: `dp[n] = dp[n-1] + dp[n-2]`
 - 初期値: `dp[0] = 1`, `dp[1] = 1`
 
@@ -15,7 +14,7 @@ stdout: "13\n"
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "core/math" as *
 #import "core/result" as *
@@ -40,17 +39,17 @@ fn ways <(i32)*>i64> (n):
 |
 fn main <()*> ()> ():
     let sc <Scanner> unwrap_ok scanner_new;
-    let n <i32> scanner_read_i32 sc;
-    let ans <i64> ways n;
-    let mut w <Writer> unwrap_ok writer_new;
-    set w writer_write_i64 w ans;
-    set w writer_writeln w;
-    set w writer_flush w;
+    let ans <i64> ways scanner_read_i32 sc;
+    let w <Writer>:
+        unwrap_ok writer_new
+        |> writer_write_i64 ans
+        |> writer_writeln
+        |> writer_flush
     writer_free w
 ```
 
 ## DP 実装時のチェックリスト
 
-- 状態が何を表すかを 1 行で言えるか。
-- 遷移の依存関係がループ順に合っているか。
-- 初期値（境界条件）をテストで固定しているか。
+- 状態を 1 行で説明できるか。
+- ループ順が遷移依存（`n-1`,`n-2`）と一致しているか。
+- 境界条件（`n=0`,`n=1`）をテストで固定しているか。

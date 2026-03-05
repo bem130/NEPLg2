@@ -1,3 +1,38 @@
+# 2026-03-06 作業メモ (フェーズF: tutorials Part6 拡充 + library-first 化)
+
+- 目的:
+  - `tutorials/getting_started` Part6（22〜27）の説明誤り・不足を監査し、短く簡潔で安全な書き方へ更新する。
+  - 生ポインタ露出を減らすため、`kp` 側に `Vec<i32>` 直受け補助を追加する。
+- 変更:
+  - `tutorials/getting_started/22_competitive_io_and_arith.n.md`
+    - `Scanner/Writer` の基本パターンを pipe 中心に簡潔化。
+    - i32/i64/空白区切り出力の 3 ケースを安全 API 前提で整理。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+    - `Vec + sort + lower/upper_bound` を library-first で再構成。
+  - `tutorials/getting_started/24_competitive_dp_basics.n.md`
+    - DP 本体を維持しつつ I/O を簡潔化。
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+    - prefix を `kp/kpprefix` ハンドル API 前提へ更新。
+    - two pointers の条件評価を短絡評価に依存しない安全な形へ修正。
+  - `tutorials/getting_started/26_competitive_graph_bfs.n.md`
+    - 手書き BFS から `kp/kpgraph` 利用へ移行。
+  - `tutorials/getting_started/27_competitive_algorithms_catalog.n.md`
+    - 未完成表記を廃止し、Part6 総まとめとしてテンプレート・対応表・実戦フローを追加。
+  - `tutorials/getting_started/00_index.n.md`
+    - 誤字を修正（関数のふりがな）。
+  - `stdlib/kp/kpprefix.nepl`
+    - `PrefixI32` ハンドルと `prefix_build_vec_i32` / `prefix_sum_i32` / `prefix_free_i32` を追加。
+  - `stdlib/kp/kpsearch.nepl`
+    - `lower_bound_vec_i32` / `upper_bound_vec_i32` / `contains_vec_i32` / `count_equal_range_vec_i32` を追加。
+  - `todo.md`
+    - フェーズFの完了済み Part6 専用タスクを削除（未完了のみ維持）。
+- 検証:
+  - `node nodesrc/tests.js -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/26_competitive_graph_bfs.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -i stdlib/kp/kpprefix.nepl -i stdlib/kp/kpsearch.nepl --no-tree -o /tmp/tests-part6-kp-refresh-v7.json -j 15`
+    - 結果: `219/219 pass`
+  - 補助確認:
+    - `node nodesrc/tests.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md --no-tree -o /tmp/tests-part6-25-v6.json -j 15`
+    - 結果: `207/207 pass`
+
 # 2026-03-06 作業メモ (フェーズD: llvm `add/sub` 再定義リンク失敗の根本修正)
 
 - 目的:

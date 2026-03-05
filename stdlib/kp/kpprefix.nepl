@@ -3,6 +3,8 @@
 
 #import "core/math" as *
 #import "core/mem" as *
+#import "alloc/collections/vec" as *
+#import "core/field" as *
 
 //: kpprefix: 競技プログラミング向け累積和ユーティリティ
 //:
@@ -56,4 +58,28 @@ fn prefix_build_i32 <(i32,i32)*>i32> (data, n):
 //: prefix_range_sum_i32: 半開区間 `[l, r)` の和を返す
 fn prefix_range_sum_i32 <(i32,i32,i32)->i32> (pref, l, r):
     sub load_i32 add pref mul r 4 load_i32 add pref mul l 4
+
+//: PrefixI32: i32 用累積和の安全ハンドル
+//:
+//: [目的/もくてき]:
+//: - 累積和配列ポインタと長さをまとめ、生ポインタの露出を減らします。
+struct PrefixI32:
+    ptr <i32>
+    len <i32>
+
+//: prefix_build_vec_i32: Vec<i32> から累積和ハンドルを作る
+fn prefix_build_vec_i32 <(Vec<i32>)*>PrefixI32> (v):
+    let n <i32> vec_len<i32> v
+    let data <i32> vec_data_ptr<i32> v
+    let pref_ptr <i32> prefix_build_i32 data n
+    PrefixI32 pref_ptr n
+
+//: prefix_sum_i32: ハンドルから半開区間 `[l,r)` の和を返す
+fn prefix_sum_i32 <(PrefixI32,i32,i32)*>i32> (pref, l, r):
+    prefix_range_sum_i32 get pref "ptr" l r
+
+//: prefix_free_i32: 累積和ハンドルのメモリを解放する
+fn prefix_free_i32 <(PrefixI32)*>()> (pref):
+    let n <i32> get pref "len"
+    dealloc_raw get pref "ptr" mul add n 1 4
 
