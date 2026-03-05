@@ -5,6 +5,20 @@
 #import "core/math" as *
 #import "std/stdio" as *
 
+enum ScannerHeaderFieldCore:
+    BufPtr
+    Len
+    Pos
+
+fn scanner_header_core_off <(ScannerHeaderFieldCore)->i32> (field):
+    match field:
+        ScannerHeaderFieldCore::BufPtr:
+            0
+        ScannerHeaderFieldCore::Len:
+            4
+        ScannerHeaderFieldCore::Pos:
+            8
+
 fn mem_i32_region_ptr <(RegionToken<u8>,i32)->Result<MemPtr<i32>,str>> (region, off):
     region_ptr_at<u8,i32> region off
 
@@ -57,7 +71,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                     Result<MemPtr<u8>,str>::Err "kpread_core.scanner header alloc failed"
                 Result::Ok sc0:
                     let sc0_region <RegionToken<u8>> region_new sc0 12;
-                    match store_i32_u8_at sc0_region 0 0:
+                    match store_i32_u8_at sc0_region scanner_header_core_off ScannerHeaderFieldCore::BufPtr 0:
                         Result::Err _:
                             match dealloc_ptr<u8> sc0 12:
                                 Result::Ok _:
@@ -66,7 +80,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                     ();
                             Result<MemPtr<u8>,str>::Err "kpread_core.scanner header init failed"
                         Result::Ok _:
-                            match store_i32_u8_at sc0_region 4 0:
+                            match store_i32_u8_at sc0_region scanner_header_core_off ScannerHeaderFieldCore::Len 0:
                                 Result::Err _:
                                     match dealloc_ptr<u8> sc0 12:
                                         Result::Ok _:
@@ -75,7 +89,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                             ();
                                     Result<MemPtr<u8>,str>::Err "kpread_core.scanner header init failed"
                                 Result::Ok _:
-                                    match store_i32_u8_at sc0_region 8 0:
+                                    match store_i32_u8_at sc0_region scanner_header_core_off ScannerHeaderFieldCore::Pos 0:
                                         Result::Err _:
                                             match dealloc_ptr<u8> sc0 12:
                                                 Result::Ok _:
@@ -224,7 +238,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                         Result::Ok sc:
                                             let sc_region <RegionToken<u8>> region_new sc 12;
                                             let buf_raw <i32> mem_u8_addr buf;
-                                            match store_i32_u8_at sc_region 0 buf_raw:
+                                            match store_i32_u8_at sc_region scanner_header_core_off ScannerHeaderFieldCore::BufPtr buf_raw:
                                                 Result::Err _:
                                                     match dealloc_ptr<u8> sc 12:
                                                         Result::Ok _:
@@ -248,7 +262,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                                             ();
                                                     Result<MemPtr<u8>,str>::Err "kpread_core.scanner header init failed"
                                                 Result::Ok _:
-                                                    match store_i32_u8_at sc_region 4 read_len:
+                                                    match store_i32_u8_at sc_region scanner_header_core_off ScannerHeaderFieldCore::Len read_len:
                                                         Result::Err _:
                                                             match dealloc_ptr<u8> sc 12:
                                                                 Result::Ok _:
@@ -272,7 +286,7 @@ fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
                                                                     ();
                                                             Result<MemPtr<u8>,str>::Err "kpread_core.scanner header init failed"
                                                         Result::Ok _:
-                                                            match store_i32_u8_at sc_region 8 0:
+                                                            match store_i32_u8_at sc_region scanner_header_core_off ScannerHeaderFieldCore::Pos 0:
                                                                 Result::Err _:
                                                                     match dealloc_ptr<u8> sc 12:
                                                                         Result::Ok _:

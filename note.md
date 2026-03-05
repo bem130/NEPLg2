@@ -1,3 +1,17 @@
+# 2026-03-05 作業メモ (フェーズD: kpread_core ヘッダフィールドの型安全化)
+
+- 目的:
+  - `kpread_core` に残っていたヘッダ生オフセット（`0/4/8`）を列挙型へ移行し、`kpread`/`kpwrite` と同じ境界表現に揃える。
+  - ヘッダレイアウトの意味を型で固定し、オフセット誤指定を上流で防ぐ。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `ScannerHeaderFieldCore` を追加（`BufPtr` / `Len` / `Pos`）。
+    - `scanner_header_core_off` を追加し、オフセット解決を1箇所に集約。
+    - `store_i32_u8_at sc*_region 0/4/8 ...` を列挙型 + オフセット関数経由へ置換。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-kp-core-header-field-enum.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpread-core-header-field-enum.json -j 15` -> `785/785 pass`
+
 # 2026-03-05 作業メモ (フェーズD: kpwrite ヘッダフィールドの型安全化)
 
 - 目的:
