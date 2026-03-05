@@ -7627,3 +7627,31 @@
   - tests.js 単体確認:
     - `node nodesrc/tests.js -i stdlib/tests/cliarg.n.md --no-stdlib --no-tree -o /tmp/tests-cliarg-only-argv.json -j 1 --assert-io`
     - 結果: `2/2 pass`
+
+# 2026-03-05 作業メモ (フェーズD: stdlib/std 安全化の完了と全体回帰)
+
+- 目的:
+  - `stdlib/std` の安全化対象（`fs` / `stdio` / `env/cliarg`）を `Result` ベースへ揃え、`alloc_raw` 直接利用の削減と失敗経路の明示化を完了する。
+
+- 変更:
+  - `stdlib/std/fs.nepl`
+    - `__fs_copy_to_cstr` を `Result<i32,i32>` 化。
+    - `wasi_path_open` で確保失敗を `Err` で返し、成功時 `cpath` を必ず解放。
+    - `fs_bytes_to_string` を `fs_alloc` ベースへ変更。
+    - if レイアウト内の不要 `;` を除去（式戻り値整合）。
+  - `stdlib/std/stdio.nepl`
+    - `print_i32` の一時領域確保を `std_alloc/std_free` ベースへ変更。
+    - `read_all` の if 式で `else out;` になっていた箇所を `out` に修正し、`expr; -> ()` による型不整合を解消。
+  - `stdlib/std/env/cliarg.nepl`
+    - `cstr_to_str` の確保を `cli_alloc` ベースへ変更し、失敗時フォールバックを明示。
+
+- 根本原因と修正方針:
+  - 全体回帰で `tests/stdin.n.md` のみ wasm stack mismatch が発生。
+  - 原因は `read_all` の `if` 式 else 側が `out;` となっており、仕様どおり `()` に化けていたこと。
+  - 場当たりでコード分解せず、式の戻り値規則（plan.md の `;` 仕様）に沿って `out` へ修正して根本解消。
+
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/fs.n.md --no-stdlib --no-tree -o /tmp/tests-fs-safe-phase.json -j 15` -> `1/1 pass`
+  - `node nodesrc/tests.js -i stdlib/tests/cliarg.n.md -i tests/stdout.n.md -i stdlib/tests/fs.n.md --no-stdlib --no-tree -o /tmp/tests-std-safe-regression.json -j 15 --assert-io` -> `9/9 pass`
+  - `node nodesrc/tests.js -i tests/stdin.n.md --no-tree -o /tmp/tests-stdin-focus.json -j 15 --assert-io` -> `210/210 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-stdlib-std-safety-phase.json -j 15` -> `788/788 pass`

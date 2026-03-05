@@ -250,15 +250,18 @@ fn cstr_len <(i32)*>i32> (p):
 //: ```
 fn cstr_to_str <(i32)*>str> (p):
     let len <i32> cstr_len p
-    let out <i32> alloc_raw add 4 len
-    store_i32 out len
-    let mut i <i32> 0
-    while lt i len:
-        do:
-            let b <i32> load_u8 add p i;
-            store_u8 add out add 4 i b;
-            set i add i 1;
-    out
+    match cli_alloc add 4 len:
+        Result::Err _:
+            ""
+        Result::Ok out:
+            store_i32 out len
+            let mut i <i32> 0
+            while lt i len:
+                do:
+                    let b <i32> load_u8 add p i;
+                    store_u8 add out add 4 i b;
+                    set i add i 1;
+            out
 
 //: cliarg_count: 引数の個数を返す
 //:

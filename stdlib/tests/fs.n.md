@@ -18,7 +18,7 @@ neplg2:test
 fn main <()*> ()> ():
     match fs_read_to_string "__definitely_missing_file__.txt":
         Result::Ok s:
-            test_fail "fs_read_to_string unexpectedly succeeded";
+            test_fail "fs_read_to_string unexpectedly succeeded"
         Result::Err e:
             ()
 ```

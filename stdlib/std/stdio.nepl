@@ -244,7 +244,7 @@ fn read_all <()*>str> ():
                                     out
                                 else:
                                     store_i32 out 0;
-                                    out;
+                                    out
                             std_free nread 4;
                             std_free iov 8;
                             res
@@ -410,47 +410,61 @@ fn noshadow print_i32 <(i32)*>()> (v):
         if:
             eq v 0
             then:
-                let out0 <i32> alloc_raw 5;
-                store_i32 out0 1;
-                store_u8 add out0 4 48;
-                out0
+                match std_alloc 5:
+                    Result::Err _:
+                        ""
+                    Result::Ok out0:
+                        store_i32 out0 1;
+                        store_u8 add out0 4 48;
+                        out0
             else:
                 if:
                     cond:
                         lt v 0
                     then:
-                        let outn <i32> alloc_raw 5;
-                        store_i32 outn 1;
-                        store_u8 add outn 4 48;
-                        outn
+                        match std_alloc 5:
+                            Result::Err _:
+                                ""
+                            Result::Ok outn:
+                                store_i32 outn 1;
+                                store_u8 add outn 4 48;
+                                outn
                     else:
-                        let scratch <i32> alloc_raw 16;
-                        let mut idx <i32> 0;
-                        let mut n <i32> v;
+                        match std_alloc 16:
+                            Result::Err _:
+                                ""
+                            Result::Ok scratch:
+                                let mut idx <i32> 0;
+                                let mut n <i32> v;
 
-                        while lt 0 n:
-                            do:
-                                let rem <i32> mod_s n 10;
-                                store_u8 add scratch idx add 48 rem;
-                                set idx add idx 1;
-                                set n div_s n 10;
+                                while lt 0 n:
+                                    do:
+                                        let rem <i32> mod_s n 10;
+                                        store_u8 add scratch idx add 48 rem;
+                                        set idx add idx 1;
+                                        set n div_s n 10;
 
-                        let out <i32> alloc_raw add 4 idx;
-                        store_i32 out idx;
+                                match std_alloc add 4 idx:
+                                    Result::Err _:
+                                        std_free scratch 16;
+                                        ""
+                                    Result::Ok out:
+                                        store_i32 out idx;
 
-                        let mut i <i32> 0;
-                        while lt i idx:
-                            do:
-                                let i1 <i32> add i 1;
-                                let rev <i32> sub idx i1;
-                                let bptr <i32> add scratch rev;
-                                let b <i32> load_u8 bptr;
-                                let out_base <i32> add out 4;
-                                let outp <i32> add out_base i;
-                                store_u8 outp b;
-                                set i add i 1;
+                                        let mut i <i32> 0;
+                                        while lt i idx:
+                                            do:
+                                                let i1 <i32> add i 1;
+                                                let rev <i32> sub idx i1;
+                                                let bptr <i32> add scratch rev;
+                                                let b <i32> load_u8 bptr;
+                                                let out_base <i32> add out 4;
+                                                let outp <i32> add out_base i;
+                                                store_u8 outp b;
+                                                set i add i 1;
 
-                        out
+                                        std_free scratch 16;
+                                        out
     print s;
     ()
 
