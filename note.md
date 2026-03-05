@@ -1,3 +1,27 @@
+# 2026-03-05 作業メモ (フェーズC: kpwrite header 読み取りの Result 化と None フォールバック廃止)
+
+- 目的:
+  - `writer_load_header` の `None -> 0` フォールバックを廃止し、header 読み取り失敗を明示分岐で扱う。
+- 根本原因:
+  - 従来の `writer_load_header` は `load_i32` 失敗時に 0 を返しており、異常状態を正常値へ潰していた。
+  - そのため後続処理で `buf/cap/iov/nw` が不正値のまま進行する余地があった。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_load_header` を `Result<i32,str>` へ変更。
+    - `writer_load_header_ptr` を `Result<MemPtr<u8>,str>` へ変更。
+    - `writer_free_handle`, `writer_flush_handle`, `writer_ensure_handle`,
+      `writer_put_u8_handle`, `writer_write_str_handle`,
+      `writer_write_i32_handle`, `writer_write_u64_handle` を
+      `Result` 分岐で安全に処理する形へ更新。
+    - `if` レイアウト中の冗長な `then: block:` を除去し、`D2002` 回避のため式構造を仕様準拠へ整理。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-after-header-result-v2.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-after-header-result.json -j 15`
+  - 結果: `226/226 pass`
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kpwrite-style-fix.json -j 15`
+  - 結果: `215/215 pass`
+
 # 2026-03-05 作業メモ (フェーズC: kpwrite の header アクセス集約と non-copy 整合)
 
 - 目的:
