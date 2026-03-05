@@ -19,7 +19,7 @@
 //:| #target std
 //: ()
 //: ```
-fn scanner_new_impl <()*>Result<i32,str>> ():
+fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
     let mut cap <i32> 65536;
     let buf_res <Result<i32,str>> alloc cap;
     match buf_res:
@@ -27,19 +27,19 @@ fn scanner_new_impl <()*>Result<i32,str>> ():
             let sc0_res <Result<i32,str>> alloc 12;
             match sc0_res:
                 Result::Err _:
-                    Result<i32,str>::Err "kpread_core.scanner header alloc failed"
+                    Result<MemPtr<u8>,str>::Err "kpread_core.scanner header alloc failed"
                 Result::Ok sc0:
                     store_i32 sc0 0;
                     store_i32 add sc0 4 0;
                     store_i32 add sc0 8 0;
-                    Result<i32,str>::Ok sc0
+                    Result<MemPtr<u8>,str>::Ok mem_ptr_wrap sc0
         Result::Ok buf0:
             let mut buf <i32> buf0;
             let iov_res <Result<i32,str>> alloc 8;
             match iov_res:
                 Result::Err _:
                     dealloc_raw buf cap;
-                    Result<i32,str>::Err "kpread_core.iov alloc failed"
+                    Result<MemPtr<u8>,str>::Err "kpread_core.iov alloc failed"
                 Result::Ok iov:
                     let nread_res <Result<i32,str>> alloc 4;
                     match nread_res:
@@ -54,7 +54,7 @@ fn scanner_new_impl <()*>Result<i32,str>> ():
                                     ()
                                 Result::Err _e:
                                     ();
-                            Result<i32,str>::Err "kpread_core.nread alloc failed"
+                            Result<MemPtr<u8>,str>::Err "kpread_core.nread alloc failed"
                         Result::Ok nread_ptr:
                             let mut read_len <i32> 0;
                             let mut done <i32> 0;
@@ -119,7 +119,7 @@ fn scanner_new_impl <()*>Result<i32,str>> ():
                                             ()
                                         Result::Err _e:
                                             ();
-                                    Result<i32,str>::Err "kpread_core.realloc failed"
+                                    Result<MemPtr<u8>,str>::Err "kpread_core.realloc failed"
                                 else:
                                     let sc_res <Result<i32,str>> alloc 12;
                                     match sc_res:
@@ -139,7 +139,7 @@ fn scanner_new_impl <()*>Result<i32,str>> ():
                                                     ()
                                                 Result::Err _e:
                                                     ();
-                                            Result<i32,str>::Err "kpread_core.scanner alloc failed"
+                                            Result<MemPtr<u8>,str>::Err "kpread_core.scanner alloc failed"
                                         Result::Ok sc:
                                             store_i32 sc buf;
                                             store_i32 add sc 4 read_len;
@@ -154,4 +154,4 @@ fn scanner_new_impl <()*>Result<i32,str>> ():
                                                     ()
                                                 Result::Err _e:
                                                     ();
-                                            Result<i32,str>::Ok sc
+                                            Result<MemPtr<u8>,str>::Ok mem_ptr_wrap sc

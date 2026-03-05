@@ -1,3 +1,18 @@
+# 2026-03-05 作業メモ (フェーズC: kpread_core の返却型を MemPtr 化)
+
+- 目的:
+  - `kpread` 入力初期化の上流（`kpread_core`）でも生 `i32` 返却を減らし、`MemPtr<u8>` で境界を揃える。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `scanner_new_impl` の戻り値を `Result<MemPtr<u8>,str>` に変更。
+    - 成功時 `sc:i32` は `mem_ptr_wrap` して返却。
+    - 失敗系の `Result` 型パラメータを `MemPtr<u8>` に統一。
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new_handle` は `scanner_new_impl` をそのまま返す実装へ簡素化。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-memptr-wrap-v5.json -j 15`
+  - 結果: `217/217 pass`
+
 # 2026-03-05 作業メモ (フェーズC: kpread/kpwrite の `*_new_handle` 返り値を MemPtr 化)
 
 - 目的:

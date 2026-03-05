@@ -32,11 +32,7 @@ fn scanner_wrap <(MemPtr<u8>)->Scanner> (raw):
     Scanner raw
 
 fn scanner_new_handle <()*>Result<MemPtr<u8>,str>> ():
-    match scanner_new_impl:
-        Result::Ok raw:
-            Result<MemPtr<u8>,str>::Ok mem_ptr_wrap raw
-        Result::Err e:
-            Result<MemPtr<u8>,str>::Err e
+    scanner_new_impl
 
 fn scanner_new <()*>Result<Scanner,str>> ():
     let raw_res <Result<MemPtr<u8>,str>> scanner_new_handle;
