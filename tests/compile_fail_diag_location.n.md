@@ -21,3 +21,14 @@ diag_spans: ["3:5", "/virtual/entry.nepl:3:5"]
 fn main <()->i32> ():
     missing_name
 ```
+
+## compile_fail_matches_object_style_diag_spans
+
+neplg2:test[compile_fail]
+diag_id: 3001
+diag_spans: [{"line": 3, "col": 5}, {"file": "/virtual/entry.nepl", "line": 3, "col": 5}]
+```neplg2
+#entry main
+fn main <()->i32> ():
+    missing_name
+```

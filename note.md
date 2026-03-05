@@ -1,3 +1,20 @@
+# 2026-03-05 作業メモ (compile_fail: diag_id + 位置検証の運用固定)
+
+- 目的:
+  - `compile_fail` ケースで `diag_id` だけでなく発生位置（file/line/col）も安定検証できるようにする。
+- 変更:
+  - `nodesrc/tests.js`
+    - `extractDiagSpansFromCompileError` を行単位解析へ変更。
+    - `--> ...` 行から末尾 `:line:col` を基準に抽出するよう修正し、パス中のコロンを含む形式にも耐えるようにした。
+  - `nodesrc/parser.js`
+    - doctest メタ `diag_spans` に JSON object 形式（`{file,line,col}`）を許可。
+    - 既存の `"line:col"` / `"file:line:col"` 文字列表記は互換維持。
+  - `tests/compile_fail_diag_location.n.md`
+    - `diag_spans` の object 形式を使う回帰ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/compile_fail_diag_location.n.md -i tests/lexer_diag.n.md --no-stdlib --no-tree -o /tmp/tests-compile-fail-location-verify.json -j 15`
+  - 結果: `6/6 pass`
+
 # 2026-03-05 作業メモ (`;` 診断の上流化と loader 診断整形)
 
 - 目的:

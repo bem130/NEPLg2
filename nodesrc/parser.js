@@ -56,6 +56,17 @@ function parseMetaValue(raw) {
 }
 
 function parseDiagSpanEntry(raw) {
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        const line = Number(raw.line);
+        const col = Number(raw.col);
+        if (!Number.isFinite(line) || !Number.isFinite(col)) return null;
+        const fileRaw = raw.file;
+        return {
+            file: fileRaw === undefined || fileRaw === null ? null : String(fileRaw).trim(),
+            line,
+            col,
+        };
+    }
     const s = String(raw || '').trim();
     if (!s) return null;
     let m = s.match(/^(\d+)\s*:\s*(\d+)$/);
