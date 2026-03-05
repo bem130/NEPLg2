@@ -7780,3 +7780,18 @@
     - `wasm_precheck_rejects_invalid_raw_line` を追加（`diag_id: 4004`）。
 - 検証:
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-rawline-v1.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: D4010 を codegen 前段へ移動)
+
+- 目的:
+  - `CodegenWasmMissingIndirectSignature (D4010)` を backend 側診断から前段へ移し、`CallIndirect` の型セクション不整合を codegen 前に検査する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `collect_wasm_signature_set` を追加し、wasm codegen で使う関数/extern/間接呼び出し署名集合を共通化。
+    - `CallIndirect` 分岐の `D4010` 診断生成を削除し、precheck 通過後の内部不整合として `panic!` へ変更。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `collect_wasm_signature_set` の結果を使い、`CallIndirect` の署名が型セクション候補に存在するかを前段で検査。
+    - 欠落時は `D4010`、非対応署名は `D4011` として分離して返す。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-indirect-missing-v1.json -j 15` -> `8/8 pass`

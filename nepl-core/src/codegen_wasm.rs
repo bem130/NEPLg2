@@ -788,6 +788,39 @@ fn find_alloc_index(name_map: &BTreeMap<String, u32>) -> Option<u32> {
     None
 }
 
+pub(crate) fn collect_wasm_signature_set(
+    ctx: &TypeCtx,
+    module: &HirModule,
+) -> BTreeSet<(Vec<ValType>, Vec<ValType>)> {
+    let mut out = BTreeSet::new();
+    let reachable_functions = collect_reachable_wasm_functions(module);
+    for ext in &module.externs {
+        if let Some((params, results)) = wasm_sig_ids(ctx, ext.result, &ext.params) {
+            out.insert((params, results));
+        }
+    }
+    for f in &module.functions {
+        if !reachable_functions.contains(&f.name) {
+            continue;
+        }
+        if let Some((params, results)) = wasm_sig(ctx, f.result, &f.params) {
+            out.insert((params, results));
+        }
+    }
+    let mut indirect_sigs = Vec::new();
+    for f in &module.functions {
+        if let HirBody::Block(b) = &f.body {
+            for line in &b.lines {
+                collect_indirect_sigs(&line.expr, &mut indirect_sigs, ctx);
+            }
+        }
+    }
+    for (params, results) in indirect_sigs {
+        out.insert((params, results));
+    }
+    out
+}
+
 fn emit_inline_alloc(locals: &mut LocalMap, insts: &mut Vec<Instruction<'static>>) {
     let size_local = locals.alloc_temp(ValType::I32);
     let base_local = locals.alloc_temp(ValType::I32);
@@ -1109,9 +1142,8 @@ fn gen_expr(
                         table_index: 0,
                     });
                 } else {
-                    diags.push(
-                        Diagnostic::error("missing wasm signature for indirect call", expr.span)
-                            .with_id(DiagnosticId::CodegenWasmMissingIndirectSignature),
+                    panic!(
+                        "internal compiler error: missing wasm signature for indirect call after precheck"
                     );
                 }
             } else {
