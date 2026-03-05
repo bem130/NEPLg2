@@ -11,10 +11,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::ast::{Block, FnBody, Ident, Literal, Module, PrefixExpr, PrefixItem, Stmt, TypeExpr};
-use crate::compiler::{BuildProfile, CompileTarget};
 use crate::ast::Directive;
-use crate::diagnostic_ids::DiagnosticId;
+use crate::compiler::{BuildProfile, CompileTarget};
 use crate::hir::{FuncRef, HirBlock, HirBody, HirExpr, HirExprKind, HirFunction, HirModule};
+use crate::runtime_helpers::{ALLOC_CANDIDATES, DEALLOC_CANDIDATES, REALLOC_CANDIDATES};
 use crate::target_precheck::{self, ActiveRawBody};
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
@@ -79,8 +79,7 @@ pub fn emit_ll_from_module_for_target(
     target: CompileTarget,
     profile: BuildProfile,
 ) -> Result<String, LlvmCodegenError> {
-    validate_target_directive_for_llvm(module)?;
-    let precheck_diags = target_precheck::precheck_module_raw_bodies(module, target, profile);
+    let precheck_diags = target_precheck::precheck_module_before_codegen(module, target, profile);
     if precheck_diags
         .iter()
         .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
@@ -223,61 +222,6 @@ fn is_ast_fn_reachable(name: &str, reachable_hint: Option<&BTreeSet<String>>) ->
         None => true,
         Some(set) => set.contains(name),
     }
-}
-
-fn validate_target_directive_for_llvm(module: &Module) -> Result<(), LlvmCodegenError> {
-    let mut found = false;
-    for d in &module.directives {
-        if let Directive::Target { target, .. } = d {
-            if !is_known_target_name(target.as_str()) {
-                return Err(LlvmCodegenError::TypecheckFailed {
-                    reason: format!(
-                        "[D{}] unknown target in #target: {}",
-                        DiagnosticId::UnknownTargetDirective.as_u32(),
-                        target
-                    ),
-                });
-            }
-            if found {
-                return Err(LlvmCodegenError::TypecheckFailed {
-                    reason: format!(
-                        "[D{}] multiple #target directives are not allowed",
-                        DiagnosticId::MultipleTargetDirective.as_u32()
-                    ),
-                });
-            }
-            found = true;
-        }
-    }
-    if !found {
-        for stmt in &module.root.items {
-            if let Stmt::Directive(Directive::Target { target, .. }) = stmt {
-                if !is_known_target_name(target.as_str()) {
-                    return Err(LlvmCodegenError::TypecheckFailed {
-                        reason: format!(
-                            "[D{}] unknown target in #target: {}",
-                            DiagnosticId::UnknownTargetDirective.as_u32(),
-                            target
-                        ),
-                    });
-                }
-                if found {
-                    return Err(LlvmCodegenError::TypecheckFailed {
-                        reason: format!(
-                            "[D{}] multiple #target directives are not allowed",
-                            DiagnosticId::MultipleTargetDirective.as_u32()
-                        ),
-                    });
-                }
-                found = true;
-            }
-        }
-    }
-    Ok(())
-}
-
-fn is_known_target_name(name: &str) -> bool {
-    matches!(name, "wasm" | "core" | "wasi" | "std" | "wasix" | "llvm")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -488,7 +432,7 @@ fn try_lower_entry_from_hir(
     let reachable_set: BTreeSet<String> = reachable.iter().cloned().collect();
     let fallback_alloc_symbol = resolve_runtime_helper_symbol(
         &sigs,
-        &["alloc_raw", "alloc"],
+        ALLOC_CANDIDATES,
         &[LlTy::I32],
         LlTy::I32,
     )
@@ -954,13 +898,13 @@ fn extend_reachable_with_runtime_helpers(
     };
     push_root(
         &mut helper_roots,
-        resolve_runtime_helper_symbol(sigs, &["alloc_raw", "alloc"], &[LlTy::I32], LlTy::I32),
+        resolve_runtime_helper_symbol(sigs, ALLOC_CANDIDATES, &[LlTy::I32], LlTy::I32),
     );
     push_root(
         &mut helper_roots,
         resolve_runtime_helper_symbol(
             sigs,
-            &["dealloc_raw", "dealloc"],
+            DEALLOC_CANDIDATES,
             &[LlTy::I32, LlTy::I32],
             LlTy::Void,
         ),
@@ -969,7 +913,7 @@ fn extend_reachable_with_runtime_helpers(
         &mut helper_roots,
         resolve_runtime_helper_symbol(
             sigs,
-            &["realloc_raw", "realloc"],
+            REALLOC_CANDIDATES,
             &[LlTy::I32, LlTy::I32, LlTy::I32],
             LlTy::I32,
         ),
@@ -2457,7 +2401,7 @@ fn llvm_f32_literal(v: f32) -> String {
 }
 
 fn resolve_alloc_symbol(ctx: &LowerCtx<'_>) -> Option<String> {
-    resolve_runtime_helper_symbol(ctx.sigs, &["alloc_raw", "alloc"], &[LlTy::I32], LlTy::I32)
+    resolve_runtime_helper_symbol(ctx.sigs, ALLOC_CANDIDATES, &[LlTy::I32], LlTy::I32)
         .map(String::from)
         .or_else(|| ctx.fallback_alloc_symbol.map(String::from))
 }

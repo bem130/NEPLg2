@@ -245,7 +245,7 @@ pub fn compile_module(
         return Err(CoreError::from_diagnostics(diags));
     }
     let profile = options.profile.unwrap_or(BuildProfile::detect());
-    let precheck_diags = crate::target_precheck::precheck_module_raw_bodies(&module, target, profile);
+    let precheck_diags = crate::target_precheck::precheck_module_before_codegen(&module, target, profile);
     if precheck_diags
         .iter()
         .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))

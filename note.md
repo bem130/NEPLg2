@@ -7599,6 +7599,29 @@
 - メモ:
   - `fs` 単体の実行系テストは入力待ちケースを含むため、今後は非対話セットで回帰確認する。
 
+# 2026-03-05 作業メモ (フェーズD: codegen 前段診断の共通化・第一段)
+
+- 目的:
+  - `codegen_llvm` 内に残っていた `#target` 個別検証を backend から撤去し、前段共通 precheck へ集約する。
+  - `compile_module` と LLVM IR 生成経路で同じ検証入口を使い、wasm/llvm の診断規則差分を縮小する。
+
+- 変更:
+  - `nepl-core/src/target_precheck.rs`
+    - `precheck_module_target_directives` を追加（`UnknownTargetDirective` / `MultipleTargetDirective` を共通生成）。
+    - `precheck_module_before_codegen` を追加（target directive + raw body precheck の合成）。
+  - `nepl-core/src/codegen_llvm.rs`
+    - `validate_target_directive_for_llvm` / `is_known_target_name` を削除。
+    - `emit_ll_from_module_for_target` 入口を `precheck_module_before_codegen` へ統一。
+  - `nepl-core/src/compiler.rs`
+    - `compile_module` の precheck 呼び出しを `precheck_module_before_codegen` へ置換。
+
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/llvm_target.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-unify-step2-focus.json -j 15`
+    - 結果: `5/5 pass`
+  - 補足:
+    - `tests/neplg2.n.md` では既知の runtime 側 `Maximum call stack size exceeded` が残存（今回変更範囲外）。
+
 # 2026-03-05 作業メモ (tests.js: argv メタ対応追加)
 
 - 目的:
@@ -7655,3 +7678,26 @@
   - `node nodesrc/tests.js -i stdlib/tests/cliarg.n.md -i tests/stdout.n.md -i stdlib/tests/fs.n.md --no-stdlib --no-tree -o /tmp/tests-std-safe-regression.json -j 15 --assert-io` -> `9/9 pass`
   - `node nodesrc/tests.js -i tests/stdin.n.md --no-tree -o /tmp/tests-stdin-focus.json -j 15 --assert-io` -> `210/210 pass`
   - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-stdlib-std-safety-phase.json -j 15` -> `788/788 pass`
+
+# 2026-03-05 作業メモ (MemPtr/RegionToken 再調査と _raw 廃止方針の再整理)
+
+- 調査目的:
+  - `MemPtr/RegionToken` 導入後の残存生ポインタ依存と `_raw` 依存を全体で棚卸しし、上流優先での移行順を再確定する。
+
+- 現状要約:
+  - `core/mem.nepl` には `MemPtr<T>` / `RegionToken<T>` と `region_ptr_at/alloc_region/dealloc_region` が実装済み。
+  - `kpread/kpwrite` は公開構造体が `RegionToken<u8>` を保持する形まで移行済み。
+  - ただし `core/mem` 公開面には `alloc_raw/dealloc_raw/realloc_raw` と `load/store(i32)` 生ポインタ版が残存。
+  - `stdlib/alloc` / `stdlib/kp` / `stdlib/nm` / `platforms/wasix` / examples/tests には `_raw` 呼び出しが多数残存。
+  - `nepl-core` 側にも `_raw` 名依存が残存（`monomorphize.rs`, `codegen_wasm.rs`, `codegen_llvm.rs`）。
+
+- 根本課題:
+  - `_raw` 廃止は stdlib 側だけでは完了せず、compiler 側の helper 解決ロジックを先に一般化する必要がある。
+  - `core/mem` の生ポインタAPIを先に削除すると、下流ライブラリと codegen が同時崩壊するため、段階移行が必要。
+
+- 再確定した実装順序（上流優先）:
+  1. compiler 側 `_raw` 名依存の除去（`monomorphize` / `codegen_wasm` / `codegen_llvm`）。
+  2. `core/mem` を安全API公開面に統一し、生ポインタAPIを内部互換層へ隔離。
+  3. `stdlib/alloc` と `kp` を `MemPtr/RegionToken` + `Result/Option` 前提へ全面移行。
+  4. `stdlib/std` / `stdlib/nm` / tutorials/examples の順で追随移行。
+  5. 最後に `_raw` と生ポインタ公開関数を削除し、compile_fail 回帰を固定。
