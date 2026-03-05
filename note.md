@@ -45,6 +45,25 @@
   - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-scanner-allhandles-v2.json -j 15`
   - 結果: `217/217 pass`
 
+# 2026-03-05 作業メモ (フェーズC: kpwrite handle API の線形化と move 整合化)
+
+- 目的:
+  - `kpwrite` の内部 API でも生 `i32` 境界を減らしつつ、`Writer` の non-copy 設計と move 規則が矛盾しない形へ整理する。
+- 根本原因:
+  - `Writer` を受ける handle が `()` を返す設計のまま `Writer` を複数回利用しており、`D3053/D3054`（moved value）を誘発していた。
+  - 一時 `writer_wrap` を多用する形は局所的には動くが、設計として線形消費規則が明確でなかった。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_flush_handle` / `writer_ensure_handle` / `writer_put_u8_handle` / `writer_writeln_handle` / `writer_write_*_handle` を `Writer` 受け取り・`Writer` 返却に統一。
+    - 各 handle で `w_raw` を内部取得し、更新後は `writer_wrap mem_ptr_wrap w_raw` を返す線形 API に変更。
+    - 複数操作を行う handle（`writer_write_i32_handle`, `writer_write_u64_handle`, `writer_write_*_ln_handle` など）は `let mut ww <Writer>` / `set ww ...` で線形に更新。
+    - 公開 API (`writer_write_i32` など) は raw 再ラップの重複を削除し、対応 handle を直接呼ぶ構造へ整理。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-kpwrite-only-v4.json -j 15`
+  - 結果: `208/208 pass`
+  - `node nodesrc/tests.js -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-writer-handle-wrap-v3.json -j 15`
+  - 結果: `217/217 pass`
+
 # 2026-03-05 作業メモ (フェーズC: `core/mem` の `*_ptr` を安全API経由へ統一)
 
 - 目的:

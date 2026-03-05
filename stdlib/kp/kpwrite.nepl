@@ -128,16 +128,17 @@ fn writer_new <()*>Result<Writer,str>> ():
 //:
 //: 計算量:
 //: - O(1)
-fn writer_free_handle <(i32)*>()> (w):
-    let buf <i32> load_i32 w;
-    let cap <i32> load_i32 add w 4;
-    let iov <i32> load_i32 add w 12;
-    let nw  <i32> load_i32 add w 16;
+fn writer_free_handle <(Writer)*>()> (w):
+    let w_raw <i32> mem_ptr_addr get w "raw";
+    let buf <i32> load_i32 w_raw;
+    let cap <i32> load_i32 add w_raw 4;
+    let iov <i32> load_i32 add w_raw 12;
+    let nw  <i32> load_i32 add w_raw 16;
 
     writer_try_free buf cap;
     writer_try_free iov 8;
     writer_try_free nw 4;
-    writer_try_free w 20;
+    writer_try_free w_raw 20;
     ()
 
 //: writer_flush: バッファ内容を stdout に書き出す
@@ -148,18 +149,19 @@ fn writer_free_handle <(i32)*>()> (w):
 //:
 //: 計算量:
 //: - O(len)
-fn writer_flush_handle <(i32)*>()> (w):
-    let buf <i32> load_i32 w;
-    let cap <i32> load_i32 add w 4;
-    let write_len <i32> load_i32 add w 8;
+fn writer_flush_handle <(Writer)*>Writer> (w):
+    let w_raw <i32> mem_ptr_addr get w "raw";
+    let buf <i32> load_i32 w_raw;
+    let cap <i32> load_i32 add w_raw 4;
+    let write_len <i32> load_i32 add w_raw 8;
 
     if:
         or eq write_len 0 le cap 0
         then:
-            ()
+            w
         else:
-            let iov <i32> load_i32 add w 12;
-            let nw  <i32> load_i32 add w 16;
+            let iov <i32> load_i32 add w_raw 12;
+            let nw  <i32> load_i32 add w_raw 16;
 
             let mut off <i32> 0;
             let mut done <i32> 0;
@@ -192,64 +194,66 @@ fn writer_flush_handle <(i32)*>()> (w):
                                         set off add off n;
                                         ();
 
-            store_i32 add w 8 0;
-            ()
+            store_i32 add w_raw 8 0;
+            writer_wrap mem_ptr_wrap w_raw
 
 //: writer_ensure: need バイト分の空きを確保する（足りなければ flush）
 //:
 //: 注意:
 //: - need が cap を超えるケースは呼び出し側で避けてください（この版は最小実装）。
-fn writer_ensure_handle <(i32,i32)*>()> (w, need):
-    let cap <i32> load_i32 add w 4;
-    let write_len <i32> load_i32 add w 8;
+fn writer_ensure_handle <(Writer,i32)*>Writer> (w, need):
+    let w_raw <i32> mem_ptr_addr get w "raw";
+    let cap <i32> load_i32 add w_raw 4;
+    let write_len <i32> load_i32 add w_raw 8;
     let required <i32> add write_len need;
     if:
         le required cap
         then:
-            ()
+            w
         else:
-            writer_flush_handle w;
-            ()
+            writer_flush_handle w
 
 //: writer_put_u8: 1 バイト追記する
 //:
 //: 計算量:
 //: - O(1)（flush が入ると O(len)）
-fn writer_put_u8_handle <(i32,i32)*>()> (w, b):
-    let cap <i32> load_i32 add w 4;
+fn writer_put_u8_handle <(Writer,i32)*>Writer> (w, b):
+    let w_raw <i32> mem_ptr_addr get w "raw";
+    let cap <i32> load_i32 add w_raw 4;
     if:
         le cap 0
         then:
-            ()
+            w
         else:
-            writer_ensure_handle w 1;
-            let buf <i32> load_i32 w;
-            let write_len <i32> load_i32 add w 8;
+            let _w1 <Writer> writer_ensure_handle w 1;
+            let buf <i32> load_i32 w_raw;
+            let write_len <i32> load_i32 add w_raw 8;
             store_u8 add buf write_len b;
-            store_i32 add w 8 add write_len 1;
-            ()
+            store_i32 add w_raw 8 add write_len 1;
+            writer_wrap mem_ptr_wrap w_raw
 
 //: writer_writeln: 改行 '\n' を出力する
-fn writer_writeln_handle <(i32)*>()> (w):
+fn writer_writeln_handle <(Writer)*>Writer> (w):
     writer_put_u8_handle w 10
 
 //: writer_write_str: str を追記する
 //:
 //: 注意:
 //: - str は [len][bytes] 形式なので、bytes 先頭は add s 4 です。
-fn writer_write_str_handle <(i32,str)*>()> (w, s):
-    let cap <i32> load_i32 add w 4;
+fn writer_write_str_handle <(Writer,str)*>Writer> (w, s):
+    let w_raw <i32> mem_ptr_addr get w "raw";
+    let cap <i32> load_i32 add w_raw 4;
     let n <i32> load_i32 s;
 
     if:
         or le n 0 le cap 0
         then:
-            ()
+            w
         else:
-            writer_ensure_handle w n;
+            let _w1 <Writer> writer_ensure_handle w n;
 
-            let buf <i32> load_i32 w;
-            let write_len <i32> load_i32 add w 8;
+            let buf <i32> load_i32 w_raw;
+            let write_len <i32> load_i32 add w_raw 8;
             let src <i32> add s 4;
 
             let mut i <i32> 0;
@@ -262,10 +266,10 @@ fn writer_write_str_handle <(i32,str)*>()> (w, s):
                     store_u8 dst_ptr ch;
                     set i add i 1;
 
-            let w_len_ptr <i32> add w 8;
+            let w_len_ptr <i32> add w_raw 8;
             let new_len <i32> add write_len n;
             store_i32 w_len_ptr new_len;
-            ()
+            writer_wrap mem_ptr_wrap w_raw
 
 //: writer_write_i32: i32 を 10 進で出力する（ヒープ確保なし）
 //:
@@ -275,25 +279,25 @@ fn writer_write_str_handle <(i32,str)*>()> (w, s):
 //:
 //: 計算量:
 //: - O(桁数)
-fn writer_write_i32_handle <(i32,i32)*>()> (w, v):
+fn writer_write_i32_handle <(Writer,i32)*>Writer> (w, v):
+    let w_raw <i32> mem_ptr_addr get w "raw";
     if:
         eq v -2147483648
         then:
-            writer_write_str_handle w "-2147483648";
-            ()
+            writer_write_str_handle w "-2147483648"
         else:
             if:
                 eq v 0
                 then:
-                    writer_put_u8_handle w 48;
-                    ()
+                    writer_put_u8_handle w 48
                 else:
+                    let mut ww <Writer> w;
                     let mut x <i32> v;
 
                     if:
                         lt x 0
                         then:
-                            writer_put_u8_handle w 45;
+                            set ww writer_put_u8_handle ww 45;
                             let zero <i32> 0;
                             set x sub zero x;
                             ()
@@ -307,11 +311,11 @@ fn writer_write_i32_handle <(i32,i32)*>()> (w, v):
                             set d add d 1;
                             set t div_s t 10;
 
-                    writer_ensure_handle w d;
+                    set ww writer_ensure_handle ww d;
 
-                    let buf <i32> load_i32 w;
-                    let old_len <i32> load_i32 add w 8;
-                    let w_len_ptr <i32> add w 8;
+                    let buf <i32> load_i32 w_raw;
+                    let old_len <i32> load_i32 add w_raw 8;
+                    let w_len_ptr <i32> add w_raw 8;
                     let new_len <i32> add old_len d;
                     store_i32 w_len_ptr new_len;
 
@@ -330,7 +334,7 @@ fn writer_write_i32_handle <(i32,i32)*>()> (w, v):
                             set n div_s n 10;
                             set i add i 1;
 
-                    ()
+                    ww
 
 //: writer_write_u64: i64 ビット列を符号なし 10 進として出力する
 //:
@@ -346,15 +350,16 @@ fn writer_write_i32_handle <(i32,i32)*>()> (w, v):
 //:
 //: 計算量:
 //: - O(桁数)
-fn writer_write_u64_handle <(i32,i64)*>()> (w, v):
+fn writer_write_u64_handle <(Writer,i64)*>Writer> (w, v):
+    let w_raw <i32> mem_ptr_addr get w "raw";
     let zero <i64> cast 0;
     let ten <i64> cast 10;
     if:
         eq v zero
         then:
-            writer_put_u8_handle w 48;
-            ()
+            writer_put_u8_handle w 48
         else:
+            let mut ww <Writer> w;
             let mut t <i64> v;
             let mut d <i32> 0;
             while gt_u t zero:
@@ -362,11 +367,11 @@ fn writer_write_u64_handle <(i32,i64)*>()> (w, v):
                     set d add d 1;
                     set t div_u t ten;
 
-            writer_ensure_handle w d;
+            set ww writer_ensure_handle ww d;
 
-            let buf <i32> load_i32 w;
-            let old_len <i32> load_i32 add w 8;
-            let w_len_ptr <i32> add w 8;
+            let buf <i32> load_i32 w_raw;
+            let old_len <i32> load_i32 add w_raw 8;
+            let w_len_ptr <i32> add w_raw 8;
             let new_len <i32> add old_len d;
             store_i32 w_len_ptr new_len;
 
@@ -385,7 +390,7 @@ fn writer_write_u64_handle <(i32,i64)*>()> (w, v):
                     set n div_u n ten;
                     set i add i 1;
 
-            ()
+            ww
 
 //: writer_write_i64: i64 を符号付き 10 進で出力する
 //:
@@ -398,18 +403,16 @@ fn writer_write_u64_handle <(i32,i64)*>()> (w, v):
 //:
 //: 計算量:
 //: - O(桁数)
-fn writer_write_i64_handle <(i32,i64)*>()> (w, v):
+fn writer_write_i64_handle <(Writer,i64)*>Writer> (w, v):
     let zero <i64> cast 0;
     if:
         lt v zero
         then:
-            writer_put_u8_handle w 45;
+            let w1 <Writer> writer_put_u8_handle w 45;
             let abs_u <i64> sub zero v;
-            writer_write_u64_handle w abs_u;
-            ()
+            writer_write_u64_handle w1 abs_u
         else:
-            writer_write_u64_handle w v;
-            ()
+            writer_write_u64_handle w v
 
 //: writer_write_f64_fixed: f64 を固定小数点で出力する
 //:
@@ -425,14 +428,15 @@ fn writer_write_i64_handle <(i32,i64)*>()> (w, v):
 //:
 //: 計算量:
 //: - O(precision + 桁数)
-fn writer_write_f64_fixed_handle <(i32,f64,i32)*>()> (w, v, precision):
+fn writer_write_f64_fixed_handle <(Writer,f64,i32)*>Writer> (w, v, precision):
     let mut x <f64> v;
     let zero <f64> cast 0;
     let is_neg <bool> lt x zero;
+    let mut ww <Writer> w;
     if:
         is_neg
         then:
-            writer_put_u8_handle w 45;
+            set ww writer_put_u8_handle ww 45;
             let nx <f64> neg x;
             set x nx;
             ()
@@ -440,14 +444,14 @@ fn writer_write_f64_fixed_handle <(i32,f64,i32)*>()> (w, v, precision):
             ();
 
     let int_part <i64> cast x;
-    writer_write_u64_handle w int_part;
+    set ww writer_write_u64_handle ww int_part;
 
     if:
         le precision 0
         then:
-            ()
+            ww
         else:
-            writer_put_u8_handle w 46;
+            set ww writer_put_u8_handle ww 46;
             let int_as_f64 <f64> cast int_part;
             let mut frac <f64> sub x int_as_f64;
             let ten <f64> cast 10;
@@ -457,25 +461,25 @@ fn writer_write_f64_fixed_handle <(i32,f64,i32)*>()> (w, v, precision):
                     let frac10 <f64> mul frac ten;
                     set frac frac10;
                     let digit <i32> cast frac;
-                    writer_put_u8_handle w add 48 digit;
+                    set ww writer_put_u8_handle ww add 48 digit;
                     let digit_f <f64> cast digit;
                     let next_frac <f64> sub frac digit_f;
                     set frac next_frac;
                     set i add i 1;
-            ()
+            ww
 
 //: writer_write_f64: f64 を小数点以下 6 桁で出力する
 //:
 //: 計算量:
 //: - O(桁数)
-fn writer_write_f64_handle <(i32,f64)*>()> (w, v):
+fn writer_write_f64_handle <(Writer,f64)*>Writer> (w, v):
     writer_write_f64_fixed_handle w v 6
 
 //: writer_write_f32_fixed: f32 を固定小数点で出力する
 //:
 //: 計算量:
 //: - O(precision + 桁数)
-fn writer_write_f32_fixed_handle <(i32,f32,i32)*>()> (w, v, precision):
+fn writer_write_f32_fixed_handle <(Writer,f32,i32)*>Writer> (w, v, precision):
     let v64 <f64> cast v;
     writer_write_f64_fixed_handle w v64 precision
 
@@ -483,7 +487,7 @@ fn writer_write_f32_fixed_handle <(i32,f32,i32)*>()> (w, v, precision):
 //:
 //: 計算量:
 //: - O(桁数)
-fn writer_write_f32_handle <(i32,f32)*>()> (w, v):
+fn writer_write_f32_handle <(Writer,f32)*>Writer> (w, v):
     writer_write_f32_fixed_handle w v 6
 
 //: writer_write_space: 半角スペースを 1 文字出力する
@@ -512,7 +516,7 @@ fn writer_write_f32_handle <(i32,f32)*>()> (w, v):
 //:     set w writer_flush w;
 //:     writer_free w
 //: ```
-fn writer_write_space_handle <(i32)*>()> (w):
+fn writer_write_space_handle <(Writer)*>Writer> (w):
     writer_put_u8_handle w 32
 
 //: writer_write_i32_ln: i32 を出力して改行する
@@ -538,9 +542,9 @@ fn writer_write_space_handle <(i32)*>()> (w):
 //:     set w writer_flush w;
 //:     writer_free w
 //: ```
-fn writer_write_i32_ln_handle <(i32,i32)*>()> (w, v):
-    writer_write_i32_handle w v;
-    writer_writeln_handle w
+fn writer_write_i32_ln_handle <(Writer,i32)*>Writer> (w, v):
+    let w1 <Writer> writer_write_i32_handle w v;
+    writer_writeln_handle w1
 
 //: writer_write_i64_ln: i64 を出力して改行する
 //:
@@ -565,105 +569,70 @@ fn writer_write_i32_ln_handle <(i32,i32)*>()> (w, v):
 //:     set w writer_flush w;
 //:     writer_free w
 //: ```
-fn writer_write_i64_ln_handle <(i32,i64)*>()> (w, v):
-    writer_write_i64_handle w v;
-    writer_writeln_handle w
+fn writer_write_i64_ln_handle <(Writer,i64)*>Writer> (w, v):
+    let w1 <Writer> writer_write_i64_handle w v;
+    writer_writeln_handle w1
 
 //: writer_write_f64_ln: f64 を出力して改行する
-fn writer_write_f64_ln_handle <(i32,f64)*>()> (w, v):
-    writer_write_f64_handle w v;
-    writer_writeln_handle w
+fn writer_write_f64_ln_handle <(Writer,f64)*>Writer> (w, v):
+    let w1 <Writer> writer_write_f64_handle w v;
+    writer_writeln_handle w1
 
 //: writer_write_f32_ln: f32 を出力して改行する
-fn writer_write_f32_ln_handle <(i32,f32)*>()> (w, v):
-    writer_write_f32_handle w v;
-    writer_writeln_handle w
+fn writer_write_f32_ln_handle <(Writer,f32)*>Writer> (w, v):
+    let w1 <Writer> writer_write_f32_handle w v;
+    writer_writeln_handle w1
 
 fn writer_free <(Writer)*>()> (w):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_free_handle raw
+    writer_free_handle w
 
 fn writer_flush <(Writer)*>Writer> (w):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_flush_handle raw;
-    writer_wrap mem_ptr_wrap raw
+    writer_flush_handle w
 
 fn writer_ensure <(Writer,i32)*>Writer> (w, need):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_ensure_handle raw need;
-    writer_wrap mem_ptr_wrap raw
+    writer_ensure_handle w need
 
 fn writer_put_u8 <(Writer,i32)*>Writer> (w, b):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_put_u8_handle raw b;
-    writer_wrap mem_ptr_wrap raw
+    writer_put_u8_handle w b
 
 fn writer_writeln <(Writer)*>Writer> (w):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_writeln_handle raw;
-    writer_wrap mem_ptr_wrap raw
+    writer_writeln_handle w
 
 fn writer_write_str <(Writer,str)*>Writer> (w, s):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_str_handle raw s;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_str_handle w s
 
 fn writer_write_i32 <(Writer,i32)*>Writer> (w, v):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_i32_handle raw v;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_i32_handle w v
 
 fn writer_write_u64 <(Writer,i64)*>Writer> (w, v):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_u64_handle raw v;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_u64_handle w v
 
 fn writer_write_i64 <(Writer,i64)*>Writer> (w, v):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_i64_handle raw v;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_i64_handle w v
 
 fn writer_write_f64_fixed <(Writer,f64,i32)*>Writer> (w, v, precision):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_f64_fixed_handle raw v precision;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_f64_fixed_handle w v precision
 
 fn writer_write_f64 <(Writer,f64)*>Writer> (w, v):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_f64_handle raw v;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_f64_handle w v
 
 fn writer_write_f32_fixed <(Writer,f32,i32)*>Writer> (w, v, precision):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_f32_fixed_handle raw v precision;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_f32_fixed_handle w v precision
 
 fn writer_write_f32 <(Writer,f32)*>Writer> (w, v):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_f32_handle raw v;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_f32_handle w v
 
 fn writer_write_space <(Writer)*>Writer> (w):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_space_handle raw;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_space_handle w
 
 fn writer_write_i32_ln <(Writer,i32)*>Writer> (w, v):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_i32_ln_handle raw v;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_i32_ln_handle w v
 
 fn writer_write_i64_ln <(Writer,i64)*>Writer> (w, v):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_i64_ln_handle raw v;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_i64_ln_handle w v
 
 fn writer_write_f64_ln <(Writer,f64)*>Writer> (w, v):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_f64_ln_handle raw v;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_f64_ln_handle w v
 
 fn writer_write_f32_ln <(Writer,f32)*>Writer> (w, v):
-    let raw <i32> mem_ptr_addr get w "raw";
-    writer_write_f32_ln_handle raw v;
-    writer_wrap mem_ptr_wrap raw
+    writer_write_f32_ln_handle w v
