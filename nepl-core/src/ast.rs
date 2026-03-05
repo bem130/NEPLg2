@@ -142,6 +142,7 @@ pub struct TraitDef {
     pub vis: Visibility,
     pub name: Ident,
     pub type_params: Vec<TypeParam>,
+    pub capabilities: Vec<String>,
     pub methods: Vec<FnDef>,
     pub span: Span,
 }

@@ -77,6 +77,7 @@ pub enum TokenKind {
     DirUse(String),
     DirIfTarget(String),
     DirIfProfile(String),
+    DirCapability(String),
     DirWasm,
     DirLlvmIr,
     DirIndentWidth(usize),
@@ -554,6 +555,17 @@ impl LexState {
                     span,
                 });
             }
+        } else if body.starts_with("capability") {
+            let arg = body.strip_prefix("capability").unwrap().trim();
+            let span = Span::new(
+                self.file_id,
+                line_offset as u32,
+                (line_offset + body.len()) as u32,
+            );
+            self.tokens.push(Token {
+                kind: TokenKind::DirCapability(arg.to_string()),
+                span,
+            });
         } else if body.starts_with("extern") {
             // format: extern "env" "sym" fn name <signature>
             let span = Span::new(

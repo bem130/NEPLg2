@@ -238,13 +238,13 @@ diag_id: 3049
 #indent 4
 #target core
 
-//: @capability: clone
 trait Clone:
+    #capability clone
     fn clone <(Self)->Self> (x):
         x
 
-//: @capability: copy
 trait Copy:
+    #capability copy
     fn copy_mark <(Self)->Self> (x):
         x
 
@@ -268,13 +268,13 @@ diag_id: 3050
 #indent 4
 #target core
 
-//: @capability: clone
 trait Clone:
+    #capability clone
     fn clone <(Self)->Self> (x):
         x
 
-//: @capability: copy
 trait Copy:
+    #capability copy
     fn copy_mark <(Self)->Self> (x):
         x
 
@@ -295,13 +295,13 @@ ret: 0
 #indent 4
 #target core
 
-//: @capability: clone
 trait Clone:
+    #capability clone
     fn clone <(Self)->Self> (x):
         x
 
-//: @capability: copy
 trait Copy:
+    #capability copy
     fn copy_mark <(Self)->Self> (x):
         x
 
@@ -327,13 +327,13 @@ diag_id: 3053
 #target core
 #import "core/cast" as *
 
-//: @capability: clone
 trait Clone:
+    #capability clone
     fn clone <(Self)->Self> (x):
         x
 
-//: @capability: copy
 trait Copy:
+    #capability copy
     fn copy_mark <(Self)->Self> (x):
         x
 
@@ -358,13 +358,13 @@ ret: 0
 #target core
 #import "core/cast" as *
 
-//: @capability: clone
 trait Clone:
+    #capability clone
     fn clone <(Self)->Self> (x):
         x
 
-//: @capability: copy
 trait Copy:
+    #capability copy
     fn copy_mark <(Self)->Self> (x):
         x
 

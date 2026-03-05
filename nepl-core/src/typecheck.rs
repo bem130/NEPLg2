@@ -87,6 +87,7 @@ struct TraitInfo {
     doc: Option<String>,
     name: String,
     type_params: Vec<TypeId>,
+    capabilities: Vec<String>,
     methods: BTreeMap<String, TypeId>,
     self_ty: TypeId,
     span: Span,
@@ -104,7 +105,7 @@ impl TraitSemantics {
         let mut clone_trait: Option<(String, TypeId)> = None;
 
         for (name, info) in traits {
-            for cap in detect_declared_trait_capabilities(info.doc.as_deref()) {
+            for cap in detect_declared_trait_capabilities(&info.capabilities) {
                 match cap {
                     TraitCapability::Copy => {
                         if copy_trait.is_none() {
@@ -212,17 +213,10 @@ enum TraitCapability {
     Clone,
 }
 
-fn detect_declared_trait_capabilities(doc: Option<&str>) -> Vec<TraitCapability> {
+fn detect_declared_trait_capabilities(caps: &[String]) -> Vec<TraitCapability> {
     let mut out = Vec::new();
-    let Some(doc) = doc else {
-        return out;
-    };
-    for line in doc.lines() {
-        let trimmed = line.trim();
-        let Some(rest) = trimmed.strip_prefix("@capability:") else {
-            continue;
-        };
-        let name = rest.trim();
+    for cap in caps {
+        let name = cap.trim();
         if name == "copy" {
             out.push(TraitCapability::Copy);
         } else if name == "clone" {
@@ -683,6 +677,7 @@ pub fn typecheck(
                         doc: t.doc.clone(),
                         name: t.name.name.clone(),
                         type_params: tps,
+                        capabilities: t.capabilities.clone(),
                         methods,
                         self_ty,
                         span: t.name.span,

@@ -6760,3 +6760,36 @@
 
 - 次段の上流課題:
   - `Copy/Clone` の能力宣言を `doc comment` 依存でなく AST/文法レベルで供給する仕組みを追加し、名称フォールバックを撤去する。
+# 2026-03-05 作業メモ (フェーズB2: `#capability` 文法化と型検査統合)
+
+- 目的:
+  - `todo.md` フェーズB2の上流側として、`Copy/Clone` 能力の宣言経路を doc 文字列依存から parser/AST 経路へ移す。
+  - codegen 手前で同一の trait 能力情報を参照できる形に揃える。
+
+- 実装:
+  - `nepl-core/src/ast.rs`
+    - `TraitDef` に `capabilities: Vec<String>` を追加。
+  - `nepl-core/src/lexer.rs`
+    - `TokenKind::DirCapability(String)` を追加。
+    - `#capability ...` を lex 対象に追加。
+  - `nepl-core/src/parser.rs`
+    - trait 本文内で `#capability` を受理し `TraitDef.capabilities` へ格納。
+    - トップレベル `#capability` は `ParserUnexpectedToken` で拒否。
+  - `nepl-core/src/typecheck.rs`
+    - `TraitInfo` に `capabilities` を保持。
+    - 能力抽出は `TraitInfo.capabilities` から行うよう変更（doc 行解析を廃止）。
+  - `nepl-web/src/lib.rs`
+    - token 表示側に `DirCapability` の分岐を追加して `trunk build` の non-exhaustive を解消。
+  - `tests/move_effect.n.md`
+    - `@capability:` コメント表現を trait 本文の `#capability` に置換。
+
+- テスト:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/overload.n.md -i tests/move_effect.n.md -i tests/move_check.n.md --no-tree -o /tmp/tests-b2-capability-targeted-v6.json -j 15`
+    - `281/281 pass`
+  - `node nodesrc/tests.js -i tests -i tutorials -i stdlib --no-tree -o /tmp/tests-all-b2-capability-v3.json -j 15`
+    - `837/837 pass`
+
+- 残課題:
+  - `Copy/Clone` 検出の最終フォールバック（trait 名 `Copy` / `Clone`）はまだ残っている。
+  - フェーズB2完了条件「文字列比較の完全撤廃」に向けて、次段で除去する。

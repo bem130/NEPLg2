@@ -587,6 +587,15 @@ impl Parser {
                 };
                 Some(Stmt::Directive(Directive::IfProfile { profile, span }))
             }
+            TokenKind::DirCapability(_) => {
+                let span = self.next().map(|t| t.span).unwrap_or_else(Span::dummy);
+                self.push_error_with_id(
+                    DiagnosticId::ParserUnexpectedToken,
+                    "#capability is only allowed inside trait blocks",
+                    span,
+                );
+                None
+            }
             TokenKind::DirIndentWidth(width) => {
                 let span = self.next().unwrap().span;
                 Some(Stmt::Directive(Directive::IndentWidth { width: width, span }))
@@ -1147,9 +1156,19 @@ impl Parser {
         self.expect(&TokenKind::Colon)?;
         self.consume_if(&TokenKind::Newline);
         self.expect(&TokenKind::Indent)?;
+        let mut capabilities = Vec::new();
         let mut methods = Vec::new();
         while !self.check(&TokenKind::Dedent) && !self.is_eof() {
             if self.consume_if(&TokenKind::Newline) {
+                continue;
+            }
+            if let Some(TokenKind::DirCapability(cap)) = self.peek_kind() {
+                let cap = cap.clone();
+                self.next();
+                if !cap.is_empty() {
+                    capabilities.push(cap);
+                }
+                self.consume_if(&TokenKind::Newline);
                 continue;
             }
             match self.parse_fn() {
@@ -1167,6 +1186,7 @@ impl Parser {
             vis,
             name: Ident { name, span: nspan },
             type_params,
+            capabilities,
             methods,
             span: kw_span.join(end_span).unwrap_or(kw_span),
         }))

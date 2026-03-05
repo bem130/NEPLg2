@@ -388,6 +388,7 @@ fn token_kind_name(kind: &TokenKind) -> &'static str {
         TokenKind::DirUse(_) => "DirUse",
         TokenKind::DirIfTarget(_) => "DirIfTarget",
         TokenKind::DirIfProfile(_) => "DirIfProfile",
+        TokenKind::DirCapability(_) => "DirCapability",
         TokenKind::DirWasm => "DirWasm",
         TokenKind::DirLlvmIr => "DirLlvmIr",
         TokenKind::DirIndentWidth(_) => "DirIndentWidth",
@@ -416,6 +417,7 @@ fn token_extra(kind: &TokenKind) -> Option<String> {
         | TokenKind::DirUse(v)
         | TokenKind::DirIfTarget(v)
         | TokenKind::DirIfProfile(v)
+        | TokenKind::DirCapability(v)
         | TokenKind::DirInclude(v)
         | TokenKind::DirPrelude(v)
         | TokenKind::WasmText(v)
