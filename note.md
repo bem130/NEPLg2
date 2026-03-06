@@ -8417,3 +8417,21 @@
   - `timeout 20s node nodesrc/run_test.js <<'EOF' ... mem-dealloc-region-type-fail ... EOF` -> pass (`D3006` が先頭)
 - 補足:
   - `nodesrc/tests.js -i tests/memory_safety.n.md ...` はこの環境では timeout 30s に到達したため、個別 focused 実行で確認した。
+
+# 2026-03-06 作業メモ (core/mem の互換エイリアス整理)
+
+- 目的:
+  - `MemPtr` 安全オーバーロードへ収束させ、`load_i32_ptr` / `store_i32_ptr` のような互換名を残さない。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `load_i32_ptr`
+    - `store_i32_ptr`
+    - `load_u8_ptr`
+    - `store_u8_ptr`
+    を削除。
+  - `tests/memory_safety.n.md`
+    - 既存テストを `load_i32` / `store_i32` の直接利用へ更新。
+- 検証:
+  - `rg -n "load_i32_ptr|store_i32_ptr|load_u8_ptr|store_u8_ptr" stdlib tests tutorials examples` -> 該当なし
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... mem-basic-direct-overload ... EOF` -> pass
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... mem-invalid-store-direct-overload ... EOF` -> pass

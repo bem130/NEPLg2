@@ -17,11 +17,11 @@ fn main <()->i32> ():
         Result::Err _e:
             0
         Result::Ok p:
-            match store_i32_ptr p 123:
+            match store_i32 p 123:
                 Result::Err _e:
                     0
                 Result::Ok _:
-                    let v <i32> match load_i32_ptr p:
+                    let v <i32> match load_i32 p:
                         Option::None:
                             0
                         Option::Some x:
@@ -47,7 +47,7 @@ ret: 1
 
 fn main <()->i32> ():
     let p <MemPtr<i32>> mem_ptr_wrap 0
-    match load_i32_ptr p:
+    match load_i32 p:
         Option::None:
             1
         Option::Some _v:
@@ -68,7 +68,7 @@ ret: 1
 
 fn main <()->i32> ():
     let p <MemPtr<i32>> mem_ptr_wrap 0
-    match store_i32_ptr p 42:
+    match store_i32 p 42:
         Result::Err _e:
             1
         Result::Ok _:

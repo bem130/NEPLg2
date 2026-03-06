@@ -780,22 +780,6 @@ fn store_u8 <(MemPtr<u8>,i32)->Result<(),str>> (p, v):
             store_u8 raw v
             Result<(),str>::Ok ()
 
-//: load_i32_ptr: 互換エイリアス（`load_i32` の MemPtr オーバーロード）
-fn load_i32_ptr <(MemPtr<i32>)->Option<i32>> (p):
-    load_i32 p
-
-//: store_i32_ptr: 互換エイリアス（`store_i32` の MemPtr オーバーロード）
-fn store_i32_ptr <(MemPtr<i32>,i32)->Result<(),str>> (p, v):
-    store_i32 p v
-
-//: load_u8_ptr: 互換エイリアス（`load_u8` の MemPtr オーバーロード）
-fn load_u8_ptr <(MemPtr<u8>)->Option<i32>> (p):
-    load_u8 p
-
-//: store_u8_ptr: 互換エイリアス（`store_u8` の MemPtr オーバーロード）
-fn store_u8_ptr <(MemPtr<u8>,i32)->Result<(),str>> (p, v):
-    store_u8 p v
-
 //: size_of: 型のサイズを取得する
 //:
 //: 目的:
