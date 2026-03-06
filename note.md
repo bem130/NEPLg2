@@ -8352,3 +8352,30 @@
     - runtime helper 選択ループの文字列配列リテラルを `runtime_helpers` 定数参照に置換。
 - 検証:
   - `NO_COLOR=false trunk build` -> success
+
+# 2026-03-06 作業メモ (フェーズE前進: cliarg の C 文字列境界を MemPtr<u8> 化)
+
+- 目的:
+  - `stdlib/std/env/cliarg.nepl` の公開面に残っていた生 `i32` ポインタ境界を減らし、`core/mem` の `MemPtr<T>` / `RegionToken<T>` モデルへ寄せる。
+  - 特に `cstr_len` / `cstr_to_str` を型付きポインタで受ける形に変更し、誤った raw 呼び出しを型エラーで止める。
+- 原因:
+  - `cliarg` は内部・公開ともに `i32` アドレスを直接受け渡しており、`kpread/kpwrite` 側で進めていた型安全モデルと不整合だった。
+  - `cstr_len 0` や `cstr_to_str 0` のような誤用が API 形状上可能で、コンパイラが前段で止められなかった。
+- 変更:
+  - `stdlib/std/env/cliarg.nepl`
+    - `cstr_len` を `<(MemPtr<u8>)*>i32>` に変更。
+    - `cstr_to_str` を `<(MemPtr<u8>)*>str>` に変更。
+    - `cli_alloc_u8_region` / `cli_free_region` / `cli_i32_ptr` / `cli_u8_ptr` を追加し、一時領域確保を `RegionToken` ベースへ移行。
+    - LLVM 側 `__cli_copy_to_cstr` / `__cli_read_cmdline` を `MemPtr<u8>` ベースへ変更。
+    - `cliarg_count` / `cliarg_get` のメタ情報確保と `argv` バッファ確保を `RegionToken<u8>` ベースへ変更。
+  - `stdlib/tests/cliarg.n.md`
+    - `cstr_len 0` / `cstr_to_str 0` が `D3006` で失敗する compile_fail 回帰を追加。
+- 途中判断:
+  - `stdlib/std/stdio.nepl` も同時に `RegionToken` 化を試したが、`read_line` の rewrite で構文不整合を入れ、parser overflow を誘発した。
+  - ここは間に合わせで押し切らず、`stdio` は直前の正常状態へ戻し、今回のコミット対象から外した。
+- 検証:
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... import-only-cliarg ... EOF` -> pass
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... cliarg-count ... argv=[\"--flag\",\"value\"] ... EOF` -> pass (`stdout: "3"`)
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... cliarg-basic ... EOF` -> pass
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... cliarg-compile-fail-cstr ... EOF` -> pass (`D3006`)
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... stdout-concat ... EOF` -> pass

@@ -38,3 +38,33 @@ stdout: "3"
 fn main <()*>()> ():
     print_i32 cliarg_count;
 ```
+
+## cliarg_cstr_requires_mem_ptr
+
+neplg2:test[compile_fail]
+diag_id: D3006
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/env/cliarg" as *
+
+fn main <()*>()> ():
+    let _n cstr_len 0;
+```
+
+## cliarg_cstr_to_str_requires_mem_ptr
+
+neplg2:test[compile_fail]
+diag_id: D3006
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/env/cliarg" as *
+
+fn main <()*>()> ():
+    let _s cstr_to_str 0;
+```
