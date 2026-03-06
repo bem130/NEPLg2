@@ -15,36 +15,24 @@ stdout: "6 -> Fizz\n10 -> Buzz\n30 -> FizzBuzz\n7 -> 7\n"
 #import "core/math" as *
 #import "std/stdio" as *
 
-fn fizzbuzz_code <(i32)->i32> (n):
+fn print_fizzbuzz <(i32)*>()> (n):
     if:
         cond eq mod_s n 15 0
-        then 3
+        then println "FizzBuzz"
         else:
             if:
                 cond eq mod_s n 3 0
-                then 1
+                then println "Fizz"
                 else:
                     if:
                         cond eq mod_s n 5 0
-                        then 2
-                        else 0
+                        then println "Buzz"
+                        else println_i32 n
 
 fn show_line <(i32)*>()> (n):
-    let code <i32> fizzbuzz_code n;
     print_i32 n;
     print " -> ";
-    if:
-        cond eq code 1
-        then println "Fizz"
-        else:
-            if:
-                cond eq code 2
-                then println "Buzz"
-                else:
-                    if:
-                        cond eq code 3
-                        then println "FizzBuzz"
-                        else println_i32 n
+    n |> print_fizzbuzz
 
 fn main <()*> ()> ():
     show_line 6;
@@ -65,37 +53,25 @@ stdout: "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz
 #import "core/math" as *
 #import "std/stdio" as *
 
-fn fizzbuzz_code <(i32)->i32> (n):
+fn print_fizzbuzz <(i32)*>()> (n):
     if:
         cond eq mod_s n 15 0
-        then 3
+        then println "FizzBuzz"
         else:
             if:
                 cond eq mod_s n 3 0
-                then 1
+                then println "Fizz"
                 else:
                     if:
                         cond eq mod_s n 5 0
-                        then 2
-                        else 0
+                        then println "Buzz"
+                        else println_i32 n
 
 fn print_fizzbuzz_1_to_n <(i32)*>()> (n):
     let mut i <i32> 1;
     while le i n:
         do:
-            let code <i32> fizzbuzz_code i;
-            if:
-                cond eq code 1
-                then println "Fizz"
-                else:
-                    if:
-                        cond eq code 2
-                        then println "Buzz"
-                        else:
-                            if:
-                                cond eq code 3
-                                then println "FizzBuzz"
-                                else println_i32 i
+            i |> print_fizzbuzz;
             set i add i 1;
 
 fn main <()*> ()> ():
