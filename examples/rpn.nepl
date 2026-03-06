@@ -2,6 +2,32 @@
 #indent 4
 #target wasi
 
+//: neplg2:test[rpn_repl_simple, normalize_newlines, strip_ansi]
+//: [目的/もくてき]: REPL全体の統合テスト (1 2 +)
+//: stdin: "1 2 +\n"
+//: stdout: mlstr:
+//:     ##: RPN REPL
+//:     ##: enter space-separated tokens (e.g. 3 4 +). Ctrl+Z to exit.
+//:     ##: 
+//:     ##: > 1 2 +
+//:     ##: 1 2 +
+//:     ##: 3
+//:     ##: ok: result = 3
+//:     ##: > bye
+//:
+//: neplg2:test[rpn_repl_negative, normalize_newlines, strip_ansi]
+//: [目的/もくてき]: 負の計算の統合テスト (2 7 -)
+//: stdin: "2 7 -\n"
+//: stdout: mlstr:
+//:     ##: RPN REPL
+//:     ##: enter space-separated tokens (e.g. 3 4 +). Ctrl+Z to exit.
+//:     ##: 
+//:     ##: > 2 7 -
+//:     ##: 2 7 -
+//:     ##: -5
+//:     ##: ok: result = -5
+//:     ##: > bye
+
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/option" as *
