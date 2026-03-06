@@ -14,23 +14,23 @@ stdout: "6 -> Fizz\n10 -> Buzz\n30 -> FizzBuzz\n7 -> 7\n"
 |
 #import "core/math" as *
 #import "std/stdio" as *
-#import "std/test" as *
+#import "alloc/string" as *
 
 fn show_line <(i32)*>()> (n):
     print_i32 n;
     print " -> ";
-    if:
+    println <str> if:
         cond eq mod_s n 15 0
-        then println "FizzBuzz"
+        then "FizzBuzz"
         else:
             if:
                 cond eq mod_s n 3 0
-                then println "Fizz"
+                then "Fizz"
                 else:
                     if:
                         cond eq mod_s n 5 0
-                        then println "Buzz"
-                        else println_i32 n
+                        then "Buzz"
+                        else from_i32 n
 
 fn main <()*> ()> ():
     show_line 6;
@@ -50,7 +50,7 @@ stdout: "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz
 |
 #import "core/math" as *
 #import "std/stdio" as *
-#import "std/test" as *
+#import "alloc/string" as *
 
 fn print_fizzbuzz_1_to_n <(i32)*>()> (n):
     let mut i <i32> 1;
@@ -67,7 +67,7 @@ fn print_fizzbuzz_1_to_n <(i32)*>()> (n):
                             if:
                                 cond eq mod_s i 5 0
                                 then "Buzz"
-                                else to_str i
+                                else from_i32 i
             set i add i 1;
 
 fn main <()*> ()> ():

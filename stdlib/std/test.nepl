@@ -108,93 +108,6 @@ fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
                 then test_str_eq_loop a b len add i 1
                 else false
 
-//: to_str: bool を "true"/"false" に変換する
-//:
-//: 目的:
-//: - 失敗メッセージ用に bool を文字列化します。
-//:
-//: 実装(アルゴリズム):
-//: - if で分岐して固定文字列を返します。
-//:
-//: 注意(重要):
-//: - 文字列は定数です。
-//:
-//: 計算量:
-//: - O(1)
-//: to_str: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `to_str` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     to_str true;
-//: ```
-fn to_str <(bool)->str> (b):
-    if:
-        b
-        then:
-            "true"
-        else:
-            "false"
-
-//: to_str: i32 を文字列に変換する（符号対応）
-//:
-//: 目的:
-//: - 失敗メッセージ用に i32 を文字列化します。
-//:
-//: 実装(アルゴリズム):
-//: - 0 は "0" を返します。
-//: - 負数は符号を付け、正の値は from_i32 を使います。
-//:
-//: 注意(重要):
-//: - 最小値の符号反転は未定義になり得ます。
-//:
-//: 計算量:
-//: - O(d)
-//: to_str: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `to_str` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     to_str 0;
-//: ```
-fn to_str <(i32)*>str> (v):
-    if:
-        eq v 0
-        then:
-            "0"
-        else:
-            if:
-                cond:
-                    lt v 0
-                then:
-                    let a <i32> sub 0 v;
-                    let s <str> from_i32 a;
-                    concat "-" s
-                else:
-                    from_i32 v
-
 //: test_print_fail: 失敗メッセージを表示する（WASI）
 //:
 //: 目的:
@@ -414,8 +327,8 @@ fn noshadow assert_eq_i32 <(i32,i32)*>()> (expected, actual):
         eq expected actual
         then ()
         else:
-            let se <str> to_str expected;
-            let sa <str> to_str actual;
+            let se <str> from_i32 expected;
+            let sa <str> from_i32 actual;
             let m0 <str> concat "assert_eq_i32 failed: expected=" se;
             let m1 <str> concat m0 " actual=";
             let m2 <str> concat m1 sa;
@@ -459,8 +372,8 @@ fn noshadow assert_ne <(bool,bool)*>()> (a, b):
             if:
                 b
                 then:
-                    let sa <str> to_str a;
-                    let sb <str> to_str b;
+                    let sa <str> if a then "true" else "false";
+                    let sb <str> if b then "true" else "false";
                     let m0 <str> concat "assert_ne failed: a=" sa;
                     let m1 <str> concat m0 " b=";
                     let m2 <str> concat m1 sb;
@@ -471,8 +384,8 @@ fn noshadow assert_ne <(bool,bool)*>()> (a, b):
                 b
                 then ()
                 else:
-                    let sa <str> to_str a;
-                    let sb <str> to_str b;
+                    let sa <str> if a then "true" else "false";
+                    let sb <str> if b then "true" else "false";
                     let m0 <str> concat "assert_ne failed: a=" sa;
                     let m1 <str> concat m0 " b=";
                     let m2 <str> concat m1 sb;
@@ -556,7 +469,7 @@ fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
         Result::Ok v:
             ()
         Result::Err e:
-            let se <str> to_str e;
+            let se <str> from_i32 e;
             let m0 <str> concat "assert_ok_i32 failed: Err=" se;
             test_fail m0;
 
@@ -594,7 +507,7 @@ fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
 fn noshadow assert_err_i32 <(Result<i32,i32>)*>()> (r):
     match r:
         Result::Ok v:
-            let sv <str> to_str v;
+            let sv <str> from_i32 v;
             let m0 <str> concat "assert_err_i32 failed: Ok=" sv;
             test_fail m0;
         Result::Err e:
