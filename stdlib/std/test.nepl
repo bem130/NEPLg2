@@ -372,8 +372,8 @@ fn noshadow assert_ne <(bool,bool)*>()> (a, b):
             if:
                 b
                 then:
-                    let sa <str> if a then "true" else "false";
-                    let sb <str> if b then "true" else "false";
+                    let sa <str> from_bool a;
+                    let sb <str> from_bool b;
                     let m0 <str> concat "assert_ne failed: a=" sa;
                     let m1 <str> concat m0 " b=";
                     let m2 <str> concat m1 sb;
@@ -384,8 +384,8 @@ fn noshadow assert_ne <(bool,bool)*>()> (a, b):
                 b
                 then ()
                 else:
-                    let sa <str> if a then "true" else "false";
-                    let sb <str> if b then "true" else "false";
+                    let sa <str> from_bool a;
+                    let sb <str> from_bool b;
                     let m0 <str> concat "assert_ne failed: a=" sa;
                     let m1 <str> concat m0 " b=";
                     let m2 <str> concat m1 sb;

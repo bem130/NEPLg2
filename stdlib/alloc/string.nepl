@@ -767,73 +767,178 @@ fn str_split <(str,str)->Vec<str>> (s, sep):
             set out vec_push<str> out tail;
             out
 
+// from_bool: bool を文字列へ変換する
+//
+// 目的:
+// - bool を "true" または "false" の文字列へ変換します。
+// - 診断文やテスト失敗メッセージで、論理値をそのまま表示したい時に使います。
+//
+// 実装(アルゴリズム):
+// - `if` で分岐し、あらかじめ用意された定数文字列を返します。
+//
+// 注意(重要):
+// - 返す文字列はヒープ確保を伴わない定数文字列です。
+// - 数値変換ではなく表示用の文字列表現です。
+//
+// 計算量:
+// - O(1)
+//: from_bool: 主な用途
+//:
+//: [目的/もくてき]:
+//: - bool を人間向けの文字列へ変換する使い方を示します。
+//:
+//: [実装/じっそう]:
+//: - true と false を、それぞれ固定文字列へ直接対応付けます。
+//:
+//: [注意/ちゅうい]:
+//: - 返値は表示や比較には使えますが、bool としては扱えません。
+//:
+//: [計算量/けいさんりょう]:
+//: - 分岐 1 回だけなので O(1) です。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "alloc/string" as *
+//: fn main <()*>()> ():
+//:     assert_str_eq "true" from_bool true;
+//:     assert_str_eq "false" from_bool false;
+//: ```
+fn from_bool <(bool)->str> (b):
+    if:
+        b
+        then:
+            "true"
+        else:
+            "false"
+
+// digit_to_char_lower: 0..15 の数値を小文字 16 進数字へ変換する
+//
+// 目的:
+// - 基数変換で得た 1 桁分の値を、`0-9` または `a-f` の 1 文字へ変換します。
+//
+// 実装(アルゴリズム):
+// - `v < 10` のときは `'0' + v` を返します。
+// - それ以外は `'a' + (v - 10)` を返します。
+//
+// 注意(重要):
+// - 呼び出し側は `0 <= v < 16` を満たす値だけを渡す必要があります。
+// - 16 以上の値を渡した場合の挙動は未定義です。
+//
+// 計算量:
+// - O(1)
+fn digit_to_char_lower <(i32)->i32> (v):
+    if:
+        lt v 10
+        then:
+            add 48 v
+        else:
+            add 87 v
+
+// digit_from_char: 1 文字を数値へ変換する
+//
+// 目的:
+// - `0-9`、`a-f`、`A-F` を数値 0..15 へ変換します。
+// - 基数付きの文字列解析で各文字の意味を判定する時に使います。
+//
+// 実装(アルゴリズム):
+// - ASCII 範囲を順に判定し、対応する値へ写像します。
+// - 数字でも英字でもない場合は `Result::Err 1` を返します。
+//
+// 注意(重要):
+// - 返る値が基数未満かどうかの判定は、この関数ではなく呼び出し側が行います。
+// - 英字は大小どちらも受理します。
+//
+// 計算量:
+// - O(1)
+fn digit_from_char <(i32)->Result<i32,i32>> (ch):
+    if:
+        and ge ch 48 le ch 57
+        then:
+            Result::Ok<i32,i32> sub ch 48
+        else:
+            if:
+                and ge ch 97 le ch 102
+                then:
+                    Result::Ok<i32,i32> add 10 sub ch 97
+                else:
+                    if:
+                        and ge ch 65 le ch 70
+                        then:
+                            Result::Ok<i32,i32> add 10 sub ch 65
+                        else:
+                            Result::Err<i32,i32> 1
+
+// validate_radix: 文字列変換で使える基数かを判定する
+//
+// 目的:
+// - 2 / 8 / 10 / 16 のみを受理し、それ以外の基数を早期に弾きます。
+//
+// 実装(アルゴリズム):
+// - 許可された 4 値との等値比較だけで判定します。
+//
+// 注意(重要):
+// - 現在の文字列変換 API は NEPLg2 の標準的な整数リテラル系に合わせ、2 / 8 / 10 / 16 に限定します。
+// - それ以外の基数を使いたい場合は、この関数と対応する doctest を拡張してください。
+//
+// 計算量:
+// - O(1)
+fn validate_radix <(i32)->Result<i32,i32>> (radix):
+    if:
+        or or eq radix 2 eq radix 8 or eq radix 10 eq radix 16
+        then:
+            Result::Ok<i32,i32> radix
+        else:
+            Result::Err<i32,i32> 1
+
 // from_i32: i32 を文字列へ変換する
 //
 // 目的:
-// - 非負の i32 を 10 進文字列に変換します。
+// - i32 を符号付き 10 進文字列へ変換します。
+// - 診断文やログで、負数を含む整数をそのまま表示したい時に使います。
 //
 // 実装(アルゴリズム):
-// - 10 で割った余りを逆順に保存し、最後に反転して出力します。
+// - まず i32 を i64 へ符号拡張し、その後 `from_i64` に委譲します。
+// - 桁生成と負号処理を `from_i64` に集約し、整数文字列化の実装を一箇所に保ちます。
 //
 // 注意(重要):
-// - 負数は未対応のため "0" を返します（暫定動作）。
+// - `from_i32` 自身は薄いラッパで、実際の計算量とメモリ確保は `from_i64` に従います。
+// - これは型変換ではなく文字列表現の生成なので、`cast` ではなく `alloc/string` に置いています。
 //
 // 計算量:
 // - O(d)  (d は桁数)
 //: from_i32: 主な用途
 //:
 //: [目的/もくてき]:
-//: - from_i32 の主な用途と呼び出し方を示します。
+//: - 正数と負数の両方を 10 進文字列へ変換する例を示します。
 //:
 //: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
+//: - i64 共通実装へ渡すことで、符号と桁列の処理を重複させません。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - 返値は新しい文字列であり、桁数に応じた確保コストがあります。
 //:
 //: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
+//: - 桁数 d に対して O(d) です。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "alloc/string" as *
+//: fn main <()*>()> ():
+//:     assert_str_eq "42" from_i32 42;
+//:     assert_str_eq "-42" from_i32 -42;
+//: ```
 fn from_i32 <(i32)->str> (x):
-    if:
-        eq x 0
-        then:
-            let out0 <i32> alloc_raw 5;
-            store_i32 out0 1;
-            store_u8 add out0 4 48;    // '0'
-            out0
-        else:
-            if:
-                cond:
-                    lt x 0
-                then:
-                    let outn <i32> alloc_raw 5;
-                    store_i32 outn 1;
-                    store_u8 add outn 4 48;
-                    outn
-                else:
-                    let scratch <i32> alloc_raw 16;
-                    let mut idx <i32> 0;
-                    let mut n <i32> x;
-
-                    while lt 0 n:
-                        do:
-                            let rem <i32> mod_s n 10;
-                            store_u8 add scratch idx add 48 rem;
-                            set idx add idx 1;
-                            set n div_s n 10;
-
-                    let out <i32> alloc_raw add 4 idx;
-                    store_i32 out idx;
-
-                    let mut i <i32> 0;
-                    while lt i idx:
-                        do:
-                            let rev <i32> sub idx <i32> add i 1;
-                            let b <i32> load_u8 <i32> add scratch rev;
-                            store_u8 <i32> add out <i32> add 4 i b;
-                            set i add i 1;
-
-                    out
+    match from_i32_radix x 10:
+        Result::Ok s:
+            s
+        Result::Err _:
+            "0"
 
 // to_i32: 文字列を i32 に変換する
 //
@@ -863,56 +968,58 @@ fn from_i32 <(i32)->str> (x):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn to_i32 <(str)->Result<i32,i32>> (s):
-    let n <i32> load_i32 s;
-    let mut i <i32> 0;
-    let mut res <i32> 0;
-    let mut ok <i32> 1;
+    match to_i32_radix s 10:
+        Result::Ok v:
+            Result::Ok<i32,i32> v
+        Result::Err e:
+            Result::Err<i32,i32> e
 
-    if:
-        cond:
-            eq n 0
-        then:
-            set ok 0;
-        else:
-            let first <i32> load_u8 add s 4;
+// from_i32_radix: i32 を指定した基数の文字列へ変換する
+//
+// 目的:
+// - i32 を 2 / 8 / 10 / 16 進の文字列へ変換します。
+// - ログ、テスト、シリアライズで基数を明示した文字列表現が必要な場面に使います。
+//
+// 実装(アルゴリズム):
+// - `i32` を `i64` に符号拡張してから `from_i64_radix` に委譲します。
+// - 桁列生成の本体は i64 共通実装に集約します。
+//
+// 注意(重要):
+// - 対応基数は 2 / 8 / 10 / 16 のみです。
+// - 結果は小文字英字を使うため、16 進では `ff` のような表記になります。
+//
+// 計算量:
+// - O(d)  (d は指定基数での桁数)
+fn from_i32_radix <(i32,i32)->Result<str,i32>> (x, radix):
+    from_i64_radix <i64> cast x radix
+
+// to_i32_radix: 指定基数の文字列を i32 に変換する
+//
+// 目的:
+// - 2 / 8 / 10 / 16 進で書かれた文字列を i32 に変換します。
+// - 設定値やリテラル風入力を i32 として読み取りたい時に使います。
+//
+// 実装(アルゴリズム):
+// - まず `to_i64_radix` で共通解析を行います。
+// - その後、i32 の範囲に収まるかを確認してから縮小します。
+//
+// 注意(重要):
+// - 接頭辞 `0x` や `0b` は解釈しません。文字列本体だけを渡してください。
+// - 解析失敗と範囲外はどちらも `Result::Err` を返します。
+//
+// 計算量:
+// - O(n)  (n は入力文字列長)
+fn to_i32_radix <(str,i32)->Result<i32,i32>> (s, radix):
+    match to_i64_radix s radix:
+        Result::Ok v64:
             if:
-                cond:
-                    eq first 45
+                and ge v64 <i64> cast -2147483648 le v64 <i64> cast 2147483647
                 then:
-                    set ok 0;
+                    Result::Ok<i32,i32> <i32> cast v64
                 else:
-                    while lt i n:
-                        do:
-                            let base <i32> add s 4;
-                            let p <i32> add base i;
-                            let b <i32> load_u8 p;
-                            let digit <i32> sub b 48;
-
-                            if:
-                                cond:
-                                    lt digit 0
-                                then:
-                                    set ok 0;
-                                    set i n;
-                                else:
-                                    if:
-                                        cond:
-                                            le digit 9
-                                        then:
-                                            let acc <i32> mul res 10;
-                                            set res add acc digit;
-                                            set i add i 1;
-                                        else:
-                                            set ok 0;
-                                            set i n;
-
-    if:
-        cond:
-            eq ok 1
-        then:
-            Result::Ok<i32,i32> res
-        else:
-            Result::Err<i32,i32> 1
+                    Result::Err<i32,i32> 1
+        Result::Err e:
+            Result::Err<i32,i32> e
 
 //: cast: 主な用途
 //:
@@ -941,58 +1048,86 @@ fn to_i32 <(str)->Result<i32,i32>> (s):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn from_i64 <(i64)->str> (x):
-    if:
-        eq x <i64> cast 0
-        then:
-            let out0 <i32> alloc_raw 5;
-            store_i32 out0 1;
-            store_u8 add out0 4 48;
-            out0
-        else:
-            let scratch <i32> alloc_raw 32;
-            let mut idx <i32> 0;
-            let mut n <i64> x;
-            let ten <i64> cast 10;
-            while ne n <i64> cast 0:
-                do:
-                    let mut rem <i64> rem_s n ten;
+    match from_i64_radix x 10:
+        Result::Ok s:
+            s
+        Result::Err _:
+            "0"
+
+// from_i64_radix: i64 を指定した基数の文字列へ変換する
+//
+// 目的:
+// - i64 を 2 / 8 / 10 / 16 進文字列へ変換します。
+// - 整数の可視化や、基数を固定したテストデータ生成に使います。
+//
+// 実装(アルゴリズム):
+// - `validate_radix` で受理基数を確認します。
+// - 負数なら 10 進では `-` を付け、2 / 8 / 16 進では 64-bit 2 の補数表現として扱います。
+// - 各ループで `rem_s` と `div_s` により下位 1 桁ずつ取り出し、逆順に積んで最後に反転します。
+//
+// 注意(重要):
+// - 2 / 8 / 16 進の負数は符号付き文字列ではなく、64-bit 2 の補数表現です。
+// - 16 進の英字は小文字です。
+// - 基数が不正な場合は `Result::Err 1` を返します。
+//
+// 計算量:
+// - O(d)  (d は指定基数での桁数)
+fn from_i64_radix <(i64,i32)->Result<str,i32>> (x, radix):
+    match validate_radix radix:
+        Result::Err e:
+            Result::Err<str,i32> e
+        Result::Ok _:
+            if:
+                and eq radix 10 eq x <i64> cast 0
+                then:
+                    Result::Ok<str,i32> "0"
+                else:
+                    let scratch <i32> alloc_raw 68;
+                    let mut idx <i32> 0;
+                    let mut n <i64> x;
+                    let radix64 <i64> cast radix;
+                    let signed_decimal <bool> and eq radix 10 lt x <i64> cast 0;
                     if:
-                        lt rem <i64> cast 0
+                        and ne radix 10 lt n <i64> cast 0
                         then:
-                            set rem sub <i64> cast 0 rem;
+                            set n sub <i64> cast 0 n;
                         else:
                             ();
-                    let d <i32> cast rem;
-                    store_u8 add scratch idx add 48 d;
-                    set idx add idx 1;
-                    set n div_s n ten;
-
-            let neg <bool> lt x <i64> cast 0;
-            let out_len <i32> if neg add idx 1 idx;
-            let out <i32> alloc_raw add 4 out_len;
-            store_i32 out out_len;
-
-            let mut dst <i32> 0;
-            if:
-                neg
-                then:
-                    store_u8 add out 4 45;
-                    set dst 1;
-                else:
-                    ();
-
-            let mut i <i32> 0;
-            while lt i idx:
-                do:
-                    let rev <i32> sub idx <i32> add i 1;
-                    let b <i32> load_u8 <i32> add scratch rev;
-                    let out_ptr <i32> add out 4;
-                    let wr_off <i32> add dst i;
-                    let wr_ptr <i32> add out_ptr wr_off;
-                    store_u8 wr_ptr b;
-                    set i add i 1;
-
-            out
+                    while ne n <i64> cast 0:
+                        do:
+                            let mut rem <i64> rem_s n radix64;
+                            if:
+                                lt rem <i64> cast 0
+                                then:
+                                    set rem sub <i64> cast 0 rem;
+                                else:
+                                    ();
+                            let digit <i32> cast rem;
+                            store_u8 add scratch idx digit_to_char_lower digit;
+                            set idx add idx 1;
+                            set n div_s n radix64;
+                    let out_len <i32> if signed_decimal add idx 1 idx;
+                    let out <i32> alloc_raw add 4 out_len;
+                    store_i32 out out_len;
+                    let mut dst <i32> 0;
+                    if:
+                        signed_decimal
+                        then:
+                            store_u8 add out 4 45;
+                            set dst 1;
+                        else:
+                            ();
+                    let mut i <i32> 0;
+                    while lt i idx:
+                        do:
+                            let rev <i32> sub idx <i32> add i 1;
+                            let b <i32> load_u8 <i32> add scratch rev;
+                            let out_ptr <i32> add out 4;
+                            let wr_off <i32> add dst i;
+                            let wr_ptr <i32> add out_ptr wr_off;
+                            store_u8 wr_ptr b;
+                            set i add i 1;
+                    Result::Ok<str,i32> out
 
 //: cast: 主な用途
 //:
@@ -1021,57 +1156,89 @@ fn from_i64 <(i64)->str> (x):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn to_i64 <(str)->Result<i64,i32>> (s):
-    let n <i32> load_i32 s;
-    let mut i <i32> 0;
-    let mut res <i64> cast 0;
-    let mut ok <i32> 1;
-    let mut neg <i32> 0;
-    let ten <i64> cast 10;
+    to_i64_radix s 10
 
-    if:
-        eq n 0
-        then:
-            set ok 0;
-        else:
-            let first <i32> load_u8 add s 4;
+// to_i64_radix: 指定基数の文字列を i64 に変換する
+//
+// 目的:
+// - 2 / 8 / 10 / 16 進文字列を i64 として解釈します。
+// - 数値入力の解析や、基数別テストデータの読み戻しに使います。
+//
+// 実装(アルゴリズム):
+// - `validate_radix` で基数を確認します。
+// - 10 進のみ先頭の `-` を許可し、他基数では各文字を非負の桁として累積します。
+// - 各文字は `digit_from_char` で数値化し、基数未満かを都度確認します。
+//
+// 注意(重要):
+// - 接頭辞 `0b` / `0o` / `0x` は解釈しません。
+// - 2 / 8 / 16 進で負数表記を直接読むことはできません。
+// - 現在はオーバーフロー検査を行っていないため、表現域外入力は未定義です。
+//
+// 計算量:
+// - O(n)  (n は入力文字列長)
+fn to_i64_radix <(str,i32)->Result<i64,i32>> (s, radix):
+    match validate_radix radix:
+        Result::Err e:
+            Result::Err<i64,i32> e
+        Result::Ok _:
+            let n <i32> load_i32 s;
+            let mut i <i32> 0;
+            let mut res <i64> cast 0;
+            let mut ok <i32> 1;
+            let mut neg <i32> 0;
+            let radix64 <i64> cast radix;
             if:
-                eq first 45
-                then:
-                    set neg 1;
-                    set i 1;
-                else:
-                    ();
-            if:
-                ge i n
+                eq n 0
                 then:
                     set ok 0;
                 else:
-                    while lt i n:
-                        do:
-                            let b <i32> load_u8 <i32> add s <i32> add 4 i;
-                            let digit <i32> sub b 48;
+                    let first <i32> load_u8 add s 4;
+                    if:
+                        and eq radix 10 eq first 45
+                        then:
+                            set neg 1;
+                            set i 1;
+                        else:
                             if:
-                                or lt digit 0 gt digit 9
+                                eq first 45
                                 then:
                                     set ok 0;
-                                    set i n;
                                 else:
-                                    let d64 <i64> cast digit;
-                                    let acc <i64> mul res ten;
-                                    if:
-                                        eq neg 1
-                                        then:
-                                            set res sub acc d64;
-                                        else:
-                                            set res add acc d64;
-                                    set i add i 1;
-
-    if:
-        eq ok 1
-        then:
-            Result::Ok<i64,i32> res
-        else:
-            Result::Err<i64,i32> 1
+                                    ();
+                    if:
+                        ge i n
+                        then:
+                            set ok 0;
+                        else:
+                            while lt i n:
+                                do:
+                                    let b <i32> load_u8 <i32> add s <i32> add 4 i;
+                                    match digit_from_char b:
+                                        Result::Ok digit:
+                                            if:
+                                                ge digit radix
+                                                then:
+                                                    set ok 0;
+                                                    set i n;
+                                                else:
+                                                    let d64 <i64> cast digit;
+                                                    let acc <i64> mul res radix64;
+                                                    if:
+                                                        eq neg 1
+                                                        then:
+                                                            set res sub acc d64;
+                                                        else:
+                                                            set res add acc d64;
+                                                    set i add i 1;
+                                        Result::Err _:
+                                            set ok 0;
+                                            set i n;
+            if:
+                eq ok 1
+                then:
+                    Result::Ok<i64,i32> res
+                else:
+                    Result::Err<i64,i32> 1
 
 //: cast: 主な用途
 //:

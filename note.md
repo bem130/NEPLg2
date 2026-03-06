@@ -8154,6 +8154,43 @@
 - 検証:
   - `NO_COLOR=false trunk build` -> success
   - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-signature-v8.json -j 15` -> `7/7 pass`
+# 2026-03-06 作業メモ (alloc/string: bool と基数付き整数文字列変換の整理)
+
+- 目的:
+  - 文字列表現への変換責務を `alloc/string` に集約し、`core/cast` を値変換専用に保つ。
+  - 2 / 8 / 10 / 16 進の整数文字列化・解析を `alloc/string` の API として揃える。
+- 変更:
+  - `stdlib/alloc/string.nepl`
+    - `from_bool` を追加し、bool の表示用文字列化を `alloc/string` に統一。
+    - `from_i32` を `from_i32_radix x 10` 経由へ変更。
+    - `to_i32` を `to_i32_radix s 10` 経由へ変更。
+    - `from_i64` を `from_i64_radix x 10` 経由へ変更。
+    - `to_i64` を `to_i64_radix s 10` 経由へ変更。
+    - 新規に `digit_to_char_lower` / `digit_from_char` / `validate_radix` を追加。
+    - 新規に `from_i32_radix` / `to_i32_radix` / `from_i64_radix` / `to_i64_radix` を追加。
+    - 2 / 8 / 10 / 16 進のみを受理する方針をドキュメントコメントに明記。
+    - `from_bool` / `from_i32` / 基数付き変換の説明を、目的・実装・注意・計算量が分かる形へ手書きで更新。
+  - `stdlib/std/test.nepl`
+    - bool の文字列化を `from_bool` に統一。
+  - `tests/stdlib.n.md`
+    - `from_i32_radix 10 2`
+    - `from_i64_radix 255 16`
+    - `to_i32_radix "1010" 2`
+    - `to_i64_radix "Ff" 16`
+    - 不正桁 / 不正基数
+    を focused test として追加。
+- 検証:
+  - `node nodesrc/tests.js -i /tmp/one-radix-format.n.md --no-stdlib --no-tree -o /tmp/one-radix-format-only.json -j 1` -> `1/1 pass`
+  - `node nodesrc/tests.js -i /tmp/one-radix-parse.n.md --no-stdlib --no-tree -o /tmp/one-radix-parse-only.json -j 1` -> `1/1 pass`
+  - `node nodesrc/tests.js -i tests/stdlib.n.md -i tutorials/getting_started/10_project_fizzbuzz.n.md --no-stdlib --no-tree -o /tmp/tests-string-radix-focused-v1.json -j 15` -> `13/13 pass`
+- 判断:
+  - `bool -> str` は値変換ではなく文字列表現化なので `core/cast` ではなく `alloc/string` に置く。
+  - 2 / 8 / 10 / 16 進の基数指定は文字列 API の責務なので、`cast` ではなく `alloc/string` に置く。
+  - `core/cast` には数値/論理/ビット/ポインタの値変換だけを残す方針が一貫している。
+- 未完:
+  - `alloc/string.nepl` を input にした stdlib doctest 実行経路は別途整理が必要。
+  - `i128` の文字列表現変換は未実装。
+
 # 2026-03-05 作業メモ (フェーズD: D4011 を codegen 前段へ移動)
 
 - 目的:
