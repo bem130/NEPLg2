@@ -7,6 +7,7 @@
 - 変更:
   - `stdlib/alloc/string.nepl`
     - `from_bool`
+    - `to_bool`
     - `from_u128` / `from_u128_radix`
     - `to_u128` / `to_u128_radix`
     - `from_i128` / `from_i128_radix`

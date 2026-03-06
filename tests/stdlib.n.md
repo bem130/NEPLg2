@@ -85,6 +85,48 @@ fn main <()*>i32> ():
     add len t len f
 ```
 
+## string_to_bool_reads_text_form
+
+neplg2:test
+ret: 10
+```neplg2
+
+#entry main
+#indent 4
+#import "alloc/string" as *
+
+fn main <()*>i32> ():
+    let a <i32> match to_bool "true":
+        Result::Ok v:
+            cast v
+        Result::Err _:
+            0
+    let b <i32> match to_bool "false":
+        Result::Ok v:
+            cast v
+        Result::Err _:
+            1
+    add mul a 10 b
+```
+
+## string_to_bool_rejects_non_bool_text
+
+neplg2:test
+ret: 1
+```neplg2
+
+#entry main
+#indent 4
+#import "alloc/string" as *
+
+fn main <()*>i32> ():
+    match to_bool "1":
+        Result::Ok _:
+            0
+        Result::Err _:
+            1
+```
+
 ## string_from_i32_radix_formats_binary
 
 neplg2:test

@@ -814,6 +814,70 @@ fn from_bool <(bool)->str> (b):
         else:
             "false"
 
+// to_bool: 文字列を bool に変換する
+//
+// 目的:
+// - `"true"` または `"false"` の文字列を `bool` として読み取ります。
+// - 設定値や CLI 引数、テスト入力などで論理値を文字列から受け取る時に使います。
+//
+// 実装(アルゴリズム):
+// - 先に `str_eq` で `"true"` と一致するかを確認します。
+// - 続いて `"false"` と一致するかを確認し、どちらでもなければ `Err` を返します。
+//
+// 注意(重要):
+// - 受理する表記は小文字の `"true"` / `"false"` のみです。
+// - `"True"` や `"0"` / `"1"` は bool として扱いません。
+// - 解析失敗は `Result::Err 1` で返します。
+//
+// 計算量:
+// - O(n)  (n は入力文字列長)
+//:
+//: to_bool: 主な用途
+//:
+//: [目的/もくてき]:
+//: - 文字列入力から bool を安全に読む使い方を示します。
+//:
+//: [実装/じっそう]:
+//: - 固定文字列 `"true"` / `"false"` との比較で判定します。
+//:
+//: [注意/ちゅうい]:
+//: - 大文字小文字は区別します。
+//:
+//: [計算量/けいさんりょう]:
+//: - 比較は文字列長に比例するため O(n) です。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "core/result" as *
+//:| #import "alloc/string" as *
+//: fn main <()*>()> ():
+//:     match to_bool "true":
+//:         Result::Ok v:
+//:             assert_eq_i32 1 cast v;
+//:         Result::Err _:
+//:             assert_eq_i32 1 0;
+//:     match to_bool "false":
+//:         Result::Ok v:
+//:             assert_eq_i32 0 cast v;
+//:         Result::Err _:
+//:             assert_eq_i32 1 0;
+//: ```
+fn to_bool <(str)->Result<bool,i32>> (s):
+    if:
+        str_eq s "true"
+        then:
+            Result::Ok<bool,i32> true
+        else:
+            if:
+                str_eq s "false"
+                then:
+                    Result::Ok<bool,i32> false
+                else:
+                    Result::Err<bool,i32> 1
+
 // digit_to_char_lower: 0..15 の数値を小文字 16 進数字へ変換する
 //
 // 目的:

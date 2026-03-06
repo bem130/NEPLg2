@@ -72,6 +72,13 @@ fn main <()*> ()> ():
             assert_eq_i32 123 v
         Result::Err _:
             assert_eq_i32 1 0
+
+    match to_bool "false":
+        Result::Ok v:
+            assert_eq_i32 0 cast v
+        Result::Err _:
+            assert_eq_i32 1 0
+
     test_checked "parsing returns Result"
 ```
 
