@@ -4,22 +4,43 @@
 
 #import "core/mem" as *
 #import "core/math" as *
+#import "core/option" as *
+#import "core/result" as *
+#import "core/field" as *
 #import "std/stdio" as *
+#import "alloc/string" as s
+#import "alloc/collections/stack" as stk
+#import "alloc/collections/vec" as v
+#import "alloc/diag/error" as *
 
+//: rpn: 逆ポーランド記法（RPN）電卓 TUI/REPL
+//:
+//: [目的/もくてき]:
+//: - スペース区切りの逆ポーランド記法を対話的に評価する REPL を提供します。
+//: - `Stack<i32>` / `str_split` / `to_i32` などの stdlib を活用した実装例です。
+//: - 各トークンごとの計算ステップがきれいに表示される TUI スタイルの UI レスポンスを行います。
+//:
+//: [実装/じっそう]:
+//: - 入力を `str_split " "` でトークン化し、各トークンを順に処理します。
+//: - 処理経過のスタック状態を `  [ 値 | トップ値 ]` 形式で可視化します。
+//: - 演算結果やエラーメッセージには ANSI カラーを使い、視認性を高く保ちます。
+//:
+//: [注意/ちゅうい]:
+//: - 対応演算子は `+` `-` `*` の 3 種です。スタック不足時の保護付きです。
+//: - 負の整数リテラルにも対応しています（`to_i32` が符号付き解析を行います）。
+//:
+//: [計算量/けいさんりょう]:
+//: - 1 トークンあたり O(1)、全体で O(n)（n = トークン数）
 
-fn print_i32_color <(str,i32)*>()> (color, v):
-    print color;
-    print_i32 v;
-    print ansi_reset;
-    ()
+// ──────────────────────────────────────────────
+// UI ヘルパ
+// ──────────────────────────────────────────────
 
-fn println_i32_color <(str,i32)*>()> (color, v):
-    print_i32_color color v;
-    print "\n";
-    ()
-
-fn println_error <(str)*>()> (msg):
-    // Bold red "error:" + message
+//: print_error: エラーメッセージを赤色太字で出力する
+//:
+//: [目的/もくてき]:
+//: - `error: <msg>` 形式で標準出力に赤色で表示します。
+fn print_error <(str)*>()> (msg):
     print ansi_bold;
     print ansi_red;
     print "error:";
@@ -28,17 +49,248 @@ fn println_error <(str)*>()> (msg):
     println_color ansi_red msg;
     ()
 
-fn print_prompt <()*> ()> ():
-    // Bold green prompt
+//: print_prompt: REPL のプロンプトを表示する
+//:
+//: [目的/もくてき]:
+//: - 入力行の先頭に `> ` を太字緑色で出力します。
+fn print_prompt <()*>()> ():
     print ansi_bold;
     print_color ansi_green "> ";
     ()
 
+//: print_result: 計算結果を色付きで出力する
+//:
+//: [目的/もくてき]:
+//: - `ok: result = <val>` 形式で結果を表示します。
+fn print_result <(i32)*>()> (val):
+    print ansi_bold;
+    print_color ansi_green "ok";
+    print_color ansi_gray ": result = ";
+    print ansi_bold;
+    print ansi_cyan;
+    print_i32 val;
+    print ansi_reset;
+    print "\n";
+    ()
 
-fn main <()*> ()> ():
-    // Reverse Polish evaluator for space-separated ASCII lines (REPL).
-    // Supported tokens: non-negative integers and + - * operators.
+//: print_step_before: 途中計算の適用前状態を表示する
+//:
+//: [目的/もくてき]:
+//: - `[stack] [a b op] [tokens]` の形式で演算子適用前の状態・ハイライトを出力します。
+fn print_step_before <(Stack<i32>,i32,i32,str,Vec<str>,i32)*>()> (stack, a, b, op, tokens, i):
+    let hdr <i32> get stack "hdr";
+    let len <i32> load_i32 hdr;
+    let data <i32> load_i32 add hdr 8;
 
+    let mut j <i32> 0;
+    while lt j len:
+        do:
+            let elem <i32> load_i32 add data mul j 4;
+            print_i32 elem;
+            print " ";
+            set j add j 1;
+
+    print ansi_cyan;
+    print_i32 a;
+    print " ";
+    print_i32 b;
+    print " ";
+    print op;
+    print ansi_reset;
+
+    let n <i32> v::vec_len<str> tokens;
+    let mut k <i32> add i 1;
+    while lt k n:
+        do:
+            print " ";
+            match v::vec_get<str> tokens k:
+                Option::Some tok:
+                    print tok;
+                Option::None:
+                    ();
+            set k add k 1;
+
+    print "\n";
+    ()
+
+//: print_step_after: 途中計算の適用後状態を表示する
+//:
+//: [目的/もくてき]:
+//: - `[stack] [res] [tokens]` の形式で演算子適用後の状態・ハイライトを出力します。
+fn print_step_after <(Stack<i32>,i32,Vec<str>,i32)*>()> (stack, res, tokens, i):
+    let hdr <i32> get stack "hdr";
+    let len <i32> load_i32 hdr;
+    let data <i32> load_i32 add hdr 8;
+
+    let mut j <i32> 0;
+    while lt j len:
+        do:
+            let elem <i32> load_i32 add data mul j 4;
+            print_i32 elem;
+            print " ";
+            set j add j 1;
+
+    print ansi_green;
+    print_i32 res;
+    print ansi_reset;
+
+    let n <i32> v::vec_len<str> tokens;
+    let mut k <i32> add i 1;
+    while lt k n:
+        do:
+            print " ";
+            match v::vec_get<str> tokens k:
+                Option::Some tok:
+                    print tok;
+                Option::None:
+                    ();
+            set k add k 1;
+
+    print "\n";
+    ()
+
+// ──────────────────────────────────────────────
+// 演算ロジック
+// ──────────────────────────────────────────────
+
+//: apply_op: スタックから 2 値を取り出して二項演算を適用する
+//:
+//: [目的/もくてき]:
+//: - `+` `-` `*` のいずれかの演算を適用し、結果をスタックに積みます。
+//: - 適用前と適用後の状態をそれぞれ強調表示します。
+fn apply_op <(Stack<i32>,str,Vec<str>,i32)*>Stack<i32>> (stack, token, tokens, i):
+    if:
+        lt stk::stack_len<i32> stack 2
+        then:
+            print_error "stack underflow";
+            stack
+        else:
+            let b <i32> unwrap stk::stack_pop<i32> stack;
+            let a <i32> unwrap stk::stack_pop<i32> stack;
+            
+            print_step_before stack a b token tokens i;
+            
+            let res <i32>:
+                if:
+                    s::str_eq token "+"
+                    then add a b
+                    else:
+                        if:
+                            s::str_eq token "-"
+                            then sub a b
+                            else:
+                                if:
+                                    s::str_eq token "*"
+                                    then mul a b
+                                    else:
+                                        print_error "unknown operator";
+                                        0
+                                        
+            print_step_after stack res tokens i;
+            
+            stk::stack_push<i32> stack res
+            |> unwrap_ok<Stack<i32>, Diag>
+
+//: process_token: 1 つのトークンを分類して処理する
+//:
+//: [目的/もくてき]:
+//: - 演算子か数値かを判定しスタックに反映させ、トレースを表示します。
+fn process_token <(Stack<i32>,str,Vec<str>,i32)*>Stack<i32>> (stack, token, tokens, i):
+    if:
+        s::str_eq token ""
+        then:
+            stack
+        else:
+            let is_op <bool> or or s::str_eq token "+" s::str_eq token "-" s::str_eq token "*";
+            let next_stack <Stack<i32>>:
+                if:
+                    is_op
+                    then:
+                        apply_op stack token tokens i
+                    else:
+                        match s::to_i32 token:
+                            Result::Ok val:
+                                stk::stack_push<i32> stack val
+                                |> unwrap_ok<Stack<i32>, Diag>
+                            Result::Err _:
+                                print_error "unknown token";
+                                stack
+            next_stack
+
+// ──────────────────────────────────────────────
+// メイン処理
+// ──────────────────────────────────────────────
+
+//: eval_line: 1 行の RPN 式を評価する
+//:
+//: [目的/もくてき]:
+//: - スペース区切りの入力行をトークン化し、すべて適用して結果を出力します。
+//:
+//: [実装/じっそう]:
+//: - `Stack` を new し、`str_split` 結果をループして `process_token` を呼びます。
+//: - 最終的なスタック長が 1 であれば結果を表示し、超過時はエラーを出力します。
+//: - `Stack` および `Vec` は関数終了時に正しく `free` します。
+fn eval_line <(str)*>()> (line):
+    let trimmed <str> s::str_trim line;
+    let tokens <Vec<str>> s::str_split trimmed " ";
+    let n <i32> v::vec_len<str> tokens;
+
+    let mut stack <Stack<i32>>:
+        stk::stack_new<i32>
+        |> unwrap_ok<Stack<i32>, Diag>
+
+    let mut i <i32> 0;
+    while lt i n:
+        do:
+            match v::vec_get<str> tokens i:
+                Option::Some tok:
+                    set stack process_token stack tok tokens i;
+                Option::None:
+                    ()
+            set i add i 1;
+
+    let sp <i32> stk::stack_len<i32> stack;
+    if:
+        eq sp 1
+        then:
+            match stk::stack_pop<i32> stack:
+                Option::Some val:
+                    print_result val;
+                Option::None:
+                    ()
+        else:
+            if:
+                eq sp 0
+                then: ()
+                else:
+                    // エラー前にスタックの全要素を出力
+                    let hdr <i32> get stack "hdr";
+                    let len <i32> load_i32 hdr;
+                    let data <i32> load_i32 add hdr 8;
+                    let mut j <i32> 0;
+                    while lt j len:
+                        do:
+                            if:
+                                gt j 0
+                                then:
+                                    print " ";
+                                else:
+                                    ();
+                            let elem <i32> load_i32 add data mul j 4;
+                            print_i32 elem;
+                            set j add j 1;
+                    print "\n";
+                    print_error s::concat3 "stack has " s::from_i32 sp " values";
+    
+    stk::stack_free<i32> stack;
+    v::vec_free<str> tokens;
+    ()
+
+//: main: RPN TUI REPL のエントリーポイント
+//:
+//: [目的/もくてき]:
+//: - 初期バナーを表示後、対話式の無限ループを開始します。
+fn main <()*>()> ():
     print ansi_bold;
     println_color ansi_cyan "RPN REPL";
     println_color ansi_gray "enter space-separated tokens (e.g. 3 4 +). Ctrl+Z to exit.";
@@ -50,179 +302,16 @@ fn main <()*> ()> ():
         do:
             print_prompt;
             let input <str> read_line;
-            let input_len <i32> load_i32 input;
+            let input_len <i32> s::len input;
 
             if:
                 eq input_len 0
                 then:
-                    // read_line still allocates a buffer; free it before exit.
-                    // NOTE: stdlib read_line uses cap=1024 => alloc_raw(4+cap)=1028 bytes.
-                    dealloc_raw input 1028;
                     print ansi_bold;
                     println_color ansi_yellow "bye";
                     set running false;
                     ()
                 else:
-                    let stack <i32> alloc_raw mul 16 4;
-
-                    let mut sp <i32> 0;
-                    let mut a <i32> 0;
-                    let mut b <i32> 0;
-                    let mut i <i32> 0;
-                    let mut ok <i32> 1;
-
-                    while lt i input_len:
-                        do:
-                            let mut skip <i32> 0;
-                            let ch <i32> load_u8 add input add 4 i;
-
-                            // BOM skip (kept from original)
-                            if:
-                                eq i 0
-                                then:
-                                    if:
-                                        eq ch 255
-                                        then:
-                                            set i add i 2;
-                                            set skip 1;
-                                        else:
-                                            ()
-                                    if:
-                                        eq ch 239
-                                        then:
-                                            set i add i 3;
-                                            set skip 1;
-                                        else:
-                                            ()
-                                else:
-                                    ()
-
-                            if:
-                                eq skip 1
-                                then:
-                                    ()
-                                else:
-                                    if:
-                                        le ch 32
-                                        then:
-                                            set i add i 1;
-                                            ()
-                                        else:
-                                            // Operator branch: non-digit and not whitespace
-                                            if:
-                                                lt ch 48
-                                                then:
-                                                    if:
-                                                        lt sp 2
-                                                        then:
-                                                            println_error "stack underflow";
-                                                            set ok 0;
-                                                            set i input_len;
-                                                        else:
-                                                            set sp sub sp 1;
-                                                            set b load_i32 add stack mul sp 4;
-                                                            set sp sub sp 1;
-                                                            set a load_i32 add stack mul sp 4;
-
-                                                            if:
-                                                                eq ch 43
-                                                                then:
-                                                                    store_i32 add stack mul sp 4 add a b;
-                                                                    set sp add sp 1;
-                                                                else:
-                                                                    if:
-                                                                        eq ch 45
-                                                                        then:
-                                                                            store_i32 add stack mul sp 4 sub a b;
-                                                                            set sp add sp 1;
-                                                                        else:
-                                                                            if:
-                                                                                eq ch 42
-                                                                                then:
-                                                                                    store_i32 add stack mul sp 4 mul a b;
-                                                                                    set sp add sp 1;
-                                                                                else:
-                                                                                    println_error "unknown operator";
-                                                                                    set ok 0;
-                                                                                    set i input_len;
-
-                                                            set i add i 1;
-                                                else:
-                                                    // Number branch (starts with '0'..'9')
-                                                    if:
-                                                        le ch 57
-                                                        then:
-                                                            // Parse a non-negative integer token.
-                                                            let mut val <i32> 0;
-                                                            let mut parsing <bool> true;
-
-                                                            while parsing:
-                                                                do:
-                                                                    if:
-                                                                        lt i input_len
-                                                                        then:
-                                                                            let digit <i32> load_u8 add input add 4 i;
-                                                                            if:
-                                                                                eq digit 0
-                                                                                then:
-                                                                                    // Preserve original behavior: skip NUL.
-                                                                                    set i add i 1;
-                                                                                else:
-                                                                                    if:
-                                                                                        lt digit 48
-                                                                                        then:
-                                                                                            set parsing false;
-                                                                                        else:
-                                                                                            if:
-                                                                                                le digit 57
-                                                                                                then:
-                                                                                                    set val add mul val 10 sub digit 48;
-                                                                                                    set i add i 1;
-                                                                                                else:
-                                                                                                    set parsing false;
-                                                                        else:
-                                                                            set parsing false;
-
-                                                            store_i32 add stack mul sp 4 val;
-                                                            set sp add sp 1;
-                                                        else:
-                                                            println_error "unknown token";
-                                                            set ok 0;
-                                                            set i input_len;
-
-                    if:
-                        eq ok 1
-                        then:
-                            if:
-                                eq sp 1
-                                then:
-                                    set sp sub sp 1;
-                                    set a load_i32 add stack mul sp 4;
-
-                                    print ansi_bold;
-                                    print_color ansi_green "ok";
-                                    print_color ansi_gray ": result = ";
-
-                                    print ansi_bold;
-                                    print ansi_cyan;
-                                    print_i32 a;
-                                    print ansi_reset;
-                                    print "\n";
-                                else:
-                                    // Colored "stack has N values"
-                                    print ansi_bold;
-                                    print ansi_red;
-                                    print "error:";
-                                    print ansi_reset;
-                                    print_color ansi_red " stack has ";
-                                    print_i32_color ansi_yellow sp;
-                                    println_color ansi_red " values";
-                        else:
-                            ();
-
-                    // Free per-line allocations.
-                    dealloc_raw stack mul 16 4;
-                    // NOTE: stdlib read_line uses cap=1024 => alloc_raw(4+cap)=1028 bytes.
-                    dealloc_raw input 1028;
-
+                    eval_line input;
+                    ()
     ()
