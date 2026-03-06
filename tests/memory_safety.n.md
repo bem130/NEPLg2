@@ -263,3 +263,54 @@ fn main <()->i32> ():
         else:
             0
 ```
+
+## load_i32 は MemPtr<i32> だけを受け付ける
+
+neplg2:test[compile_fail]
+diag_id: D3006
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "core/mem" as *
+
+fn main <()->i32> ():
+    let p <MemPtr<u8>> mem_ptr_wrap 0
+    let _v load_i32 p;
+    0
+```
+
+## store_u8 は MemPtr<u8> だけを受け付ける
+
+neplg2:test[compile_fail]
+diag_id: D3006
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "core/mem" as *
+
+fn main <()->i32> ():
+    let p <MemPtr<i32>> mem_ptr_wrap 0
+    store_u8 p 1;
+    0
+```
+
+## dealloc_region は RegionToken を要求する
+
+neplg2:test[compile_fail]
+diag_id: D3006
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "core/mem" as *
+
+fn main <()->i32> ():
+    let p <MemPtr<u8>> mem_ptr_wrap 0
+    dealloc_region p;
+    0
+```

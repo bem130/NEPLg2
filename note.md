@@ -8400,3 +8400,20 @@
 - 検証:
   - `timeout 20s node nodesrc/run_test.js <<'EOF' ... import-only-fs ... EOF` -> pass
   - `timeout 20s node nodesrc/run_test.js <<'EOF' ... fs-missing-file ... EOF` -> pass
+
+# 2026-03-06 作業メモ (型安全回帰の追加: MemPtr と RegionToken の取り違えを D3006 で固定)
+
+- 目的:
+  - `core/mem` の型安全モデルをテストで固定し、`MemPtr<u8>` / `MemPtr<i32>` / `RegionToken<T>` の取り違えを前段で止める。
+- 変更:
+  - `tests/memory_safety.n.md`
+    - `load_i32` に `MemPtr<u8>` を渡す compile_fail を追加。
+    - `store_u8` に `MemPtr<i32>` を渡す compile_fail を追加。
+    - `dealloc_region` に `MemPtr<u8>` を渡す compile_fail を追加。
+- 検証:
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... mem-basic ... EOF` -> pass
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... mem-load-i32-type-fail ... EOF` -> pass (`D3006`)
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... mem-store-u8-type-fail ... EOF` -> pass (`D3006` が先頭)
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... mem-dealloc-region-type-fail ... EOF` -> pass (`D3006` が先頭)
+- 補足:
+  - `nodesrc/tests.js -i tests/memory_safety.n.md ...` はこの環境では timeout 30s に到達したため、個別 focused 実行で確認した。
