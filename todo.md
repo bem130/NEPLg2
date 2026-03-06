@@ -39,10 +39,9 @@
 - `mem/kpread/kpwrite` の公開APIを Result/Option 前提で統一する。
 - `_safe` 接尾辞を廃止し、安全APIを標準名へ統一する。
 - 生ポインタ前提APIは段階的に `*_raw` へ隔離し、最終的に公開面から削除する。
-- `alloc/collections` と `alloc/string` の `alloc_raw/realloc_raw/dealloc_raw` 依存を安全APIへ置換する。
+- `alloc/collections` の `alloc_raw/realloc_raw/dealloc_raw` 依存を安全APIへ置換する。
 - `alloc/string` の文字列表現変換を責務整理し、`bool` / `i32` / `i64` の 2/8/10/16 進変換を固定する。
 - `alloc/string` の doctest 記述を見直し、focused test と stdlib 入力時の doctest 実行経路を整理する。
-- `alloc/string` の未整備変換（必要なら `str -> bool` など）の配置と命名を確定する。
 - `stdlib/std`（`stdio` と `env/cliarg` の残り syscall/argv 内部、`fs` の残り ABI 境界整理）および `stdlib/nm` を同一安全モデルへ移行する。
 - 完了条件:
   - `core/mem` と主要stdlibの公開面に `_raw` が残らない。

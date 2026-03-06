@@ -1,3 +1,39 @@
+# 2026-03-06 作業メモ (型安全化: `alloc/string` の主要 raw 確保を `RegionToken<u8>` 化)
+
+- 目的:
+  - `alloc/string` の主要生成経路から `alloc_raw` を取り除き、`core/mem` の型付き領域 API に寄せる。
+  - 文字列生成処理で長さヘッダと本文ポインタを `MemPtr<T>` / `RegionToken<T>` で扱い、内部の生ポインタ露出を減らす。
+- 変更:
+  - `stdlib/alloc/string.nepl`
+    - `string_alloc_region`
+    - `string_region_len_ptr`
+    - `string_region_data_ptr`
+    - `string_data_ptr`
+    - `string_finish`
+    を追加し、文字列レイアウト専用の内部ヘルパとして整理。
+  - `concat`
+    - 出力文字列の確保を `string_alloc_region` に変更。
+    - 出力先コピーを `MemPtr<u8>` ベースへ変更。
+  - `sb_build`
+    - 連結先バッファの確保を `RegionToken<u8>` 化。
+    - 各 part の読み出しと出力先書き込みを型付きポインタへ変更。
+  - `str_slice`
+    - 切り出し先の確保を `RegionToken<u8>` 化。
+  - `from_u128_radix`
+    - 逆順桁積みの scratch を `RegionToken<u8>` 化。
+    - 一時 scratch は `dealloc_region` で解放。
+  - `from_f64`
+    - 小数部 scratch を `RegionToken<u8>` 化。
+    - scratch 解放を追加。
+- 結果:
+  - `stdlib/alloc/string.nepl` から `alloc_raw/realloc_raw/dealloc_raw` の直接呼び出しは消えた。
+  - `str` の内部表現自体はまだ raw address だが、主要な生成経路では `RegionToken<u8>` から `string_finish` で確定する流れに整理できた。
+- 検証:
+  - `node nodesrc/tests.js -i tests/stdlib.n.md -i tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md --no-stdlib --no-tree -o /tmp/tests-string-type-safety-v1.json -j 15`
+    - 結果: `26/26 pass`
+  - `rg -n "alloc_raw|realloc_raw|dealloc_raw" stdlib/alloc/string.nepl`
+    - 結果: 該当なし
+
 # 2026-03-06 作業メモ (alloc/string: i128/u128 と基数付き文字列変換の整備)
 
 - 目的:
