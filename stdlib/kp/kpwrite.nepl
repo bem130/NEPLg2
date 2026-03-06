@@ -131,7 +131,7 @@ fn writer_alloc_buf <()*>Result<WriterBuf,str>> ():
                         Result::Err _e2:
                             Result<WriterBuf,str>::Err "kpwrite.writer_new buffer alloc failed"
 
-fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
+fn writer_new_header <()*>Result<MemPtr<u8>,str>> ():
     match writer_alloc_buf:
         Result::Err e:
             Result<MemPtr<u8>,str>::Err e
@@ -199,7 +199,7 @@ fn writer_new_handle <()*>Result<MemPtr<u8>,str>> ():
                                                                             Result<MemPtr<u8>,str>::Ok w
 
 fn writer_new <()*>Result<Writer,str>> ():
-    let raw_res <Result<MemPtr<u8>,str>> writer_new_handle;
+    let raw_res <Result<MemPtr<u8>,str>> writer_new_header;
     match raw_res:
         Result::Ok raw:
             Result<Writer,str>::Ok writer_wrap raw

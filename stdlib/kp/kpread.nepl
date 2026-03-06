@@ -36,11 +36,11 @@ enum ScannerHeaderField:
 fn scanner_wrap <(MemPtr<u8>)->Scanner> (raw):
     Scanner region_new raw 12
 
-fn scanner_new_handle <()*>Result<MemPtr<u8>,str>> ():
+fn scanner_new_header <()*>Result<MemPtr<u8>,str>> ():
     scanner_new_impl
 
 fn scanner_new <()*>Result<Scanner,str>> ():
-    let raw_res <Result<MemPtr<u8>,str>> scanner_new_handle;
+    let raw_res <Result<MemPtr<u8>,str>> scanner_new_header;
     match raw_res:
         Result::Ok raw:
             Result<Scanner,str>::Ok scanner_wrap raw
