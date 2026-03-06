@@ -27,6 +27,19 @@
   - `node nodesrc/tests.js -i tests/stdlib.n.md --no-stdlib --no-tree -o /tmp/tests-stdlib-conversions-i128-v3.json -j 15`
     - 結果: `19/19 pass`
 
+# 2026-03-06 作業メモ (型安全化: `ptr_cast` 公開廃止)
+
+- 目的:
+  - ポインタ再解釈のような unsafe な公開 API を減らし、`MemPtr<T>` / `RegionToken<T>` モデルへ寄せる。
+- 変更:
+  - `stdlib/core/cast.nepl`
+    - 未使用だった `ptr_cast` を削除。
+    - モジュール先頭コメントを、数値 cast と bitcast のみに責務を限定する説明へ更新。
+- 判断:
+  - `ptr_cast` は型だけを付け替える操作で、`MemPtr<T>` による型安全化方針と矛盾する。
+  - repo 内参照は無く、現時点で公開面に残す合理性は無かった。
+  - `MemPtr<T>` は「型付きアドレス」、`RegionToken<T>` は「その領域のサイズと所有権」を伴う線形トークンとして使い分ける。
+
 # 2026-03-06 作業メモ (フェーズF: tutorials Part6 拡充 + library-first 化)
 
 - 目的:
