@@ -1,3 +1,31 @@
+# 2026-03-06 作業メモ (alloc/string: i128/u128 と基数付き文字列変換の整備)
+
+- 目的:
+  - `alloc/string` に整数の文字列表現変換を集約し、`core/cast` との責務を分離する。
+  - `i128` / `u128` を含む 2/8/10/16 進の変換を提供する。
+  - tutorial に、数値 cast と文字列変換の違いを明示した導線を追加する。
+- 変更:
+  - `stdlib/alloc/string.nepl`
+    - `from_bool`
+    - `from_u128` / `from_u128_radix`
+    - `to_u128` / `to_u128_radix`
+    - `from_i128` / `from_i128_radix`
+    - `to_i128` / `to_i128_radix`
+    - `u128_divrem_small` など 128-bit 整数の補助関数群
+    - `to_i32` の説明を現実装に合わせて更新
+  - `tests/stdlib.n.md`
+    - `i128/u128` と負数16進の focused case を追加
+  - `tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md`
+    - `core/cast` と `alloc/string` の使い分け
+    - `Result` を返す解析関数
+    - 2/8/10/16 進変換
+    - `i128/u128` の大きい値の例
+  - `tutorials/getting_started/00_index.n.md`
+    - 新規 tutorial への導線を追加
+- 検証:
+  - `node nodesrc/tests.js -i tests/stdlib.n.md --no-stdlib --no-tree -o /tmp/tests-stdlib-conversions-i128-v3.json -j 15`
+    - 結果: `19/19 pass`
+
 # 2026-03-06 作業メモ (フェーズF: tutorials Part6 拡充 + library-first 化)
 
 - 目的:

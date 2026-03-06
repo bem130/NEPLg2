@@ -121,6 +121,26 @@ fn main <()*>i32> ():
             0
 ```
 
+## string_from_i64_radix_formats_negative_hex_with_sign
+
+neplg2:test
+ret: 3
+```neplg2
+
+#entry main
+#indent 4
+#import "alloc/string" as *
+#import "core/cast" as *
+
+fn main <()*>i32> ():
+    let n <i64> sub <i64> cast 0 <i64> cast 255;
+    match from_i64_radix n 16:
+        Result::Ok s:
+            len s
+        Result::Err _:
+            0
+```
+
 ## string_to_i32_radix_reads_binary
 
 neplg2:test
@@ -152,6 +172,25 @@ ret: 255
 
 fn main <()*>i32> ():
     match to_i64_radix "Ff" 16:
+        Result::Ok v:
+            <i32> cast v
+        Result::Err _:
+            0
+```
+
+## string_to_i64_radix_reads_negative_hex
+
+neplg2:test
+ret: -255
+```neplg2
+
+#entry main
+#indent 4
+#import "alloc/string" as *
+#import "core/cast" as *
+
+fn main <()*>i32> ():
+    match to_i64_radix "-Ff" 16:
         Result::Ok v:
             <i32> cast v
         Result::Err _:
@@ -193,4 +232,138 @@ fn main <()*>i32> ():
             0
         Result::Err _:
             1
+```
+
+## string_from_i128_formats_decimal_beyond_i64
+
+neplg2:test
+ret: 20
+```neplg2
+
+#entry main
+#indent 4
+#import "alloc/string" as *
+#import "core/math" as *
+#import "core/cast" as *
+
+fn main <()*>i32> ():
+    let v <i128> i128 <i64> cast 1 <i64> cast 0;
+    let s <str> from_i128 v;
+    len s
+```
+
+## string_from_i128_radix_formats_large_hex
+
+neplg2:test
+ret: 17
+```neplg2
+
+#entry main
+#indent 4
+#import "alloc/string" as *
+#import "core/math" as *
+#import "core/cast" as *
+
+fn main <()*>i32> ():
+    let v <i128> i128 <i64> cast 1 <i64> cast 0;
+    match from_i128_radix v 16:
+        Result::Ok s:
+            len s
+        Result::Err _:
+            0
+```
+
+## string_to_i128_radix_reads_large_hex
+
+neplg2:test
+ret: 11
+```neplg2
+
+#entry main
+#indent 4
+#import "alloc/string" as *
+#import "core/math" as *
+#import "core/field" as *
+#import "core/cast" as *
+
+fn main <()*>i32> ():
+    match to_i128_radix "10000000000000000" 16:
+        Result::Ok v:
+            let hi <i64> get v "hi";
+            let lo <i64> get v "lo";
+            if:
+                and eq hi <i64> cast 1 eq lo <i64> cast 0
+                then:
+                    11
+                else:
+                    0
+        Result::Err _:
+            0
+```
+
+## string_to_i128_radix_reads_negative_hex
+
+neplg2:test
+ret: -255
+```neplg2
+
+#entry main
+#indent 4
+#import "alloc/string" as *
+#import "core/cast" as *
+
+fn main <()*>i32> ():
+    match to_i128_radix "-ff" 16:
+        Result::Ok v:
+            let v64 <i64> cast v;
+            <i32> cast v64
+        Result::Err _:
+            0
+```
+
+## string_u128_radix_roundtrip_large_hex
+
+neplg2:test
+ret: 17
+```neplg2
+
+#entry main
+#indent 4
+#import "alloc/string" as *
+#import "core/math" as *
+#import "core/cast" as *
+
+fn main <()*>i32> ():
+    let v <u128> u128 <i64> cast 1 <i64> cast 0;
+    match from_u128_radix v 16:
+        Result::Ok s:
+            len s
+        Result::Err _:
+            0
+```
+
+## string_to_u128_radix_reads_large_hex
+
+neplg2:test
+ret: 7
+```neplg2
+
+#entry main
+#indent 4
+#import "alloc/string" as *
+#import "core/math" as *
+#import "core/field" as *
+#import "core/cast" as *
+
+fn main <()*>i32> ():
+    match to_u128_radix "10000000000000000" 16:
+        Result::Ok v:
+            if:
+                and eq get v "hi" <i64> cast 1 eq get v "lo" <i64> cast 0
+                then:
+                    7
+                else:
+                    0
+        Result::Err _:
+            0
 ```

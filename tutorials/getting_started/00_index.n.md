@@ -30,6 +30,7 @@ NEPLg2 の[中核/ちゅうかく]は[次/つぎ]の 4 つです。
 ### Part 1: [基礎/きそ]（[概念章/がいねんしょう]）
 - [01 Hello World](01_hello_world.n.md)
 - [02 数値と変数（前置記法と型注釈）](02_numbers_and_variables.n.md)
+- [02b 型変換と文字列表現](02b_type_conversion_and_textual_conversion.n.md)
 - [03 関数と if（inline と block）](03_functions.n.md)
 - [04 文字列と標準入出力](04_strings_and_stdio.n.md)
 - [05 Option（値がある/ない）](05_option.n.md)
