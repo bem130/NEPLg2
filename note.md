@@ -8379,3 +8379,24 @@
   - `timeout 20s node nodesrc/run_test.js <<'EOF' ... cliarg-basic ... EOF` -> pass
   - `timeout 20s node nodesrc/run_test.js <<'EOF' ... cliarg-compile-fail-cstr ... EOF` -> pass (`D3006`)
   - `timeout 20s node nodesrc/run_test.js <<'EOF' ... stdout-concat ... EOF` -> pass
+
+# 2026-03-06 作業メモ (フェーズE前進: fs の一時領域を RegionToken<u8> 化)
+
+- 目的:
+  - `stdlib/std/fs.nepl` の内部一時バッファ確保を `RegionToken<u8>` / `MemPtr<T>` ベースへ移し、`i32` 生ポインタの受け渡しを syscall 境界へ閉じ込める。
+- 原因:
+  - `fs_open_read` / `fs_read_fd_bytes` / `fs_bytes_to_string` は確保した一時領域をすべて `i32` で扱っており、`cliarg` と同じく型安全モデルから外れていた。
+  - 特に iovec / nread / 文字列組み立て用領域が型情報を失ったまま流れていたため、誤用を API 形状で防げなかった。
+- 変更:
+  - `stdlib/std/fs.nepl`
+    - `fs_alloc` / `fs_free` を廃止し、`fs_alloc_u8_region` / `fs_free_region` / `fs_i32_ptr` を追加。
+    - LLVM 側 `__fs_copy_to_cstr` を `Result<MemPtr<u8>,i32>` へ変更し、解放も `dealloc_ptr<u8>` に統一。
+    - `fs_open_read` の fd_out 一時領域を `RegionToken<u8>` 化。
+    - `fs_read_fd_bytes` の tmp/iov/nread 一時領域を `RegionToken<u8>` 化し、`load/store` は `MemPtr` オーバーロードを経由する形へ変更。
+    - `fs_bytes_to_string` の出力バッファ構築を `RegionToken<u8>` と `MemPtr<u8>` で行う形へ変更。
+- 設計判断:
+  - `wasi_path_open` / `wasi_fd_read` 自体はホスト ABI 境界なので raw `i32` を維持した。
+  - 型安全化の対象は stdlib 公開面と stdlib 内の通常ロジックであり、ABI 直前のみ `mem_ptr_addr` で raw 化する。
+- 検証:
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... import-only-fs ... EOF` -> pass
+  - `timeout 20s node nodesrc/run_test.js <<'EOF' ... fs-missing-file ... EOF` -> pass
