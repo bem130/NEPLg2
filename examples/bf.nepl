@@ -1,0 +1,203 @@
+#entry main
+#indent 4
+#target wasi
+
+//: neplg2:test[bf_hello_world, normalize_newlines, strip_ansi]
+//: [目的/もくてき]: Hello World プログラムの実行
+//: stdin: "+++++++++[>++++++++>+++++++++++>+++>+<<<<-]>.>++.+++++++..+++.>+++++.<<+++++++++++++++.>.+++.------.--------.>+.>+.\n"
+//: stdout: mlstr:
+//:     ##: Brainfuck Runner
+//:     ##: enter BF program. Ctrl+Z to exit.
+//:     ##: 
+//:     ##: > Hello World!
+//:     ##: > bye
+
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/result" as *
+#import "core/option" as *
+#import "std/stdio" as *
+#import "alloc/string" as s
+#import "alloc/diag/error" as *
+#import "alloc/collections/stack" as stk
+
+// ──────────────────────────────────────────────
+// UI ヘルパ
+// ──────────────────────────────────────────────
+fn print_error <(str)*>()> (msg):
+    print ansi_bold;
+    print_color ansi_red "error: ";
+    print ansi_reset;
+    println_color ansi_red msg
+
+fn print_prompt <()*>()> ():
+    print ansi_bold;
+    print_color ansi_green "> "
+
+fn print_byte <(i32)*>()> (b):
+    let out <i32> alloc_raw 5;
+    store_i32 out 1;
+    store_u8 add out 4 b;
+    print out;
+    dealloc_raw out 5
+
+// ──────────────────────────────────────────────
+// 評価ロジック
+// ──────────────────────────────────────────────
+
+//: compile_jumps: '[' と ']' のジャンプ先を事前計算する
+fn compile_jumps <(i32,i32)*>Result<i32,str>> (code_ptr, code_len):
+    let jump_table <i32> alloc_raw mul code_len 4;
+    fill_i32 jump_table code_len 0;
+    
+    let mut stk <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>
+
+    let mut pc <i32> 0;
+    let mut error <bool> false;
+
+    while and lt pc code_len not error:
+        do:
+            let ch <i32> load_u8 add code_ptr pc;
+            if:
+                eq ch 91 // '['
+                then:
+                    set stk unwrap_ok<Stack<i32>, Diag> stack_push<i32> stk pc
+                else: 
+                    if:
+                        eq ch 93 // ']'
+                        then:
+                            let pop_res <Option<i32>> stack_pop<i32> stk
+                            match pop_res:
+                                Option::Some start_pc:
+                                    store_i32 add jump_table mul start_pc 4 pc;
+                                    store_i32 add jump_table mul pc 4 start_pc
+                                Option::None:
+                                    set error true
+                        else:
+                            ();
+            set pc add pc 1;
+
+    let empty <bool> stack_is_empty<i32> stk
+    stack_free<i32> stk;
+
+    if:
+        error
+        then: 
+            dealloc_raw jump_table mul code_len 4;
+            err<i32, str> "unmatched ']'"
+        else: 
+            if:
+                not empty
+                then:
+                    dealloc_raw jump_table mul code_len 4;
+                    err<i32, str> "unmatched '['"
+                else:
+                    ok<i32, str> jump_table
+
+fn eval_line <(i32,str)*>()> (mem_buf, code):
+    let code_len <i32> s::len code;
+    let code_ptr <i32> add code 4;
+    
+    match compile_jumps code_ptr code_len:
+        Result::Err msg:
+            print_error msg
+        Result::Ok jump_table:
+            let mut dp <i32> 0;
+            let mut pc <i32> 0;
+
+            while lt pc code_len:
+                do:
+                    let cmd <i32> load_u8 add code_ptr pc;
+                    let p <i32> add mem_buf dp;
+                    
+                    if:
+                        eq cmd 43 // '+'
+                        then: store_u8 p add load_u8 p 1
+                        else: ()
+
+                    if:
+                        eq cmd 45 // '-'
+                        then: store_u8 p sub load_u8 p 1
+                        else: ()
+
+                    if:
+                        eq cmd 62 // '>'
+                        then:
+                            set dp add dp 1;
+                            if:
+                                ge dp mem_size
+                                then: set dp 0
+                                else: ()
+                        else: ()
+
+                    if:
+                        eq cmd 60 // '<'
+                        then:
+                            set dp sub dp 1;
+                            if:
+                                lt dp 0
+                                then: set dp sub mem_size 1
+                                else: ()
+                        else: ()
+
+                    if:
+                        eq cmd 46 // '.'
+                        then: print_byte load_u8 p
+                        else: ()
+
+                    if:
+                        eq cmd 44 // ','
+                        then: store_u8 p 0
+                        else: ()
+
+                    if:
+                        eq cmd 91 // '['
+                        then:
+                            if:
+                                eq load_u8 p 0
+                                then: set pc load_i32 add jump_table mul pc 4
+                                else: ()
+                        else: ()
+
+                    if:
+                        eq cmd 93 // ']'
+                        then:
+                            if:
+                                ne load_u8 p 0
+                                then: set pc load_i32 add jump_table mul pc 4
+                                else: ()
+                        else: ()
+
+                    set pc add pc 1;
+
+            print "\n";
+            dealloc_raw jump_table mul code_len 4
+
+// ──────────────────────────────────────────────
+// メイン処理
+// ──────────────────────────────────────────────
+fn main <()*>()> ():
+    print ansi_bold;
+    println_color ansi_cyan "Brainfuck Runner";
+    println_color ansi_gray "enter BF program. Ctrl+Z to exit.";
+    println "";
+
+    let mem_size <i32> 30000;
+    let mut running <bool> true;
+
+    while running:
+        do:
+            print_prompt;
+            let input <str> read_line;
+            
+            if:
+                eq s::len input 0
+                then:
+                    print ansi_bold;
+                    println_color ansi_yellow "bye";
+                    set running false
+                else:
+                    let mem_buf <i32> alloc_raw mem_size;
+                    fill_u8 mem_buf mem_size 0;
+                    eval_line mem_buf input;
+                    dealloc_raw mem_buf mem_size

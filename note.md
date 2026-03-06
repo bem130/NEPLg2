@@ -1,3 +1,20 @@
+# 2026-03-06 作業メモ (feat: examples/bf.nepl に Brainfuck Runner を実装)
+
+- 目的:
+  - `rpn.nepl` を参考にして `examples/bf.nepl` に Brainfuck の実行ツールを実装する。
+  - 毎行入力を受け付け、入力ごとにメモリをリセットして独立実行する。
+- 変更:
+  - `examples/bf.nepl`
+    - `alloc/collections/stack` を使って `[` と `]` のジャンプ先を事前計算する `compile_jumps` を実装。
+    - `eval_line` で 30,000 バイトのメモリ上で BF 命令（`+` `-` `>` `<` `.` `,` `[` `]`）を実行。
+    - `,` は現状 0 を書き込む簡略実装。
+    - メインループは入力ごとにメモリバッファを確保・解放し、状態を引き継がない。
+    - 表示名は "Brainfuck REPL" から "Brainfuck Runner" に変更（毎行リセットのため）。
+    - `neplg2:test[bf_hello_world]` doctest を追加（Hello World プログラムの実行）。
+- 検証:
+  - `target/debug/nepl-cli -i examples/bf.nepl -o tmp/wasm.wasm && wasmer run tmp/wasm.wasm`
+    - `+++++++++[>++++++++>+++++++++++>+++>+<<<<-]>.>++.+++++++..+++.>+++++.<<+++++++++++++++.>.+++.------.--------.>+.>+.` を入力して `Hello World!` の出力を確認。
+
 # 2026-03-06 作業メモ (TUI改善: rpnの途中計算可視化とstdioの負数出力修正)
 
 - 目的:
