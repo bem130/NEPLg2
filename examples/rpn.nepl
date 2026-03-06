@@ -73,7 +73,6 @@ fn print_error <(str)*>()> (msg):
     print ansi_reset;
     print " ";
     println_color ansi_red msg;
-    ()
 
 //: print_prompt: REPL のプロンプトを表示する
 //:
@@ -82,7 +81,6 @@ fn print_error <(str)*>()> (msg):
 fn print_prompt <()*>()> ():
     print ansi_bold;
     print_color ansi_green "> ";
-    ()
 
 //: print_result: 計算結果を色付きで出力する
 //:
@@ -97,7 +95,6 @@ fn print_result <(i32)*>()> (val):
     print_i32 val;
     print ansi_reset;
     print "\n";
-    ()
 
 //: print_step_before: 途中計算の適用前状態を表示する
 //:
@@ -137,7 +134,6 @@ fn print_step_before <(Stack<i32>,i32,i32,str,Vec<str>,i32)*>()> (stack, a, b, o
             set k add k 1;
 
     print "\n";
-    ()
 
 //: print_step_after: 途中計算の適用後状態を表示する
 //:
@@ -173,7 +169,6 @@ fn print_step_after <(Stack<i32>,i32,Vec<str>,i32)*>()> (stack, res, tokens, i):
             set k add k 1;
 
     print "\n";
-    ()
 
 // ──────────────────────────────────────────────
 // 演算ロジック
@@ -300,8 +295,7 @@ fn eval_line <(str)*>()> (line):
                                 gt j 0
                                 then:
                                     print " ";
-                                else:
-                                    ();
+                                else: ()
                             let elem <i32> load_i32 add data mul j 4;
                             print_i32 elem;
                             set j add j 1;
@@ -310,7 +304,6 @@ fn eval_line <(str)*>()> (line):
     
     stk::stack_free<i32> stack;
     v::vec_free<str> tokens;
-    ()
 
 //: main: RPN TUI REPL のエントリーポイント
 //:
@@ -336,8 +329,5 @@ fn main <()*>()> ():
                     print ansi_bold;
                     println_color ansi_yellow "bye";
                     set running false;
-                    ()
                 else:
                     eval_line input;
-                    ()
-    ()
