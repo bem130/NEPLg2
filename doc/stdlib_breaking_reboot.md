@@ -57,6 +57,15 @@
 - `std` の責務は、各 target 固有の機能や `runtimes` が吸収する差分を束ね、利用者に共通の標準 API を提供することである。
 - したがって、`core` / `alloc` / `nm` / `neplg2` / `kp` は stdlib に含まれていても `std` ではない。
 
+### 3.6 ドキュメントコメントも再構築対象
+
+- stdlib reboot では API と実装だけでなく、ドキュメントコメントも再構築対象とする。
+- `doc/stdlib_doc_comment_policy.md` を標準方針書とし、stdlib 内のすべてのファイルはこの方針に従ってドキュメントコメントを整備する。
+- 関数、struct、enum、trait、ファイル冒頭コメントを含め、実装の責務・制約・使い方がコードの実体に対応して説明されていなければならない。
+- ライブラリ `.nepl` 内の doctest は、利用者に対する使い方説明と、そのサンプルコードが正しいことの保証を目的とする。
+- 実装の正しさ、回帰、エッジケースの検証は `tests/` に置き、ドキュメントコメント内の doctest と責務を分離する。
+- テンプレート流用、ボイラープレート、機械生成的なコメントは採用しない。
+
 ## 4. 層構造
 
 ### 4.1 層の分類
@@ -474,6 +483,13 @@ stdlib/
 
 ## 13. テスト方針
 
+- `tests/` は階層的に整理し、少なくとも次の 2 系統へ分ける。
+  - `tests/compiler/*`
+    - stdlib との関係が薄く、compiler 自体の構文・型・名前解決・診断・codegen 前段検査などに誤りがないかを確認する。
+  - `tests/stdlib/*`
+    - stdlib の API、アルゴリズム、メモリ安全性、target facade、回帰ケースに誤りがないかを確認する。
+- 既存の `tests/` 直下ファイルは、reboot の進行に合わせて上記構造へ段階的に移行する。
+- compiler の仕様確認と stdlib の実装確認を同じ粒度で混在させない。
 - trait 解決の曖昧性・重複 impl・能力不足は `compile_fail` で固定する。
 - `alloc` / `alloc/collections` / `alloc/text` / `alloc/io` / `std/streamio` / `std` ごとに edge case を含む回帰を追加する。
 - target 差分は adapter テストへ局所化し、共通挙動は同一ケースで検証する。
