@@ -1,114 +1,112 @@
-2026-03-05 move/effect/memory 本格実装計画（最優先）
-
-実装方針
-- `doc/move_effect_spec.md` と `doc/memory_safety_compiler_design.md` を正として実装する。
-- 上流から順に修正する（compiler前段/型検査/effect判定 -> move_check -> stdlib -> tests）。
-- 間に合わせ修正を禁止し、失敗を `Result/Option` へ収束させる。
-- 旧API互換は維持しない。最終的に `_raw` 公開APIと生ポインタ公開APIを廃止する。
-
-フェーズB: move/borrow/copy/clone 規則の確定実装（継続）
-- 分岐/ループ合流時の `PossiblyMoved` 判定を安定化する。
-- token の二重消費/解放後利用を検出する。
-- copy/clone 判定はハードコードでなく trait capability ベースに統一する。
-- 完了条件:
-  - 分岐/ループ合流時の move 誤判定が解消される。
-  - token の二重消費/解放後利用が検出される。
-
-フェーズC: メモリ安全型モデル導入（継続）
-- `core/mem` の公開面を `MemPtr<T>` / `RegionToken<T>` 前提へ統一する。
-- 生 `i32` ポインタ受け取りの公開関数を段階的に除去する。
-- `load/store` の境界/生存検査を `Result/Option` ベースで統一する。
-- 完了条件:
-  - 公開関数シグネチャに生ポインタが残らない。
-  - OOB/UAF/double free が `Result::Err` またはコンパイルエラーで表現される。
-
-フェーズD: compiler 側 `_raw` 依存の撤去（新設・最優先）
-- `nepl-core` 内の `_raw` 名依存と生ポインタ前提解決を棚卸しする。
-- `monomorphize.rs` / `codegen_wasm.rs` / 関連前処理の `_raw` ハードコードを廃止する。
-- codegen 前段で検証と診断を完結させる（codegen は原則診断を出さない）。
-- wasm/llvm の診断規則を共通化し、backend ごとの差分診断を廃止する。
-- `#wasm/#llvmir` の前段検証を共通化し、codegen 到達時は基本的に生成成功を前提にする。
-- llvm 経路の precheck を拡張し、intrinsic/戻り値規約など backend 依存失敗を前段で確定する。
-- runtime helper 名解決から `_raw` フォールバックを段階的に除去する（stdlib 移行完了後）。
-- 完了条件:
-- compiler が `_raw` 名へ依存せずに安全APIを解決できる。
-- raw 名称変更で backend が壊れない。
-- 診断は codegen 前段で一貫して決定され、wasm/llvm で同一入力に同一診断が出る。
-
-フェーズE: stdlib移行（mem/kpread/kpwrite -> alloc -> std/nm）
-- `mem/kpread/kpwrite` の公開APIを Result/Option 前提で統一する。
-- `_safe` 接尾辞を廃止し、安全APIを標準名へ統一する。
-- 生ポインタ前提APIは段階的に `*_raw` へ隔離し、最終的に公開面から削除する。
-- `alloc/collections` の `alloc_raw/realloc_raw/dealloc_raw` 依存を安全APIへ置換する。
-- `alloc/string` の文字列表現変換を責務整理し、`bool` / `i32` / `i64` の 2/8/10/16 進変換を固定する。
-- `alloc/string` の doctest 記述を見直し、focused test と stdlib 入力時の doctest 実行経路を整理する。
-- `stdlib/std`（`stdio` と `env/cliarg` の残り syscall/argv 内部、`fs` の残り ABI 境界整理）および `stdlib/nm` を同一安全モデルへ移行する。
-- 完了条件:
-  - `core/mem` と主要stdlibの公開面に `_raw` が残らない。
-  - `tests + stdlib + tutorials` が新APIで通過する。
-
-フェーズF: tutorials・examples の全面移行
-- 新しい安全APIへ tutorials/examples を書き直す。
-- pipe演算子と式指向を活かし、不要な中間変数を削減する。
-- 記述の簡潔さとメモリ安全性が両立するスタイルへ統一する。
-
-フェーズG: テスト・診断の固定化
-- `compile_fail` は `diag_id` を必須化する。
-- compile error テストで診断位置（行・列）も検証できる仕組みを追加する。
-- 完了条件:
-  - 仕様に対応する回帰テストが揃い、失敗理由が診断IDと位置で固定される。
-
-コミット方針
-- 各フェーズの区切りでコミットする（必要なら中間で分割）。
-- コミット前に対象範囲テストを実行し、結果を `note.md` に記録する。
-
-2026-03-08 stdlib 破壊的再設計（提案フェーズ後の実装TODO）
-
-- `doc/stdlib_breaking_reboot.md` の能力 trait を `doc/trait_system_design.md` と統合し、最終仕様へ確定する。
-- stdlib 新構成（`core/alloc/collections/text/io/fs/runtime/prelude`）のディレクトリ移行計画を作成する。
-- `_raw/_safe` 命名廃止に伴う一括置換対象（stdlib + compiler helper）を棚卸しする。
-- `Writer` trait ベースの出力API設計を確定し、`print_*` 群の置換順序を定める。
-- `Result<T, StdError>` への統合エラー体系を設計し、既存エラー型からの移行表を作成する。
-
-2026-02-22 今後の実装計画（未完了のみ）
+2026-03-09 stdlib reboot 実装計画
 
 方針
-- plan.md の仕様を唯一の基準として、上流（lexer/parser）から順に修正する。
-- 間に合わせ修正を避け、原因が同一の失敗はまとめて解消する。
-- 実装進捗・結果・失敗分析は `note.md` に記録し、`todo.md` は未完了のみを保持する。
-- stdlib のドキュメントコメント/ドキュメントテストは `stdlib/kp` の記述スタイルを参照して統一する。
+- `plan.md` と `doc/stdlib_breaking_reboot.md` を正として実装する。
+- `todo.md` には、reboot 仕様を問題なく実装するための順序だけを書く。
+- stdlib 再構築は、依存の強い基盤から順に進める（diag/trait -> compiler 前提 -> core/mem -> alloc -> runtimes -> std -> features -> tutorials/tests）。
+- 間に合わせ修正を避け、旧 API の互換維持ではなく最終構成への収束を優先する。
+- 実装完了項目はここから削除し、経過・差分・判断理由は `note.md` に記録する。
 
-1. 高階関数・call_indirect
-- capture あり関数値は closure conversion の設計を確定して段階導入する。
+stdlib 再構築 本流
 
-3. Web Playground / tests.html 強化
-- VSCode 拡張予定の情報（名前解決/型情報/式範囲/定義ジャンプ候補）を Playground で表示する。
-- `web/tests.html` の詳細展開時にソースと解析結果（AST/resolve/semantics）を併記する。
+1. `diag` / `Diags` / `Outcome` / `StdErrorKind` を先に確定する
+- `alloc/diag` を再設計し、`error.nepl` を `diag` へ吸収する。
+- `Diag` を単一 struct、`Diags` を `List<Diag>` を包む struct として実装する。
+- `Outcome<T, E>` を named struct として導入し、`result` と `diags` を持たせる。
+- `Result<T, E>` の既定 `E` として使う `StdErrorKind` を定義する。
+- `Diag.kind` は標準分類と独自分類を両立できる構造へ寄せる。
+- 表示責務は `diag` から分離し、`Stringify` / `Debug` / `Serialize` + renderer に移す。
+- 完了条件:
+  - stdlib で `Result` / `Outcome` / `Diag` の使い分けが固定される。
+  - 既存 `error.nepl` の公開責務が `diag` 側へ移る。
 
-4. `examples/js_interpreter` 実装（言語仕様固定後）
-- `examples/js_interpreter` に JavaScript インタプリタを実装する。
-- 言語仕様は変更せず、stdlib の再設計・改良のみで不足を埋める。
-- Node.js 実行結果との同値性回帰テストを追加する。
+2. trait 能力モデルの土台を確定する
+- `Copy` / `Clone` / `Eq` / `Ord` / `Hash` / `Stringify` / `Debug` / `Serialize` / `Deserialize` の trait 配置と責務を実装へ落とす。
+- copy/clone 判定は compiler 内固定表を使わず、`.nepl` ソース上の trait 実装だけで決まるようにする。
+- `Result` と `Outcome` を共通に扱う helper / trait 枠組みを設計し、stdlib 全体で再利用できるようにする。
+- 完了条件:
+  - trait 能力の責務が `core` / `alloc` / `std` の配置と一致する。
+  - compiler 側の copy/clone ハードコード撤去方針が実装可能な形に落ちる。
 
-5. stdlib の段階的リファクタリング（言語仕様安定後）
-- `stdlib/kp` のドキュメントコメント/ドキュメントテスト形式を基準に、他 stdlib へ統一展開する。
-- 複雑データ処理の箇所を中心に改行 `|>` パイプを活用し、可読性とメモリ安全性を両立する。
+3. compiler 前提を固定する
+- copy/clone 非ハードコード化の実装経路を compiler 側で確定する。
+- codegen では診断を出さず、前段で診断を完結させる。
+- wasm/llvm の診断規則を共通化する。
+- `_raw` 名依存や backend ごとの差分診断を前段の共通検査へ寄せる。
+- 完了条件:
+  - codegen 到達時は基本的に生成成功前提となる。
+  - 同一入力で wasm/llvm が同一診断を返す。
+  - copy/clone 能力が compiler 内固定表なしで解決される。
 
-6. LLVM IR target 追加（nepl-cli 限定）
+4. `Diag.kind` を支える言語機能追加の計画と前段実装を進める
+- 軽量実体を持ちながら階層識別子として扱える kind 表現を言語機能として追加する。
+- 仕様化前の暫定実装では、`Diag.kind` を構造化データで表しつつ、将来の言語機能へ移行しやすい形にする。
+- compiler / selfhost / DSL 実装が共通 kind 体系を利用できるようにする。
+- 完了条件:
+  - reboot 仕様に必要な kind 体系を支える実装方針が確定する。
+  - `todo.md` 下部の編集禁止メモとは別に、実装タスクとして独立して追える状態になる。
 
-6. stdlib/collections 再設計
-- `collections` 配下の既存データ構造を新配置に合わせて改修する。
+5. メモリ安全型モデルを `core/mem` に固定する
+- `MemPtr<T>` / `RegionToken<T>` を公開 API の中心に据える。
+- 生 `i32` ポインタ受け取りの公開関数を段階的に除去する。
+- `load/store` の境界・生存・解放後利用を `Result/Option` と型検査へ寄せる。
+- compiler 側では move/token 消費検査を trait 能力と接続する。
+- 完了条件:
+  - 公開面に生ポインタ前提 API が残らない。
+  - OOB/UAF/double free が compile error または `Result::Err` として表現される。
 
-7. move/effect 再設計の実装反映
-- `mem` の `*_safe` 命名を廃止し、Result/Option ベースAPIを標準名へ移行する。
-- `kpread/kpwrite` の `_raw` 完全削除（`mem` 側の移行完了後）を行う。
-- move/effect 回帰テストを拡張し、`move_check` と整合する失敗パターン（分岐合流/再借用/二重解放）を追加する。
+6. `alloc` 層を新構成へ移す
+- `alloc/collections` を `MemPtr<T>` / `RegionToken<T>` 前提へ統一する。
+- `alloc/text` の文字列表現変換・数値変換・真偽値変換を trait 設計と整合させる。
+- `alloc/io` に低水準抽象（Reader/Writer/Seekable/Buffered）を集約する。
+- `alloc/encoding` / `alloc/hash` / `alloc/diag` の責務を reboot 仕様に合わせて再配置する。
+- 完了条件:
+  - `alloc` 層の公開 API が新しい trait / diag / memory モデルと整合する。
+  - `_raw` / `_safe` の公開命名が消える。
 
-8. メモリ安全コンパイラ機構の導入
-- `doc/memory_safety_compiler_design.md` に基づいて、`MemPtr<T>` と `RegionToken` の型モデルを導入する。
-- `load/store` での境界チェック挿入と、証明可能ケースのチェック削除を実装する。
-- move_check に token 消費検査（解放後アクセス/二重解放検出）を導入する。
-- `MemReadable<T>`, `MemWritable<T>`, `RegionOwned` の trait 境界でメモリ能力を型検査する。
+7. `runtimes` 層を整理する
+- target ごとの差分と厚い wrapper が必要な機能だけを `runtimes` に集める。
+- `math` のような `core` へ置くべきものを `runtimes` に持ち込まない。
+- wasip1 / wasip2 / wasix などの差分を `runtimes` 配下で整理する。
+- 完了条件:
+  - `runtimes` の責務が `std` や `features` と重複しない。
+  - target 差分を `std` が包める状態になる。
+
+8. `std` と `std/streamio` を再構築する
+- `std/streamio` を `alloc/io` 抽象の上に構築する。
+- `stdio` / `fs` / `env/cliarg` を `std` 配下へ整理し、`runtimes` を直接見せない facade にする。
+- `kpread` / `kpwrite` の中核を `std/streamio` へ昇格させ、`kp` 側には競技向け薄ラッパだけを残す。
+- `TUI` は `std` ではなく `features/tui` として扱う。
+- 完了条件:
+  - `std` が target 依存標準 API の facade として一貫する。
+  - `kpread` / `kpwrite` の一般化可能部分が `std/streamio` 側へ移る。
+
+9. `features` 層を定義し直す
+- GUI / HTTP / TUI / 音声再生のような外部 API / FFI / デバイス接続を `features` へ配置する。
+- regex や audio buffer/processing のような計算・データ処理を `core` / `alloc` へ戻す。
+- `features` は `std` や `runtimes` の上に載る追加機能群として整理する。
+- 完了条件:
+  - `features` の責務が `std` と混ざらない。
+  - `tui.nepl` を含む既存外部連携コードの配置方針が固定される。
+
+10. tests / tutorials / docs を新 stdlib に追従させる
+- `compile_fail` に `diag_id` を付ける。
+- 診断位置検証の仕組みを追加する。
+- tutorials を新ライブラリ構成と新 API に合わせて書き直す。
+- `Part6` を含め、短く・安全で・ライブラリを活かした書き方へ改稿する。
+- 完了条件:
+  - 新構成で tests / tutorials / stdlib doctest が通る。
+  - 旧ライブラリ前提の説明が消える。
+
+stdlib 再構築と直接は関係しない別件
+
+1. Web Playground / tests.html 強化
+- 名前解決/型情報/式範囲/定義ジャンプ候補の表示を強化する。
+- `web/tests.html` で AST / resolve / semantics を詳細表示できるようにする。
+
+2. `examples/js_interpreter`
+- stdlib 再構築後のライブラリを使って JavaScript インタプリタを整備する。
+- Node.js 実行結果との同値性回帰を追加する。
 
 ---
 ### 以下編集禁止
