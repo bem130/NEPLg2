@@ -8794,3 +8794,31 @@
 - 結論:
   - `Outcome` の最小読み取り helper は、現状の言語機能でも安定に提供できる。
   - `Outcome` の mutating helper を library 側だけで無理に進めるのは誤りで、必要なら compiler / 言語機能の課題として扱う。
+
+# 2026-03-09 作業メモ (`core/traits` の最小核を stdlib へ追加)
+
+- 目的:
+  - reboot の trait 能力モデルを library 側から具体化するため、現行言語機能で安定に提供できる最小核を先に配置する。
+  - compiler テスト内の ad-hoc trait 宣言を stdlib の正式モジュールへ置き換えていく足場を作る。
+- 変更:
+  - `stdlib/core/traits/copy.nepl`
+    - `Clone` と `Copy` を stdlib trait として定義した。
+    - `bool`, `i32`, `i64`, `i128`, `u8`, `f32`, `f64` へ impl を追加した。
+  - `stdlib/core/traits/stringify.nepl`
+    - `Stringify` trait と共通 helper `stringify` を追加した。
+    - `str`, `bool`, `i32`, `i64`, `i128`, `u8`, `f32`, `f64` へ impl を追加した。
+    - 実体の文字列化は `alloc/string` の既存関数を再利用した。
+  - `stdlib/core/traits/debug.nepl`
+    - `Debug` trait と共通 helper `debug_string` を追加した。
+    - `str` は引用符付き、それ以外の基本型は `Stringify` に委譲する impl を追加した。
+  - `tests/stdlib/traits_text.n.md`
+    - 日本語の `[目的/もくてき]` と確認項目を持つ focused test を追加した。
+- 判断:
+  - `Serialize` / `Deserialize` は trait 型引数や format 型が必要になりやすく、現行言語機能と正面衝突する可能性が高い。
+  - そのため今回は `Copy` / `Clone` / `Stringify` / `Debug` までを最小核として先に確定し、残りは `todo.md` の未完タスクとして維持する。
+  - `Eq` / `Ord` / `Hash` も同様に、既存の ad-hoc 実装との整合を見ながら次段で扱う。
+- compiler 修正:
+  - generic 関数呼び出しの型引数解決で、関数本体の型変数束縛から推論できた具体型が `resolved_args` へ反映されず、単相化時に `Clone::clone` が未解決のまま残る不具合があった。
+  - `check_function` で generic 関数本体の型変数 binding を snapshot / restore しつつ、呼び出し側では `binding.ty` と `inst_ty` の組から各 type parameter の具体型を再推論して `resolved_args` へ反映するように修正した。
+  - monomorphize の trait impl 探索は `unify` を使っていたため、cast 用の緩い一致規則まで trait 解決に混入し、`Stringify<i32>` が `u8` / `bool` / `str` など複数 impl と曖昧一致する不具合があった。
+  - trait impl 選択は `same_type` による同一型一致へ切り替え、trait 解決と数値 cast の規則を分離した。

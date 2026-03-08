@@ -1,0 +1,103 @@
+//: copy: [`Copy/Clone`][Copy/Clone] の[能力/のうりょく]を[標準化/ひょうじゅんか]する trait [群/ぐん]
+//:
+//: [目的/もくてき]:
+//: - `Copy` と `Clone` を stdlib [側/がわ]で[明示的/めいじてき]に[定義/ていぎ]し、capability として[再利用/さいりよう]できるようにします。
+//: - compiler [内部/ないぶ]の[固定表/こていひょう]に[頼/たよ]らず、`.nepl` の trait [宣言/せんげん]と impl によって copy/clone を[決定/けってい]する[基盤/きばん]を[提供/ていきょう]します。
+//:
+//: [注意/ちゅうい]:
+//: - ここで[定義/ていぎ]する `Copy` / `Clone` は「どういう[値/あたい]を[暗黙的/あんもくてき]に[複製/ふくせい]してよいか」を[表/あらわ]す capability です。
+//: - [実装/じっそう]する trait [自体/じたい]は[軽量/けいりょう]ですが、どの[型/かた]へ impl するかは[所有権/しょゆうけん]と[意味論/いみろん]に[強/つよ]く[関係/かんけい]します。
+//:
+//: [計算量/けいさんりょう]:
+//: - trait [宣言/せんげん]そのものは O(1) です。
+
+#indent 4
+
+//: Clone: [明示的/めいじてき]な[複製/ふくせい] capability
+//:
+//: [目的/もくてき]:
+//: - `Clone::clone x` の[形/かたち]で、[値/あたい]を[明示的/めいじてき]に[複製/ふくせい]できる[能力/のうりょく]を[表/あらわ]します。
+//:
+//: [注意/ちゅうい]:
+//: - `Clone` が[独立/どくりつ]した[複製/ふくせい]か、[共有/きょうゆう]を[増/ふ]やす[複製/ふくせい]かは、各 impl の[意味/いみ]に[従/したが]います。
+//: - [利用者/りようしゃ]は、[型/かた]ごとの[注意/ちゅうい]を[確認/かくにん]する[必要/ひつよう]があります。
+trait Clone:
+    #capability clone
+    fn clone <(Self)->Self> (x):
+        x
+
+//: Copy: [暗黙的/あんもくてき]な[再利用/さいりよう]を[許可/きょか]する capability
+//:
+//: [目的/もくてき]:
+//: - `Copy` を[持/も]つ[型/かた]が、move ではなく copy として[扱/あつか]えることを[示/しめ]します。
+//:
+//: [注意/ちゅうい]:
+//: - `Copy` は `Clone` より[強/つよ]い[制約/せいやく]です。
+//: - [所有権/しょゆうけん]のある[資源/しげん]を[持/も]つ[型/かた]には impl しない[前提/ぜんてい]です。
+trait Copy:
+    #capability copy
+    fn copy_mark <(Self)->Self> (x):
+        x
+
+//: bool は `Clone` / `Copy` の[両方/りょうほう]を[持/も]つ
+impl Clone for bool:
+    fn clone <(bool)->bool> (x):
+        x
+
+impl Copy for bool:
+    fn copy_mark <(bool)->bool> (x):
+        x
+
+//: i32 は `Clone` / `Copy` の[両方/りょうほう]を[持/も]つ
+impl Clone for i32:
+    fn clone <(i32)->i32> (x):
+        x
+
+impl Copy for i32:
+    fn copy_mark <(i32)->i32> (x):
+        x
+
+//: i64 は `Clone` / `Copy` の[両方/りょうほう]を[持/も]つ
+impl Clone for i64:
+    fn clone <(i64)->i64> (x):
+        x
+
+impl Copy for i64:
+    fn copy_mark <(i64)->i64> (x):
+        x
+
+//: i128 は `Clone` / `Copy` の[両方/りょうほう]を[持/も]つ
+impl Clone for i128:
+    fn clone <(i128)->i128> (x):
+        x
+
+impl Copy for i128:
+    fn copy_mark <(i128)->i128> (x):
+        x
+
+//: u8 は `Clone` / `Copy` の[両方/りょうほう]を[持/も]つ
+impl Clone for u8:
+    fn clone <(u8)->u8> (x):
+        x
+
+impl Copy for u8:
+    fn copy_mark <(u8)->u8> (x):
+        x
+
+//: f32 は `Clone` / `Copy` の[両方/りょうほう]を[持/も]つ
+impl Clone for f32:
+    fn clone <(f32)->f32> (x):
+        x
+
+impl Copy for f32:
+    fn copy_mark <(f32)->f32> (x):
+        x
+
+//: f64 は `Clone` / `Copy` の[両方/りょうほう]を[持/も]つ
+impl Clone for f64:
+    fn clone <(f64)->f64> (x):
+        x
+
+impl Copy for f64:
+    fn copy_mark <(f64)->f64> (x):
+        x

@@ -1057,10 +1057,8 @@ impl TypeCtx {
     ) -> TypeId {
         let ty = self.resolve_id(ty);
         if let Some(target) = mapping.get(&ty) {
-            // std::eprintln!("substitute: found {:?} -> {:?}", ty, target);
             return *target;
         }
-        // std::eprintln!("substitute: NOT found {:?} in {:?}", ty, mapping.keys().collect::<Vec<_>>());
         if !seen.insert(ty) {
             return ty;
         }
@@ -1236,7 +1234,14 @@ impl TypeCtx {
         }
     }
 
-    pub fn instantiate(&mut self, ty: TypeId) -> (TypeId, Vec<TypeId>) {
+    pub fn instantiate(
+        &mut self,
+        ty: TypeId,
+    ) -> (
+        TypeId,
+        Vec<TypeId>,
+        alloc::collections::BTreeMap<TypeId, TypeId>,
+    ) {
         let ty = self.resolve_id(ty);
         if let TypeKind::Function {
             type_params,
@@ -1246,7 +1251,7 @@ impl TypeCtx {
         } = self.get(ty)
         {
             if type_params.is_empty() {
-                return (ty, Vec::new());
+                return (ty, Vec::new(), alloc::collections::BTreeMap::new());
             }
             let mut mapping = alloc::collections::BTreeMap::new();
             let mut fresh_args = Vec::new();
@@ -1263,9 +1268,10 @@ impl TypeCtx {
             (
                 self.function(Vec::new(), new_params, new_result, effect),
                 fresh_args,
+                mapping,
             )
         } else {
-            (ty, Vec::new())
+            (ty, Vec::new(), alloc::collections::BTreeMap::new())
         }
     }
 

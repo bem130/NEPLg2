@@ -81,6 +81,15 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
     while let Some((orig_name, args)) = mono.worklist.pop() {
         mono.process_instantiation(orig_name, args);
     }
+    loop {
+        mono.resolve_remaining_trait_calls();
+        if mono.worklist.is_empty() {
+            break;
+        }
+        while let Some((orig_name, args)) = mono.worklist.pop() {
+            mono.process_instantiation(orig_name, args);
+        }
+    }
 
     let mut new_functions = Vec::new();
     for (_, f) in mono.specialized {
@@ -107,6 +116,128 @@ struct Monomorphizer<'a> {
 }
 
 impl<'a> Monomorphizer<'a> {
+    fn resolve_remaining_trait_calls(&mut self) {
+        let names: Vec<String> = self.specialized.keys().cloned().collect();
+        for name in names {
+            let Some(mut func) = self.specialized.remove(&name) else {
+                continue;
+            };
+            match &mut func.body {
+                HirBody::Block(block) => self.resolve_trait_calls_in_block(block),
+                HirBody::Wasm(_) | HirBody::LlvmIr(_) => {}
+            }
+            self.specialized.insert(name, func);
+        }
+    }
+
+    fn resolve_trait_calls_in_block(&mut self, block: &mut HirBlock) {
+        for line in &mut block.lines {
+            self.resolve_trait_calls_in_expr(&mut line.expr);
+        }
+    }
+
+    fn resolve_trait_calls_in_expr(&mut self, expr: &mut HirExpr) {
+        match &mut expr.kind {
+            HirExprKind::Call { callee, args } => {
+                for arg in args.iter_mut() {
+                    self.resolve_trait_calls_in_expr(arg);
+                }
+                if let FuncRef::Trait {
+                    trait_name,
+                    method,
+                    self_ty,
+                } = callee
+                {
+                    let resolved = args
+                        .first()
+                        .map(|arg| self.ctx.resolve_id(arg.ty))
+                        .unwrap_or_else(|| self.ctx.resolve_id(*self_ty));
+                    *self_ty = resolved;
+                    if let Some(name) =
+                        self.resolve_trait_impl_name(trait_name.as_str(), method.as_str(), resolved)
+                    {
+                        *callee = FuncRef::User(self.request_instantiation(name, Vec::new()), Vec::new());
+                    }
+                }
+            }
+            HirExprKind::CallIndirect { callee, args, .. } => {
+                self.resolve_trait_calls_in_expr(callee);
+                for arg in args {
+                    self.resolve_trait_calls_in_expr(arg);
+                }
+            }
+            HirExprKind::If {
+                cond,
+                then_branch,
+                else_branch,
+            } => {
+                self.resolve_trait_calls_in_expr(cond);
+                self.resolve_trait_calls_in_expr(then_branch);
+                self.resolve_trait_calls_in_expr(else_branch);
+            }
+            HirExprKind::While { cond, body } => {
+                self.resolve_trait_calls_in_expr(cond);
+                self.resolve_trait_calls_in_expr(body);
+            }
+            HirExprKind::Match { scrutinee, arms } => {
+                self.resolve_trait_calls_in_expr(scrutinee);
+                for arm in arms {
+                    self.resolve_trait_calls_in_expr(&mut arm.body);
+                }
+            }
+            HirExprKind::Block(block) => self.resolve_trait_calls_in_block(block),
+            HirExprKind::Let { value, .. }
+            | HirExprKind::Set { value, .. }
+            | HirExprKind::AddrOf(value)
+            | HirExprKind::Deref(value) => self.resolve_trait_calls_in_expr(value),
+            HirExprKind::TupleConstruct { items }
+            | HirExprKind::Intrinsic { args: items, .. } => {
+                for item in items {
+                    self.resolve_trait_calls_in_expr(item);
+                }
+            }
+            HirExprKind::EnumConstruct { payload, .. } => {
+                if let Some(payload) = payload {
+                    self.resolve_trait_calls_in_expr(payload);
+                }
+            }
+            HirExprKind::StructConstruct { fields, .. } => {
+                for field in fields {
+                    self.resolve_trait_calls_in_expr(field);
+                }
+            }
+            HirExprKind::FnValue(_)
+            | HirExprKind::Var(_)
+            | HirExprKind::Unit
+            | HirExprKind::LiteralI32(_)
+            | HirExprKind::LiteralF32(_)
+            | HirExprKind::LiteralBool(_)
+            | HirExprKind::LiteralStr(_)
+            | HirExprKind::Drop { .. } => {}
+        }
+    }
+
+    fn resolve_trait_impl_name(
+        &self,
+        trait_name: &str,
+        method: &str,
+        resolved_self_ty: TypeId,
+    ) -> Option<String> {
+        let key = (String::from(trait_name), String::from(method), resolved_self_ty);
+        if let Some(name) = self.impl_map.get(&key) {
+            return Some(name.clone());
+        }
+        for ((tr, meth, target_ty), func_name) in self.impl_map.iter() {
+            if tr != trait_name || meth != method {
+                continue;
+            }
+            if self.ctx.same_type(resolved_self_ty, *target_ty) {
+                return Some(func_name.clone());
+            }
+        }
+        None
+    }
+
     fn request_instantiation(&mut self, name: String, args: Vec<TypeId>) -> String {
         let mut resolved_args = Vec::new();
         for arg in &args {
@@ -267,7 +398,7 @@ impl<'a> Monomorphizer<'a> {
                 }
             }
             HirExprKind::Call { callee, args } => {
-                for arg in args {
+                for arg in args.iter_mut() {
                     self.substitute_expr(arg, mapping, local_names);
                 }
                 match callee {
@@ -285,31 +416,14 @@ impl<'a> Monomorphizer<'a> {
                         self_ty,
                     } => {
                         *self_ty = self.ctx.substitute(*self_ty, mapping);
-                        let resolved = self.ctx.resolve_id(*self_ty);
-                        let key = (
-                            trait_name.clone(),
-                            method.clone(),
-                            resolved,
-                        );
-                        let mut selected = self.impl_map.get(&key).cloned();
-                        if selected.is_none() {
-                            let mut fallback: Option<String> = None;
-                            for ((tr, meth, target_ty), func_name) in self.impl_map.iter() {
-                                if tr != trait_name || meth != method {
-                                    continue;
-                                }
-                                let mut tmp = self.ctx.clone();
-                                if tmp.unify(resolved, *target_ty).is_ok() {
-                                    if fallback.is_some() {
-                                        fallback = None;
-                                        break;
-                                    }
-                                    fallback = Some(func_name.clone());
-                                }
-                            }
-                            selected = fallback;
-                        }
-                        if let Some(func_name) = selected {
+                        let resolved = args
+                            .first()
+                            .map(|arg| self.ctx.resolve_id(arg.ty))
+                            .unwrap_or_else(|| self.ctx.resolve_id(*self_ty));
+                        *self_ty = resolved;
+                        if let Some(func_name) =
+                            self.resolve_trait_impl_name(trait_name.as_str(), method.as_str(), resolved)
+                        {
                             let inst = self.request_instantiation(func_name, Vec::new());
                             *callee = FuncRef::User(inst, Vec::new());
                         }
