@@ -1517,6 +1517,7 @@ fn check_function(
     generated_functions: &mut Vec<HirFunction>,
 ) -> Result<CheckedFunction, Vec<Diagnostic>> {
     let mut diags = Vec::new();
+    let func_ty_snapshot = ctx.snapshot_type_var_bindings(func_ty);
     let (params_ty, result_ty, effect) = match ctx.get(func_ty) {
         TypeKind::Function {
             params,
@@ -1602,6 +1603,7 @@ fn check_function(
             FnBody::Parsed(b) => {
                 if let Some(raw) = checker.select_target_raw_body(b) {
                     if !checker.validate_raw_body_effect(&raw, f.name.span) {
+                        checker.ctx.restore_type_var_bindings(&func_ty_snapshot);
                         return Err(checker.diagnostics);
                     }
                     raw
@@ -1617,6 +1619,7 @@ fn check_function(
                             HirBody::Block(blk)
                         }
                         None => {
+                            checker.ctx.restore_type_var_bindings(&func_ty_snapshot);
                             return Err(checker.diagnostics);
                         }
                     }
@@ -1625,6 +1628,7 @@ fn check_function(
             FnBody::Wasm(wb) => {
                 let raw = HirBody::Wasm(wb.clone());
                 if !checker.validate_raw_body_effect(&raw, f.name.span) {
+                    checker.ctx.restore_type_var_bindings(&func_ty_snapshot);
                     return Err(checker.diagnostics);
                 }
                 raw
@@ -1632,6 +1636,7 @@ fn check_function(
             FnBody::LlvmIr(lb) => {
                 let raw = HirBody::LlvmIr(lb.clone());
                 if !checker.validate_raw_body_effect(&raw, f.name.span) {
+                    checker.ctx.restore_type_var_bindings(&func_ty_snapshot);
                     return Err(checker.diagnostics);
                 }
                 raw
@@ -1639,6 +1644,7 @@ fn check_function(
         };
         (body_res, checker.diagnostics)
     };
+    ctx.restore_type_var_bindings(&func_ty_snapshot);
 
     env.pop_scope();
     let has_error = diag_out

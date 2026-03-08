@@ -218,6 +218,52 @@
   - `nepl-core/src/runtime_helpers.rs`
     - `ALLOC_CANDIDATES` を `["alloc", "alloc_raw"]` に変更（安全API優先）。
     - `RuntimeHelperKind` / `helper_candidates` / `helper_base_name` を追加。
+
+# 2026-03-09 作業メモ (`std/test` 集約 API 追加と nested generic overload 根本修正)
+
+- 目的:
+  - stdlib reboot 前のテスト基盤として、1 件失敗しても残りの検査を継続実行できる `std/test` の collectable API を整備する。
+  - `Vec<Result<(),str>>` に `push` / `vec_push` / pipe で `Result<(),str>` を積めない compiler バグを、library 側の回避ではなく typecheck の根本原因から修正する。
+- 変更:
+  - `stdlib/std/test.nepl`
+    - `checks_new`
+    - `checks_push`
+    - `check`
+    - `check_eq_i32`
+    - `check_ne`
+    - `check_str_eq`
+    - `check_ok_i32`
+    - `check_err_i32`
+    - `check_status_str`
+    - `checks_has_err(_loop)`
+    - `checks_summary(_loop)`
+    - `checks_report_failures`
+    - `finish_checks`
+    を追加した。
+    - `assert` / `assert_eq_i32` / `assert_ne` / `assert_str_eq` は、対応する `check_*` を受けて即時失敗する薄いラッパへ整理した。
+  - `tests/std_test_collect.n.md`
+    - `[目的/もくてき]` と `[何/なに]を[確/たし]かめるか` を付けた focused case を追加した。
+    - 全件成功時の summary 出力と、失敗を含むときの summary + 個別失敗出力を固定した。
+  - `tests/compiler/overload_nested_generic_push.n.md`
+    - `Vec<Result<(),str>>` に対する `push` / `vec_push` / pipe の nested generic overload 解決を確認する compiler 回帰 test を追加した。
+  - `nepl-core/src/types.rs`
+    - 関数型に含まれる型変数 binding を退避・復元する
+      - `snapshot_type_var_bindings`
+      - `restore_type_var_bindings`
+      を追加した。
+  - `nepl-core/src/typecheck.rs`
+    - `check_function` で関数本体を検査する前に `func_ty` 上の型変数 binding を snapshot し、終了後に必ず restore するよう変更した。
+- 原因:
+  - generic 関数本体の型検査中に、関数シグネチャ自体が持っている型変数 `TypeId` が unification で束縛され、その束縛が `Env` 上の大域関数型へ残留していた。
+  - その結果、`vec_push <.T> <(Vec<.T>, .T)->Vec<.T>>` の `.T` が過去の検査で `i32` へ汚染され、`Vec<Result<(),str>>` に対する overload 推論で `Vec<i32>` として扱われていた。
+  - 明示型引数付き `vec_push<Result<(),str>>` が通り、型引数省略時だけ落ちることから、candidate 選択時の `instantiate(binding.ty)` 入力が既に汚染されていると特定した。
+- 結果:
+  - `std/test` の collectable API で、`[ok,ok,err,ok,err]` 形式の概要と失敗添字・理由をまとめて表示できるようになった。
+  - nested generic `push` / `vec_push` / pipe は、型引数を明示しなくても `Vec<Result<(),str>>` 上で解決できるようになった。
+- 検証:
+  - `trunk build`（root, `NO_COLOR=false`） -> success
+  - `node nodesrc/tests.js -i tests/std_test_collect.n.md -i tests/compiler/overload_nested_generic_push.n.md --no-stdlib --no-tree -o /tmp/tests-std-test-collect-focused.json -j 15`
+    - 結果: `5/5 pass`
     - `find_runtime_helper_key`（名前解決）と `find_runtime_helper_index`（index解決）を追加。
   - `nepl-core/src/codegen_wasm.rs`
     - ローカル実装だった helper 名解決を削除し、`runtime_helpers::find_runtime_helper_index` に統一。
