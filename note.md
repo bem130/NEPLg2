@@ -8508,3 +8508,51 @@
   - `rg -n "load_i32_ptr|store_i32_ptr|load_u8_ptr|store_u8_ptr" stdlib tests tutorials examples` -> 該当なし
   - `timeout 20s node nodesrc/run_test.js <<'EOF' ... mem-basic-direct-overload ... EOF` -> pass
   - `timeout 20s node nodesrc/run_test.js <<'EOF' ... mem-invalid-store-direct-overload ... EOF` -> pass
+
+# 2026-03-08 作業メモ (提案: stdlib の後方互換なし再設計)
+
+- 目的:
+  - stdlib をジェネリクス/trait 中心で作り直すための、後方互換なしの破壊的改良案を整理する。
+  - 既存の `_raw` 依存、命名揺れ、target 依存混在を解消するための設計軸を明確化する。
+- 変更:
+  - `doc/stdlib_breaking_reboot.md`
+    - 目的/非目標/設計原則を定義。
+    - 新しい stdlib パッケージ構成（`core/alloc/collections/text/io/fs/runtime/prelude`）を提案。
+    - trait 能力モデル（メモリ能力、I/O 能力含む）とジェネリクス設計を提案。
+    - 命名規則の破壊的変更（`_raw/_safe` 廃止、`into_xxx/parse_xxx` 統一）を提案。
+    - runtime adapter 分離、移行フェーズ、テスト戦略、期待効果を記述。
+- plan.mdとの差異:
+  - `plan.md` は言語仕様の核（前置記法・式指向・オフサイドルール）を定義している。
+  - 今回は言語構文を変更せず、stdlib の責務分離と trait 境界設計に限定した提案であり、`plan.md` と矛盾しない。
+- 結果:
+  - フェーズD/E（compiler `_raw` 依存撤去、stdlib 移行）を進める際の実装基準として参照可能な文書を追加した。
+
+- 検証:
+  - `trunk build`
+    - 結果: 環境に `trunk` コマンドが存在せず実行不可（`command not found`）。
+  - `node nodesrc/tests.js -i tests/stdlib.n.md --no-tree -o /tmp/tests-proposal.json -j 15`
+    - 結果: `nepl-web compiler artifacts were not found` により `229/229 errored`。
+    - 出力 JSON `/tmp/tests-proposal.json` を確認し、要因がビルド成果物不足であることを確認。
+
+# 2026-03-08 作業メモ (改善: stdlib 再設計案の NEPLg2 哲学整合)
+
+- 目的:
+  - 前回追加した `doc/stdlib_breaking_reboot.md` が、`plan.md`、`introduce.n.md`、`tutorials` で示される NEPLg2 の哲学（式指向・前置記法・オフサイドルール・パイプ合成）と一致しているかを再点検し、改善する。
+- 原因:
+  - 前回案は trait/generics と安全性方針は示せていたが、NEPLg2 の表現哲学（値合成優先、パイプで追える引数順、effect 明示）との接続が弱く、実装判断時に解釈がぶれる余地があった。
+- 変更:
+  - `doc/stdlib_breaking_reboot.md`
+    - 「NEPLg2 哲学との整合要件」章を追加し、式指向・前置記法/パイプ・effect・型駆動の整合基準を明文化。
+    - API設計原則を「合成しやすい引数順」「`Result/Option` で失敗を表現」「target依存をadapterへ隔離」の観点で再整理。
+    - コンテナ・命名方針・移行フェーズ・テスト戦略を、tutorialsの実装スタイルと繋がる形に調整。
+- plan.mdとの差異:
+  - 言語仕様は変更していない。
+  - stdlib再設計案の評価軸を、`plan.md` と tutorials の記述に沿うよう強化した。
+- 結果:
+  - 破壊的改良案をそのまま実装計画へ落とし込む際に、NEPLg2 の設計思想と乖離しにくい文書へ更新できた。
+- 検証:
+  - `trunk build`
+    - 結果: 環境に `trunk` コマンドが存在せず実行不可（`command not found`）。
+  - `node nodesrc/tests.js -i tests/stdlib.n.md --no-tree -o /tmp/tests-stdlib-philosophy.json -j 15`
+    - 結果: `nepl-web compiler artifacts were not found` により `229/229 errored`。
+    - 出力 JSON `/tmp/tests-stdlib-philosophy.json` を確認し、成果物不足が失敗要因であることを確認。

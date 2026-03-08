@@ -62,6 +62,14 @@
 - 各フェーズの区切りでコミットする（必要なら中間で分割）。
 - コミット前に対象範囲テストを実行し、結果を `note.md` に記録する。
 
+2026-03-08 stdlib 破壊的再設計（提案フェーズ後の実装TODO）
+
+- `doc/stdlib_breaking_reboot.md` の能力 trait を `doc/trait_system_design.md` と統合し、最終仕様へ確定する。
+- stdlib 新構成（`core/alloc/collections/text/io/fs/runtime/prelude`）のディレクトリ移行計画を作成する。
+- `_raw/_safe` 命名廃止に伴う一括置換対象（stdlib + compiler helper）を棚卸しする。
+- `Writer` trait ベースの出力API設計を確定し、`print_*` 群の置換順序を定める。
+- `Result<T, StdError>` への統合エラー体系を設計し、既存エラー型からの移行表を作成する。
+
 2026-02-22 今後の実装計画（未完了のみ）
 
 方針
