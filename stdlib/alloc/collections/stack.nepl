@@ -136,7 +136,7 @@ struct Stack<.T>:
 //:         |> unwrap_ok<Stack<i32>, Diag>
 //:     if stack_is_empty<i32> st 0 1
 //: ```
-fn stack_new <.T> <()->Result<Stack<.T>, Diag>> ():
+fn stack_new <.T> <()*>Result<Stack<.T>, Diag>> ():
     let cap <i32> 8
     let header <i32> alloc_raw 12
     if:
@@ -188,7 +188,7 @@ fn stack_new <.T> <()->Result<Stack<.T>, Diag>> ():
 //:         |> unwrap_ok<Stack<i32>, Diag>
 //:     if eq stack_len<i32> st 1 0 1
 //: ```
-fn stack_push <.T> <(Stack<.T>,.T)->Result<Stack<.T>, Diag>> (stk, item):
+fn stack_push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
     let header <i32> get stk "hdr"
     let len <i32> load_i32 header
     let cap <i32> load_i32 add header 4

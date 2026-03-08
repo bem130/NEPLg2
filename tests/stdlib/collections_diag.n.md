@@ -1,8 +1,15 @@
 # collections の診断（Diag）検証
 
-`alloc/collections` の不正操作が `Result<_,Diag>` で適切に返ることを確認します。
+`alloc/collections` の不正操作が `Result<_,Diag>` で返るとき、
+`Diag` の `StdErrorKind` が[期待/きたい]どおりに[分類/ぶんるい]されていることを[確認/かくにん]します。
 
 ## hashmap_remove_missing_key_returns_diag
+
+[目的/もくてき]:
+- `hashmap_remove` が[存在/そんざい]しない key に[対/たい]して `Err(Diag)` を[返/かえ]すことを[確/たし]かめます。
+
+[何/なに]を[確/たし]かめるか:
+- key [欠落/けつらく]は `StdErrorKind::KeyNotFound` として[報告/ほうこく]される。
 
 neplg2:test
 ```neplg2
@@ -21,10 +28,16 @@ fn main <()*>()> ():
         Result::Ok _h:
             test_fail "expected KeyNotFound";
         Result::Err d:
-            assert_str_eq "KeyNotFound" diag_code_str d.code;
+            assert_str_eq "KeyNotFound" diag_std_error_kind_str d;
 ```
 
 ## hashset_remove_missing_key_returns_diag
+
+[目的/もくてき]:
+- `hashset_remove` が[存在/そんざい]しない key に[対/たい]して `Err(Diag)` を[返/かえ]すことを[確/たし]かめます。
+
+[何/なに]を[確/たし]かめるか:
+- key [欠落/けつらく]は `StdErrorKind::KeyNotFound` として[報告/ほうこく]される。
 
 neplg2:test
 ```neplg2
@@ -43,10 +56,16 @@ fn main <()*>()> ():
         Result::Ok _h:
             test_fail "expected KeyNotFound";
         Result::Err d:
-            assert_str_eq "KeyNotFound" diag_code_str d.code;
+            assert_str_eq "KeyNotFound" diag_std_error_kind_str d;
 ```
 
 ## hashmap_insert_capacity_exceeded_returns_diag
+
+[目的/もくてき]:
+- `HashMap` が[容量/ようりょう]の[上限/じょうげん]に[達/たっ]したあとに `hashmap_insert` すると `Err(Diag)` が[返/かえ]ることを[確/たし]かめます。
+
+[何/なに]を[確/たし]かめるか:
+- [容量/ようりょう][超過/ちょうか]は `StdErrorKind::CapacityExceeded` として[報告/ほうこく]される。
 
 neplg2:test
 ```neplg2
@@ -71,10 +90,16 @@ fn main <()*>()> ():
         Result::Ok _h:
             test_fail "expected CapacityExceeded";
         Result::Err d:
-            assert_str_eq "CapacityExceeded" diag_code_str d.code;
+            assert_str_eq "CapacityExceeded" diag_std_error_kind_str d;
 ```
 
 ## hashset_insert_capacity_exceeded_returns_diag
+
+[目的/もくてき]:
+- `HashSet` が[容量/ようりょう]の[上限/じょうげん]に[達/たっ]したあとに `hashset_insert` すると `Err(Diag)` が[返/かえ]ることを[確/たし]かめます。
+
+[何/なに]を[確/たし]かめるか:
+- [容量/ようりょう][超過/ちょうか]は `StdErrorKind::CapacityExceeded` として[報告/ほうこく]される。
 
 neplg2:test
 ```neplg2
@@ -99,10 +124,16 @@ fn main <()*>()> ():
         Result::Ok _h:
             test_fail "expected CapacityExceeded";
         Result::Err d:
-            assert_str_eq "CapacityExceeded" diag_code_str d.code;
+            assert_str_eq "CapacityExceeded" diag_std_error_kind_str d;
 ```
 
 ## queue_pop_empty_returns_none
+
+[目的/もくてき]:
+- `queue_pop` は、[空/から] queue を[失敗/しっぱい]とせず `Option::None` で[返/かえ]すことを[確/たし]かめます。
+
+[何/なに]を[確/たし]かめるか:
+- [想定内/そうていない]の[不在/ふざい]は `Diag` ではなく `Option` で[表現/ひょうげん]される。
 
 neplg2:test
 ```neplg2
@@ -125,6 +156,12 @@ fn main <()*>()> ():
 ```
 
 ## ringbuffer_pop_empty_returns_none
+
+[目的/もくてき]:
+- `ringbuffer_pop_front` は、[空/から] ring buffer を[失敗/しっぱい]とせず `Option::None` で[返/かえ]すことを[確/たし]かめます。
+
+[何/なに]を[確/たし]かめるか:
+- [想定内/そうていない]の[不在/ふざい]は `Diag` ではなく `Option` で[表現/ひょうげん]される。
 
 neplg2:test
 ```neplg2

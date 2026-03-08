@@ -204,6 +204,13 @@ fn main <()->i32> ():
 
 ## sizeof_diag_structs
 
+[目的/もくてき]:
+- `alloc/diag` の[主要/しゅよう] struct が `size_of` の[対象/たいしょう]として[扱/あつか]えることを[確/たし]かめます。
+
+[何/なに]を[確/たし]かめるか:
+- `Span` の layout が 3 つの `i32` ぶんである。
+- `Diag` / `Diags` / `Outcome` が[不正/ふせい]な zero-size 扱いになっていない。
+
 neplg2:test
 ret: 0
 ```neplg2
@@ -219,9 +226,19 @@ fn main <()->i32> ():
         eq size_of<Span> 12
         then:
             if:
-                eq size_of<Error> 4
+                gt size_of<Diag> 0
                 then:
-                    if eq size_of<Diag> 8 0 3
+                    if:
+                        gt size_of<Diags> 0
+                        then:
+                            if:
+                                gt size_of<Outcome<i32, StdErrorKind>> 0
+                                then:
+                                    0
+                                else:
+                                    4
+                        else:
+                            3
                 else:
                     2
         else:

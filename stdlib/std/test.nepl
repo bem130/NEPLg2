@@ -184,8 +184,8 @@ fn trap <()*>()> ():
 //:     let checks <Vec<Result<(),str>>> checks_new;
 //:     finish_checks checks;
 //: ```
-fn checks_new <()->Vec<Result<(),str>>> ():
-    new<Result<(),str>>
+fn checks_new <()*>Vec<Result<(),str>>> ():
+    vec_new<Result<(),str>>
 
 //: checks_push: 集約検査列に 1 件追加する
 //:
@@ -218,7 +218,7 @@ fn checks_new <()->Vec<Result<(),str>>> ():
 //:         |> checks_push check true
 //:     finish_checks checks;
 //: ```
-fn checks_push <(Vec<Result<(),str>>,Result<(),str>)->Vec<Result<(),str>>> (checks, r):
+fn checks_push <(Vec<Result<(),str>>,Result<(),str>)*>Vec<Result<(),str>>> (checks, r):
     vec_push<Result<(),str>> checks r
 
 //: check: 条件を即時終了せず `Result<(),str>` として返す

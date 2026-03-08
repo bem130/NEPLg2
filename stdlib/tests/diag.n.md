@@ -1,37 +1,64 @@
 # stdlib/diag.n.md
 
-## diag_main
+`alloc/diag/diag` の[文字列化/もじれつか] helper を[確/たし]かめるためのテストです。
+ここでは `Diag` / `Diags` を[人間/にんげん]が[読/よ]める[表示/ひょうじ]へ[整形/せいけい]したとき、
+kind / span / note / help / source が[期待/きたい]どおりの[順番/じゅんばん]で[出力/しゅつりょく]されるかを[確認/かくにん]します。
+
+## diag_to_string_formats_structured_fields
+
+[目的/もくてき]:
+- `Diag` 1 [件/けん]の[表示/ひょうじ]が kind / message / span / note / help / source を[崩/くず]さず[整形/せいけい]することを[確/たし]かめます。
+
+[何/なに]を[確/たし]かめるか:
+- `kind_str`
+- `span_to_string`
+- `diag_to_string`
 
 neplg2:test
 ```neplg2
-
 #entry main
 #indent 4
 #target std
 
-#import "alloc/diag/diag" as *
 #import "alloc/diag/error" as *
+#import "alloc/diag/diag" as *
 #import "std/test" as *
 
-fn main <()*> ()> ():
-    // Test kind_str for various error kinds
-    assert_str_eq "Failure" kind_str ErrorKind::Failure;
-    assert_str_eq "OutOfMemory" kind_str ErrorKind::OutOfMemory;
-    assert_str_eq "IndexOutOfBounds" kind_str ErrorKind::IndexOutOfBounds;
-    assert_str_eq "KeyNotFound" kind_str ErrorKind::KeyNotFound;
-    assert_str_eq "ParseError" kind_str ErrorKind::ParseError;
-    assert_str_eq "IoError" kind_str ErrorKind::IoError;
-    assert_str_eq "Other" kind_str ErrorKind::Other;
+fn main <()*>()> ():
+    let sp <Span> Span 4 5 6;
+    let d0 <Diag> diag_error StdErrorKind::Failure "with source";
+    let d1 <Diag> diag_with_span d0 sp;
+    let d2 <Diag> diag_add_note d1 "check input";
+    let d3 <Diag> diag_add_help d2 "doc: std/test";
+    let d4 <Diag> diag_with_source d3 "parser";
+    let s <str> diag_to_string d4;
+    assert_str_eq "error[Failure]: with source\nat 4:5-6\ncheck input\nhelp: doc: std/test\nsource: parser\n" s;
+```
 
-    let e <Error> error_new ErrorKind::Failure "oops";
-    let s <str> diag_to_string e;
-    assert_str_eq "error[Failure]: oops\n" s;
+## diags_to_string_keeps_order
 
-    let sp <Span> Span 1 2 3;
-    let e1 <Error> error_new ErrorKind::Failure "oops";
-    let e2 <Error> error_with_span e1 sp;
-    let s2 <str> diag_to_string e2;
-    assert_str_eq "error[Failure]: oops\nat 1:2-3\n" s2;
+[目的/もくてき]:
+- `Diags` が[順序/じゅんじょ][付/づ]きの[診断群/しんだんぐん]として[扱/あつか]われることを[確/たし]かめます。
+- warn と info を[積/つ]んだとき、[追加/ついか]した[順/じゅん]に[並/なら]ぶことを[確認/かくにん]します。
 
-    ()
+[何/なに]を[確/たし]かめるか:
+- `diags_one`
+- `diags_push`
+- `diags_to_string`
+
+neplg2:test
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "alloc/diag/error" as *
+#import "alloc/diag/diag" as *
+#import "std/test" as *
+
+fn main <()*>()> ():
+    let ds0 <Diags> diags_one diag_warn "careful";
+    let ds1 <Diags> diags_push ds0 diag_info "loaded";
+    let s <str> diags_to_string ds1;
+    assert_str_eq "warn[warn]: careful\ninfo[info]: loaded\n" s;
 ```

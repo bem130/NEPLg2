@@ -8712,3 +8712,49 @@
   - `stdlib/std/test.nepl` の公開 `assert_*` 例は `#entry main` と `#target std` を前提にすると、そのまま実行できることを確認した。
   - collectable API の既存回帰 2 件も維持されているため、今回の変更はドキュメントコメント整理として確定してよい。
   - `nodesrc/tests.js` は `--no-stdlib` を付けないと stdlib 全走査で重くなりやすく、focused 検証では `--no-stdlib` を使うのが妥当。
+
+# 2026-03-09 作業メモ (`alloc/diag` の再設計と focused test の安定化)
+
+- 目的:
+  - stdlib reboot の最初の本流タスクとして、`alloc/diag` を `Diag` / `Diags` / `Outcome` / `StdErrorKind` 中心のモデルへ移行する。
+  - 旧 `error.nepl` の責務を `diag` 側へ吸収し、stdlib 全体で再利用できる診断基盤を先に固める。
+- 変更:
+  - `stdlib/alloc/diag/error.nepl`
+    - `DiagLevel`, `StdErrorKind`, `DiagKind`, `Diag`, `Diags`, `Outcome` を定義した。
+    - `diag_new`, `diag_log`, `diag_info`, `diag_warn`, `diag_error`, `diag_with_span`, `diag_with_source`, `diag_add_note`, `diag_add_help` を追加した。
+    - `diags_new`, `diags_one`, `diags_push`, `diags_len`, `diags_has_errors` を追加した。
+    - `outcome_ok`, `outcome_err`, `outcome_with_diags`, `result_to_outcome` を追加した。
+    - `diag_out_of_memory` など旧 collections 側 helper は、新しい `Diag` モデルの薄いラッパとして残した。
+  - `stdlib/alloc/diag/diag.nepl`
+    - `kind_str`, `span_to_string`, `diag_to_string`, `diags_to_string` を新 `Diag` / `Diags` 構造に合わせて書き直した。
+    - `std` target では `diag_print*` / `diags_print*` を renderer helper として残した。
+  - `stdlib/tests/error.n.md`
+    - `Diag` / `Diags` / `Outcome` の値モデル確認へ全面更新した。
+    - `match _:` を列挙型の完全列挙へ修正した。
+  - `stdlib/tests/diag.n.md`
+    - `diag_to_string` / `diags_to_string` の focused test を新モデルへ更新した。
+  - `tests/stdlib/collections_diag.n.md`
+    - collections が返す `Diag` の `StdErrorKind` 確認へ更新した。
+  - `tests/compiler/sizeof.n.md`
+    - `Span` / `Diag` / `Diags` / `Outcome` の `size_of` ケースを新モデルへ更新した。
+- 根本原因と修正:
+  - `diag_new`, `diags_new`, `diags_one`, `checks_new` などが `Vec::new` / `vec_push` を内部で呼んでいるのに pure のままだった。
+    - これにより `pure context cannot call impure function` が発生していた。
+    - 影響する helper を impure シグネチャへ修正した。
+  - `alloc/diag/error.nepl` では `new<str>` / `new<Diag>` の無修飾呼び出しが、周辺 import 環境によって `ambiguous overload` になっていた。
+    - これは `new` / `push` の alias 群が star import で混ざる現行環境に依存した不安定性だった。
+    - `vec_new<...>` / `vec_push<...>` を明示的に使う形へ直し、環境依存の曖昧さを消した。
+  - `stack_new` / `stack_push` は `diag_out_of_memory` の impure 化に追従しておらず、`sizeof` focused test で compile failure を起こしていた。
+    - シグネチャを impure に修正した。
+- 検証:
+  - direct `runSingle` により、以下の 4 ファイルの全ケースを個別確認した。
+    - `stdlib/tests/error.n.md`
+    - `stdlib/tests/diag.n.md`
+    - `tests/stdlib/collections_diag.n.md`
+    - `tests/compiler/sizeof.n.md`
+  - 結果:
+    - `2 + 2 + 6 + 8 = 18` ケースすべて pass。
+  - `nodesrc/tests.js` の focused run はこの環境では進捗表示が乏しく長く見えるため、問題切り分けは `runSingle` ベースで行った。
+- 結論:
+  - `alloc/diag` の新モデル自体は成立し、focused test で安定した。
+  - 次はこの変更を commit し、stdlib reboot 本流の次段階へ進める。
