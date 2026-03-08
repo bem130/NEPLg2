@@ -248,6 +248,42 @@
     - `Eq` / `Ord` core focused case: pass
     - `vec/sort` + `Ord` std focused case: pass
 
+# 2026-03-09 作業メモ (trait 能力モデル: `Hash` の共通化)
+
+- 目的:
+  - `Hash` trait を `core/traits` へ追加し、hashmap / hashset が具体的な `hash32_i32` / `hash32_str` へ直接依存せず共通 helper 経由でキーを混合できるようにする。
+  - 将来の `Serialize` / `Deserialize` と同じく、型ごとの能力を stdlib trait として明示する流れを揃える。
+- 変更:
+  - `stdlib/core/traits/hash.nepl`
+    - `Hash` trait
+    - `hash32_by_trait`
+    - `i32`
+    - `bool`
+    - `u8`
+    - `i64`
+    - `str`
+    への impl を追加。
+  - `stdlib/alloc/collections/hashmap.nepl`
+    - `hash32_i32` / `hash32_str` の直接呼び出しを `hash32_by_trait` に置換。
+  - `stdlib/alloc/collections/hashset.nepl`
+    - 同様に `hash32_by_trait` 経由へ置換。
+  - `tests/stdlib/traits_hash.n.md`
+    - `[目的/もくてき]` つき focused case を追加。
+- 判断:
+  - `Hash<i64>` は [上位/じょうい] / [下位/かい] 32-bit を XOR で折りたたんでから `hash32_i32` へ流す。
+  - `Hash` の対象は、まず既存 stdlib が安定して支えているキー型に限定した。
+  - `i128` や独自構造体のハッシュ能力は、今後 `Serialize` / `Eq` との整合を見ながら追加する。
+- compiler 修正:
+  - なし。今回の確認で見つかった問題は `traits_hash.n.md` 側の API サンプルが現行 `hashmap` / `hashset` の利用流儀とずれていたことだった。
+  - `must_hm` / `must_hs` と `Option` の match を使う既存流儀へ合わせて修正した。
+- 検証:
+  - `node` + `nodesrc/compiler_loader` による compile-only focused check で、
+    - `hash32_by_trait` 単体
+    - `hashmap/hashset/hashmap_str/hashset_str`
+    を使う snippet
+    の両方が `COMPILE_OK` を返すことを確認。
+  - `nodesrc/tests.js` はこの環境では長くぶら下がることがあるため、focused な compile-only でまず妥当性を固定した。
+
 # 2026-03-09 作業メモ (`std/test` 集約 API 追加と nested generic overload 根本修正)
 
 - 目的:
