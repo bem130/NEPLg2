@@ -314,6 +314,49 @@ fn outcome_with_diags <.T, .E> <(Outcome<.T, .E>,Diags)->Outcome<.T, .E>> (o, ds
 fn result_to_outcome <.T, .E> <(Result<.T, .E>)->Outcome<.T, .E>> (r):
     Outcome r none<Diags>
 
+//: outcome_diags_or_empty: `Outcome` の[診断/しんだん][群/ぐん]を[空/から]なら[空/から]の `Diags` に[置/お]き[換/か]えて[返/かえ]す
+//:
+//: [目的/もくてき]:
+//: - `Outcome` を[使/つか]う[側/がわ]が `Option<Diags>` をそのつど `match` せず、[一貫/いっかん]して `Diags` として[扱/あつか]えるようにします。
+//:
+//: [実装/じっそう]:
+//: - `some` ならそのまま[返/かえ]し、`none` なら `diags_new` を[作/つく]ります。
+//:
+//: [注意/ちゅうい]:
+//: - `none` のときは[空/から] `Diags` を[新規/しんき][確保/かくほ]します。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn outcome_diags_or_empty <.T, .E> <(Outcome<.T, .E>)*>Diags> (o):
+    match get o "diags":
+        Option::Some ds:
+            ds
+        Option::None:
+            diags_new
+
+//: outcome_has_errors: `Outcome` の[診断/しんだん][群/ぐん]に error level が[含/ふく]まれるか[判定/はんてい]する
+//:
+//: [目的/もくてき]:
+//: - compiler や richer な parser が `Outcome.result` とは[別/べつ]に、[診断/しんだん][群/ぐん]の[重大度/じゅうだいど]で[処理/しょり][継続/けいぞく]を[判断/はんだん]するときに[使/つか]います。
+//:
+//: [実装/じっそう]:
+//: - `diags` が `none` なら false、`some` なら `diags_has_errors` を[呼/よ]びます。
+//:
+//: [注意/ちゅうい]:
+//: - `Result::Err` であっても `diags` が[空/から]なら false を[返/かえ]します。
+//: - `Outcome.result` の[成否/せいひ]と `DiagLevel::Error` は[別軸/べつじく]です。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（[再帰/さいき]ぶん）
+fn outcome_has_errors <.T, .E> <(Outcome<.T, .E>)->bool> (o):
+    match get o "diags":
+        Option::Some ds:
+            diags_has_errors ds
+        Option::None:
+            false
+
 //: std_error_kind_str: `StdErrorKind` を[文字列/もじれつ]へ[変換/へんかん]する
 fn std_error_kind_str <(StdErrorKind)->str> (kind):
     match kind:

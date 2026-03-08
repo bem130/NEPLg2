@@ -8758,3 +8758,39 @@
 - 結論:
   - `alloc/diag` の新モデル自体は成立し、focused test で安定した。
   - 次はこの変更を commit し、stdlib reboot 本流の次段階へ進める。
+
+# 2026-03-09 作業メモ (`Outcome` 読み取り helper の追加と struct 抽出制約の確認)
+
+- 目的:
+  - `Diag` 再設計の次段階として、`Result` と `Outcome` を共通に扱う helper 層の最小部分を先に整備する。
+  - trait 能力モデルへ進む前に、`Outcome` から診断群を安全に読み取る API を固定する。
+- 変更:
+  - `stdlib/alloc/diag/error.nepl`
+    - `outcome_diags_or_empty <.T, .E> <(Outcome<.T, .E>)*>Diags>` を追加。
+    - `outcome_has_errors <.T, .E> <(Outcome<.T, .E>)->bool>` を追加。
+  - `stdlib/tests/error.n.md`
+    - 上記 2 helper の使い方と結果を確認する focused doctest へ更新。
+- 試行して見送った内容:
+  - `outcome_push_diag`
+  - `outcome_map`
+  - `outcome_map_err`
+- 根本原因:
+  - 現在の言語では、struct から複数 field を安全に取り出して再構築する一般的な手段が不足している。
+  - `get o "result"` と `get o "diags"` はどちらも `o` を消費するため、両方を同時に取り出して新しい `Outcome` を作れない。
+  - struct に対する `match` による分解も現状の文法では未対応で、`Outcome r ds:` のような destructuring は parser error になる。
+  - そのため、読み取り専用 helper は成立するが、`Outcome` を更新・写像する helper は言語機能側の支援なしに安全実装できない。
+- 判断:
+  - 間に合わせで raw field 操作や ad-hoc helper を増やすと、後で trait 能力モデルと衝突する。
+  - 今回は成立する読み取り API だけを確定し、更新系 helper は compiler / 言語機能の整備後へ回す。
+- 検証:
+  - direct `runSingle`
+    - `stdlib/tests/error.n.md`
+      - 結果: `2/2 pass`
+    - `stdlib/tests/error.n.md`
+    - `stdlib/tests/diag.n.md`
+    - `tests/stdlib/collections_diag.n.md`
+      をまとめた focused 実行
+      - 結果: `10/10 pass`
+- 結論:
+  - `Outcome` の最小読み取り helper は、現状の言語機能でも安定に提供できる。
+  - `Outcome` の mutating helper を library 側だけで無理に進めるのは誤りで、必要なら compiler / 言語機能の課題として扱う。

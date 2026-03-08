@@ -76,6 +76,8 @@ fn main <()*>()> ():
 - `outcome_err`
 - `outcome_with_diags`
 - `result_to_outcome`
+- `outcome_diags_or_empty`
+- `outcome_has_errors`
 
 neplg2:test
 ```neplg2
@@ -131,6 +133,8 @@ fn main <()*>()> ():
             assert_eq_i32 1 diags_len got;
         Option::None:
             test_fail "expected diags";
+    assert_eq_i32 1 diags_len outcome_diags_or_empty ok1;
+    assert not outcome_has_errors ok1;
 
     let err0 <Outcome<i32, StdErrorKind>> outcome_err<i32, StdErrorKind> StdErrorKind::IoError;
     match get err0 "result":
@@ -160,6 +164,8 @@ fn main <()*>()> ():
                     test_fail "expected IoError";
                 StdErrorKind::Other:
                     test_fail "expected IoError";
+    assert_eq_i32 0 diags_len outcome_diags_or_empty err0;
+    assert not outcome_has_errors err0;
 
     let err1 <Outcome<i32, StdErrorKind>>:
         result_to_outcome<i32, StdErrorKind> Result::Err StdErrorKind::ParseError
