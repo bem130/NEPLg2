@@ -55,6 +55,7 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/cast" as *
+#import "core/traits/ord" as *
 #import "alloc/collections/vec" as *
 #import "core/field" as *
 
@@ -75,33 +76,6 @@
 // - 各アルゴリズムごとのコメントを参照してください。
 
 
-// Ord: ソートに必要な最小の順序づけ
-//
-// 目的:
-// - 要素型 .T に「a < b」を与えるための最小トレイトです。
-//
-// 注意(重要):
-// - lt は strict な大小比較を返してください。
-// - 「等しい」判定は要求しません。
-//   (a <= b は not (b < a) として構成します)
-trait Ord:
-    fn lt <(Self,Self)->bool> (a, b):
-        false
-
-
-// i32 の Ord 実装
-impl Ord for i32:
-    fn lt <(i32,i32)->bool> (a, b):
-        lt a b
-
-// u8 の Ord 実装
-impl Ord for u8:
-    fn lt <(u8,u8)->bool> (a, b):
-        let ai <i32> cast a;
-        let bi <i32> cast b;
-        lt ai bi
-
-
 // sort_lt: a < b
 //: sort_lt: 主な用途
 //:
@@ -117,7 +91,7 @@ impl Ord for u8:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn sort_lt <.T: Ord> <(.T,.T)->bool> (a, b):
-    Ord::lt a b
+    ord_lt a b
 
 // sort_le: a <= b  (not (b < a))
 //: sort_le: 主な用途
@@ -134,7 +108,7 @@ fn sort_lt <.T: Ord> <(.T,.T)->bool> (a, b):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn sort_le <.T: Ord> <(.T,.T)->bool> (a, b):
-    not Ord::lt b a
+    ord_le a b
 
 // sort_gt: a > b  (b < a)
 //: sort_gt: 主な用途
@@ -151,7 +125,7 @@ fn sort_le <.T: Ord> <(.T,.T)->bool> (a, b):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn sort_gt <.T: Ord> <(.T,.T)->bool> (a, b):
-    Ord::lt b a
+    ord_gt a b
 
 // sort_ge: a >= b (not (a < b))
 //: sort_ge: 主な用途
@@ -168,7 +142,7 @@ fn sort_gt <.T: Ord> <(.T,.T)->bool> (a, b):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn sort_ge <.T: Ord> <(.T,.T)->bool> (a, b):
-    not Ord::lt a b
+    ord_ge a b
 
 
 // sort_get_unchecked: 範囲チェックなしの要素取得

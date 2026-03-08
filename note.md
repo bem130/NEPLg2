@@ -215,9 +215,38 @@
   - `nepl-core` 内で重複していた runtime helper（alloc/dealloc/realloc）解決ロジックを共通化し、`_raw` 名依存を段階縮小する。
   - helper 名の優先順位を安全API名（suffixなし）優先へ統一する。
 - 変更:
-  - `nepl-core/src/runtime_helpers.rs`
+- `nepl-core/src/runtime_helpers.rs`
     - `ALLOC_CANDIDATES` を `["alloc", "alloc_raw"]` に変更（安全API優先）。
     - `RuntimeHelperKind` / `helper_candidates` / `helper_base_name` を追加。
+
+# 2026-03-09 作業メモ (trait 能力モデル: `Eq` / `Ord` の共通化)
+
+- 目的:
+  - `core/traits` に `Eq` / `Ord` を追加し、比較意味論を stdlib 共通 trait として扱えるようにする。
+  - `alloc/collections/vec/sort.nepl` の局所 `Ord` 定義を撤去し、collections 側の比較 capability を `core` へ寄せる。
+- 変更:
+  - `stdlib/core/traits/eq.nepl`
+    - `Eq` trait
+    - `eq_by_trait`
+    - `ne_by_trait`
+    - `bool`, `i32`, `u8`, `i64`, `f32`, `f64`, `str` への impl
+  - `stdlib/core/traits/ord.nepl`
+    - `Ord` trait
+    - `ord_lt`, `ord_le`, `ord_gt`, `ord_ge`
+    - `bool`, `i32`, `u8`, `i64`, `i128`, `f32`, `f64` への impl
+  - `stdlib/alloc/collections/vec/sort.nepl`
+    - 局所 `Ord` trait と局所 impl を削除
+    - `core/traits/ord` を import し、`sort_lt` 系 helper から共通 `ord_*` を呼ぶ形へ変更
+  - `tests/stdlib/traits_order.n.md`
+    - 日本語の目的つき focused test を追加
+- 判断:
+  - `Eq<i128>` は既存の分解 helper を仮定すると壊れるため、一旦追加しなかった。
+  - `Ord<str>` も既存の順序比較 helper が未整備なので、同様に見送った。
+  - まずは既存の `core/math` overload で根拠を持てる型だけを共通 trait 化した。
+- 検証:
+  - `NODE_NO_WARNINGS=1 node nodesrc/run_test.js`
+    - `Eq` / `Ord` core focused case: pass
+    - `vec/sort` + `Ord` std focused case: pass
 
 # 2026-03-09 作業メモ (`std/test` 集約 API 追加と nested generic overload 根本修正)
 
