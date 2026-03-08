@@ -13,16 +13,7 @@
 
 stdlib 再構築 本流
 
-1. `tests/compiler/*` と `tests/stdlib/*` への再編を先に行う
-- `tests/` 直下の既存ケースを棚卸しし、compiler 自体の正しさを確認するものと stdlib 実装の正しさを確認するものを分離する。
-- `tests/compiler/*` には、stdlib 依存が薄く、構文・型・名前解決・診断・codegen 前段検査など compiler 本体の誤りを確認するケースを移す。
-- `tests/stdlib/*` には、stdlib の API、アルゴリズム、メモリ安全性、target facade、回帰ケースを確認するケースを移す。
-- stdlib reboot 開始前にこの分離を完了し、以後のテスト失敗が「stdlib 変更によるものか」「テスト移行ミスか」を切り分けられる状態にする。
-- 完了条件:
-  - `tests/compiler/*` と `tests/stdlib/*` の責務分離が固定される。
-  - 既存 focused test の代表ケースが新構成へ移り、実行経路が壊れていないことを確認できる。
-
-2. `diag` / `Diags` / `Outcome` / `StdErrorKind` を先に確定する
+1. `diag` / `Diags` / `Outcome` / `StdErrorKind` を先に確定する
 - `alloc/diag` を再設計し、`error.nepl` を `diag` へ吸収する。
 - `Diag` を単一 struct、`Diags` を `List<Diag>` を包む struct として実装する。
 - `Outcome<T, E>` を named struct として導入し、`result` と `diags` を持たせる。
@@ -33,7 +24,7 @@ stdlib 再構築 本流
   - stdlib で `Result` / `Outcome` / `Diag` の使い分けが固定される。
   - 既存 `error.nepl` の公開責務が `diag` 側へ移る。
 
-3. trait 能力モデルの土台を確定する
+2. trait 能力モデルの土台を確定する
 - `Copy` / `Clone` / `Eq` / `Ord` / `Hash` / `Stringify` / `Debug` / `Serialize` / `Deserialize` の trait 配置と責務を実装へ落とす。
 - copy/clone 判定は compiler 内固定表を使わず、`.nepl` ソース上の trait 実装だけで決まるようにする。
 - `Result` と `Outcome` を共通に扱う helper / trait 枠組みを設計し、stdlib 全体で再利用できるようにする。
@@ -41,7 +32,7 @@ stdlib 再構築 本流
   - trait 能力の責務が `core` / `alloc` / `std` の配置と一致する。
   - compiler 側の copy/clone ハードコード撤去方針が実装可能な形に落ちる。
 
-4. compiler 前提を固定する
+3. compiler 前提を固定する
 - copy/clone 非ハードコード化の実装経路を compiler 側で確定する。
 - codegen では診断を出さず、前段で診断を完結させる。
 - wasm/llvm の診断規則を共通化する。
@@ -51,7 +42,7 @@ stdlib 再構築 本流
   - 同一入力で wasm/llvm が同一診断を返す。
   - copy/clone 能力が compiler 内固定表なしで解決される。
 
-5. `Diag.kind` を支える言語機能追加の計画と前段実装を進める
+4. `Diag.kind` を支える言語機能追加の計画と前段実装を進める
 - 軽量実体を持ちながら階層識別子として扱える kind 表現を言語機能として追加する。
 - 仕様化前の暫定実装では、`Diag.kind` を構造化データで表しつつ、将来の言語機能へ移行しやすい形にする。
 - compiler / selfhost / DSL 実装が共通 kind 体系を利用できるようにする。
@@ -59,7 +50,7 @@ stdlib 再構築 本流
   - reboot 仕様に必要な kind 体系を支える実装方針が確定する。
   - `todo.md` 下部の編集禁止メモとは別に、実装タスクとして独立して追える状態になる。
 
-6. メモリ安全型モデルを `core/mem` に固定する
+5. メモリ安全型モデルを `core/mem` に固定する
 - `MemPtr<T>` / `RegionToken<T>` を公開 API の中心に据える。
 - 生 `i32` ポインタ受け取りの公開関数を段階的に除去する。
 - `load/store` の境界・生存・解放後利用を `Result/Option` と型検査へ寄せる。
@@ -68,7 +59,7 @@ stdlib 再構築 本流
   - 公開面に生ポインタ前提 API が残らない。
   - OOB/UAF/double free が compile error または `Result::Err` として表現される。
 
-7. `alloc` 層を新構成へ移す
+6. `alloc` 層を新構成へ移す
 - `alloc/collections` を `MemPtr<T>` / `RegionToken<T>` 前提へ統一する。
 - `alloc/text` の文字列表現変換・数値変換・真偽値変換を trait 設計と整合させる。
 - `alloc/io` に低水準抽象（Reader/Writer/Seekable/Buffered）を集約する。
@@ -77,7 +68,7 @@ stdlib 再構築 本流
   - `alloc` 層の公開 API が新しい trait / diag / memory モデルと整合する。
   - `_raw` / `_safe` の公開命名が消える。
 
-8. `runtimes` 層を整理する
+7. `runtimes` 層を整理する
 - target ごとの差分と厚い wrapper が必要な機能だけを `runtimes` に集める。
 - `math` のような `core` へ置くべきものを `runtimes` に持ち込まない。
 - wasip1 / wasip2 / wasix などの差分を `runtimes` 配下で整理する。
@@ -85,7 +76,7 @@ stdlib 再構築 本流
   - `runtimes` の責務が `std` や `features` と重複しない。
   - target 差分を `std` が包める状態になる。
 
-9. `std` と `std/streamio` を再構築する
+8. `std` と `std/streamio` を再構築する
 - `std/streamio` を `alloc/io` 抽象の上に構築する。
 - `stdio` / `fs` / `env/cliarg` を `std` 配下へ整理し、`runtimes` を直接見せない facade にする。
 - `kpread` / `kpwrite` の中核を `std/streamio` へ昇格させ、`kp` 側には競技向け薄ラッパだけを残す。
@@ -94,7 +85,7 @@ stdlib 再構築 本流
   - `std` が target 依存標準 API の facade として一貫する。
   - `kpread` / `kpwrite` の一般化可能部分が `std/streamio` 側へ移る。
 
-10. `features` 層を定義し直す
+9. `features` 層を定義し直す
 - GUI / HTTP / TUI / 音声再生のような外部 API / FFI / デバイス接続を `features` へ配置する。
 - regex や audio buffer/processing のような計算・データ処理を `core` / `alloc` へ戻す。
 - `features` は `std` や `runtimes` の上に載る追加機能群として整理する。
@@ -102,7 +93,7 @@ stdlib 再構築 本流
   - `features` の責務が `std` と混ざらない。
   - `tui.nepl` を含む既存外部連携コードの配置方針が固定される。
 
-11. tests / tutorials / docs を新 stdlib に追従させる
+10. tests / tutorials / docs を新 stdlib に追従させる
 - `compile_fail` に `diag_id` を付ける。
 - 診断位置検証の仕組みを追加する。
 - tutorials を新ライブラリ構成と新 API に合わせて書き直す。

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // nodesrc/tests.js
 // 目的:
-// - /tests/*.n.md, /tutorials/**/*.n.md, /stdlib/**/*.nepl などに埋め込まれた doctest を走査して実行し、結果を JSON にまとめる。
+// - /tests/compiler/*.n.md, /tests/stdlib/*.n.md, /tutorials/**/*.n.md, /stdlib/**/*.nepl などに埋め込まれた doctest を走査して実行し、結果を JSON にまとめる。
 //
 // 使い方例:
 //   node nodesrc/tests.js -i tests -i tutorials -i stdlib -o dist/tests.json
@@ -16,7 +16,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const { Worker } = require('node:worker_threads');
 const { parseFile } = require('./parser');
 const { createRunner, runSingle } = require('./run_test');
-const { runTreeSuite } = require('../tests/tree/run');
+const { runTreeSuite } = require('../tests/compiler/tree/run');
 
 // doctest 集計の標準出力は要約重視にする。
 process.removeAllListeners('warning');
@@ -1182,8 +1182,8 @@ async function main() {
                 const status = tr?.status === 'pass' ? 'pass' : tr?.status === 'fail' ? 'fail' : 'error';
                 results.push({
                     ok: status === 'pass',
-                    id: `tests/tree/${tr?.id || 'unknown'}`,
-                    file: 'tests/tree',
+                    id: `tests/compiler/tree/${tr?.id || 'unknown'}`,
+                    file: 'tests/compiler/tree',
                     index: 0,
                     tags: ['tree_api'],
                     status,
@@ -1196,8 +1196,8 @@ async function main() {
         } catch (e) {
             results.push({
                 ok: false,
-                id: 'tests/tree/run',
-                file: 'tests/tree',
+                id: 'tests/compiler/tree/run',
+                file: 'tests/compiler/tree',
                 index: 0,
                 tags: ['tree_api'],
                 status: 'error',

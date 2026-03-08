@@ -8653,3 +8653,35 @@
   - 次の安全な着手点は `todo.md` 先頭の `std/test` 改善タスクである。
   - `vec` 系差分は reboot 計画に吸収する前提で保持し、`nm` 側の import-only 失敗は別件ブロッカーとして管理する。
   - この時点では `nm/parser.nepl` / `nm/html_gen.nepl` の追従差分は commit 対象から外し、stdlib reboot 後に改めて対処する。
+
+# 2026-03-09 作業メモ (tests/compiler と tests/stdlib の再編)
+
+- 目的:
+  - stdlib reboot 開始前に、テスト失敗の原因を「compiler 本体の誤り」「stdlib 実装の誤り」「テスト移行ミス」の 3 つへ切り分けやすくする。
+  - `tests/` 直下に混在していたケースを `tests/compiler/*` と `tests/stdlib/*` へ分離し、以後の回帰確認の粒度を揃える。
+- 変更:
+  - compiler 本体の確認を主目的とする `.n.md` と tree suite を `tests/compiler/*` へ移動した。
+  - stdlib API・アルゴリズム・target facade・回帰確認を主目的とする `.n.md` を `tests/stdlib/*` へ移動した。
+  - `nodesrc/tests.js`
+    - tree suite の読み込み先を `tests/compiler/tree/run` へ更新した。
+    - tree suite 結果の `id` / `file` を `tests/compiler/tree/*` へ更新した。
+  - `tests/compiler/tree/_shared.js`
+    - `nodesrc/*` への相対 import を、新しい配置に合わせて 1 段深く修正した。
+  - `nodesrc/analyze_source.js`
+    - 使用例コメントのパスを `tests/compiler/functions.n.md` へ更新した。
+- 根本原因:
+  - 既存の `tests/` は compiler 本体テストと stdlib テストが同居しており、stdlib reboot 中に失敗の原因を正しく切り分けにくかった。
+  - tree suite も `tests/tree/*` を前提に直参照していたため、単純なファイル移動だけでは実行経路が壊れた。
+- 実装上の注意:
+  - `nodesrc/tests.js` は既定で stdlib doctest も一緒に走査するため、focused test では `--no-stdlib` を明示しないと「移動確認」のつもりが stdlib 全体実行になる。
+  - 今回の focused 検証は、再編そのものの安全性確認に限定するため `--no-stdlib --no-tree` を用いた。
+- 検証:
+  - `node nodesrc/tests.js -i tests/compiler/block_semicolon_return.n.md -i tests/compiler/plan.n.md -i tests/compiler/overload_nested_generic_push.n.md --no-stdlib --no-tree -o /tmp/tests-compiler-reorg-focused.json -j 15`
+    - 結果: `49/49 pass`
+  - `node nodesrc/tests.js -i /tmp/std-test-collect-success-only.n.md --no-stdlib --no-tree -o /tmp/std-test-collect-success-only.json -j 15`
+    - 結果: `1/1 pass`
+  - `node nodesrc/tests.js -i /tmp/std-test-collect-fail-only.n.md --no-stdlib --no-tree -o /tmp/std-test-collect-fail-only.json -j 15`
+    - 結果: `1/1 pass`
+- 結論:
+  - `tests/compiler/*` と `tests/stdlib/*` の分離、およびそれに伴う `nodesrc` / tree suite の追従は成立した。
+  - `todo.md` 先頭の再編タスクは完了として削除し、以後は reboot 本流の `diag` / `Outcome` / trait 能力モデルの実装へ進める。
