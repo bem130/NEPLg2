@@ -396,21 +396,21 @@ fn sb_append_i32 <(StringBuilder,i32)->StringBuilder> (sb, v):
 fn sb_build <(StringBuilder)->str> (sb):
     let parts_vec <Vec<str>> get sb "parts";
     let n <i32> get parts_vec "len";
-    let parts_data <i32> get parts_vec "data";
+    let parts_data <i32> mem_ptr_addr get parts_vec "data";
     let mut total <i32> 0;
     let mut idx0 <i32> 0;
     while lt idx0 n:
         do:
-            let part <str> load<str> <i32> add parts_data <i32> mul idx0 size_of<str>;
-            set total <i32> add total load_i32 part;
-            set idx0 <i32> add idx0 1;
+            let part <str> load<str> add parts_data mul idx0 size_of<str>;
+            set total add total load_i32 part;
+            set idx0 add idx0 1;
     let out_region <RegionToken<u8>> unwrap_ok string_alloc_region total;
     let out_data <MemPtr<u8>> string_region_data_ptr out_region;
     let mut idx <i32> 0;
     let mut dst <i32> 0;
     while lt idx n:
         do:
-            let part <str> load<str> <i32> add parts_data <i32> mul idx size_of<str>;
+            let part <str> load<str> add parts_data mul idx size_of<str>;
             let plen <i32> load_i32 part;
             let part_data <MemPtr<u8>> string_data_ptr part;
             let mut i <i32> 0;
@@ -423,9 +423,9 @@ fn sb_build <(StringBuilder)->str> (sb):
                             ()
                         Result::Err _e:
                             #intrinsic "unreachable" <> ()
-                    set i <i32> add i 1;
-            set dst <i32> add dst plen;
-            set idx <i32> add idx 1;
+                    set i add i 1;
+            set dst add dst plen;
+            set idx add idx 1;
     string_finish out_region total
 
 // str_eq: 文字列が等しいか判定する

@@ -82,6 +82,7 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/option" as *
+#import "core/result" as *
 #import "core/field" as *
 
 //: Vec: 可変長配列のメタ情報
@@ -101,7 +102,7 @@
 struct Vec<.T>:
     len <i32>
     cap <i32>
-    data <i32>
+    data <MemPtr<.T>>
 
 //: vec_new: 空の Vec を作る
 //:
@@ -130,7 +131,7 @@ struct Vec<.T>:
 //: ```
 fn vec_new <.T> <()->Vec<.T>> ():
     let cap <i32> 8
-    let data <i32> alloc_raw mul cap size_of<.T>
+    let data <MemPtr<.T>> unwrap_ok alloc_ptr<.T> mul cap size_of<.T>
     Vec<.T> 0 cap data
 
 //: vec_with_capacity: 指定容量で Vec を作る
@@ -159,7 +160,7 @@ fn vec_new <.T> <()->Vec<.T>> ():
 //:     if eq vec_cap<i32> v 16 0 1
 //: ```
 fn vec_with_capacity <.T> <(i32)->Vec<.T>> (cap):
-    let data <i32> alloc_raw mul cap size_of<.T>
+    let data <MemPtr<.T>> unwrap_ok alloc_ptr<.T> mul cap size_of<.T>
     Vec<.T> 0 cap data
 
 //: vec_len: 長さを返す
@@ -245,6 +246,22 @@ fn vec_cap <.T> <(Vec<.T>)->i32> (v):
 //:     if gt vec_data_ptr<i32> v 0 0 1
 //: ```
 fn vec_data_ptr <.T> <(Vec<.T>)->i32> (v):
+    mem_ptr_addr get v "data"
+
+//: vec_data_mem_ptr: 要素バッファ先頭を型付きポインタとして返す
+//:
+//: 目的:
+//: - `Vec<.T>` の内部データを `MemPtr<.T>` として取得し、collections 内部で安全に扱います。
+//:
+//: 実装(アルゴリズム):
+//: - フィールド data をそのまま返します。
+//:
+//: 注意(重要):
+//: - 主に stdlib 内部の実装補助であり、公開の生ポインタ API の代替です。
+//:
+//: 計算量:
+//: - O(1)
+fn vec_data_mem_ptr <.T> <(Vec<.T>)->MemPtr<.T>> (v):
     get v "data"
 
 //: vec_data_len: 要素バッファ先頭ポインタと長さを同時に返す
@@ -278,7 +295,7 @@ fn vec_data_ptr <.T> <(Vec<.T>)->i32> (v):
 //: ```
 fn vec_data_len <.T> <(Vec<.T>)->.Pair> (v):
     let v_len <i32> get v "len"
-    let v_data <i32> get v "data"
+    let v_data <i32> mem_ptr_addr get v "data"
     Tuple:
         v_data
         v_len
@@ -340,18 +357,18 @@ fn vec_is_empty <.T> <(Vec<.T>)->bool> (v):
 fn vec_push <.T> <(Vec<.T>,.T)->Vec<.T>> (v, item):
     let v_len <i32> get v "len"
     let v_cap <i32> get v "cap"
-    let v_data <i32> get v "data"
+    let v_data <MemPtr<.T>> get v "data"
     if:
         eq v_len v_cap
         then:
             let grown_cap <i32> mul v_cap 2
-            let grown_data <i32> realloc_raw v_data mul v_cap size_of<.T> mul grown_cap size_of<.T>
+            let grown_data <MemPtr<.T>> unwrap_ok realloc_ptr<.T> v_data mul v_cap size_of<.T> mul grown_cap size_of<.T>
             let write_off <i32> mul v_len size_of<.T>
-            store<.T> add grown_data write_off item
+            store<.T> add mem_ptr_addr grown_data write_off item
             Vec<.T> add v_len 1 grown_cap grown_data
         else:
             let write_off <i32> mul v_len size_of<.T>
-            store<.T> add v_data write_off item
+            store<.T> add mem_ptr_addr v_data write_off item
             Vec<.T> add v_len 1 v_cap v_data
 
 //: vec_get: 要素を取得する
@@ -387,7 +404,7 @@ fn vec_push <.T> <(Vec<.T>,.T)->Vec<.T>> (v, item):
 //: ```
 fn vec_get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
     let v_len <i32> get v "len"
-    let v_data <i32> get v "data"
+    let v_data <MemPtr<.T>> get v "data"
     if:
         lt idx 0
         then none<.T>
@@ -397,7 +414,7 @@ fn vec_get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
                 then none<.T>
                 else:
                     let read_off <i32> mul idx size_of<.T>
-                    some<.T> load<.T> add v_data read_off
+                    some<.T> load<.T> add mem_ptr_addr v_data read_off
 
 //: vec_set: 要素を上書きする（範囲外は無視）
 //:
@@ -429,7 +446,7 @@ fn vec_get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
 //: ```
 fn vec_set <.T> <(Vec<.T>,i32,.T)->()> (v, idx, item):
     let v_len <i32> get v "len"
-    let v_data <i32> get v "data"
+    let v_data <MemPtr<.T>> get v "data"
     if:
         lt idx 0
         then ()
@@ -439,7 +456,7 @@ fn vec_set <.T> <(Vec<.T>,i32,.T)->()> (v, idx, item):
                 then ()
                 else:
                     let write_off <i32> mul idx size_of<.T>
-                    store<.T> add v_data write_off item
+                    store<.T> add mem_ptr_addr v_data write_off item
 
 //: vec_pop: 末尾要素を取り出す
 //:
@@ -472,7 +489,7 @@ fn vec_set <.T> <(Vec<.T>,i32,.T)->()> (v, idx, item):
 fn vec_pop <.T> <(Vec<.T>)->.Pair> (v):
     let v_len <i32> get v "len"
     let v_cap <i32> get v "cap"
-    let v_data <i32> get v "data"
+    let v_data <MemPtr<.T>> get v "data"
     if:
         eq v_len 0
         then:
@@ -482,7 +499,7 @@ fn vec_pop <.T> <(Vec<.T>)->.Pair> (v):
         else:
             let next_len <i32> sub v_len 1
             let read_off <i32> mul next_len size_of<.T>
-            let item <.T> load<.T> add v_data read_off
+            let item <.T> load<.T> add mem_ptr_addr v_data read_off
             Tuple:
                 Vec<.T> next_len v_cap v_data
                 some<.T> item
@@ -516,7 +533,7 @@ fn vec_pop <.T> <(Vec<.T>)->.Pair> (v):
 //: ```
 fn vec_clear <.T> <(Vec<.T>)->Vec<.T>> (v):
     let v_cap <i32> get v "cap"
-    let v_data <i32> get v "data"
+    let v_data <MemPtr<.T>> get v "data"
     Vec<.T> 0 v_cap v_data
 
 //: vec_free: メモリを解放する
@@ -547,8 +564,12 @@ fn vec_clear <.T> <(Vec<.T>)->Vec<.T>> (v):
 //: ```
 fn vec_free <.T> <(Vec<.T>)->()> (v):
     let v_cap <i32> get v "cap"
-    let v_data <i32> get v "data"
-    dealloc_raw v_data mul v_cap size_of<.T>
+    let v_data <MemPtr<.T>> get v "data"
+    match dealloc_ptr<.T> v_data mul v_cap size_of<.T>:
+        Result::Ok _:
+            ()
+        Result::Err _e:
+            #intrinsic "unreachable" <> ()
 
 //: new: vec_new の短縮エイリアス
 fn new vec_new;

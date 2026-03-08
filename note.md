@@ -8556,3 +8556,54 @@
   - `node nodesrc/tests.js -i tests/stdlib.n.md --no-tree -o /tmp/tests-stdlib-philosophy.json -j 15`
     - 結果: `nepl-web compiler artifacts were not found` により `229/229 errored`。
     - 出力 JSON `/tmp/tests-stdlib-philosophy.json` を確認し、成果物不足が失敗要因であることを確認。
+
+# 2026-03-09 作業メモ (stdlib reboot 開始前の未確定差分整理)
+
+- 目的:
+  - `todo.md` の本格実装へ入る前に、現在の未確定差分が何を直しているのか、どこまで安定しているのか、何が別件ブロッカーなのかを明確にする。
+  - `vec` の型安全化差分を「そのまま reboot に持ち込める状態」まで整理する。
+- 対象差分:
+  - `stdlib/alloc/collections/vec.nepl`
+  - `stdlib/alloc/collections/vec/sort.nepl`
+  - `stdlib/alloc/string.nepl`
+  - `stdlib/nm/parser.nepl`
+  - `stdlib/nm/html_gen.nepl`
+  - `examples/bf.nepl` は今回の整理対象外の既存差分として触れていない。
+- 変更の意味:
+  - `Vec<.T>.data` を `i32` から `MemPtr<.T>` に変更し、`alloc/collections` を型付きメモリ API に寄せている。
+  - それに伴い、`string` と `nm` で `get v "data"` を生 `i32` とみなしていた箇所を `mem_ptr_addr get ... "data"` に追従させている。
+  - `vec/sort` も同様に、`Vec` の内部表現変更へ追従している。
+- 根本原因:
+  - `core/mem` の型安全化を進めた結果、`alloc/collections` の中核である `Vec` が raw `i32` を公開していると下流全体の型安全化が進まない。
+  - そのため `Vec` を先に `MemPtr<.T>` 化し、その変更の影響先を追従させる必要があった。
+- 切り分け結果:
+  - `string` の最小 compile は通過した。
+    - `sb_build` 周辺の `parts_vec.data` 参照変更は妥当。
+  - `vec` の最小 compile も、`vec_get` を用いたケースでは通過した。
+    - `get v 1` が失敗するのは field access の `get` と衝突しているためで、今回の `MemPtr` 化自体の問題ではない。
+  - `nm/parser.nepl` は import するだけで parser の stack overflow が発生した。
+  - `nm/html_gen.nepl` は import するだけで wasm validation error が発生した。
+- 重要な判断:
+  - `nm/parser.nepl` / `nm/html_gen.nepl` の import-only failure は、今回の `mem_ptr_addr` 追従変更とは独立の既存ブロッカーとして扱う。
+  - したがって、現在の未確定差分のうち
+    - `vec.nepl`
+    - `vec/sort.nepl`
+    - `string.nepl`
+    は reboot に向けた有効差分である。
+  - 一方で `nm` 側は、今回の追従変更自体の妥当性は高いが、現時点で import-only compile が失敗するため、個別に安定性を証明したとはまだ言えない。
+- 検証:
+  - `NO_COLOR=false trunk build`
+    - 結果: 成功。
+  - direct compile (`alloc/string` 最小ケース)
+    - 結果: 成功。
+  - direct compile (`alloc/collections/vec` 最小ケース、`vec_get` 使用)
+    - 結果: 成功。
+  - direct compile (`nm/parser` import-only)
+    - 結果: parser stack overflow。
+  - direct compile (`nm/html_gen` import-only)
+    - 結果: wasm validation error。
+- 現時点の結論:
+  - `todo.md` の本格実装へ入るための準備として、未確定差分の意味とブロッカーは整理できた。
+  - 次の安全な着手点は `todo.md` 先頭の `std/test` 改善タスクである。
+  - `vec` 系差分は reboot 計画に吸収する前提で保持し、`nm` 側の import-only 失敗は別件ブロッカーとして管理する。
+  - この時点では `nm/parser.nepl` / `nm/html_gen.nepl` の追従差分は commit 対象から外し、stdlib reboot 後に改めて対処する。

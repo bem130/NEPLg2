@@ -284,7 +284,7 @@ fn sort_swap <.T> <(Vec<.T>,i32,i32)->()> (v, i, j):
 //: - 本体処理に準じます。
 fn sort_is_sorted <.T: Ord> <(Vec<.T>)->bool> (v):
     let n <i32> get v "len"
-    let data_ptr <i32> get v "data"
+    let data_ptr <i32> mem_ptr_addr get v "data"
     if:
         le n 1
         then true
@@ -720,7 +720,7 @@ fn sort_quick_range_data <.T: Ord> <(i32,i32,i32)->()> (data_ptr, lo, hi):
 //: - 本体処理に準じます。
 fn sort_quick <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> get v "len"
-    let data_ptr <i32> get v "data"
+    let data_ptr <i32> mem_ptr_addr get v "data"
     if:
         le n 1
         then ()
@@ -805,7 +805,7 @@ fn sort_heap_sift_down_data <.T: Ord> <(i32,i32,i32)->()> (data_ptr, start, end)
 //: - 本体処理に準じます。
 fn sort_heap <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> get v "len"
-    let data_ptr <i32> get v "data"
+    let data_ptr <i32> mem_ptr_addr get v "data"
     if:
         le n 1
         then ()
@@ -959,7 +959,7 @@ fn sort_merge_range_data <.T: Ord> <(i32,i32,i32,i32)->()> (data_ptr, buf, l, r)
 //: - 本体処理に準じます。
 fn sort_merge <.T: Ord> <(Vec<.T>)->()> (v):
     let n <i32> get v "len"
-    let data_ptr <i32> get v "data"
+    let data_ptr <i32> mem_ptr_addr get v "data"
     if:
         le n 1
         then ()
@@ -1024,12 +1024,12 @@ fn sort_i32 <(i32,i32)->()> (data_ptr, n):
 fn sort_quick_ret <.T: Ord> <(Vec<.T>)->Vec<.T>> (v):
     let n <i32> get v "len"
     let cap <i32> get v "cap"
-    let data_ptr <i32> get v "data"
+    let data_ptr <MemPtr<.T>> get v "data"
     if:
         le n 1
         then ()
         else:
-            sort_quick_range_data<.T> data_ptr 0 sub n 1;
+            sort_quick_range_data<.T> mem_ptr_addr data_ptr 0 sub n 1;
             ()
     Vec<.T> n cap data_ptr
 
@@ -1049,7 +1049,7 @@ fn sort_quick_ret <.T: Ord> <(Vec<.T>)->Vec<.T>> (v):
 fn sort_heap_ret <.T: Ord> <(Vec<.T>)->Vec<.T>> (v):
     let n <i32> get v "len"
     let cap <i32> get v "cap"
-    let data_ptr <i32> get v "data"
+    let data_ptr <MemPtr<.T>> get v "data"
     if:
         le n 1
         then ()
@@ -1058,14 +1058,14 @@ fn sort_heap_ret <.T: Ord> <(Vec<.T>)->Vec<.T>> (v):
             let mut start <i32> div_s n_minus_two 2;
             while ge start 0:
                 do:
-                    sort_heap_sift_down_data<.T> data_ptr start n;
+                    sort_heap_sift_down_data<.T> mem_ptr_addr data_ptr start n;
                     set start sub start 1;
 
             let mut end <i32> sub n 1;
             while gt end 0:
                 do:
-                    sort_swap_data<.T> data_ptr 0 end;
-                    sort_heap_sift_down_data<.T> data_ptr 0 end;
+                    sort_swap_data<.T> mem_ptr_addr data_ptr 0 end;
+                    sort_heap_sift_down_data<.T> mem_ptr_addr data_ptr 0 end;
                     set end sub end 1;
             ()
     Vec<.T> n cap data_ptr
@@ -1086,14 +1086,14 @@ fn sort_heap_ret <.T: Ord> <(Vec<.T>)->Vec<.T>> (v):
 fn sort_merge_ret <.T: Ord> <(Vec<.T>)->Vec<.T>> (v):
     let n <i32> get v "len"
     let cap <i32> get v "cap"
-    let data_ptr <i32> get v "data"
+    let data_ptr <MemPtr<.T>> get v "data"
     if:
         le n 1
         then ()
         else:
             let bytes <i32> mul n size_of<.T>
             let buf <i32> alloc_raw bytes
-            sort_merge_range_data<.T> data_ptr buf 0 n;
+            sort_merge_range_data<.T> mem_ptr_addr data_ptr buf 0 n;
             dealloc_raw buf bytes;
             ()
     Vec<.T> n cap data_ptr
