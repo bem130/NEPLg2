@@ -8,20 +8,24 @@
 #if[target=std]
 #import "std/stdio" as *
 
-//: test: 標準ライブラリ用の簡易テスト支援
+//: test: 標準ライブラリ用の[簡易/かんい]テスト支援
 //:
-//: 目的:
-//: - assert 系関数と、文字列比較を提供します。
+//: [目的/もくてき]:
+//: - stdlib と tutorials で共通に使う `assert_*` と、`Result<(),str>` を集約して最後にまとめて失敗させる `check_*` / `finish_checks` を提供します。
+//: - 単発の assert と、複数検査を継続実行する collectable な検査の両方を同じモジュールで扱います。
 //:
-//: 実装(アルゴリズム):
-//: - 失敗時はメッセージを表示して trap で異常終了させます。
+//: [実装/じっそう]:
+//: - 単発の `assert_*` は対応する `check_*` の結果を受け、`Err` のときだけ `test_fail` で停止します。
+//: - 集約検査は `Vec<Result<(),str>>` を使って保持し、`finish_checks` が summary と失敗詳細をまとめて表示します。
 //:
-//: 注意(重要):
-//: - 失敗は回復不能です。テスト用途に限定してください。
-//: - 表示は WASI ターゲットのみ対応です。
+//: [注意/ちゅうい]:
+//: - 失敗時は最終的に trap するため、通常のアプリケーション制御には使わず、テスト用途に限定してください。
+//: - 表示は `#target std` のときだけ行います。`std` 以外の target でも失敗時の trap 自体は発生します。
+//: - doctest は[使/つか]い[方/かた]の[保証/ほしょう]が目的であり、境界条件や回帰確認は `tests/stdlib/*` 側で行います。
 //:
-//: 計算量:
-//: - 文字列比較は O(n)、その他は O(1)
+//: [計算量/けいさんりょう]:
+//: - `assert_*` と `check_*` の単体判定は O(1) か、比較対象の長さに応じた O(n) です。
+//: - 集約 API は summary 文字列構築を含むため、`finish_checks` 全体では O(n^2) になりえます。
 
 //: test_str_eq: 文字列が等しいか判定する
 //:
@@ -34,26 +38,9 @@
 //: 注意(重要):
 //: - UTF-8 のバイト列として比較します。
 //:
-//: 計算量:
-//: - O(n)
-//: test_str_eq: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_str_eq` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_str_eq "sample" "sample";
-//: ```
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（再帰呼び出しぶん）
 fn test_str_eq <(str,str)->bool> (a,b):
     let la <i32> load_i32 a;
     let lb <i32> load_i32 b;
@@ -75,26 +62,9 @@ fn test_str_eq <(str,str)->bool> (a,b):
 //: 注意(重要):
 //: - 呼び出し側で長さ一致を確認している前提です。
 //:
-//: 計算量:
-//: - O(n)
-//: test_str_eq_loop: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_str_eq_loop` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_str_eq_loop "sample" "sample" 0 0;
-//: ```
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（再帰呼び出しぶん）
 fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
     if:
         eq i len
@@ -121,27 +91,10 @@ fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
 //: - WASI ターゲットのみ対応です。
 //: - 端末が ANSI に対応している必要があります。
 //:
-//: 計算量:
-//: - O(n)
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)
 #if[target=std]
-//: test_print_fail: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_print_fail` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_print_fail "sample";
-//: ```
 #if[target=std]
 fn test_print_fail <(str)*>()> (msg):
     let m0 <str> concat "FAIL: " msg;
@@ -159,27 +112,10 @@ fn test_print_fail <(str)*>()> (msg):
 //: - WASI ターゲットのみ対応です。
 //: - 端末が ANSI に対応している必要があります。
 //:
-//: 計算量:
-//: - O(n)
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)
 #if[target=std]
-//: test_checked: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_checked` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_checked "sample";
-//: ```
 #if[target=std]
 fn test_checked <(str)*>()> (msg):
     print_color ansi_green "Checked ";
@@ -196,26 +132,9 @@ fn test_checked <(str)*>()> (msg):
 //: 注意(重要):
 //: - 失敗は回復不能です。
 //:
-//: 計算量:
-//: - O(n)
-//: test_fail: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_fail` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_fail "sample";
-//: ```
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)
 fn noshadow test_fail <(str)*>()> (msg):
     test_print_fail msg;
     trap;
@@ -231,26 +150,9 @@ fn noshadow test_fail <(str)*>()> (msg):
 //: 注意(重要):
 //: - 正常なプログラムでは使わないでください。
 //:
-//: 計算量:
-//: - O(1)
-//: trap: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `trap` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     trap ();
-//: ```
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 fn trap <()*>()> ():
     #intrinsic "unreachable" <> ()
 
@@ -761,25 +663,20 @@ fn finish_checks <(Vec<Result<(),str>>)*>()> (checks):
 //: 注意(重要):
 //: - ok は bool である必要があります。
 //:
-//: 計算量:
-//: - O(1)
-//: assert: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 //:
-//: [目的/もくてき]:
-//: - `assert` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     assert true;
+//:     assert eq 3 add 1 2;
 //: ```
 fn noshadow assert <(bool)*>()> (ok):
     match check ok:
@@ -799,25 +696,21 @@ fn noshadow assert <(bool)*>()> (ok):
 //: 注意(重要):
 //: - i32 専用です。
 //:
-//: 計算量:
-//: - O(1)
-//: assert_eq_i32: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 //:
-//: [目的/もくてき]:
-//: - `assert_eq_i32` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
+//:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 0 0;
+//:     assert_eq_i32 6 add 1 5;
+//:     assert_eq_i32 3 sub 10 7;
 //: ```
 fn noshadow assert_eq_i32 <(i32,i32)*>()> (expected, actual):
     match check_eq_i32 expected actual:
@@ -837,25 +730,20 @@ fn noshadow assert_eq_i32 <(i32,i32)*>()> (expected, actual):
 //: 注意(重要):
 //: - bool 専用です。
 //:
-//: 計算量:
-//: - O(1)
-//: assert_ne: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 //:
-//: [目的/もくてき]:
-//: - `assert_ne` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
-//:     assert_ne true true;
+//:     assert_ne true false;
+//:     assert_ne false true;
 //: ```
 fn noshadow assert_ne <(bool,bool)*>()> (a, b):
     match check_ne a b:
@@ -875,25 +763,21 @@ fn noshadow assert_ne <(bool,bool)*>()> (a, b):
 //: 注意(重要):
 //: - UTF-8 のバイト列として比較します。
 //:
-//: 計算量:
-//: - O(n)
-//: assert_str_eq: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)
 //:
-//: [目的/もくてき]:
-//: - `assert_str_eq` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
+//:| #import "alloc/string" as *
 //: fn main <()*>()> ():
-//:     assert_str_eq "sample" "sample";
+//:     assert_str_eq "prefix-suffix" concat "prefix-" "suffix";
+//:     assert_str_eq "true" from_bool true;
 //: ```
 fn noshadow assert_str_eq <(str,str)*>()> (expected, actual):
     match check_str_eq expected actual:
@@ -913,25 +797,20 @@ fn noshadow assert_str_eq <(str,str)*>()> (expected, actual):
 //: 注意(重要):
 //: - Result<i32,i32> 専用です。
 //:
-//: 計算量:
-//: - O(1)
-//: assert_ok_i32: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 //:
-//: [目的/もくてき]:
-//: - `assert_ok_i32` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
+//:| #import "core/result" as *
 //: fn main <()*>()> ():
-//:     assert_ok_i32 () ();
+//:     assert_ok_i32 Result<i32,i32>::Ok 42;
 //: ```
 fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
     match check_ok_i32 r:
@@ -951,25 +830,20 @@ fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
 //: 注意(重要):
 //: - Result<i32,i32> 専用です。
 //:
-//: 計算量:
-//: - O(1)
-//: assert_err_i32: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 //:
-//: [目的/もくてき]:
-//: - `assert_err_i32` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
+//:| #import "core/result" as *
 //: fn main <()*>()> ():
-//:     assert_err_i32 () ();
+//:     assert_err_i32 Result<i32,i32>::Err 7;
 //: ```
 fn noshadow assert_err_i32 <(Result<i32,i32>)*>()> (r):
     match check_err_i32 r:

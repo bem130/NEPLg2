@@ -8685,3 +8685,30 @@
 - 結論:
   - `tests/compiler/*` と `tests/stdlib/*` の分離、およびそれに伴う `nodesrc` / tree suite の追従は成立した。
   - `todo.md` 先頭の再編タスクは完了として削除し、以後は reboot 本流の `diag` / `Outcome` / trait 能力モデルの実装へ進める。
+
+# 2026-03-09 作業メモ (`std/test` コメント整理と collect API の使い方固定)
+
+- 目的:
+  - `stdlib/std/test.nepl` のコメントを `doc/stdlib_doc_comment_policy.md` に沿って整理し、内部 helper に boilerplate doctest が並ぶ状態を解消する。
+  - 利用者が直接使う公開 API だけに、用途が分かる doctest を残す。
+- 変更:
+  - `stdlib/std/test.nepl`
+    - モジュール先頭コメントを、単発 assert と collectable な `check_*` / `finish_checks` の二系統を持つことが分かる内容へ更新。
+    - `test_str_eq_loop`、`test_print_fail`、`test_checked`、`test_fail`、`trap` など内部 helper の boilerplate doctest を削除。
+    - `assert` / `assert_eq_i32` / `assert_ne` / `assert_str_eq` / `assert_ok_i32` / `assert_err_i32` の doctest を、実際の用途が分かる例へ差し替え。
+    - 計算量表記を `[時間/じかん]` / `[空間/くうかん]` の形に揃えた。
+- 判断:
+  - `std/test` の実装自体は `67e8156` で十分に揃っていたため、今回は API を増やさず、利用者向け説明の質を先に上げた。
+  - 実装検証は `tests/stdlib/std_test_collect.n.md` に残し、`.nepl` 側 doctest は使い方確認へ寄せた。
+
+# 2026-03-09 作業メモ (`std/test` コメント整理の検証完了)
+
+- 検証:
+  - `node nodesrc/tests.js -i tests/stdlib/std_test_collect.n.md --no-stdlib --no-tree -o /tmp/tests-stdlib-std-test-collect-nostdlib.json -j 15`
+    - 結果: `2/2 pass`
+  - `node nodesrc/tests.js -i /tmp/std_test_assert_doctest_smoke.n.md --no-stdlib --no-tree -o /tmp/std_test_assert_doctest_smoke.json -j 15`
+    - 結果: `1/1 pass`
+- 判断:
+  - `stdlib/std/test.nepl` の公開 `assert_*` 例は `#entry main` と `#target std` を前提にすると、そのまま実行できることを確認した。
+  - collectable API の既存回帰 2 件も維持されているため、今回の変更はドキュメントコメント整理として確定してよい。
+  - `nodesrc/tests.js` は `--no-stdlib` を付けないと stdlib 全走査で重くなりやすく、focused 検証では `--no-stdlib` を使うのが妥当。
