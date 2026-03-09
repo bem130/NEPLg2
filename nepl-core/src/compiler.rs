@@ -1,9 +1,10 @@
 #![no_std]
 extern crate std;
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::ast;
@@ -245,30 +246,19 @@ pub fn compile_module(
         return Err(CoreError::from_diagnostics(diags));
     }
     let profile = options.profile.unwrap_or(BuildProfile::detect());
-    let precheck_diags = crate::target_precheck::precheck_module_before_codegen(&module, target, profile);
-    if precheck_diags
-        .iter()
-        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
-    {
-        return Err(CoreError::from_diagnostics(precheck_diags));
-    }
-    let tc = run_typecheck(&module, target, profile)?;
-    let mut types = tc.types;
-    let mut hir_module = monomorphize::monomorphize(&mut types, tc.module);
-
-    let mut diagnostics = tc.diagnostics;
-    run_move_check(&hir_module, &types, &mut diagnostics)?;
-    passes::insert_drops(&mut hir_module, types.unit());
-    let pre_codegen_diags = passes::codegen_precheck::precheck_wasm_codegen(&types, &hir_module);
+    let prepared = prepare_module_for_codegen(&module, target, profile)?;
+    let pre_codegen_diags =
+        passes::codegen_precheck::precheck_wasm_codegen(&prepared.types, &prepared.hir_module);
     if pre_codegen_diags
         .iter()
         .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
     {
+        let mut diagnostics = prepared.diagnostics;
         diagnostics.extend(pre_codegen_diags);
         return Err(CoreError::from_diagnostics(diagnostics));
     }
 
-    emit_wasm(&types, &hir_module, diagnostics)
+    emit_wasm(&prepared.types, &prepared.hir_module, prepared.diagnostics)
 }
 
 /// ソーステキストから wasm を生成する。
@@ -311,6 +301,18 @@ struct TypedProgram {
     diagnostics: Vec<Diagnostic>,
 }
 
+pub struct PreparedProgram {
+    pub types: crate::types::TypeCtx,
+    pub hir_module: crate::hir::HirModule,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+pub struct PreparedLlvmProgram {
+    pub program: PreparedProgram,
+    pub reachable_set: BTreeSet<String>,
+    pub resolved_entries: BTreeMap<String, String>,
+}
+
 fn run_typecheck(
     module: &ast::Module,
     target: CompileTarget,
@@ -338,6 +340,229 @@ fn run_move_check(
     }
     diagnostics.extend(move_errors);
     Err(CoreError::from_diagnostics(diagnostics.clone()))
+}
+
+pub fn prepare_module_for_codegen(
+    module: &ast::Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+) -> Result<PreparedProgram, CoreError> {
+    let precheck_diags = crate::target_precheck::precheck_module_before_codegen(module, target, profile);
+    if precheck_diags
+        .iter()
+        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
+    {
+        return Err(CoreError::from_diagnostics(precheck_diags));
+    }
+    let tc = run_typecheck(module, target, profile)?;
+    let mut types = tc.types;
+    let mut hir_module = monomorphize::monomorphize(&mut types, tc.module);
+    let mut diagnostics = tc.diagnostics;
+    run_move_check(&hir_module, &types, &mut diagnostics)?;
+    passes::insert_drops(&mut hir_module, types.unit());
+    Ok(PreparedProgram {
+        types,
+        hir_module,
+        diagnostics,
+    })
+}
+
+pub fn prepare_module_for_llvm_codegen(
+    module: &ast::Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+    entry_names: &[String],
+) -> Result<PreparedLlvmProgram, CoreError> {
+    let program = prepare_module_for_codegen(module, target, profile)?;
+    let mut reachable_set = BTreeSet::new();
+    let mut resolved_entries = BTreeMap::new();
+    for entry in entry_names {
+        let resolved = resolve_hir_entry_name(&program.hir_module, entry.as_str())?;
+        resolved_entries.insert(entry.clone(), resolved.clone());
+        for name in collect_reachable_functions(&program.hir_module, resolved.as_str()) {
+            reachable_set.insert(name.clone());
+            if let Some(sep) = find_mangled_signature_separator(name.as_str()) {
+                reachable_set.insert(String::from(&name[..sep]));
+            }
+        }
+    }
+    let pre_codegen_diags = passes::codegen_precheck::precheck_llvm_codegen(
+        &program.types,
+        &program.hir_module,
+        &reachable_set,
+    );
+    if pre_codegen_diags
+        .iter()
+        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
+    {
+        return Err(CoreError::from_diagnostics(pre_codegen_diags));
+    }
+    Ok(PreparedLlvmProgram {
+        program,
+        reachable_set,
+        resolved_entries,
+    })
+}
+
+fn resolve_hir_entry_name(
+    hir_module: &crate::hir::HirModule,
+    entry: &str,
+) -> Result<String, CoreError> {
+    let mut function_map: BTreeMap<String, &crate::hir::HirFunction> = BTreeMap::new();
+    for f in &hir_module.functions {
+        function_map.insert(f.name.clone(), f);
+    }
+    if function_map.contains_key(entry) {
+        return Ok(String::from(entry));
+    }
+    if let Some(found) = function_map
+        .keys()
+        .find(|name| {
+            name.starts_with(&format!("{}__", entry))
+                || name.starts_with(&format!("{}::", entry))
+                || name.ends_with(&format!("::{}", entry))
+        })
+        .cloned()
+    {
+        return Ok(found);
+    }
+    let mut sample = function_map.keys().take(6).cloned().collect::<Vec<_>>();
+    if sample.is_empty() {
+        sample.push(String::from("<none>"));
+    }
+    Err(CoreError::from_diagnostics(vec![Diagnostic::error(
+        format!(
+            "entry function '{}' was not found in lowered module (available: {})",
+            entry,
+            sample.join(", ")
+        ),
+        Span::dummy(),
+    )]))
+}
+
+fn find_mangled_signature_separator(name: &str) -> Option<usize> {
+    let bytes = name.as_bytes();
+    if bytes.len() < 3 {
+        return None;
+    }
+    for i in 1..(bytes.len() - 1) {
+        if bytes[i] == b'_' && bytes[i + 1] == b'_' {
+            return Some(i);
+        }
+    }
+    None
+}
+
+fn collect_reachable_functions(
+    module: &crate::hir::HirModule,
+    entry: &str,
+) -> Vec<String> {
+    let mut function_map: BTreeMap<String, &crate::hir::HirFunction> = BTreeMap::new();
+    for f in &module.functions {
+        function_map.insert(f.name.clone(), f);
+    }
+    let mut visited: BTreeSet<String> = BTreeSet::new();
+    let mut stack = Vec::new();
+    stack.push(String::from(entry));
+    while let Some(name) = stack.pop() {
+        if !visited.insert(name.clone()) {
+            continue;
+        }
+        let Some(func) = function_map.get(name.as_str()) else {
+            continue;
+        };
+        collect_called_functions_from_body(&func.body, &mut stack);
+    }
+    visited.into_iter().collect()
+}
+
+fn collect_called_functions_from_body(
+    body: &crate::hir::HirBody,
+    stack: &mut Vec<String>,
+) {
+    match body {
+        crate::hir::HirBody::Block(block) => collect_called_functions_from_block(block, stack),
+        crate::hir::HirBody::Wasm(_) | crate::hir::HirBody::LlvmIr(_) => {}
+    }
+}
+
+fn collect_called_functions_from_block(
+    block: &crate::hir::HirBlock,
+    stack: &mut Vec<String>,
+) {
+    for line in &block.lines {
+        collect_called_functions_from_expr(&line.expr, stack);
+    }
+}
+
+fn collect_called_functions_from_expr(
+    expr: &crate::hir::HirExpr,
+    stack: &mut Vec<String>,
+) {
+    match &expr.kind {
+        crate::hir::HirExprKind::Call { callee, args } => {
+            if let crate::hir::FuncRef::User(name, _) = callee {
+                stack.push(name.clone());
+            }
+            for arg in args {
+                collect_called_functions_from_expr(arg, stack);
+            }
+        }
+        crate::hir::HirExprKind::CallIndirect { callee, args, .. } => {
+            collect_called_functions_from_expr(callee, stack);
+            for arg in args {
+                collect_called_functions_from_expr(arg, stack);
+            }
+        }
+        crate::hir::HirExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            collect_called_functions_from_expr(cond, stack);
+            collect_called_functions_from_expr(then_branch, stack);
+            collect_called_functions_from_expr(else_branch, stack);
+        }
+        crate::hir::HirExprKind::While { cond, body } => {
+            collect_called_functions_from_expr(cond, stack);
+            collect_called_functions_from_expr(body, stack);
+        }
+        crate::hir::HirExprKind::Match { scrutinee, arms } => {
+            collect_called_functions_from_expr(scrutinee, stack);
+            for arm in arms {
+                collect_called_functions_from_expr(&arm.body, stack);
+            }
+        }
+        crate::hir::HirExprKind::EnumConstruct { payload, .. } => {
+            if let Some(payload) = payload {
+                collect_called_functions_from_expr(payload, stack);
+            }
+        }
+        crate::hir::HirExprKind::StructConstruct { fields, .. }
+        | crate::hir::HirExprKind::TupleConstruct { items: fields }
+        | crate::hir::HirExprKind::Intrinsic { args: fields, .. } => {
+            for field in fields {
+                collect_called_functions_from_expr(field, stack);
+            }
+        }
+        crate::hir::HirExprKind::Block(block) => {
+            collect_called_functions_from_block(block, stack);
+        }
+        crate::hir::HirExprKind::Let { value, .. }
+        | crate::hir::HirExprKind::Set { value, .. }
+        | crate::hir::HirExprKind::AddrOf(value)
+        | crate::hir::HirExprKind::Deref(value) => {
+            collect_called_functions_from_expr(value, stack);
+        }
+        crate::hir::HirExprKind::LiteralI32(_)
+        | crate::hir::HirExprKind::LiteralF32(_)
+        | crate::hir::HirExprKind::LiteralBool(_)
+        | crate::hir::HirExprKind::LiteralStr(_)
+        | crate::hir::HirExprKind::Unit
+        | crate::hir::HirExprKind::Var(_)
+        | crate::hir::HirExprKind::FnValue(_)
+        | crate::hir::HirExprKind::Drop { .. } => {}
+    }
 }
 
 fn emit_wasm(

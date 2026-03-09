@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 
 use crate::ast::{Block, FnBody, Ident, Literal, Module, PrefixExpr, PrefixItem, Stmt, TypeExpr};
 use crate::ast::Directive;
-use crate::compiler::{BuildProfile, CompileTarget};
+use crate::compiler::{self, BuildProfile, CompileTarget, PreparedLlvmProgram};
 use crate::hir::{FuncRef, HirBlock, HirBody, HirExpr, HirExprKind, HirFunction, HirModule};
 use crate::runtime_helpers::{
     helper_base_name, helper_candidates, RuntimeHelperKind,
@@ -62,18 +62,11 @@ pub fn emit_ll_from_module_for_target(
     target: CompileTarget,
     profile: BuildProfile,
 ) -> Result<String, LlvmCodegenError> {
-    let precheck_diags = target_precheck::precheck_module_before_codegen(module, target, profile);
-    if precheck_diags
-        .iter()
-        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
-    {
-        return Err(LlvmCodegenError::TypecheckFailed {
-            reason: summarize_diagnostics_for_message(precheck_diags.as_slice()),
-        });
-    }
     let mut out = String::new();
     let entry_names = collect_active_entry_names(module, target, profile);
-    let reachable_hint = compute_reachable_hint(module, target, profile, &entry_names);
+    let prepared = compiler::prepare_module_for_llvm_codegen(module, target, profile, &entry_names)
+        .map_err(map_core_error_to_llvm_codegen_error)?;
+    let reachable_hint = (!prepared.reachable_set.is_empty()).then_some(&prepared.reachable_set);
     let raw_call_requirements = collect_required_raw_calls_fixed_point(module, target, profile);
     let raw_name_counts = collect_active_ast_raw_name_counts(module, target, profile);
     let mut raw_canonical_taken: BTreeSet<String> = BTreeSet::new();
@@ -91,7 +84,7 @@ pub fn emit_ll_from_module_for_target(
                 FnBody::LlvmIr(block) => {
                     if !should_emit_ast_llvmir_fn(
                         def,
-                        reachable_hint.as_ref(),
+                        reachable_hint,
                         raw_call_requirements.as_slice(),
                     ) {
                         continue;
@@ -115,7 +108,7 @@ pub fn emit_ll_from_module_for_target(
                     append_llvmir_block(&mut out, &normalized);
                 }
                 FnBody::Parsed(block) => {
-                    if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
+                    if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint) {
                         continue;
                     }
                     match target_precheck::select_active_raw_body(
@@ -164,7 +157,7 @@ pub fn emit_ll_from_module_for_target(
                     }
                 }
                 FnBody::Wasm(_) => {
-                    if is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
+                    if is_ast_fn_reachable(def.name.name.as_str(), reachable_hint) {
                         panic!(
                             "internal compiler error: llvm codegen reached wasm function body after precheck in function '{}'",
                             def.name.name
@@ -179,14 +172,8 @@ pub fn emit_ll_from_module_for_target(
     if let Some(entry) = entry_names.last() {
         let mut resolved_entry = entry.clone();
         if !emitted_functions.iter().any(|n| n == entry) {
-            resolved_entry = try_lower_entry_from_hir(
-                module,
-                target,
-                profile,
-                entry.as_str(),
-                &mut out,
-                &mut emitted_functions,
-            )?;
+            resolved_entry =
+                try_lower_entry_from_hir(&prepared, entry.as_str(), &mut out, &mut emitted_functions)?;
         }
         if !emitted_functions.iter().any(|n| n == &resolved_entry) {
             return Err(LlvmCodegenError::MissingEntryFunction {
@@ -205,6 +192,17 @@ pub fn emit_ll_from_module_for_target(
     }
 
     Ok(deduplicate_overloaded_llvm_symbols(out.as_str()))
+}
+
+fn map_core_error_to_llvm_codegen_error(err: crate::error::CoreError) -> LlvmCodegenError {
+    match err {
+        crate::error::CoreError::Diagnostics(diags) => LlvmCodegenError::TypecheckFailed {
+            reason: summarize_diagnostics_for_message(diags.as_slice()),
+        },
+        other => LlvmCodegenError::TypecheckFailed {
+            reason: other.to_string(),
+        },
+    }
 }
 
 fn compute_reachable_hint(
@@ -821,56 +819,24 @@ impl<'a> LowerCtx<'a> {
 }
 
 fn try_lower_entry_from_hir(
-    module: &Module,
-    target: CompileTarget,
-    profile: BuildProfile,
+    prepared: &PreparedLlvmProgram,
     entry: &str,
     out: &mut String,
     emitted_functions: &mut Vec<String>,
 ) -> Result<String, LlvmCodegenError> {
-    let (mut types, mut hir) = build_hir_for_llvm_lowering(module, target, profile)?;
-    crate::passes::insert_drops(&mut hir, types.unit());
-
+    let types = &prepared.program.types;
+    let hir = &prepared.program.hir_module;
     let mut function_map: BTreeMap<String, &HirFunction> = BTreeMap::new();
     for f in &hir.functions {
         function_map.insert(f.name.clone(), f);
     }
-    let resolved_entry = if function_map.contains_key(entry) {
-        String::from(entry)
-    } else if let Some(found) = function_map
-        .keys()
-        .find(|name| {
-            name.starts_with(&format!("{}__", entry))
-                || name.starts_with(&format!("{}::", entry))
-                || name.ends_with(&format!("::{}", entry))
-        })
-        .cloned()
-    {
-        found
-    } else {
-        let mut sample = function_map.keys().take(6).cloned().collect::<Vec<_>>();
-        if sample.is_empty() {
-            sample.push(String::from("<none>"));
-        }
+    let Some(resolved_entry) = prepared.resolved_entries.get(entry) else {
         return Err(LlvmCodegenError::MissingEntryFunction {
-            function: format!("{} (available: {})", entry, sample.join(", ")),
+            function: String::from(entry),
         });
     };
 
-    let mut sigs = collect_hir_signatures(&types, &hir);
-    let mut reachable = collect_reachable_functions(&hir, resolved_entry.as_str());
-    extend_reachable_with_runtime_helpers(&mut reachable, &hir, &sigs);
-    let reachable_set: BTreeSet<String> = reachable.iter().cloned().collect();
-    let pre_codegen_diags =
-        crate::passes::codegen_precheck::precheck_llvm_codegen(&types, &hir, &reachable_set);
-    if pre_codegen_diags
-        .iter()
-        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
-    {
-        return Err(LlvmCodegenError::TypecheckFailed {
-            reason: summarize_diagnostics_for_message(pre_codegen_diags.as_slice()),
-        });
-    }
+    let mut sigs = collect_hir_signatures(types, hir);
     let fallback_alloc_symbol = resolve_runtime_helper_symbol(
         &sigs,
         helper_candidates(RuntimeHelperKind::Alloc),
@@ -892,7 +858,7 @@ fn try_lower_entry_from_hir(
         let base_alias = find_mangled_signature_separator(local_name_raw)
             .map(|sep| &local_name_raw[..sep]);
         let needs_base = base_alias
-            .map(|base| reachable.iter().any(|n| n == base))
+            .map(|base| prepared.reachable_set.contains(base))
             .unwrap_or(false);
         let local_name = ll_symbol(ex.local_name.as_str());
         let external_name = ll_symbol(ex.name.as_str());
@@ -974,11 +940,11 @@ fn try_lower_entry_from_hir(
             }
         }
     }
-    if !reachable.is_empty() {
+    if !prepared.reachable_set.is_empty() {
         out.push('\n');
     }
 
-    for name in &reachable {
+    for name in &prepared.reachable_set {
         if emitted_functions.iter().any(|n| n == name) {
             continue;
         }
@@ -1038,7 +1004,7 @@ fn try_lower_entry_from_hir(
                     &types,
                     &hir,
                     &sigs,
-                    &reachable_set,
+                    &prepared.reachable_set,
                     memory_global,
                     fallback_alloc_symbol,
                     func,
@@ -1084,7 +1050,7 @@ fn try_lower_entry_from_hir(
 
     // suppress unused warning when future passes extend signature synthesis
     sigs.clear();
-    Ok(resolved_entry)
+    Ok(resolved_entry.clone())
 }
 
 fn emit_base_alias_for_mangled(

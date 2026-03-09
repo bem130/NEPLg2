@@ -8973,3 +8973,29 @@
 - [状況/じょうきょう]:
   - compiler の `Copy` 固定表は縮小され、`.nepl` 側に impl を置ける primitive は stdlib impl に寄せられた。
   - 残る特別扱いは、現状の言語で source impl を置きにくい参照型と `never` である。
+
+# 2026-03-09 作業メモ (compiler 前提固定: LLVM codegen の前段責務を `compiler.rs` に集約)
+
+- [目的/もくてき]:
+  - `todo.md` の compiler 前提固定に従い、LLVM 経路でも codegen が typecheck / move check / target precheck / codegen precheck を抱えない形へ寄せる。
+  - wasm/llvm の前段診断を `compiler.rs` 側の共通 lowering へ集約し、codegen 到達後は生成専任に近づける。
+- [根本原因/こんぽんげんいん]:
+  - `compile_module` は wasm 用に target precheck -> typecheck -> monomorphize -> move check -> drop 挿入をまとめていたが、LLVM 経路は `codegen_llvm.rs` 内で別に `precheck_module_before_codegen` / `typecheck` / `monomorphize` / `precheck_llvm_codegen` を実行していた。
+  - そのため、同じ入力でも wasm と llvm で診断生成責務が分散し、`codegen_llvm` が前段の失敗を `TypecheckFailed` に潰して抱え込む構造になっていた。
+- [変更/へんこう]:
+  - `nepl-core/src/compiler.rs`
+    - `PreparedProgram` を追加し、target precheck -> typecheck -> monomorphize -> move check -> drop 挿入までを `prepare_module_for_codegen` に集約。
+    - `PreparedLlvmProgram` を追加し、LLVM entry 解決・reachable 集合構築・`precheck_llvm_codegen` を `prepare_module_for_llvm_codegen` に集約。
+    - `compile_module` は `prepare_module_for_codegen` を使う形へ変更し、wasm 前段も同じ経路を通るようにした。
+  - `nepl-core/src/codegen_llvm.rs`
+    - `emit_ll_from_module_for_target` は `compiler::prepare_module_for_llvm_codegen` を呼ぶだけにし、直接の typecheck/precheck 呼び出しを除去。
+    - `try_lower_entry_from_hir` は prechecked artifact (`PreparedLlvmProgram`) を受け取り、診断生成を行わず lowering だけを担当する形へ変更。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - 結果: success
+  - `node nodesrc/tests.js -i tests/compiler/llvm_target.n.md -i tests/compiler/raw_body_precheck.n.md -i tests/compiler/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-llvm-frontload.json -j 15`
+    - 結果: `8/8 pass`
+- [状況/じょうきょう]:
+  - LLVM codegen は前段を直接実行せず、`compiler.rs` の共通 lowering を前提に動く形へ寄った。
+  - まだ `nepl-cli` の LLVM 分岐は `codegen_llvm::emit_ll_from_module_for_target` を直接呼ぶが、その内部は共通 front-end を通るため、責務分離の主眼は満たした。
+  - 残る compiler 前提固定の本流は、copy/clone 非ハードコード化の残件と、`Diag.kind` 言語機能の準備である。
