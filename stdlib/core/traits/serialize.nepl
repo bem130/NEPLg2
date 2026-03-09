@@ -1,0 +1,91 @@
+//: # serialize
+//: [機械/きかい][向/む]けの[安定/あんてい][文字列表現/もじれつひょうげん]を[与/あた]える trait [群/ぐん]
+//:
+//: ### [目的/もくてき]
+//: - `Serialize` trait を[標準化/ひょうじゅんか]し、[保存/ほぞん]・[比較/ひかく]・[通信/つうしん]に[使/つか]う[文字列表現/もじれつひょうげん]を[共通/きょうつう] helper から[得/え]られるようにします。
+//: - `Stringify` が[利用者/りようしゃ][向/む]け、`Debug` が[開発者/かいはつしゃ][向/む]けであるのに[対/たい]し、`Serialize` は[機械/きかい]に[渡/わた]しても[壊/こわ]れにくい[表現/ひょうげん]を[担当/たんとう]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [当面/とうめん]は `str` を[媒体/ばいたい]にした[最小/さいしょう]の trait として[導入/どうにゅう]します。
+//: - [形式/けいしき]を[複数/ふくすう][持/も]つ `Serialize<T, F>` への[一般化/いっぱんか]は[後続/こうぞく]の[課題/かだい]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - 各 impl に[依存/いそん]します。`str` の[再利用/さいりよう]は O(1)、[数値/すうち]の 10 [進/しん][変換/へんかん]は O(d) です。
+
+#indent 4
+
+#import "alloc/string" as *
+#import "core/cast" as *
+
+//: ## Serialize
+//: [機械/きかい][向/む]け[文字列表現/もじれつひょうげん]
+//:
+//: ### [目的/もくてき]
+//: - [値/あたい]を `str` に[変換/へんかん]し、[保存/ほぞん]や[比較/ひかく]のために[安定/あんてい]した[表現/ひょうげん]を[得/え]られるようにします。
+//:
+//: ### [注意/ちゅうい]
+//: - [現在/げんざい]の stdlib では `Serialize` の[返/かえ]り[値/あたい]は `str` に[固定/こてい]します。
+//: - [人間/にんげん][向/む]けの[簡易/かんい][表示/ひょうじ]は `Stringify`、[調査用/ちょうさよう]の[詳細/しょうさい][表示/ひょうじ]は `Debug` を[使/つか]います。
+trait Serialize:
+    fn serialize <(Self)->str> (x):
+        ""
+
+//: ## serialize
+//: trait を[通/とお]して[直列化/ちょくれつか][文字列/もじれつ]を[得/え]る
+//:
+//: ### [目的/もくてき]
+//: - [呼/よ]び[出/だ]し[側/がわ]が[具体的/ぐたいてき] impl を[意識/いしき]せず、[共通/きょうつう]の[入口/いりぐち]から[機械/きかい][向/む]け[表現/ひょうげん]を[取得/しゅとく]できるようにします。
+//:
+//: ### [使用例/しようれい]
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "core/traits/serialize" as *
+//: assert_str_eq "42" serialize 42;
+//: assert_str_eq "false" serialize false;
+//: ```
+//:
+//: ### [実装/じっそう]
+//: - `Serialize::serialize x` をそのまま[呼/よ]びます。
+//:
+//: ### [注意/ちゅうい]
+//: - [型推論/かたすいろん]が[曖昧/あいまい]な[場合/ばあい]は[周囲/しゅうい]の[型注釈/かたちゅうしゃく]で[解決/かいけつ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - impl に[依存/いそん]します。
+fn serialize <.T: Serialize> <(.T)->str> (x):
+    Serialize::serialize x
+
+impl Serialize for str:
+    fn serialize <(str)->str> (x):
+        x
+
+impl Serialize for bool:
+    fn serialize <(bool)->str> (x):
+        from_bool x
+
+impl Serialize for i32:
+    fn serialize <(i32)->str> (x):
+        from_i32 x
+
+impl Serialize for i64:
+    fn serialize <(i64)->str> (x):
+        from_i64 x
+
+impl Serialize for i128:
+    fn serialize <(i128)->str> (x):
+        from_i128 x
+
+impl Serialize for u8:
+    fn serialize <(u8)->str> (x):
+        from_i32 cast x
+
+impl Serialize for f32:
+    fn serialize <(f32)->str> (x):
+        from_f32 x
+
+impl Serialize for f64:
+    fn serialize <(f64)->str> (x):
+        from_f64 x

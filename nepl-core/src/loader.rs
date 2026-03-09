@@ -135,6 +135,7 @@ impl Loader {
             &mut cache,
             &mut processing,
             &mut imported,
+            true,
         ) {
             Ok(m) => m,
             Err(e) => {
@@ -166,6 +167,7 @@ impl Loader {
             &mut cache,
             &mut processing,
             &mut imported,
+            true,
             provider,
         ) {
             Ok(m) => m,
@@ -192,6 +194,7 @@ impl Loader {
             &mut cache,
             &mut processing,
             &mut imported,
+            true,
         ) {
             Ok(m) => m,
             Err(e) => {
@@ -214,6 +217,7 @@ impl Loader {
         cache: &mut BTreeMap<PathBuf, Module>,
         processing: &mut BTreeSet<PathBuf>,
         imported_once: &mut BTreeSet<PathBuf>,
+        is_root: bool,
     ) -> Result<Module, LoaderError> {
         // For pseudo files (stdin) canonicalize may fail; fall back to provided path.
         let canon = canonicalize_path(&path);
@@ -228,8 +232,15 @@ impl Loader {
         }
         let file_id = sm.add(canon.clone(), src.clone());
         let module = self.parse_module(file_id, src)?;
-        let module =
-            self.process_directives(canon.clone(), module, sm, cache, processing, imported_once)?;
+        let module = self.process_directives(
+            canon.clone(),
+            module,
+            sm,
+            cache,
+            processing,
+            imported_once,
+            is_root,
+        )?;
         processing.remove(&canon);
         cache.insert(canon.clone(), module.clone());
         Ok(module)
@@ -243,6 +254,7 @@ impl Loader {
         cache: &mut BTreeMap<PathBuf, Module>,
         processing: &mut BTreeSet<PathBuf>,
         imported_once: &mut BTreeSet<PathBuf>,
+        is_root: bool,
         provider: &mut dyn FnMut(&PathBuf) -> Result<String, LoaderError>,
     ) -> Result<Module, LoaderError> {
         let canon = canonicalize_path(&path);
@@ -264,6 +276,7 @@ impl Loader {
             cache,
             processing,
             imported_once,
+            is_root,
             provider,
         )?;
         processing.remove(&canon);
@@ -279,6 +292,7 @@ impl Loader {
         cache: &mut BTreeMap<PathBuf, Module>,
         processing: &mut BTreeSet<PathBuf>,
         imported_once: &mut BTreeSet<PathBuf>,
+        is_root: bool,
     ) -> Result<Module, LoaderError> {
         let canon = canonicalize_path(&path);
         if let Some(m) = cache.get(&canon) {
@@ -296,8 +310,15 @@ impl Loader {
         std::eprintln!("[Loader] Parsing module: {:?}", canon);
         let module = self.parse_module(file_id, src)?;
         std::eprintln!("[Loader] Processing directives for: {:?}", canon);
-        let module =
-            self.process_directives(canon.clone(), module, sm, cache, processing, imported_once)?;
+        let module = self.process_directives(
+            canon.clone(),
+            module,
+            sm,
+            cache,
+            processing,
+            imported_once,
+            is_root,
+        )?;
         std::eprintln!("[Loader] Finished loading: {:?}", canon);
         processing.remove(&canon);
         cache.insert(canon.clone(), module.clone());
@@ -311,6 +332,7 @@ impl Loader {
         cache: &mut BTreeMap<PathBuf, Module>,
         processing: &mut BTreeSet<PathBuf>,
         imported_once: &mut BTreeSet<PathBuf>,
+        is_root: bool,
         provider: &mut dyn FnMut(&PathBuf) -> Result<String, LoaderError>,
     ) -> Result<Module, LoaderError> {
         let canon = canonicalize_path(&path);
@@ -333,6 +355,7 @@ impl Loader {
             cache,
             processing,
             imported_once,
+            is_root,
             provider,
         )?;
         processing.remove(&canon);
@@ -348,16 +371,60 @@ impl Loader {
         cache: &mut BTreeMap<PathBuf, Module>,
         processing: &mut BTreeSet<PathBuf>,
         imported_once: &mut BTreeSet<PathBuf>,
+        is_root: bool,
     ) -> Result<Module, LoaderError> {
         let mut directives = module.directives.clone();
         let mut items = Vec::new();
+        let mut prelude_paths = Vec::new();
+        let mut no_prelude = false;
+        for d in &module.directives {
+            match d {
+                Directive::Prelude { path, .. } => prelude_paths.push(path.clone()),
+                Directive::NoPrelude { .. } => no_prelude = true,
+                _ => {}
+            }
+        }
+        if is_root && !no_prelude && prelude_paths.is_empty() {
+            prelude_paths.push(String::from("std/prelude_base"));
+        }
+        for path in prelude_paths {
+            let target = self.resolve_path(&base, &path);
+            if imported_once.insert(target.clone()) {
+                let imp_mod =
+                    self.load_file(&target, sm, cache, processing, imported_once, false)?;
+                for d in imp_mod.directives.clone() {
+                    if let Directive::Entry { .. } = d {
+                        continue;
+                    }
+                    if let Directive::Target { .. } = d {
+                        continue;
+                    }
+                    if let Directive::IndentWidth { .. } = d {
+                        continue;
+                    }
+                    directives.push(d);
+                }
+                for it in imp_mod.root.items.clone() {
+                    if let Stmt::Directive(Directive::Entry { .. }) = it {
+                        continue;
+                    }
+                    if let Stmt::Directive(Directive::Target { .. }) = it {
+                        continue;
+                    }
+                    if let Stmt::Directive(Directive::IndentWidth { .. }) = it {
+                        continue;
+                    }
+                    items.push(it);
+                }
+            }
+        }
         for stmt in module.root.items.clone() {
             match &stmt {
                 Stmt::Directive(Directive::Import { path, .. }) => {
                     let target = self.resolve_path(&base, path);
                     if imported_once.insert(target.clone()) {
                         let imp_mod =
-                            self.load_file(&target, sm, cache, processing, imported_once)?;
+                            self.load_file(&target, sm, cache, processing, imported_once, false)?;
                         // Propagate non-file-scoped directives (e.g., externs) so
                         // symbols declared in stdlib become visible to the parent
                         // module during later compilation phases.
@@ -390,7 +457,8 @@ impl Loader {
                 }
                 Stmt::Directive(Directive::Include { path, .. }) => {
                     let target = self.resolve_path(&base, path);
-                    let inc_mod = self.load_file(&target, sm, cache, processing, imported_once)?;
+                    let inc_mod =
+                        self.load_file(&target, sm, cache, processing, imported_once, false)?;
                     // Propagate non-file-scoped directives from included modules as well.
                     for d in inc_mod.directives.clone() {
                         if let Directive::Entry { .. } = d {
@@ -434,10 +502,61 @@ impl Loader {
         cache: &mut BTreeMap<PathBuf, Module>,
         processing: &mut BTreeSet<PathBuf>,
         imported_once: &mut BTreeSet<PathBuf>,
+        is_root: bool,
         provider: &mut dyn FnMut(&PathBuf) -> Result<String, LoaderError>,
     ) -> Result<Module, LoaderError> {
         let mut directives = module.directives.clone();
         let mut items = Vec::new();
+        let mut prelude_paths = Vec::new();
+        let mut no_prelude = false;
+        for d in &module.directives {
+            match d {
+                Directive::Prelude { path, .. } => prelude_paths.push(path.clone()),
+                Directive::NoPrelude { .. } => no_prelude = true,
+                _ => {}
+            }
+        }
+        if is_root && !no_prelude && prelude_paths.is_empty() {
+            prelude_paths.push(String::from("std/prelude_base"));
+        }
+        for path in prelude_paths {
+            let target = self.resolve_path(&base, &path);
+            if imported_once.insert(target.clone()) {
+                let imp_mod = self.load_file_with(
+                    &target,
+                    sm,
+                    cache,
+                    processing,
+                    imported_once,
+                    false,
+                    provider,
+                )?;
+                for d in imp_mod.directives.clone() {
+                    if let Directive::Entry { .. } = d {
+                        continue;
+                    }
+                    if let Directive::Target { .. } = d {
+                        continue;
+                    }
+                    if let Directive::IndentWidth { .. } = d {
+                        continue;
+                    }
+                    directives.push(d);
+                }
+                for it in imp_mod.root.items.clone() {
+                    if let Stmt::Directive(Directive::Entry { .. }) = it {
+                        continue;
+                    }
+                    if let Stmt::Directive(Directive::Target { .. }) = it {
+                        continue;
+                    }
+                    if let Stmt::Directive(Directive::IndentWidth { .. }) = it {
+                        continue;
+                    }
+                    items.push(it);
+                }
+            }
+        }
         for stmt in module.root.items.clone() {
             match &stmt {
                 Stmt::Directive(Directive::Import { path, .. }) => {
@@ -449,6 +568,7 @@ impl Loader {
                             cache,
                             processing,
                             imported_once,
+                            false,
                             provider,
                         )?;
                         for d in imp_mod.directives.clone() {
@@ -485,6 +605,7 @@ impl Loader {
                         cache,
                         processing,
                         imported_once,
+                        false,
                         provider,
                     )?;
                     for d in inc_mod.directives.clone() {

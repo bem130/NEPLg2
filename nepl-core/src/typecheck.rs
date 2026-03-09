@@ -213,6 +213,194 @@ fn collect_type_params(
     (tps, bounds_vec, bounds_map)
 }
 
+fn type_param_has_trait_bound(
+    ctx: &TypeCtx,
+    type_param_bounds: &BTreeMap<TypeId, Vec<TraitBoundRef>>,
+    ty: TypeId,
+    trait_self_ty: TypeId,
+) -> bool {
+    let resolved = ctx.resolve_id(ty);
+    if let Some(bounds) = type_param_bounds.get(&resolved) {
+        return bounds.iter().any(|b| b.trait_self_ty == trait_self_ty);
+    }
+    if type_param_bounds.iter().any(|(tp, bounds)| {
+        ctx.resolve_id(*tp) == resolved
+            && bounds.iter().any(|b| b.trait_self_ty == trait_self_ty)
+    }) {
+        return true;
+    }
+    let label = match ctx.get(resolved) {
+        TypeKind::Var(v) => v.label.clone(),
+        _ => None,
+    };
+    let Some(label) = label else {
+        return false;
+    };
+    type_param_bounds.iter().any(|(tp, bounds)| {
+        let same_label = match ctx.get(ctx.resolve_id(*tp)) {
+            TypeKind::Var(v) => v.label.as_deref() == Some(label.as_str()),
+            _ => false,
+        };
+        same_label && bounds.iter().any(|b| b.trait_self_ty == trait_self_ty)
+    })
+}
+
+fn merge_inferred_instantiation(
+    ctx: &TypeCtx,
+    current: Option<TypeId>,
+    candidate: Option<TypeId>,
+) -> Option<TypeId> {
+    match (current, candidate) {
+        (None, other) => other,
+        (some, None) => some,
+        (Some(a), Some(b)) if ctx.same_type(a, b) => Some(ctx.resolve_id(a)),
+        _ => None,
+    }
+}
+
+fn infer_type_param_from_instantiated_pair(
+    ctx: &TypeCtx,
+    original: TypeId,
+    instantiated: TypeId,
+    target_tp: TypeId,
+    target_label: Option<&str>,
+) -> Option<TypeId> {
+    let original = ctx.resolve_id(original);
+    let instantiated = ctx.resolve_id(instantiated);
+    if original == ctx.resolve_id(target_tp) {
+        return Some(instantiated);
+    }
+
+    let original_is_same_label = match ctx.get(original) {
+        TypeKind::Var(v) => target_label
+            .map(|label| v.label.as_deref() == Some(label))
+            .unwrap_or(false),
+        _ => false,
+    };
+    if original_is_same_label {
+        return Some(instantiated);
+    }
+
+    match (ctx.get(original), ctx.get(instantiated)) {
+        (
+            TypeKind::Function {
+                params: params_a,
+                result: result_a,
+                ..
+            },
+            TypeKind::Function {
+                params: params_b,
+                result: result_b,
+                ..
+            },
+        ) if params_a.len() == params_b.len() => {
+            let mut found = None;
+            for (pa, pb) in params_a.iter().zip(params_b.iter()) {
+                found = merge_inferred_instantiation(
+                    ctx,
+                    found,
+                    infer_type_param_from_instantiated_pair(
+                        ctx,
+                        *pa,
+                        *pb,
+                        target_tp,
+                        target_label,
+                    ),
+                );
+            }
+            merge_inferred_instantiation(
+                ctx,
+                found,
+                infer_type_param_from_instantiated_pair(
+                    ctx,
+                    result_a,
+                    result_b,
+                    target_tp,
+                    target_label,
+                ),
+            )
+        }
+        (
+            TypeKind::Enum { type_params: args_a, .. },
+            TypeKind::Enum { type_params: args_b, .. },
+        )
+        | (
+            TypeKind::Struct { type_params: args_a, .. },
+            TypeKind::Struct { type_params: args_b, .. },
+        )
+        | (
+            TypeKind::Apply { args: args_a, .. },
+            TypeKind::Apply { args: args_b, .. },
+        ) if args_a.len() == args_b.len() => {
+            let mut found = None;
+            for (aa, ab) in args_a.iter().zip(args_b.iter()) {
+                found = merge_inferred_instantiation(
+                    ctx,
+                    found,
+                    infer_type_param_from_instantiated_pair(
+                        ctx,
+                        *aa,
+                        *ab,
+                        target_tp,
+                        target_label,
+                    ),
+                );
+            }
+            found
+        }
+        (TypeKind::Tuple { items: items_a }, TypeKind::Tuple { items: items_b })
+            if items_a.len() == items_b.len() =>
+        {
+            let mut found = None;
+            for (ia, ib) in items_a.iter().zip(items_b.iter()) {
+                found = merge_inferred_instantiation(
+                    ctx,
+                    found,
+                    infer_type_param_from_instantiated_pair(
+                        ctx,
+                        *ia,
+                        *ib,
+                        target_tp,
+                        target_label,
+                    ),
+                );
+            }
+            found
+        }
+        (TypeKind::Box(inner_a), TypeKind::Box(inner_b))
+        | (TypeKind::Reference(inner_a, _), TypeKind::Reference(inner_b, _)) => {
+            infer_type_param_from_instantiated_pair(
+                ctx,
+                inner_a,
+                inner_b,
+                target_tp,
+                target_label,
+            )
+        }
+        _ => None,
+    }
+}
+
+fn infer_instantiated_type_arg(
+    ctx: &TypeCtx,
+    original_fn_ty: TypeId,
+    instantiated_fn_ty: TypeId,
+    target_tp: TypeId,
+) -> Option<TypeId> {
+    let target_label = match ctx.get(ctx.resolve_id(target_tp)) {
+        TypeKind::Var(v) => v.label.clone(),
+        _ => None,
+    };
+    infer_type_param_from_instantiated_pair(
+        ctx,
+        original_fn_ty,
+        instantiated_fn_ty,
+        target_tp,
+        target_label.as_deref(),
+    )
+    .map(|ty| ctx.resolve_id(ty))
+}
+
 pub fn typecheck(
     module: &crate::ast::Module,
     target: CompileTarget,
@@ -296,7 +484,7 @@ pub fn typecheck(
                         effect,
                         arity: params.len(),
                         builtin: None,
-                        type_param_bounds: Vec::new(),
+                        type_param_bounds: BTreeMap::new(),
                         captures: Vec::new(),
                     },
                 });
@@ -449,7 +637,7 @@ pub fn typecheck(
                             effect: Effect::Pure,
                             arity: params.len(),
                             builtin: None,
-                            type_param_bounds: Vec::new(),
+                            type_param_bounds: BTreeMap::new(),
                             captures: Vec::new(),
                         },
                     });
@@ -468,7 +656,7 @@ pub fn typecheck(
                             effect: Effect::Pure,
                             arity: params.len(),
                             builtin: None,
-                            type_param_bounds: Vec::new(),
+                            type_param_bounds: BTreeMap::new(),
                             captures: Vec::new(),
                         },
                     });
@@ -540,7 +728,7 @@ pub fn typecheck(
                         effect: Effect::Pure,
                         arity: fs.len(),
                         builtin: None,
-                        type_param_bounds: Vec::new(),
+                        type_param_bounds: BTreeMap::new(),
                         captures: Vec::new(),
                     },
                 });
@@ -655,7 +843,7 @@ pub fn typecheck(
                         effect: Effect::Pure,
                         arity: params.len(),
                         builtin: None,
-                        type_param_bounds: Vec::new(),
+                        type_param_bounds: BTreeMap::new(),
                         captures: Vec::new(),
                     },
                 });
@@ -811,7 +999,7 @@ pub fn typecheck(
                     effect: Effect::Pure,
                     arity: info.fields.len(),
                     builtin: None,
-                    type_param_bounds: Vec::new(),
+                    type_param_bounds: BTreeMap::new(),
                     captures: Vec::new(),
                 },
             });
@@ -837,7 +1025,7 @@ pub fn typecheck(
         }
         if let Stmt::FnDef(f) = item {
             let mut f_labels = LabelEnv::new();
-            let (mut tps, bounds_vec, _bounds_map) =
+            let (mut tps, _bounds_vec, bounds_map) =
                 collect_type_params(&mut ctx, &mut f_labels, &f.type_params, &traits, &mut diagnostics);
 
             let mut ty = type_from_expr(&mut ctx, &mut f_labels, &f.signature);
@@ -975,7 +1163,7 @@ pub fn typecheck(
                         effect,
                         arity: params.len(),
                         builtin: None,
-                        type_param_bounds: bounds_vec.clone(),
+                        type_param_bounds: bounds_map.clone(),
                         captures: Vec::new(),
                     },
                 });
@@ -1517,6 +1705,7 @@ fn check_function(
     generated_functions: &mut Vec<HirFunction>,
 ) -> Result<CheckedFunction, Vec<Diagnostic>> {
     let mut diags = Vec::new();
+    let func_ty_snapshot = ctx.snapshot_type_var_bindings(func_ty);
     let (params_ty, result_ty, effect) = match ctx.get(func_ty) {
         TypeKind::Function {
             params,
@@ -1579,13 +1768,14 @@ fn check_function(
         });
     }
 
-    let (body, diag_out) = {
+    let (body, mut diag_out, pending_trait_checks) = {
         let mut checker = BlockChecker {
             ctx,
             env,
             labels,
             string_table: strings,
             diagnostics: Vec::new(),
+            pending_trait_bound_checks: Vec::new(),
             current_effect: effect,
             enums,
             structs,
@@ -1602,6 +1792,7 @@ fn check_function(
             FnBody::Parsed(b) => {
                 if let Some(raw) = checker.select_target_raw_body(b) {
                     if !checker.validate_raw_body_effect(&raw, f.name.span) {
+                        checker.ctx.restore_type_var_bindings(&func_ty_snapshot);
                         return Err(checker.diagnostics);
                     }
                     raw
@@ -1617,6 +1808,7 @@ fn check_function(
                             HirBody::Block(blk)
                         }
                         None => {
+                            checker.ctx.restore_type_var_bindings(&func_ty_snapshot);
                             return Err(checker.diagnostics);
                         }
                     }
@@ -1625,6 +1817,7 @@ fn check_function(
             FnBody::Wasm(wb) => {
                 let raw = HirBody::Wasm(wb.clone());
                 if !checker.validate_raw_body_effect(&raw, f.name.span) {
+                    checker.ctx.restore_type_var_bindings(&func_ty_snapshot);
                     return Err(checker.diagnostics);
                 }
                 raw
@@ -1632,14 +1825,37 @@ fn check_function(
             FnBody::LlvmIr(lb) => {
                 let raw = HirBody::LlvmIr(lb.clone());
                 if !checker.validate_raw_body_effect(&raw, f.name.span) {
+                    checker.ctx.restore_type_var_bindings(&func_ty_snapshot);
                     return Err(checker.diagnostics);
                 }
                 raw
             }
         };
-        (body_res, checker.diagnostics)
+        (
+            body_res,
+            checker.diagnostics,
+            checker.pending_trait_bound_checks,
+        )
     };
-
+    for (bound, ty, span) in pending_trait_checks {
+        let resolved = ctx.resolve_id(ty);
+        let satisfied =
+            type_param_has_trait_bound(ctx, &type_param_bounds, ty, bound.trait_self_ty)
+                || type_param_has_trait_bound(ctx, &type_param_bounds, resolved, bound.trait_self_ty)
+                || impls.iter().any(|imp| {
+                    imp.trait_self_ty == Some(bound.trait_self_ty)
+                        && ctx.same_type(imp.target_ty, resolved)
+                });
+        if !satisfied {
+            diag_out.push(
+                Diagnostic::error(
+                    format!("type does not satisfy trait bound '{}'", bound.name),
+                    span,
+                )
+                .with_id(DiagnosticId::TypeTraitBoundUnsatisfied),
+            );
+        }
+    }
     env.pop_scope();
     let has_error = diag_out
         .iter()
@@ -1654,7 +1870,7 @@ fn check_function(
                 mangle_function_symbol(&f.name.name, func_ty, ctx)
             }
         });
-    let function = HirFunction {
+    let mut function = HirFunction {
             doc: f.doc.clone(),
             name: out_name,
             func_ty, // assigned here
@@ -1685,6 +1901,8 @@ fn check_function(
             body,
             span: f.name.span,
         };
+    resolve_type_ids_in_function(ctx, &mut function);
+    ctx.restore_type_var_bindings(&func_ty_snapshot);
     if has_error {
         Err(diag_out)
     } else {
@@ -1705,6 +1923,7 @@ struct BlockChecker<'a> {
     labels: &'a mut LabelEnv,
     string_table: &'a mut StringTable,
     diagnostics: Vec<Diagnostic>,
+    pending_trait_bound_checks: Vec<(TraitBoundRef, TypeId, Span)>,
     current_effect: Effect,
     enums: &'a BTreeMap<String, EnumInfo>,
     structs: &'a BTreeMap<String, StructInfo>,
@@ -2245,10 +2464,43 @@ impl<'a> BlockChecker<'a> {
         if !self.is_concrete_type(ty) {
             return self.type_param_has_bound(ty, bound.trait_self_ty);
         }
+        if crate::log::is_verbose() {
+            std::eprintln!(
+                "trait_bound_satisfied_by_ref: bound={} trait_self_ty={:?} ty={} ({:?})",
+                bound.name,
+                bound.trait_self_ty,
+                self.ctx.type_to_string(ty),
+                self.ctx.resolve_id(ty),
+            );
+            for imp in self.impls.iter().filter(|imp| imp.trait_self_ty == Some(bound.trait_self_ty)) {
+                std::eprintln!(
+                    "  impl candidate target={} ({:?}) same_type={}",
+                    self.ctx.type_to_string(imp.target_ty),
+                    self.ctx.resolve_id(imp.target_ty),
+                    self.ctx.same_type(imp.target_ty, ty),
+                );
+            }
+        }
         self.impls.iter().any(|imp| {
             imp.trait_self_ty == Some(bound.trait_self_ty)
                 && self.ctx.same_type(imp.target_ty, ty)
         })
+    }
+
+    fn infer_unique_type_param_for_trait(&self, trait_self_ty: TypeId) -> Option<TypeId> {
+        let mut matched: Option<TypeId> = None;
+        for (tp, bounds) in &self.type_param_bounds {
+            if !bounds.iter().any(|b| b.trait_self_ty == trait_self_ty) {
+                continue;
+            }
+            let resolved = self.ctx.resolve_id(*tp);
+            match matched {
+                None => matched = Some(resolved),
+                Some(prev) if self.ctx.same_type(prev, resolved) => {}
+                Some(_) => return None,
+            }
+        }
+        matched
     }
 
     fn resolve_field_access(
@@ -2747,7 +2999,7 @@ impl<'a> BlockChecker<'a> {
                             effect,
                             arity: params.len(),
                             builtin: None,
-                            type_param_bounds: Vec::new(),
+                            type_param_bounds: BTreeMap::new(),
                             captures,
                         },
                     });
@@ -3548,7 +3800,17 @@ impl<'a> BlockChecker<'a> {
                                         return None;
                                     }
                                     if let Some(sig) = trait_info.methods.get(method_name) {
-                                        let (inst_ty, args) = self.ctx.instantiate(*sig);
+                                        let method_self = self
+                                            .infer_unique_type_param_for_trait(trait_info.self_ty)
+                                            .unwrap_or_else(|| {
+                                                self.ctx.fresh_var(Some(String::from("Self")))
+                                            });
+                                        let mut mapping = BTreeMap::new();
+                                        mapping.insert(
+                                            self.ctx.resolve_id(trait_info.self_ty),
+                                            method_self,
+                                        );
+                                        let inst_ty = self.ctx.substitute(*sig, &mapping);
                                         stack.push(StackEntry {
                                             ty: inst_ty,
                                             expr: HirExpr {
@@ -3560,7 +3822,7 @@ impl<'a> BlockChecker<'a> {
                                                 },
                                                 span: id.span,
                                             },
-                                            type_args: args,
+                                            type_args: vec![method_self],
                                             assign: None,
                                             auto_call: !*forced_value,
                                         });
@@ -4496,7 +4758,8 @@ impl<'a> BlockChecker<'a> {
             let (inst_ty, fresh_args) = if !stack[func_pos].type_args.is_empty() {
                 (ty_for_infer, stack[func_pos].type_args.clone())
             } else {
-                self.ctx.instantiate(ty_for_infer)
+                let (inst_ty, fresh_args, _mapping) = self.ctx.instantiate(ty_for_infer);
+                (inst_ty, fresh_args)
             };
             let func_ty = self.ctx.get(inst_ty);
             let (params, result, effect) = match func_ty {
@@ -4678,7 +4941,8 @@ impl<'a> BlockChecker<'a> {
             let (inst_ty, fresh_args) = if !stack[func_pos].type_args.is_empty() {
                 (ty_for_infer, stack[func_pos].type_args.clone())
             } else {
-                self.ctx.instantiate(ty_for_infer)
+                let (inst_ty, fresh_args, _mapping) = self.ctx.instantiate(ty_for_infer);
+                (inst_ty, fresh_args)
             };
             let func_ty = self.ctx.get(inst_ty);
             let (params, result, effect) = match func_ty {
@@ -5446,7 +5710,7 @@ impl<'a> BlockChecker<'a> {
                             let substituted_result = tmp_ctx.substitute(result, &mapping);
                             tmp_ctx.function(Vec::new(), substituted_params, substituted_result, effect)
                         } else {
-                            let (inst_ty, _args) = tmp_ctx.instantiate(binding.ty);
+                            let (inst_ty, _args, _mapping) = tmp_ctx.instantiate(binding.ty);
                             inst_ty
                         };
 
@@ -5616,7 +5880,8 @@ impl<'a> BlockChecker<'a> {
                     }
 
                     let binding = candidates[0];
-                    let (inst_ty, mut resolved_args) = if !explicit_type_args.is_empty() {
+                    let (inst_ty, mut resolved_args, type_arg_mapping) =
+                        if !explicit_type_args.is_empty() {
                         let func_data = if let TypeKind::Function {
                             type_params,
                             params,
@@ -5651,6 +5916,7 @@ impl<'a> BlockChecker<'a> {
                             self.ctx
                                 .function(Vec::new(), substituted_params, substituted_result, effect),
                             explicit_type_args.clone(),
+                            mapping,
                         )
                     } else {
                         self.ctx.instantiate(binding.ty)
@@ -5701,28 +5967,53 @@ impl<'a> BlockChecker<'a> {
                         return None;
                     }
 
-                    let raw_type_args = resolved_args.clone();
                     resolved_args = resolved_args
                         .into_iter()
                         .map(|t| self.ctx.resolve_id(t))
                         .collect();
+                    if let TypeKind::Function { type_params, .. } = self.ctx.get(binding.ty) {
+                        if type_params.len() == resolved_args.len() {
+                            for (idx, tp) in type_params.iter().enumerate() {
+                                if let Some(inferred) = infer_instantiated_type_arg(
+                                    self.ctx,
+                                    binding.ty,
+                                    inst_ty,
+                                    *tp,
+                                ) {
+                                    resolved_args[idx] = self.ctx.resolve_id(inferred);
+                                }
+                            }
+                        }
+                    }
 
                     if let BindingKind::Func {
                         type_param_bounds,
                         ..
                     } = &binding.kind
                     {
-                        if !type_param_bounds.is_empty()
-                            && type_param_bounds.len() == resolved_args.len()
-                        {
-                            for (bounds, (raw_arg, resolved_arg)) in type_param_bounds
-                                .iter()
-                                .zip(raw_type_args.iter().zip(resolved_args.iter()))
-                            {
+                        if !type_param_bounds.is_empty() {
+                            for (tp, bounds) in type_param_bounds.iter() {
+                                let Some(raw_arg) = type_arg_mapping.get(tp) else {
+                                    continue;
+                                };
+                                let resolved_arg = self.ctx.resolve_id(*raw_arg);
                                 for b in bounds {
-                                    if !self.trait_bound_satisfied_by_ref(b, *raw_arg)
-                                        && !self.trait_bound_satisfied_by_ref(b, *resolved_arg)
+                                    if self.trait_bound_satisfied_by_ref(b, *raw_arg)
+                                        || self.trait_bound_satisfied_by_ref(b, resolved_arg)
                                     {
+                                        continue;
+                                    }
+                                    let inferred_arg = infer_instantiated_type_arg(
+                                        self.ctx,
+                                        binding.ty,
+                                        inst_ty,
+                                        *tp,
+                                    )
+                                    .unwrap_or(resolved_arg);
+                                    if self.trait_bound_satisfied_by_ref(b, inferred_arg) {
+                                        continue;
+                                    }
+                                    if self.is_concrete_type(inferred_arg) {
                                         self.diagnostics.push(Diagnostic::error(
                                             format!(
                                                 "type does not satisfy trait bound '{}'",
@@ -5730,6 +6021,12 @@ impl<'a> BlockChecker<'a> {
                                             ),
                                             func.expr.span,
                                         ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
+                                    } else {
+                                        self.pending_trait_bound_checks.push((
+                                            b.clone(),
+                                            inferred_arg,
+                                            func.expr.span,
+                                        ));
                                     }
                                 }
                             }
@@ -5853,7 +6150,8 @@ impl<'a> BlockChecker<'a> {
                                             continue;
                                         }
                                         let mut tmp_ctx = self.ctx.clone();
-                                        let (cand_ty, _fresh) = tmp_ctx.instantiate(cb.ty);
+                                        let (cand_ty, _fresh, _mapping) =
+                                            tmp_ctx.instantiate(cb.ty);
                                         if tmp_ctx.unify(cand_ty, *param_ty).is_ok() {
                                             if matched_symbol.is_some() {
                                                 ambiguous = true;
@@ -5888,11 +6186,54 @@ impl<'a> BlockChecker<'a> {
                     if let Some((trait_name, method_name)) = parse_variant_name(name) {
                         if let Some(trait_info) = self.traits.get(trait_name) {
                             if trait_info.methods.get(method_name).is_some() {
-                                if let Some(first) = args.first() {
+                                let mut inferred_self_ty = None;
+                                if let (Some(self_hint), Some(first_param), Some(arg)) =
+                                    (type_args.first().copied(), user_params.first().copied(), args.first())
+                                {
+                                    if self.ctx.same_type(first_param, self_hint) {
+                                        let candidate = self.ctx.resolve_id(arg.ty);
+                                        let candidate_ok =
+                                            self.type_param_has_bound(candidate, trait_info.self_ty)
+                                                || self.impls.iter().any(|imp| {
+                                                    imp.trait_self_ty == Some(trait_info.self_ty)
+                                                        && self.ctx.same_type(imp.target_ty, candidate)
+                                                });
+                                        if candidate_ok {
+                                            inferred_self_ty = Some(candidate);
+                                        }
+                                    }
+                                }
+                                if inferred_self_ty.is_none() {
+                                    if let Some(self_hint) = type_args.first().copied() {
+                                        if let Some(expected) = expected_ret {
+                                            let _ = self.ctx.unify(result, expected);
+                                        }
+                                        let resolved_hint = self.ctx.resolve_id(self_hint);
+                                        inferred_self_ty = self
+                                            .infer_unique_type_param_for_trait(trait_info.self_ty)
+                                            .or_else(|| {
+                                                if self.type_param_has_bound(
+                                                    resolved_hint,
+                                                    trait_info.self_ty,
+                                                ) {
+                                                    Some(resolved_hint)
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .or(Some(resolved_hint));
+                                    }
+                                }
+                                if inferred_self_ty.is_none() {
+                                    if let Some(first) = args.first() {
+                                        inferred_self_ty = Some(self.ctx.resolve_id(first.ty));
+                                    }
+                                }
+                                if let Some(self_ty) = inferred_self_ty {
                                     trait_callee = Some(FuncRef::Trait {
                                         trait_name: trait_name.to_string(),
                                         method: method_name.to_string(),
-                                        self_ty: self.ctx.resolve_id(first.ty),
+                                        self_ty,
                                     });
                                 }
                             }
@@ -5937,17 +6278,54 @@ impl<'a> BlockChecker<'a> {
 
         if let HirExprKind::Var(name) = &func.expr.kind {
             if self.env.lookup_all_callables(name).is_empty() {
-                if let Some((trait_name, method_name)) = parse_variant_name(name) {
-                    if let Some(trait_info) = self.traits.get(trait_name) {
-                        if trait_info.methods.get(method_name).is_some() {
-                            if args.is_empty() {
-                                self.diagnostics.push(Diagnostic::error(
-                                    "trait method call requires receiver argument",
-                                    func.expr.span,
-                                ).with_id(DiagnosticId::TypeArgumentArityMismatch));
-                                return None;
+                    if let Some((trait_name, method_name)) = parse_variant_name(name) {
+                        if let Some(trait_info) = self.traits.get(trait_name) {
+                            if trait_info.methods.get(method_name).is_some() {
+                            let mut inferred_self_ty = None;
+                            if let (Some(self_hint), Some(first_param), Some(arg)) =
+                                (type_args.first().copied(), params.first().copied(), args.first())
+                            {
+                                if self.ctx.same_type(first_param, self_hint) {
+                                    let candidate = self.ctx.resolve_id(arg.ty);
+                                    let candidate_ok =
+                                        self.type_param_has_bound(candidate, trait_info.self_ty)
+                                            || self.impls.iter().any(|imp| {
+                                                imp.trait_self_ty == Some(trait_info.self_ty)
+                                                    && self.ctx.same_type(imp.target_ty, candidate)
+                                            });
+                                    if candidate_ok {
+                                        inferred_self_ty = Some(candidate);
+                                    }
+                                }
                             }
-                            let self_ty = self.ctx.resolve_id(args[0].ty);
+                            if inferred_self_ty.is_none() {
+                                if let Some(self_hint) = type_args.first().copied() {
+                                    if let Some(expected) = expected_ret {
+                                        let _ = self.ctx.unify(result, expected);
+                                    }
+                                    let resolved_hint = self.ctx.resolve_id(self_hint);
+                                    inferred_self_ty = self
+                                        .infer_unique_type_param_for_trait(trait_info.self_ty)
+                                        .or_else(|| {
+                                            if self.type_param_has_bound(
+                                                resolved_hint,
+                                                trait_info.self_ty,
+                                            ) {
+                                                Some(resolved_hint)
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .or(Some(resolved_hint));
+                                }
+                            }
+                            let Some(self_ty) = inferred_self_ty else {
+                                self.diagnostics.push(Diagnostic::error(
+                                    "trait method call requires receiver argument or expected self type",
+                                    func.expr.span,
+                                ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
+                                return None;
+                            };
                             let trait_ok = self.type_param_has_bound(self_ty, trait_info.self_ty)
                                 || self.impls.iter().any(|imp| {
                                     imp.trait_self_ty == Some(trait_info.self_ty)
@@ -6107,9 +6485,118 @@ enum BindingKind {
         effect: Effect,
         arity: usize,
         builtin: Option<BuiltinKind>,
-        type_param_bounds: Vec<Vec<TraitBoundRef>>,
+        type_param_bounds: BTreeMap<TypeId, Vec<TraitBoundRef>>,
         captures: Vec<(String, TypeId)>,
     },
+}
+
+fn resolve_type_ids_in_function(ctx: &TypeCtx, function: &mut HirFunction) {
+    function.func_ty = ctx.resolve_id(function.func_ty);
+    function.result = ctx.resolve_id(function.result);
+    for param in &mut function.params {
+        param.ty = ctx.resolve_id(param.ty);
+    }
+    match &mut function.body {
+        HirBody::Block(block) => resolve_type_ids_in_block(ctx, block),
+        HirBody::Wasm(_) | HirBody::LlvmIr(_) => {}
+    }
+}
+
+fn resolve_type_ids_in_block(ctx: &TypeCtx, block: &mut HirBlock) {
+    block.ty = ctx.resolve_id(block.ty);
+    for line in &mut block.lines {
+        resolve_type_ids_in_expr(ctx, &mut line.expr);
+    }
+}
+
+fn resolve_type_ids_in_expr(ctx: &TypeCtx, expr: &mut HirExpr) {
+    expr.ty = ctx.resolve_id(expr.ty);
+    match &mut expr.kind {
+        HirExprKind::Call { callee, args } => {
+            match callee {
+                FuncRef::User(_, type_args) => {
+                    for ty in type_args {
+                        *ty = ctx.resolve_id(*ty);
+                    }
+                }
+                FuncRef::Trait { self_ty, .. } => {
+                    *self_ty = ctx.resolve_id(*self_ty);
+                }
+                FuncRef::Builtin(_) => {}
+            }
+            for arg in args {
+                resolve_type_ids_in_expr(ctx, arg);
+            }
+        }
+        HirExprKind::CallIndirect {
+            callee,
+            params,
+            result,
+            args,
+        } => {
+            resolve_type_ids_in_expr(ctx, callee);
+            for ty in params {
+                *ty = ctx.resolve_id(*ty);
+            }
+            *result = ctx.resolve_id(*result);
+            for arg in args {
+                resolve_type_ids_in_expr(ctx, arg);
+            }
+        }
+        HirExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            resolve_type_ids_in_expr(ctx, cond);
+            resolve_type_ids_in_expr(ctx, then_branch);
+            resolve_type_ids_in_expr(ctx, else_branch);
+        }
+        HirExprKind::While { cond, body } => {
+            resolve_type_ids_in_expr(ctx, cond);
+            resolve_type_ids_in_expr(ctx, body);
+        }
+        HirExprKind::Match { scrutinee, arms } => {
+            resolve_type_ids_in_expr(ctx, scrutinee);
+            for arm in arms {
+                resolve_type_ids_in_expr(ctx, &mut arm.body);
+            }
+        }
+        HirExprKind::Block(block) => resolve_type_ids_in_block(ctx, block),
+        HirExprKind::Let { value, .. }
+        | HirExprKind::Set { value, .. }
+        | HirExprKind::AddrOf(value)
+        | HirExprKind::Deref(value) => resolve_type_ids_in_expr(ctx, value),
+        HirExprKind::TupleConstruct { items }
+        | HirExprKind::Intrinsic { args: items, .. } => {
+            for item in items {
+                resolve_type_ids_in_expr(ctx, item);
+            }
+        }
+        HirExprKind::EnumConstruct {
+            type_args, payload, ..
+        } => {
+            for ty in type_args {
+                *ty = ctx.resolve_id(*ty);
+            }
+            if let Some(payload) = payload {
+                resolve_type_ids_in_expr(ctx, payload);
+            }
+        }
+        HirExprKind::StructConstruct { fields, .. } => {
+            for field in fields {
+                resolve_type_ids_in_expr(ctx, field);
+            }
+        }
+        HirExprKind::FnValue(_)
+        | HirExprKind::Var(_)
+        | HirExprKind::Unit
+        | HirExprKind::LiteralI32(_)
+        | HirExprKind::LiteralF32(_)
+        | HirExprKind::LiteralBool(_)
+        | HirExprKind::LiteralStr(_)
+        | HirExprKind::Drop { .. } => {}
+    }
 }
 
 impl BindingKind {

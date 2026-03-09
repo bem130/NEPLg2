@@ -4,23 +4,28 @@
 #import "core/mem" as *
 #import "core/result" as *
 #import "alloc/string" as *
+#import "alloc/collections/vec" as *
 #if[target=std]
 #import "std/stdio" as *
 
-//: test: 標準ライブラリ用の簡易テスト支援
+//: test: 標準ライブラリ用の[簡易/かんい]テスト支援
 //:
-//: 目的:
-//: - assert 系関数と、文字列比較を提供します。
+//: [目的/もくてき]:
+//: - stdlib と tutorials で共通に使う `assert_*` と、`Result<(),str>` を集約して最後にまとめて失敗させる `check_*` / `finish_checks` を提供します。
+//: - 単発の assert と、複数検査を継続実行する collectable な検査の両方を同じモジュールで扱います。
 //:
-//: 実装(アルゴリズム):
-//: - 失敗時はメッセージを表示して trap で異常終了させます。
+//: [実装/じっそう]:
+//: - 単発の `assert_*` は対応する `check_*` の結果を受け、`Err` のときだけ `test_fail` で停止します。
+//: - 集約検査は `Vec<Result<(),str>>` を使って保持し、`finish_checks` が summary と失敗詳細をまとめて表示します。
 //:
-//: 注意(重要):
-//: - 失敗は回復不能です。テスト用途に限定してください。
-//: - 表示は WASI ターゲットのみ対応です。
+//: [注意/ちゅうい]:
+//: - 失敗時は最終的に trap するため、通常のアプリケーション制御には使わず、テスト用途に限定してください。
+//: - 表示は `#target std` のときだけ行います。`std` 以外の target でも失敗時の trap 自体は発生します。
+//: - doctest は[使/つか]い[方/かた]の[保証/ほしょう]が目的であり、境界条件や回帰確認は `tests/stdlib/*` 側で行います。
 //:
-//: 計算量:
-//: - 文字列比較は O(n)、その他は O(1)
+//: [計算量/けいさんりょう]:
+//: - `assert_*` と `check_*` の単体判定は O(1) か、比較対象の長さに応じた O(n) です。
+//: - 集約 API は summary 文字列構築を含むため、`finish_checks` 全体では O(n^2) になりえます。
 
 //: test_str_eq: 文字列が等しいか判定する
 //:
@@ -33,26 +38,9 @@
 //: 注意(重要):
 //: - UTF-8 のバイト列として比較します。
 //:
-//: 計算量:
-//: - O(n)
-//: test_str_eq: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_str_eq` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_str_eq "sample" "sample";
-//: ```
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（再帰呼び出しぶん）
 fn test_str_eq <(str,str)->bool> (a,b):
     let la <i32> load_i32 a;
     let lb <i32> load_i32 b;
@@ -74,26 +62,9 @@ fn test_str_eq <(str,str)->bool> (a,b):
 //: 注意(重要):
 //: - 呼び出し側で長さ一致を確認している前提です。
 //:
-//: 計算量:
-//: - O(n)
-//: test_str_eq_loop: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_str_eq_loop` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_str_eq_loop "sample" "sample" 0 0;
-//: ```
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（再帰呼び出しぶん）
 fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
     if:
         eq i len
@@ -120,27 +91,10 @@ fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
 //: - WASI ターゲットのみ対応です。
 //: - 端末が ANSI に対応している必要があります。
 //:
-//: 計算量:
-//: - O(n)
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)
 #if[target=std]
-//: test_print_fail: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_print_fail` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_print_fail "sample";
-//: ```
 #if[target=std]
 fn test_print_fail <(str)*>()> (msg):
     let m0 <str> concat "FAIL: " msg;
@@ -158,27 +112,10 @@ fn test_print_fail <(str)*>()> (msg):
 //: - WASI ターゲットのみ対応です。
 //: - 端末が ANSI に対応している必要があります。
 //:
-//: 計算量:
-//: - O(n)
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)
 #if[target=std]
-//: test_checked: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_checked` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_checked "sample";
-//: ```
 #if[target=std]
 fn test_checked <(str)*>()> (msg):
     print_color ansi_green "Checked ";
@@ -195,26 +132,9 @@ fn test_checked <(str)*>()> (msg):
 //: 注意(重要):
 //: - 失敗は回復不能です。
 //:
-//: 計算量:
-//: - O(n)
-//: test_fail: 使い方の最小例
-//:
-//: [目的/もくてき]:
-//: - `test_fail` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
-//:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     test_fail "sample";
-//: ```
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)
 fn noshadow test_fail <(str)*>()> (msg):
     test_print_fail msg;
     trap;
@@ -230,28 +150,507 @@ fn noshadow test_fail <(str)*>()> (msg):
 //: 注意(重要):
 //: - 正常なプログラムでは使わないでください。
 //:
-//: 計算量:
-//: - O(1)
-//: trap: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn trap <()*>()> ():
+    #intrinsic "unreachable" <> ()
+
+//: checks_new: 集約検査列の空ベクタを作る
 //:
 //: [目的/もくてき]:
-//: - `trap` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: - `finish_checks` に渡す `Vec<Result<(),str>>` を空の状態で作ります。
+//: - `push` の型引数を毎回書かずに collectable な検査列を組み立てる入口として使います。
+//:
+//: [実装/じっそう]:
+//: - `new<Result<(),str>>` を呼び、検査結果専用の空ベクタを返します。
 //:
 //: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
+//: - 返り値は `Result<(),str>` 専用です。
+//: - 以後の追加は `checks_push` を使うと型引数を書かずに済みます。
 //:
-//: neplg2:test[skip]
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+//:
+//: [使い方/つかいかた]:
+//:
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
-//:     trap ();
+//:     let checks <Vec<Result<(),str>>> checks_new;
+//:     finish_checks checks;
 //: ```
-fn trap <()*>()> ():
-    #intrinsic "unreachable" <> ()
+fn checks_new <()*>Vec<Result<(),str>>> ():
+    vec_new<Result<(),str>>
+
+//: checks_push: 集約検査列に 1 件追加する
+//:
+//: [目的/もくてき]:
+//: - `Result<(),str>` を `Vec<Result<(),str>>` に追加し、pipe で連結しやすい形を提供します。
+//:
+//: [実装/じっそう]:
+//: - `vec_push<Result<(),str>>` を固定して呼び、`push` の型推論詳細を利用者へ露出させません。
+//:
+//: [注意/ちゅうい]:
+//: - 検査そのものは `check_*` 側で評価済みであり、この関数は格納しかしません。
+//: - 返り値は同じベクタなので、`|> checks_push ... |> checks_push ...` と連結できます。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: 償却 O(1)
+//: - [最悪/さいあく][時間/じかん]: O(n)（再確保が起きる場合）
+//: - [空間/くうかん]: 償却 O(1)
+//:
+//: [使い方/つかいかた]:
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//: fn main <()*>()> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push check true
+//:         |> checks_push check true
+//:     finish_checks checks;
+//: ```
+fn checks_push <(Vec<Result<(),str>>,Result<(),str>)*>Vec<Result<(),str>>> (checks, r):
+    vec_push<Result<(),str>> checks r
+
+//: check: 条件を即時終了せず `Result<(),str>` として返す
+//:
+//: [目的/もくてき]:
+//: - `assert` と同じ条件判定を行い、その場で停止せず `Result<(),str>` として返します。
+//: - 複数の検査を `Vec<Result<(),str>>` に集約して最後にまとめて判定したいときに使います。
+//:
+//: [実装/じっそう]:
+//: - `ok` が true なら `Ok(())`、false なら固定メッセージ付きの `Err` を返します。
+//:
+//: [注意/ちゅうい]:
+//: - 失敗時に詳細な説明が必要なら、この関数ではなく `check_eq_i32` や `check_str_eq` のような専用版を使ってください。
+//: - この関数自体は何も表示しません。表示と最終失敗判定は `finish_checks` が担当します。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+//:
+//: [使い方/つかいかた]:
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//: fn main <()*>()> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push check true
+//:         |> checks_push check true
+//:     finish_checks checks;
+//: ```
+fn check <(bool)->Result<(),str>> (okv):
+    if:
+        okv
+        then:
+            Result<(),str>::Ok ()
+        else:
+            Result<(),str>::Err "check failed"
+
+//: check_eq_i32: i32 の等値検査を `Result<(),str>` として返す
+//:
+//: [目的/もくてき]:
+//: - `expected` と `actual` の比較結果を即時停止ではなく値として返します。
+//:
+//: [実装/じっそう]:
+//: - 等しければ `Ok(())`、異なれば `expected` と `actual` を文字列化したメッセージ付き `Err` を返します。
+//:
+//: [注意/ちゅうい]:
+//: - `assert_eq_i32` はこの関数の結果を受けてただちに失敗終了する薄いラッパです。
+//: - 失敗を複数件まとめたいときはこの関数を `Vec<Result<(),str>>` に積んでください。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+//:
+//: [使い方/つかいかた]:
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//: fn main <()*>()> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push check_eq_i32 10 add 4 6
+//:         |> checks_push check_eq_i32 3 sub 8 5
+//:     finish_checks checks;
+//: ```
+fn check_eq_i32 <(i32,i32)->Result<(),str>> (expected, actual):
+    if:
+        eq expected actual
+        then:
+            Result<(),str>::Ok ()
+        else:
+            let se <str> from_i32 expected
+            let sa <str> from_i32 actual
+            let m0 <str> concat "assert_eq_i32 failed: expected=" se
+            let m1 <str> concat m0 " actual="
+            let m2 <str> concat m1 sa
+            Result<(),str>::Err m2
+
+//: check_ne: bool が等しくないことを `Result<(),str>` として返す
+//:
+//: [目的/もくてき]:
+//: - `a` と `b` が同じなら詳細メッセージ付き `Err`、違えば `Ok(())` を返します。
+//:
+//: [実装/じっそう]:
+//: - bool の組み合わせを分岐し、一致時だけ値を文字列化して失敗メッセージを組み立てます。
+//:
+//: [注意/ちゅうい]:
+//: - bool 専用です。
+//: - true/false のどちらで一致したかを失敗メッセージに含めます。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn check_ne <(bool,bool)->Result<(),str>> (a, b):
+    if:
+        a
+        then:
+            if:
+                b
+                then:
+                    let sa <str> from_bool a
+                    let sb <str> from_bool b
+                    let m0 <str> concat "assert_ne failed: a=" sa
+                    let m1 <str> concat m0 " b="
+                    let m2 <str> concat m1 sb
+                    Result<(),str>::Err m2
+                else:
+                    Result<(),str>::Ok ()
+        else:
+            if:
+                b
+                then:
+                    Result<(),str>::Ok ()
+                else:
+                    let sa <str> from_bool a
+                    let sb <str> from_bool b
+                    let m0 <str> concat "assert_ne failed: a=" sa
+                    let m1 <str> concat m0 " b="
+                    let m2 <str> concat m1 sb
+                    Result<(),str>::Err m2
+
+//: check_str_eq: 文字列の等値検査を `Result<(),str>` として返す
+//:
+//: [目的/もくてき]:
+//: - 文字列比較の結果を、直ちに停止せずに後段へ渡せる形で返します。
+//:
+//: [実装/じっそう]:
+//: - `test_str_eq` で UTF-8 バイト列を比較し、不一致時だけ詳細メッセージを組み立てます。
+//:
+//: [注意/ちゅうい]:
+//: - 比較単位は Unicode の文字数ではなく UTF-8 のバイト列です。
+//: - 長い文字列では、失敗メッセージ自体の生成にも連結コストがかかります。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（失敗時メッセージ生成ぶん）
+//:
+//: [使い方/つかいかた]:
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//: fn main <()*>()> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push check_str_eq "hello" concat "he" "llo"
+//:     finish_checks checks;
+//: ```
+fn check_str_eq <(str,str)->Result<(),str>> (expected, actual):
+    if:
+        test_str_eq expected actual
+        then:
+            Result<(),str>::Ok ()
+        else:
+            let m0 <str> concat "assert_str_eq failed: expected=\"" expected
+            let m1 <str> concat m0 "\" actual=\""
+            let m2 <str> concat m1 actual
+            let m3 <str> concat m2 "\""
+            Result<(),str>::Err m3
+
+//: check_ok_i32: `Result<i32,i32>` が `Ok` であることを値として返す
+//:
+//: [目的/もくてき]:
+//: - `Result::Ok` を期待する検査を集約可能な `Result<(),str>` に変換します。
+//:
+//: [実装/じっそう]:
+//: - `match` で `Ok/Err` を分け、`Err` の場合だけ失敗メッセージを返します。
+//:
+//: [注意/ちゅうい]:
+//: - `Result<i32,i32>` 専用です。
+//: - `Ok` の中身は返さず、成功・失敗だけを返します。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn check_ok_i32 <(Result<i32,i32>)->Result<(),str>> (r):
+    match r:
+        Result::Ok v:
+            Result<(),str>::Ok ()
+        Result::Err e:
+            let se <str> from_i32 e
+            let m0 <str> concat "assert_ok_i32 failed: Err=" se
+            Result<(),str>::Err m0
+
+//: check_err_i32: `Result<i32,i32>` が `Err` であることを値として返す
+//:
+//: [目的/もくてき]:
+//: - `Result::Err` を期待する検査を集約可能な `Result<(),str>` に変換します。
+//:
+//: [実装/じっそう]:
+//: - `match` で `Ok/Err` を分け、`Ok` の場合だけ失敗メッセージを返します。
+//:
+//: [注意/ちゅうい]:
+//: - `Result<i32,i32>` 専用です。
+//: - `Err` の中身は返さず、成功・失敗だけを返します。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn check_err_i32 <(Result<i32,i32>)->Result<(),str>> (r):
+    match r:
+        Result::Ok v:
+            let sv <str> from_i32 v
+            let m0 <str> concat "assert_err_i32 failed: Ok=" sv
+            Result<(),str>::Err m0
+        Result::Err e:
+            Result<(),str>::Ok ()
+
+//: check_status_str: 集約表示用の状態文字列を返す
+//:
+//: [目的/もくてき]:
+//: - `Result<(),str>` を `ok` / `err` の短い表示へ変換します。
+//:
+//: [実装/じっそう]:
+//: - `Ok` と `Err` を `match` で分岐します。
+//:
+//: [注意/ちゅうい]:
+//: - 集約表示専用の内部 helper です。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn check_status_str <(Result<(),str>)->str> (r):
+    match r:
+        Result::Ok v:
+            "ok"
+        Result::Err e:
+            "err"
+
+//: checks_has_err_loop: `Err` を含むかを順に調べる内部 helper
+//:
+//: [目的/もくてき]:
+//: - 集約済み検査列に失敗があるかを線形走査で判定します。
+//:
+//: [実装/じっそう]:
+//: - `vec_get` で各要素を取り出し、最初の `Err` が見つかった時点で true を返します。
+//:
+//: [注意/ちゅうい]:
+//: - 内部 helper です。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（再帰）
+fn checks_has_err_loop <(Vec<Result<(),str>>,i32,i32)->bool> (checks, n, i):
+    if:
+        eq i n
+        then:
+            false
+        else:
+            match vec_get<Result<(),str>> checks i:
+                Option::Some r:
+                    match r:
+                        Result::Ok v:
+                            checks_has_err_loop checks n add i 1
+                        Result::Err e:
+                            true
+                Option::None:
+                    false
+
+//: checks_has_err: 集約済み検査列に `Err` が含まれるか判定する
+//:
+//: [目的/もくてき]:
+//: - 最終失敗判定の前に、少なくとも 1 件の失敗があるかを調べます。
+//:
+//: [実装/じっそう]:
+//: - `checks_has_err_loop` で先頭から順に調べます。
+//:
+//: [注意/ちゅうい]:
+//: - 失敗の詳細は返しません。詳細表示には `finish_checks` を使ってください。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（再帰）
+fn checks_has_err <(Vec<Result<(),str>>)->bool> (checks):
+    checks_has_err_loop checks vec_len<Result<(),str>> checks 0
+
+//: checks_summary_loop: `[ok,err,...]` 形式の要約を作る内部 helper
+//:
+//: [目的/もくてき]:
+//: - 集約済み検査列を短い進捗表示文字列へ変換します。
+//:
+//: [実装/じっそう]:
+//: - 先頭から順に `ok` / `err` を連結し、必要な区切りだけを追加します。
+//:
+//: [注意/ちゅうい]:
+//: - 失敗件数だけでなく並び順も見たい場面を想定した helper です。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n^2)（文字列連結を繰り返すため）
+//: - [空間/くうかん]: O(n)
+fn checks_summary_loop <(Vec<Result<(),str>>,i32,i32,str)->str> (checks, n, i, acc):
+    if:
+        eq i n
+        then:
+            concat acc "]"
+        else:
+            let sep <str> if eq i 0 "" ",";
+            match vec_get<Result<(),str>> checks i:
+                Option::Some r:
+                    let a0 <str> concat acc sep;
+                    let a1 <str> concat a0 check_status_str r;
+                    checks_summary_loop checks n add i 1 a1
+                Option::None:
+                    checks_summary_loop checks n add i 1 acc
+
+//: checks_summary: 集約済み検査列を `[ok,err,...]` 形式へ整形する
+//:
+//: [目的/もくてき]:
+//: - 複数の検査結果を一目で把握できる短い要約文字列を返します。
+//:
+//: [実装/じっそう]:
+//: - `[` から始め、各要素の状態を `checks_summary_loop` で連結します。
+//:
+//: [注意/ちゅうい]:
+//: - これは概要専用です。どの検査が失敗したかは `finish_checks` の詳細出力を見てください。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n^2)（文字列連結を繰り返すため）
+//: - [空間/くうかん]: O(n)
+fn checks_summary <(Vec<Result<(),str>>)->str> (checks):
+    checks_summary_loop checks vec_len<Result<(),str>> checks 0 "["
+
+//: checks_print_failures_loop: 失敗詳細を順に表示する内部 helper
+//:
+//: [目的/もくてき]:
+//: - `Err` になった検査だけを抽出し、添字付きで表示します。
+//:
+//: [実装/じっそう]:
+//: - `Err` のときだけ `check[i] ...` の形に整形して `test_print_fail` に渡します。
+//:
+//: [注意/ちゅうい]:
+//: - 標準出力への表示は `#target std` のときだけ行います。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（再帰）
+#if[target=std]
+fn checks_print_failures_loop <(Vec<Result<(),str>>,i32,i32)*>()> (checks, n, i):
+    if:
+        eq i n
+        then:
+            ()
+        else:
+            match vec_get<Result<(),str>> checks i:
+                Option::Some r:
+                    match r:
+                        Result::Ok v:
+                            checks_print_failures_loop checks n add i 1
+                        Result::Err msg:
+                            let si <str> from_i32 i
+                            let m0 <str> concat "check[" si
+                            let m1 <str> concat m0 "] "
+                            let m2 <str> concat m1 msg
+                            test_print_fail m2
+                            checks_print_failures_loop checks n add i 1
+                Option::None:
+                    checks_print_failures_loop checks n add i 1
+
+//: checks_report_failures: 失敗時の概要と詳細をまとめて表示する
+//:
+//: [目的/もくてき]:
+//: - 集約済み検査の summary と失敗詳細を標準出力へ出します。
+//:
+//: [実装/じっそう]:
+//: - summary を 1 行表示し、その後 `Err` 要素だけを添字付きで列挙します。
+//:
+//: [注意/ちゅうい]:
+//: - `#target std` 専用です。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（再帰）
+#if[target=std]
+fn checks_report_failures <(Vec<Result<(),str>>,str)*>()> (checks, summary):
+    test_print_fail summary
+    checks_print_failures_loop checks vec_len<Result<(),str>> checks 0
+
+//: finish_checks: 複数検査をまとめて報告し、失敗があれば最後に落とす
+//:
+//: [目的/もくてき]:
+//: - `Vec<Result<(),str>>` として集約した検査を最後にまとめて評価します。
+//: - 途中の検査は継続しつつ、最後に要約と各失敗内容を表示して一括失敗できます。
+//:
+//: [実装/じっそう]:
+//: - まず `checks_summary` で `[ok,err,...]` 形式の要約を作ります。
+//: - 失敗が 1 件でもあれば summary と各 `Err` の詳細を表示して `trap` します。
+//: - 失敗がなければ summary を `Checked ...` として表示します。
+//:
+//: [注意/ちゅうい]:
+//: - 想定用途は `<Vec<Result<(),str>>> new |> push check_* ...` のような段階的収集です。
+//: - 失敗の添字は 0 始まりです。summary の `err` と同じ並びで対応します。
+//: - 標準出力への表示は `#target std` のときのみ行いますが、失敗時の最終 `trap` 自体はどの target でも行います。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n^2)（summary 文字列構築を含む）
+//: - [空間/くうかん]: O(n)
+//:
+//: [使い方/つかいかた]:
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "core/math" as *
+//: fn main <()*>()> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push check_eq_i32 3 add 1 2
+//:         |> checks_push check_str_eq "ok" "ok"
+//:         |> checks_push check_ok_i32 Result::Ok 7
+//:     finish_checks checks;
+//: ```
+fn finish_checks <(Vec<Result<(),str>>)*>()> (checks):
+    let summary <str> checks_summary checks
+    if:
+        checks_has_err checks
+        then:
+            #if[target=std]
+            checks_report_failures checks summary
+            trap
+        else:
+            #if[target=std]
+            test_checked summary
 
 //: assert: 条件が false のとき失敗する
 //:
@@ -264,32 +663,27 @@ fn trap <()*>()> ():
 //: 注意(重要):
 //: - ok は bool である必要があります。
 //:
-//: 計算量:
-//: - O(1)
-//: assert: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 //:
-//: [目的/もくてき]:
-//: - `assert` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
 //:     assert true;
+//:     assert eq 3 add 1 2;
 //: ```
 fn noshadow assert <(bool)*>()> (ok):
-    if:
-        ok
-        then ()
-        else:
-            test_fail "assert failed";
+    match check ok:
+        Result::Ok v:
+            ()
+        Result::Err msg:
+            test_fail msg
 
 //: assert_eq_i32: i32 の等値を検証する
 //:
@@ -302,37 +696,28 @@ fn noshadow assert <(bool)*>()> (ok):
 //: 注意(重要):
 //: - i32 専用です。
 //:
-//: 計算量:
-//: - O(1)
-//: assert_eq_i32: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 //:
-//: [目的/もくてき]:
-//: - `assert_eq_i32` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
+//:| #import "core/math" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 0 0;
+//:     assert_eq_i32 6 add 1 5;
+//:     assert_eq_i32 3 sub 10 7;
 //: ```
 fn noshadow assert_eq_i32 <(i32,i32)*>()> (expected, actual):
-    if:
-        eq expected actual
-        then ()
-        else:
-            let se <str> from_i32 expected;
-            let sa <str> from_i32 actual;
-            let m0 <str> concat "assert_eq_i32 failed: expected=" se;
-            let m1 <str> concat m0 " actual=";
-            let m2 <str> concat m1 sa;
-            test_fail m2;
+    match check_eq_i32 expected actual:
+        Result::Ok v:
+            ()
+        Result::Err msg:
+            test_fail msg
 
 //: assert_ne: bool が等しくないことを検証する
 //:
@@ -345,51 +730,27 @@ fn noshadow assert_eq_i32 <(i32,i32)*>()> (expected, actual):
 //: 注意(重要):
 //: - bool 専用です。
 //:
-//: 計算量:
-//: - O(1)
-//: assert_ne: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 //:
-//: [目的/もくてき]:
-//: - `assert_ne` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
 //: fn main <()*>()> ():
-//:     assert_ne true true;
+//:     assert_ne true false;
+//:     assert_ne false true;
 //: ```
 fn noshadow assert_ne <(bool,bool)*>()> (a, b):
-    if:
-        a
-        then:
-            if:
-                b
-                then:
-                    let sa <str> from_bool a;
-                    let sb <str> from_bool b;
-                    let m0 <str> concat "assert_ne failed: a=" sa;
-                    let m1 <str> concat m0 " b=";
-                    let m2 <str> concat m1 sb;
-                    test_fail m2;
-                else ()
-        else:
-            if:
-                b
-                then ()
-                else:
-                    let sa <str> from_bool a;
-                    let sb <str> from_bool b;
-                    let m0 <str> concat "assert_ne failed: a=" sa;
-                    let m1 <str> concat m0 " b=";
-                    let m2 <str> concat m1 sb;
-                    test_fail m2;
+    match check_ne a b:
+        Result::Ok v:
+            ()
+        Result::Err msg:
+            test_fail msg
 
 //: assert_str_eq: 文字列が等しいことを検証する
 //:
@@ -402,36 +763,28 @@ fn noshadow assert_ne <(bool,bool)*>()> (a, b):
 //: 注意(重要):
 //: - UTF-8 のバイト列として比較します。
 //:
-//: 計算量:
-//: - O(n)
-//: assert_str_eq: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)
 //:
-//: [目的/もくてき]:
-//: - `assert_str_eq` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
+//:| #import "alloc/string" as *
 //: fn main <()*>()> ():
-//:     assert_str_eq "sample" "sample";
+//:     assert_str_eq "prefix-suffix" concat "prefix-" "suffix";
+//:     assert_str_eq "true" from_bool true;
 //: ```
 fn noshadow assert_str_eq <(str,str)*>()> (expected, actual):
-    if:
-        test_str_eq expected actual
-        then ()
-        else:
-            let m0 <str> concat "assert_str_eq failed: expected=\"" expected;
-            let m1 <str> concat m0 "\" actual=\"";
-            let m2 <str> concat m1 actual;
-            let m3 <str> concat m2 "\"";
-            test_fail m3;
+    match check_str_eq expected actual:
+        Result::Ok v:
+            ()
+        Result::Err msg:
+            test_fail msg
 
 //: assert_ok_i32: Result が Ok であることを検証する
 //:
@@ -444,34 +797,27 @@ fn noshadow assert_str_eq <(str,str)*>()> (expected, actual):
 //: 注意(重要):
 //: - Result<i32,i32> 専用です。
 //:
-//: 計算量:
-//: - O(1)
-//: assert_ok_i32: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 //:
-//: [目的/もくてき]:
-//: - `assert_ok_i32` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
+//:| #import "core/result" as *
 //: fn main <()*>()> ():
-//:     assert_ok_i32 () ();
+//:     assert_ok_i32 Result<i32,i32>::Ok 42;
 //: ```
 fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
-    match r:
+    match check_ok_i32 r:
         Result::Ok v:
             ()
-        Result::Err e:
-            let se <str> from_i32 e;
-            let m0 <str> concat "assert_ok_i32 failed: Err=" se;
-            test_fail m0;
+        Result::Err msg:
+            test_fail msg
 
 //: assert_err_i32: Result が Err であることを検証する
 //:
@@ -484,31 +830,24 @@ fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
 //: 注意(重要):
 //: - Result<i32,i32> 専用です。
 //:
-//: 計算量:
-//: - O(1)
-//: assert_err_i32: 使い方の最小例
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
 //:
-//: [目的/もくてき]:
-//: - `assert_err_i32` の典型的な使い方を最小構成で示します。
-//: - 値を返す関数は結果の受け取り方も合わせて確認できます。
+//: [使い方/つかいかた]:
 //:
-//: [注意/ちゅうい]:
-//: - 例は用途が伝わる最短の呼び出しに絞っています。
-//: - 境界条件や詳細な正当性検証は専用テストで扱います。
-//:
-//: neplg2:test[skip]
+//: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
+//:| #import "core/result" as *
 //: fn main <()*>()> ():
-//:     assert_err_i32 () ();
+//:     assert_err_i32 Result<i32,i32>::Err 7;
 //: ```
 fn noshadow assert_err_i32 <(Result<i32,i32>)*>()> (r):
-    match r:
+    match check_err_i32 r:
         Result::Ok v:
-            let sv <str> from_i32 v;
-            let m0 <str> concat "assert_err_i32 failed: Ok=" sv;
-            test_fail m0;
-        Result::Err e:
             ()
+        Result::Err msg:
+            test_fail msg

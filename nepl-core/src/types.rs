@@ -156,6 +156,106 @@ impl TypeCtx {
         id
     }
 
+    pub fn snapshot_type_var_bindings(
+        &self,
+        ty: TypeId,
+    ) -> alloc::collections::BTreeMap<TypeId, Option<TypeId>> {
+        let mut out = alloc::collections::BTreeMap::new();
+        let mut seen = BTreeSet::new();
+        self.collect_type_var_bindings(ty, &mut seen, &mut out);
+        out
+    }
+
+    pub fn restore_type_var_bindings(
+        &mut self,
+        snapshot: &alloc::collections::BTreeMap<TypeId, Option<TypeId>>,
+    ) {
+        for (var, binding) in snapshot {
+            if let TypeKind::Var(tv) = &mut self.arena[var.0] {
+                tv.binding = *binding;
+            }
+        }
+    }
+
+    fn collect_type_var_bindings(
+        &self,
+        ty: TypeId,
+        seen: &mut BTreeSet<TypeId>,
+        out: &mut alloc::collections::BTreeMap<TypeId, Option<TypeId>>,
+    ) {
+        if !seen.insert(ty) {
+            return;
+        }
+        match &self.arena[ty.0] {
+            TypeKind::Unit
+            | TypeKind::I32
+            | TypeKind::U8
+            | TypeKind::F32
+            | TypeKind::Bool
+            | TypeKind::Str
+            | TypeKind::Never
+            | TypeKind::Named(_) => {}
+            TypeKind::Var(tv) => {
+                out.insert(ty, tv.binding);
+                if let Some(binding) = tv.binding {
+                    self.collect_type_var_bindings(binding, seen, out);
+                }
+            }
+            TypeKind::Enum {
+                type_params,
+                variants,
+                ..
+            } => {
+                for tp in type_params {
+                    self.collect_type_var_bindings(*tp, seen, out);
+                }
+                for variant in variants {
+                    if let Some(payload) = variant.payload {
+                        self.collect_type_var_bindings(payload, seen, out);
+                    }
+                }
+            }
+            TypeKind::Struct {
+                type_params, fields, ..
+            } => {
+                for tp in type_params {
+                    self.collect_type_var_bindings(*tp, seen, out);
+                }
+                for field in fields {
+                    self.collect_type_var_bindings(*field, seen, out);
+                }
+            }
+            TypeKind::Function {
+                type_params,
+                params,
+                result,
+                ..
+            } => {
+                for tp in type_params {
+                    self.collect_type_var_bindings(*tp, seen, out);
+                }
+                for param in params {
+                    self.collect_type_var_bindings(*param, seen, out);
+                }
+                self.collect_type_var_bindings(*result, seen, out);
+            }
+            TypeKind::Tuple { items } => {
+                for item in items {
+                    self.collect_type_var_bindings(*item, seen, out);
+                }
+            }
+            TypeKind::Apply { base, args } => {
+                self.collect_type_var_bindings(*base, seen, out);
+                for arg in args {
+                    self.collect_type_var_bindings(*arg, seen, out);
+                }
+            }
+            TypeKind::Box(inner) | TypeKind::Reference(inner, _) => {
+                self.collect_type_var_bindings(*inner, seen, out);
+            }
+        }
+    }
+
     pub fn register_named(&mut self, name: alloc::string::String, kind: TypeKind) -> TypeId {
         if let Some(existing) = self.named.get(&name) {
             // upgrade placeholder Named to concrete kind
@@ -262,21 +362,27 @@ impl TypeCtx {
         if self.copy_trait_enabled {
             return self.is_copy_with_trait_model(id);
         }
-        self.is_copy_eligible(id)
+        let resolved = self.resolve_id(id);
+        match self.get_ref(resolved) {
+            TypeKind::Never => true,
+            TypeKind::Reference(_, _) => true,
+            TypeKind::Var(v) => v.binding.map(|b| self.is_copy(b)).unwrap_or(false),
+            _ => false,
+        }
     }
 
     fn is_copy_with_trait_model(&self, id: TypeId) -> bool {
         let resolved = self.resolve_id(id);
         match self.get_ref(resolved) {
+            TypeKind::Never => true,
+            TypeKind::Reference(_, _) => true,
             TypeKind::Unit
             | TypeKind::I32
             | TypeKind::U8
             | TypeKind::F32
             | TypeKind::Bool
             | TypeKind::Str
-            | TypeKind::Never => true,
-            TypeKind::Reference(_, _) => true,
-            TypeKind::Named(_) => self.has_copy_impl_target(resolved),
+            | TypeKind::Named(_) => self.has_copy_impl_target(resolved),
             TypeKind::Tuple { items } => items.iter().all(|t| self.is_copy(*t)),
             TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_copy_impl_target(resolved),
             TypeKind::Apply { base, .. } => match self.get_ref(self.resolve_id(*base)) {
@@ -957,10 +1063,8 @@ impl TypeCtx {
     ) -> TypeId {
         let ty = self.resolve_id(ty);
         if let Some(target) = mapping.get(&ty) {
-            // std::eprintln!("substitute: found {:?} -> {:?}", ty, target);
             return *target;
         }
-        // std::eprintln!("substitute: NOT found {:?} in {:?}", ty, mapping.keys().collect::<Vec<_>>());
         if !seen.insert(ty) {
             return ty;
         }
@@ -1136,7 +1240,14 @@ impl TypeCtx {
         }
     }
 
-    pub fn instantiate(&mut self, ty: TypeId) -> (TypeId, Vec<TypeId>) {
+    pub fn instantiate(
+        &mut self,
+        ty: TypeId,
+    ) -> (
+        TypeId,
+        Vec<TypeId>,
+        alloc::collections::BTreeMap<TypeId, TypeId>,
+    ) {
         let ty = self.resolve_id(ty);
         if let TypeKind::Function {
             type_params,
@@ -1146,7 +1257,7 @@ impl TypeCtx {
         } = self.get(ty)
         {
             if type_params.is_empty() {
-                return (ty, Vec::new());
+                return (ty, Vec::new(), alloc::collections::BTreeMap::new());
             }
             let mut mapping = alloc::collections::BTreeMap::new();
             let mut fresh_args = Vec::new();
@@ -1163,9 +1274,10 @@ impl TypeCtx {
             (
                 self.function(Vec::new(), new_params, new_result, effect),
                 fresh_args,
+                mapping,
             )
         } else {
-            (ty, Vec::new())
+            (ty, Vec::new(), alloc::collections::BTreeMap::new())
         }
     }
 

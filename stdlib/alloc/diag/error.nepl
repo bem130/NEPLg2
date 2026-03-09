@@ -1,745 +1,557 @@
-//: error: alloc/diag/error.nepl に関する機能を提供するライブラリ
+//: error: [診断/しんだん]の[値/あたい]モデルをまとめるライブラリ
 //:
 //: [目的/もくてき]:
-//: - このモジュールの公開 API を提供します。
-//: - 実装の変更時に最小限の doctest 実行経路を維持します。
+//: - stdlib [全体/ぜんたい]で[共通/きょうつう]に[使/つか]う `Diag` / `Diags` / `Outcome` / `StdErrorKind` を[定義/ていぎ]します。
+//: - `Result<T, E>` の[軽量/けいりょう]な[失敗/しっぱい][制御/せいぎょ]と、`Diag` による[構造化/こうぞうか][診断/しんだん]を[分離/ぶんり]します。
+//:
+//: [実装/じっそう]:
+//: - `Diag` は `kind/message/span/notes/help/source` を[持/も]つ struct です。
+//: - `Diags` は `Vec<Diag>` を[包/つつ]む struct とし、[順序/じゅんじょ][付/づ]きで[複数/ふくすう]の[診断/しんだん]を[保持/ほじ]します。
+//: - `Outcome<T, E>` は `result` と `diags` を[持/も]ち、[値/あたい]の[成否/せいひ]と[診断/しんだん]を[別軸/べつじく]で[運/はこ]びます。
 //:
 //: [注意/ちゅうい]:
-//: - 利用時は各関数の「目的」「注意」「計算量」を確認してください。
+//: - ここは[表示/ひょうじ]のためのライブラリではなく、[診断/しんだん][値/あたい]の[定義/ていぎ]を[担/にな]います。
+//: - `Result<T, Diag>` は[通常/つうじょう]のライブラリ API で、`Outcome<T, E>` は compiler や JSON/HTML [処理/しょり]のような richer な[処理/しょり]で[使/つか]うことを[想定/そうてい]します。
+//: - `StdErrorKind` は[軽量/けいりょう]な[失敗/しっぱい][分類/ぶんるい]であり、`Diag.kind` が[持/も]つ[詳細/しょうさい][情報/じょうほう]を[置/お]き[換/か]えるものではありません。
 //:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//: ()
-//: ```
+//: [計算量/けいさんりょう]:
+//: - `Diag` / `DiagKind` / `Span` / `Outcome` の[構築/こうちく]は O(1) です。
+//: - `Diags` の push はならし O(1)、[最悪/さいあく] O(n)（[再確保/さいかくほ]を[含/ふく]む）です。
 
 #indent 4
 
-#import "core/mem" as *
 #import "core/math" as *
 #import "core/option" as *
 #import "core/result" as *
 #import "alloc/string" as *
+#import "alloc/collections/vec" as *
 
-//: error: エラー型と簡易コンテキスト付与
-//:
-//: 目的:
-//: - ErrorKind/Span/Error を定義し、Result と合わせて失敗情報を扱います。
-//:
-//: 実装(アルゴリズム):
-//: - Error は kind/msg/span を持つレコードを指します。
-//: - context は新しい Error を作り、元の Error を捨てます（循環を避ける）。
-//:
-//: 注意(重要):
-//: - callsite_span は intrinsic を使用します（環境依存）。
-//:
-//: 計算量:
-//: - すべて O(1)
-
-//: ErrorKind: エラー種別
-//:
-//: 目的:
-//: - 代表的な失敗理由を列挙します。
-//:
-//: 実装(アルゴリズム):
-//: - enum で表現します。
-//:
-//: 注意(重要):
-//: - 追加時は diag 側の文字列化も更新が必要です。
-//:
-//: 計算量:
-//: - O(1)
-//: ErrorKind: 列挙型の概要
+//: DiagLevel: [診断/しんだん]の[大分類/だいぶんるい]
 //:
 //: [目的/もくてき]:
-//: - ErrorKind の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
+//: - `log/info/warn/error` の 4 [段階/だんかい]で[報告/ほうこく]の[重/おも]さを[表/あらわ]します。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - これは `Result` の `Ok/Err` とは[別軸/べつじく]です。
 //:
 //: [計算量/けいさんりょう]:
-//: - 定義そのものは O(1) です。
-enum ErrorKind:
+//: - O(1)
+enum DiagLevel:
+    Log
+    Info
+    Warn
+    Error
+
+//: StdErrorKind: stdlib [全体/ぜんたい]で[共有/きょうゆう]する[軽量/けいりょう]な[失敗/しっぱい][分類/ぶんるい]
+//:
+//: [目的/もくてき]:
+//: - `Result<T, E>` の `E` として[使/つか]う[標準/ひょうじゅん]の error kind を[定義/ていぎ]します。
+//: - stdlib [横断/おうだん]で[大/おお]まかな[失敗/しっぱい][要因/よういん]を[揃/そろ]えて[扱/あつか]えるようにします。
+//:
+//: [注意/ちゅうい]:
+//: - [詳細/しょうさい]な[背景/はいけい]や[位置/いち]は `Diag` [側/がわ]で[補/おぎな]います。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(1)
+enum StdErrorKind:
     Failure
-    OutOfMemory
-    IndexOutOfBounds
-    KeyNotFound
-    InvalidUtf8
-    ParseError
-    IoError
-    Other
-
-//: Span: 位置情報
-//:
-//: 目的:
-//: - エラー位置のファイルID/開始/終了を保持します。
-//:
-//: 実装(アルゴリズム):
-//: - 3 つの i32 を持つ構造体です。
-//:
-//: 注意(重要):
-//: - file_id の意味は呼び出し側で定義します。
-//:
-//: 計算量:
-//: - O(1)
-//: Span: 構造体の概要
-//:
-//: [目的/もくてき]:
-//: - Span の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 定義そのものは O(1) です。
-struct Span:
-    file_id <i32>
-    start <i32>
-    end <i32>
-
-//: Error: エラー本体
-//:
-//: 目的:
-//: - kind/msg/span をまとめて保持します。
-//:
-//: 実装(アルゴリズム):
-//: - ヒープ上のレコードを指すポインタを保持します。
-//: - レコードは [kind][msg][has_span][file][start][end] の 6 i32 です。
-//:
-//: 注意(重要):
-//: - source を保持する設計は未実装です。
-//:
-//: 計算量:
-//: - O(1)
-//: Error: 構造体の概要
-//:
-//: [目的/もくてき]:
-//: - Error の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 定義そのものは O(1) です。
-struct Error:
-    ptr <i32>
-
-//: DiagCode: collections などで使う失敗コード
-//:
-//: 目的:
-//: - ライブラリ操作失敗を機械可読なコードで表します。
-//:
-//: 実装(アルゴリズム):
-//: - enum で種別を定義します。
-//:
-//: 注意(重要):
-//: - 追加時は `diag_code_str` とテストを更新してください。
-enum DiagCode:
     OutOfMemory
     EmptyCollection
     IndexOutOfBounds
     KeyNotFound
     CapacityExceeded
     InvalidOperation
+    InvalidUtf8
+    ParseError
+    IoError
+    Other
 
-//: Diag: 軽量な失敗情報
+//: Span: [診断/しんだん][位置/いち]
 //:
-//: 目的:
-//: - code と message をまとめて返す共通型です。
+//: [目的/もくてき]:
+//: - file/start/end の 3 [要素/ようそ]で[位置/いち][情報/じょうほう]を[保持/ほじ]します。
 //:
-//: 実装(アルゴリズム):
-//: - `DiagCode` と `str` の 2 フィールド構造体です。
+//: [注意/ちゅうい]:
+//: - `file_id` の[意味/いみ]づけは[呼/よ]び[出/だ]し[側/がわ]が[定義/ていぎ]します。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(1)
+struct Span:
+    file_id <i32>
+    start <i32>
+    end <i32>
+
+//: DiagKind: [診断/しんだん]の[分類/ぶんるい]
+//:
+//: [目的/もくてき]:
+//: - [共通/きょうつう]の[重大度/じゅうだいど]と stdlib [共通/きょうつう]の error kind、さらに[任意/にんい]の local kind を[束/たば]ねます。
+//:
+//: [注意/ちゅうい]:
+//: - `std_error` と `local_kind` はどちらか[片方/かたほう]だけでも[構/かま]いません。
+//: - [階層/かいそう][識別子/しきべつし]の[言語/げんご][機能/きのう]が[入/はい]るまでは、`local_kind` は `str` として[扱/あつか]います。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(1)
+struct DiagKind:
+    level <DiagLevel>
+    std_error <Option<StdErrorKind>>
+    local_kind <Option<str>>
+
+//: Diag: [単一/たんいつ]の[診断/しんだん]
+//:
+//: [目的/もくてき]:
+//: - [診断/しんだん] 1 [件/けん]ぶんの[分類/ぶんるい]・[本文/ほんぶん]・[補足/ほそく][情報/じょうほう]をまとめます。
+//:
+//: [実装/じっそう]:
+//: - `notes` と `help` は `Vec<str>` で[保持/ほじ]します。
+//: - `source` は[由来/ゆらい]の[記述/きじゅつ]を[指/さ]す[任意/にんい]の[文字列/もじれつ]です。
+//:
+//: [注意/ちゅうい]:
+//: - `Diag` は[表示/ひょうじ]そのものではなく、[構造化/こうぞうか]された[診断/しんだん][値/あたい]です。
+//:
+//: [計算量/けいさんりょう]:
+//: - [構築/こうちく]は O(1) です。
 struct Diag:
-    code <DiagCode>
+    kind <DiagKind>
     message <str>
+    span <Option<Span>>
+    notes <Vec<str>>
+    help <Vec<str>>
+    source <Option<str>>
 
-//: diag_new: Diag を構築する
+//: Diags: [複数/ふくすう]の[診断/しんだん]を[順序/じゅんじょ][付/づ]きで[保持/ほじ]する struct
 //:
-//: 目的:
-//: - code と message から `Diag` を作ります。
+//: [目的/もくてき]:
+//: - `Diag` の[列/れつ]を[単/たん]なる `Vec<Diag>` として[露出/ろしゅつ]せず、[診断群/しんだんぐん]として[扱/あつか]います。
 //:
-//: 計算量:
-//: - O(1)
-fn diag_new <(DiagCode,str)->Diag> (code, message):
-    Diag code message
+//: [実装/じっそう]:
+//: - `items` に `Vec<Diag>` を[保持/ほじ]します。
+//:
+//: [計算量/けいさんりょう]:
+//: - [構築/こうちく]は O(1) です。
+struct Diags:
+    items <Vec<Diag>>
 
-//: diag_code_str: DiagCode を文字列化する
+//: Outcome: `Result` と `Diags` を[同時/どうじ]に[運/はこ]ぶ struct
 //:
-//: 目的:
-//: - ログ/テスト比較用にコード名を返します。
+//: [目的/もくてき]:
+//: - compiler や source code を[伴/ともな]う richer な[処理/しょり]で、[値/あたい]の[成否/せいひ]と[診断/しんだん]を[一緒/いっしょ]に[返/かえ]します。
 //:
-//: 計算量:
-//: - O(1)
-fn diag_code_str <(DiagCode)->str> (code):
-    match code:
-        DiagCode::OutOfMemory:
-            "OutOfMemory"
-        DiagCode::EmptyCollection:
-            "EmptyCollection"
-        DiagCode::IndexOutOfBounds:
-            "IndexOutOfBounds"
-        DiagCode::KeyNotFound:
-            "KeyNotFound"
-        DiagCode::CapacityExceeded:
-            "CapacityExceeded"
-        DiagCode::InvalidOperation:
-            "InvalidOperation"
+//: [注意/ちゅうい]:
+//: - [通常/つうじょう]の stdlib API では `Result` で[十分/じゅうぶん]なことが多く、`Outcome` は[限定的/げんていてき]に[使/つか]います。
+//: - `diags` は `Option<Diags>` とし、[必要/ひつよう]なときだけ[持/も]たせます。
+//:
+//: [計算量/けいさんりょう]:
+//: - [構築/こうちく]は O(1) です。
+struct Outcome<.T, .E>:
+    result <Result<.T, .E>>
+    diags <Option<Diags>>
 
-//: diag_to_string: Diag を人間向け文字列にする
-//:
-//: 目的:
-//: - `Diag` の message を人間向け表示文字列として返します。
-//:
-//: 計算量:
-//: - O(n)
-fn diag_to_string <(Diag)->str> (d):
-    d.message
+//: diag_kind_new: `DiagKind` を[構築/こうちく]する
+fn diag_kind_new <(DiagLevel,Option<StdErrorKind>,Option<str>)->DiagKind> (level, std_error, local_kind):
+    DiagKind level std_error local_kind
 
-//: diag_err: Diag を Result::Err に包む
-//:
-//: 目的:
-//: - `Result<.T, Diag>` を返す関数で共通利用します。
-//:
-//: 計算量:
-//: - O(1)
+//: std_error_kind: `StdErrorKind` を[持/も]つ error [診断/しんだん][分類/ぶんるい]を[作/つく]る
+fn std_error_diag_kind <(StdErrorKind)->DiagKind> (kind):
+    diag_kind_new DiagLevel::Error some<StdErrorKind> kind none<str>
+
+//: log_kind: local kind [付/つ]きの log [分類/ぶんるい]を[作/つく]る
+fn log_diag_kind <(str)->DiagKind> (local_kind):
+    diag_kind_new DiagLevel::Log none<StdErrorKind> some<str> local_kind
+
+//: info_kind: local kind [付/つ]きの info [分類/ぶんるい]を[作/つく]る
+fn info_diag_kind <(str)->DiagKind> (local_kind):
+    diag_kind_new DiagLevel::Info none<StdErrorKind> some<str> local_kind
+
+//: warn_kind: local kind [付/つ]きの warn [分類/ぶんるい]を[作/つく]る
+fn warn_diag_kind <(str)->DiagKind> (local_kind):
+    diag_kind_new DiagLevel::Warn none<StdErrorKind> some<str> local_kind
+
+//: diag_new: [診断/しんだん] 1 [件/けん]を[構築/こうちく]する
+fn diag_new <(DiagKind,str)*>Diag> (kind, message):
+    let notes <Vec<str>> vec_new<str>;
+    let help <Vec<str>> vec_new<str>;
+    Diag kind message none<Span> notes help none<str>
+
+//: diag_log: log [診断/しんだん]を[作/つく]る
+fn diag_log <(str)*>Diag> (message):
+    let kind <DiagKind> log_diag_kind "log";
+    diag_new kind message
+
+//: diag_info: info [診断/しんだん]を[作/つく]る
+fn diag_info <(str)*>Diag> (message):
+    let kind <DiagKind> info_diag_kind "info";
+    diag_new kind message
+
+//: diag_warn: warn [診断/しんだん]を[作/つく]る
+fn diag_warn <(str)*>Diag> (message):
+    let kind <DiagKind> warn_diag_kind "warn";
+    diag_new kind message
+
+//: diag_error: `StdErrorKind` [付/つ]き error [診断/しんだん]を[作/つく]る
+fn diag_error <(StdErrorKind,str)*>Diag> (kind, message):
+    let dk <DiagKind> std_error_diag_kind kind;
+    diag_new dk message
+
+//: diag_with_span: [位置/いち][情報/じょうほう]を[付与/ふよ]する
+fn diag_with_span <(Diag,Span)->Diag> (d, sp):
+    Diag get d "kind" get d "message" some<Span> sp get d "notes" get d "help" get d "source"
+
+//: diag_with_source: [由来/ゆらい][情報/じょうほう]を[付与/ふよ]する
+fn diag_with_source <(Diag,str)->Diag> (d, src):
+    Diag get d "kind" get d "message" get d "span" get d "notes" get d "help" some<str> src
+
+//: diag_add_note: note を 1 [件/けん][追加/ついか]する
+fn diag_add_note <(Diag,str)*>Diag> (d, note):
+    let notes1 <Vec<str>> vec_push<str> get d "notes" note
+    Diag get d "kind" get d "message" get d "span" notes1 get d "help" get d "source"
+
+//: diag_add_help: help を 1 [件/けん][追加/ついか]する
+fn diag_add_help <(Diag,str)*>Diag> (d, help_item):
+    let help1 <Vec<str>> vec_push<str> get d "help" help_item
+    Diag get d "kind" get d "message" get d "span" get d "notes" help1 get d "source"
+
+//: diag_level: [重大度/じゅうだいど]を[取/と]り[出/だ]す
+fn diag_level <(Diag)->DiagLevel> (d):
+    get get d "kind" "level"
+
+//: diag_std_error_kind: `StdErrorKind` を[取/と]り[出/だ]す
+fn diag_std_error_kind <(Diag)->Option<StdErrorKind>> (d):
+    get get d "kind" "std_error"
+
+//: diag_std_error_kind_str: `StdErrorKind` の[文字列/もじれつ][名/めい]を[取/と]り[出/だ]す
+fn diag_std_error_kind_str <(Diag)->str> (d):
+    match diag_std_error_kind d:
+        Option::Some k:
+            std_error_kind_str k
+        Option::None:
+            "None"
+
+//: diag_err: `Diag` を `Result::Err` に[包/つつ]む
 fn diag_err <.T> <(Diag)->Result<.T, Diag>> (d):
     err<.T, Diag> d
 
-//: diag_out_of_memory: メモリ不足診断を作る
-//:
-//: 目的:
-//: - op 名を含む OutOfMemory 診断を返します。
-//:
-//: 計算量:
-//: - O(n)
-fn diag_out_of_memory <(str)->Diag> (op):
-    let p0 <str> concat op ": "
-    let p1 <str> concat p0 "allocation failed"
-    diag_new DiagCode::OutOfMemory p1
+//: diag_out_of_memory: [確保/かくほ][失敗/しっぱい]を[表/あらわ]す error [診断/しんだん]を[作/つく]る
+fn diag_out_of_memory <(str)*>Diag> (op):
+    let msg <str> concat op ": allocation failed";
+    diag_error StdErrorKind::OutOfMemory msg
 
-//: diag_empty_collection: 空コレクション診断を作る
-//:
-//: 目的:
-//: - 空状態での不正操作を表す診断を返します。
-//:
-//: 計算量:
-//: - O(n)
-fn diag_empty_collection <(str)->Diag> (op):
-    let p0 <str> concat op ": "
-    let p1 <str> concat p0 "collection is empty"
-    diag_new DiagCode::EmptyCollection p1
+//: diag_empty_collection: [空/から]コレクション[操作/そうさ]の error [診断/しんだん]を[作/つく]る
+fn diag_empty_collection <(str)*>Diag> (op):
+    let msg <str> concat op ": collection is empty";
+    diag_error StdErrorKind::EmptyCollection msg
 
-//: diag_capacity_exceeded: 容量超過診断を作る
-//:
-//: 目的:
-//: - 固定容量構造での挿入失敗を表す診断を返します。
-//:
-//: 計算量:
-//: - O(n)
-fn diag_capacity_exceeded <(str)->Diag> (op):
-    let p0 <str> concat op ": "
-    let p1 <str> concat p0 "capacity exceeded"
-    diag_new DiagCode::CapacityExceeded p1
+//: diag_capacity_exceeded: [容量/ようりょう][超過/ちょうか]の error [診断/しんだん]を[作/つく]る
+fn diag_capacity_exceeded <(str)*>Diag> (op):
+    let msg <str> concat op ": capacity exceeded";
+    diag_error StdErrorKind::CapacityExceeded msg
 
-//: diag_key_not_found: キー未検出診断を作る
-//:
-//: 目的:
-//: - remove/get 系でキーが無い場合の診断を返します。
-//:
-//: 計算量:
-//: - O(n)
-fn diag_key_not_found <(str)->Diag> (op):
-    let p0 <str> concat op ": "
-    let p1 <str> concat p0 "key not found"
-    diag_new DiagCode::KeyNotFound p1
+//: diag_key_not_found: [欠落/けつらく] key の error [診断/しんだん]を[作/つく]る
+fn diag_key_not_found <(str)*>Diag> (op):
+    let msg <str> concat op ": key not found";
+    diag_error StdErrorKind::KeyNotFound msg
 
-//: diag_code_to_error_kind: DiagCode を ErrorKind へ変換する
-//:
-//: 目的:
-//: - `Result<_, Diag>` を `Result<_, Error>` と統合して扱うときの対応表を提供します。
-//:
-//: 実装(アルゴリズム):
-//: - 種別ごとに最も近い `ErrorKind` を返します。
-//:
-//: 注意(重要):
-//: - `DiagCode::InvalidOperation` は汎用的に `ErrorKind::Failure` へ写像します。
-//:
-//: 計算量:
-//: - O(1)
-fn diag_code_to_error_kind <(DiagCode)->ErrorKind> (code):
-    match code:
-        DiagCode::OutOfMemory:
-            ErrorKind::OutOfMemory
-        DiagCode::EmptyCollection:
-            ErrorKind::Failure
-        DiagCode::IndexOutOfBounds:
-            ErrorKind::IndexOutOfBounds
-        DiagCode::KeyNotFound:
-            ErrorKind::KeyNotFound
-        DiagCode::CapacityExceeded:
-            ErrorKind::Failure
-        DiagCode::InvalidOperation:
-            ErrorKind::Failure
+//: diags_new: [空/から]の `Diags` を[作/つく]る
+fn diags_new <()*>Diags> ():
+    let items <Vec<Diag>> vec_new<Diag>;
+    Diags items
 
-//: error_kind_to_diag_code: ErrorKind を DiagCode へ変換する
-//:
-//: 目的:
-//: - `Error` から軽量な `Diag` を生成するときの対応表を提供します。
-//:
-//: 実装(アルゴリズム):
-//: - 近い意味の `DiagCode` へ写像します。
-//:
-//: 注意(重要):
-//: - `InvalidUtf8` / `ParseError` / `IoError` / `Other` は `InvalidOperation` にまとめます。
-//:
-//: 計算量:
-//: - O(1)
-fn error_kind_to_diag_code <(ErrorKind)->DiagCode> (kind):
-    match kind:
-        ErrorKind::Failure:
-            DiagCode::InvalidOperation
-        ErrorKind::OutOfMemory:
-            DiagCode::OutOfMemory
-        ErrorKind::IndexOutOfBounds:
-            DiagCode::IndexOutOfBounds
-        ErrorKind::KeyNotFound:
-            DiagCode::KeyNotFound
-        ErrorKind::InvalidUtf8:
-            DiagCode::InvalidOperation
-        ErrorKind::ParseError:
-            DiagCode::InvalidOperation
-        ErrorKind::IoError:
-            DiagCode::InvalidOperation
-        ErrorKind::Other:
-            DiagCode::InvalidOperation
+//: diags_one: `Diag` 1 [件/けん]から `Diags` を[作/つく]る
+fn diags_one <(Diag)*>Diags> (d):
+    let items0 <Vec<Diag>> vec_new<Diag>;
+    let items1 <Vec<Diag>> vec_push<Diag> items0 d;
+    Diags items1
 
-//: kind_to_i32: ErrorKind を i32 に変換する
-//:
-//: 目的:
-//: - ErrorKind を保存用の数値に変換します。
-//:
-//: 実装(アルゴリズム):
-//: - match で各種別に番号を割り当てます。
-//:
-//: 注意(重要):
-//: - kind_from_i32 と対応する番号を保ちます。
-//:
-//: 計算量:
-//: - O(1)
-//: kind_to_i32: 主な用途
-//:
-//: [目的/もくてき]:
-//: - kind_to_i32 の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn kind_to_i32 <(ErrorKind)->i32> (k):
-    match k:
-        ErrorKind::Failure:
-            0
-        ErrorKind::OutOfMemory:
-            1
-        ErrorKind::IndexOutOfBounds:
-            2
-        ErrorKind::KeyNotFound:
-            3
-        ErrorKind::InvalidUtf8:
-            4
-        ErrorKind::ParseError:
-            5
-        ErrorKind::IoError:
-            6
-        ErrorKind::Other:
-            7
+//: diags_push: `Diags` に `Diag` を 1 [件/けん][追加/ついか]する
+fn diags_push <(Diags,Diag)*>Diags> (ds, d):
+    Diags vec_push<Diag> get ds "items" d
 
-//: kind_from_i32: i32 を ErrorKind に変換する
-//:
-//: 目的:
-//: - 保存用の数値から ErrorKind を復元します。
-//:
-//: 実装(アルゴリズム):
-//: - if を連ねて対応する種別を返します。
-//:
-//: 注意(重要):
-//: - 未知の値は Other とみなします。
-//:
-//: 計算量:
-//: - O(1)
-//: kind_from_i32: 主な用途
-//:
-//: [目的/もくてき]:
-//: - kind_from_i32 の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn kind_from_i32 <(i32)->ErrorKind> (v):
+//: diags_len: [診断/しんだん][件数/けんすう]を[返/かえ]す
+fn diags_len <(Diags)->i32> (ds):
+    vec_len<Diag> get ds "items"
+
+//: diags_has_errors: error level の[診断/しんだん]を 1 [件/けん]でも[含/ふく]むか[判定/はんてい]する
+fn diags_has_errors <(Diags)->bool> (ds):
+    let items <Vec<Diag>> get ds "items";
+    diags_has_errors_loop items 0
+
+fn diags_has_errors_loop <(Vec<Diag>,i32)->bool> (items, i):
+    let n <i32> vec_len<Diag> items;
     if:
-        cond:
-            eq v 0
-        then:
-            ErrorKind::Failure
+        ge i n
+        then false
         else:
-            if:
-                cond:
-                    eq v 1
-                then:
-                    ErrorKind::OutOfMemory
-                else:
-                    if:
-                        cond:
-                            eq v 2
-                        then:
-                            ErrorKind::IndexOutOfBounds
-                        else:
-                            if:
-                                cond:
-                                    eq v 3
-                                then:
-                                    ErrorKind::KeyNotFound
-                                else:
-                                    if:
-                                        cond:
-                                            eq v 4
-                                        then:
-                                            ErrorKind::InvalidUtf8
-                                        else:
-                                            if:
-                                                cond:
-                                                    eq v 5
-                                                then:
-                                                    ErrorKind::ParseError
-                                                else:
-                                                    if:
-                                                        cond:
-                                                            eq v 6
-                                                        then:
-                                                            ErrorKind::IoError
-                                                        else:
-                                                            ErrorKind::Other
+            match vec_get<Diag> items i:
+                Option::Some d:
+                    let level <DiagLevel> diag_level d;
+                    match level:
+                        DiagLevel::Error:
+                            true
+                        DiagLevel::Log:
+                            diags_has_errors_loop items add i 1
+                        DiagLevel::Info:
+                            diags_has_errors_loop items add i 1
+                        DiagLevel::Warn:
+                            diags_has_errors_loop items add i 1
+                Option::None:
+                    diags_has_errors_loop items add i 1
 
-//: callsite_span: 呼び出し位置を取得する
+//: outcome_ok: [診断/しんだん]なしの[成功/せいこう][結果/けっか]を[作/つく]る
+fn outcome_ok <.T, .E> <(.T)->Outcome<.T, .E>> (v):
+    let r <Result<.T, .E>> ok<.T, .E> v;
+    Outcome r none<Diags>
+
+//: outcome_err: [診断/しんだん]なしの[失敗/しっぱい][結果/けっか]を[作/つく]る
+fn outcome_err <.T, .E> <(.E)->Outcome<.T, .E>> (e):
+    let r <Result<.T, .E>> err<.T, .E> e;
+    Outcome r none<Diags>
+
+//: outcome_with_diags: [診断/しんだん][群/ぐん]を[付与/ふよ]する
+fn outcome_with_diags <.T, .E> <(Outcome<.T, .E>,Diags)->Outcome<.T, .E>> (o, ds):
+    Outcome get o "result" some<Diags> ds
+
+//: result_to_outcome: `Result` を[診断/しんだん]なし `Outcome` に[昇格/しょうかく]する
+fn result_to_outcome <.T, .E> <(Result<.T, .E>)->Outcome<.T, .E>> (r):
+    Outcome r none<Diags>
+
+//: into_outcome: `Result` を `Outcome` に[昇格/しょうかく]する[共通/きょうつう][入口/いりぐち]
 //:
-//: 目的:
-//: - 呼び出し位置の Span を返します。
+//: ### [目的/もくてき]
+//: - `Result` と `Outcome` を[同/おな]じ helper [名/めい]で[扱/あつか]い、[呼/よ]び[出/だ]し[側/がわ]が[必要/ひつよう]な[時点/じてん]で `Outcome` に[揃/そろ]えられるようにします。
 //:
-//: 実装(アルゴリズム):
-//: - intrinsic を呼び出します。
+//: ### [使用例/しようれい]
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "alloc/diag/error" as *
+//: let o <Outcome<i32, StdErrorKind>> into_outcome Result::Ok<i32, StdErrorKind> 7;
+//: assert outcome_is_ok o;
+//: ```
 //:
-//: 注意(重要):
-//: - サポートされない環境では動作しません。
+//: ### [実装/じっそう]
+//: - `result_to_outcome` をそのまま[呼/よ]び、[診断/しんだん][群/ぐん]なしの `Outcome` を[返/かえ]します。
 //:
-//: 計算量:
-//: - O(1)
-//: callsite_span: 主な用途
+//: ### [注意/ちゅうい]
+//: - `Result` [側/がわ]に[診断/しんだん][群/ぐん]はないため、[昇格/しょうかく]しても `diags` は `none` です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn into_outcome <.T, .E> <(Result<.T, .E>)->Outcome<.T, .E>> (r):
+    result_to_outcome r
+
+//: into_outcome: そのまま `Outcome` を[返/かえ]す
+//:
+//: ### [目的/もくてき]
+//: - すでに `Outcome` を[持/も]っている[値/あたい]も `Result` と[同/おな]じ helper [名/めい]で[扱/あつか]えるようにします。
+//:
+//: ### [実装/じっそう]
+//: - [入力/にゅうりょく]をそのまま[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `diags` の[有無/うむ]は[保持/ほじ]されます。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn into_outcome <.T, .E> <(Outcome<.T, .E>)->Outcome<.T, .E>> (o):
+    o
+
+//: result_like_result: `Result` をそのまま[読/よ]み[出/だ]す
+//:
+//: ### [目的/もくてき]
+//: - `Result` / `Outcome` を[共通/きょうつう] helper で[扱/あつか]うとき、[成否/せいひ]の[軸/じく]だけを[同/おな]じ[名前/なまえ]で[取/と]り[出/だ]せるようにします。
+//:
+//: ### [実装/じっそう]
+//: - [入力/にゅうりょく]の `Result` をそのまま[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn result_like_result <.T, .E> <(Result<.T, .E>)->Result<.T, .E>> (r):
+    r
+
+//: result_like_result: `Outcome` [内部/ないぶ]の `Result` を[読/よ]み[出/だ]す
+//:
+//: ### [目的/もくてき]
+//: - `Outcome` [内部/ないぶ]の `result` field を `Result` と[同/おな]じ[名前/なまえ]で[取/と]り[出/だ]せるようにします。
+//:
+//: ### [実装/じっそう]
+//: - `outcome_result` を[呼/よ]びます。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn result_like_result <.T, .E> <(Outcome<.T, .E>)->Result<.T, .E>> (o):
+    outcome_result o
+
+//: result_like_is_ok: `Result` の[成功/せいこう]を[判定/はんてい]する
+fn result_like_is_ok <.T, .E> <(Result<.T, .E>)->bool> (r):
+    is_ok r
+
+//: result_like_is_ok: `Outcome` の[成功/せいこう]を[判定/はんてい]する
+fn result_like_is_ok <.T, .E> <(Outcome<.T, .E>)->bool> (o):
+    outcome_is_ok o
+
+//: result_like_is_err: `Result` の[失敗/しっぱい]を[判定/はんてい]する
+fn result_like_is_err <.T, .E> <(Result<.T, .E>)->bool> (r):
+    is_err r
+
+//: result_like_is_err: `Outcome` の[失敗/しっぱい]を[判定/はんてい]する
+fn result_like_is_err <.T, .E> <(Outcome<.T, .E>)->bool> (o):
+    outcome_is_err o
+
+//: outcome_result: `Outcome` [内部/ないぶ]の `Result` を[取/と]り[出/だ]す
 //:
 //: [目的/もくてき]:
-//: - callsite_span の主な用途と呼び出し方を示します。
+//: - `Outcome` を[受/う]け[取/と]った[呼/よ]び[出/だ]し[側/がわ]が、[診断/しんだん][群/ぐん]とは[別/べつ]に[成否/せいひ]だけを[確認/かくにん]できるようにします。
+//: - `Result` と `Outcome` を[共通/きょうつう] helper で[扱/あつか]うときの[読/よ]み[取/と]り[入口/いりぐち]として[使/つか]います。
+//:
+//: [使用例/しようれい]:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "alloc/diag/error" as *
+//: let o <Outcome<i32, StdErrorKind>> outcome_ok<i32, StdErrorKind> 42;
+//: match outcome_result o:
+//:     Result::Ok v:
+//:         assert_eq_i32 42 v;
+//:     Result::Err _e:
+//:         test_fail "expected ok";
+//: ```
 //:
 //: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
+//: - struct field `result` をそのまま[返/かえ]します。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `diags` は[返/かえ]さないので、[診断/しんだん][群/ぐん]も[見/み]たい[場合/ばあい]は `outcome_diags_or_empty` を[併用/へいよう]します。
 //:
 //: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn callsite_span <()->Span> ():
-    #intrinsic "callsite_span" <Span> ()
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn outcome_result <.T, .E> <(Outcome<.T, .E>)->Result<.T, .E>> (o):
+    get o "result"
 
-//: error_alloc: エラーレコードを確保して格納する
-//:
-//: 目的:
-//: - kind/msg/span をヒープに保存し、Error を返します。
-//:
-//: 実装(アルゴリズム):
-//: - 24 バイトを確保し、固定オフセットへ書き込みます。
-//:
-//: 注意(重要):
-//: - alloc 失敗時は到達不能として扱います。
-//: - レイアウトは Error コメントの説明に依存します。
-//:
-//: 計算量:
-//: - O(1)
-//: error_alloc: 主な用途
+//: outcome_is_ok: `Outcome.result` が `Ok` か[判定/はんてい]する
 //:
 //: [目的/もくてき]:
-//: - error_alloc の主な用途と呼び出し方を示します。
+//: - [値/あたい]の[成否/せいひ]だけを[短/みじか]く[読/よ]み[取/と]りたい[場面/ばめん]で、`match` を[省/はぶ]いて[使/つか]えるようにします。
 //:
 //: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
+//: - `outcome_result o` を `match` し、`Result::Ok` なら true を[返/かえ]します。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `diags` に warning や error が[含/ふく]まれていても、`result` が `Ok` なら true です。
+//: - [診断/しんだん][群/ぐん]の[重大度/じゅうだいど]は `outcome_has_errors` で[別途/べっと]に[確認/かくにん]します。
 //:
 //: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn error_alloc <(ErrorKind,str,Option<Span>)->Error> (kind, msg, sp):
-    let p <i32> alloc_raw 24;
-    if:
-        cond:
-            eq p 0
-        then:
-            #intrinsic "unreachable" <> ()
-        else:
-            ()
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn outcome_is_ok <.T, .E> <(Outcome<.T, .E>)->bool> (o):
+    match outcome_result o:
+        Result::Ok _v:
+            true
+        Result::Err _e:
+            false
 
-    store_i32 p kind_to_i32 kind;
-    store_i32 add p 4 msg;
+//: outcome_is_err: `Outcome.result` が `Err` か[判定/はんてい]する
+//:
+//: [目的/もくてき]:
+//: - [軽量/けいりょう]な[失敗/しっぱい][制御/せいぎょ]だけを[見/み]たい[場面/ばめん]で、`Result` の `Err` かどうかを[即座/そくざ]に[調/しら]べられるようにします。
+//:
+//: [実装/じっそう]:
+//: - `outcome_is_ok` の[否定/ひてい]を[返/かえ]します。
+//:
+//: [注意/ちゅうい]:
+//: - `Outcome` の[診断/しんだん][群/ぐん]とは[独立/どくりつ]です。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn outcome_is_err <.T, .E> <(Outcome<.T, .E>)->bool> (o):
+    not outcome_is_ok o
 
-    match sp:
-        Option::Some s:
-            store_i32 add p 8 1;
-            store_i32 add p 12 s.file_id;
-            store_i32 add p 16 s.start;
-            store_i32 add p 20 s.end;
+//: outcome_diags_or_empty: `Outcome` の[診断/しんだん][群/ぐん]を[空/から]なら[空/から]の `Diags` に[置/お]き[換/か]えて[返/かえ]す
+//:
+//: [目的/もくてき]:
+//: - `Outcome` を[使/つか]う[側/がわ]が `Option<Diags>` をそのつど `match` せず、[一貫/いっかん]して `Diags` として[扱/あつか]えるようにします。
+//:
+//: [実装/じっそう]:
+//: - `some` ならそのまま[返/かえ]し、`none` なら `diags_new` を[作/つく]ります。
+//:
+//: [注意/ちゅうい]:
+//: - `none` のときは[空/から] `Diags` を[新規/しんき][確保/かくほ]します。
+//:
+//: [計算量/けいさんりょう]:
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn outcome_diags_or_empty <.T, .E> <(Outcome<.T, .E>)*>Diags> (o):
+    match get o "diags":
+        Option::Some ds:
+            ds
         Option::None:
-            store_i32 add p 8 0;
-            store_i32 add p 12 0;
-            store_i32 add p 16 0;
-            store_i32 add p 20 0;
+            diags_new
 
-    Error p
-
-//: error_new: Error を作る
-//:
-//: 目的:
-//: - kind と msg から Error を作成します。
-//:
-//: 実装(アルゴリズム):
-//: - エラーレコードを確保して保存します。
-//:
-//: 注意(重要):
-//: - span は後で付与できます。
-//:
-//: 計算量:
-//: - O(1)
-//: error_new: 主な用途
+//: outcome_has_errors: `Outcome` の[診断/しんだん][群/ぐん]に error level が[含/ふく]まれるか[判定/はんてい]する
 //:
 //: [目的/もくてき]:
-//: - error_new の主な用途と呼び出し方を示します。
+//: - compiler や richer な parser が `Outcome.result` とは[別/べつ]に、[診断/しんだん][群/ぐん]の[重大度/じゅうだいど]で[処理/しょり][継続/けいぞく]を[判断/はんだん]するときに[使/つか]います。
 //:
 //: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
+//: - `diags` が `none` なら false、`some` なら `diags_has_errors` を[呼/よ]びます。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Result::Err` であっても `diags` が[空/から]なら false を[返/かえ]します。
+//: - `Outcome.result` の[成否/せいひ]と `DiagLevel::Error` は[別軸/べつじく]です。
 //:
 //: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn error_new <(ErrorKind,str)->Error> (kind, msg):
-    error_alloc kind msg none<Span>
+//: - [時間/じかん]: O(n)
+//: - [空間/くうかん]: O(n)（[再帰/さいき]ぶん）
+fn outcome_has_errors <.T, .E> <(Outcome<.T, .E>)->bool> (o):
+    match get o "diags":
+        Option::Some ds:
+            diags_has_errors ds
+        Option::None:
+            false
 
-//: diag_to_error: Diag を Error に変換する
-//:
-//: 目的:
-//: - `Result<_, Diag>` を `Result<_, Error>` を要求する層へ橋渡しします。
-//:
-//: 実装(アルゴリズム):
-//: - `Diag` を文字列化し、`ErrorKind::Other` として `error_new` を呼びます。
-//:
-//: 注意(重要):
-//: - 文字列表現に code/message を含めるため、情報は失われません。
-//:
-//: 計算量:
-//: - O(n)
-fn diag_to_error <(Diag)->Error> (d):
-    let msg <str> diag_to_string d;
-    error_new ErrorKind::Other msg
+//: std_error_kind_str: `StdErrorKind` を[文字列/もじれつ]へ[変換/へんかん]する
+fn std_error_kind_str <(StdErrorKind)->str> (kind):
+    match kind:
+        StdErrorKind::Failure:
+            "Failure"
+        StdErrorKind::OutOfMemory:
+            "OutOfMemory"
+        StdErrorKind::EmptyCollection:
+            "EmptyCollection"
+        StdErrorKind::IndexOutOfBounds:
+            "IndexOutOfBounds"
+        StdErrorKind::KeyNotFound:
+            "KeyNotFound"
+        StdErrorKind::CapacityExceeded:
+            "CapacityExceeded"
+        StdErrorKind::InvalidOperation:
+            "InvalidOperation"
+        StdErrorKind::InvalidUtf8:
+            "InvalidUtf8"
+        StdErrorKind::ParseError:
+            "ParseError"
+        StdErrorKind::IoError:
+            "IoError"
+        StdErrorKind::Other:
+            "Other"
 
-//: error_to_diag: Error を Diag に変換する
-//:
-//: 目的:
-//: - `Error` を簡易診断形式に落として collections などで再利用できるようにします。
-//:
-//: 実装(アルゴリズム):
-//: - `Error` から `kind` と `message` を読み出して `Diag` を生成します。
-//:
-//: 注意(重要):
-//: - `span` は保持しません。
-//:
-//: 計算量:
-//: - O(1)
-fn error_to_diag <(Error)->Diag> (e):
-    let p <i32> e.ptr;
-    let kind <ErrorKind> kind_from_i32 load_i32 p;
-    let msg <str> load_i32 add p 4;
-    let code <DiagCode> error_kind_to_diag_code kind;
-    diag_new code msg
-
-//: error_with_span: span を付与する
-//:
-//: 目的:
-//: - Error に Span を付けた新しい Error を返します。
-//:
-//: 実装(アルゴリズム):
-//: - 既存の kind/msg を読み出して再構築します。
-//:
-//: 注意(重要):
-//: - 既存の span は上書きされます。
-//:
-//: 計算量:
-//: - O(1)
-//: error_with_span: 主な用途
-//:
-//: [目的/もくてき]:
-//: - error_with_span の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn error_with_span <(Error,Span)->Error> (e, sp):
-    let p <i32> e.ptr;
-    let k <ErrorKind> kind_from_i32 load_i32 p;
-    let m <str> load_i32 add p 4;
-    error_alloc k m some<Span> sp
-
-//: error_with_source: 原因を付与する（未実装）
-//:
-//: 目的:
-//: - 外側の Error に原因情報を付ける想定です。
-//:
-//: 実装(アルゴリズム):
-//: - 現状は inner を捨てます。
-//:
-//: 注意(重要):
-//: - 再帰構造はまだ保持しません。
-//:
-//: 計算量:
-//: - O(1)
-//: error_with_source: 主な用途
-//:
-//: [目的/もくてき]:
-//: - error_with_source の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn error_with_source <(Error,Error)->Error> (outer, inner):
-    outer
-
-//: fail: 失敗エラーを作る
-//:
-//: 目的:
-//: - Failure 種別の Error を作って返します。
-//:
-//: 実装(アルゴリズム):
-//: - error_new で作り、callsite_span の結果を付与します。
-//:
-//: 注意(重要):
-//: - 本来は callsite_span を使う想定です。
-//:
-//: 計算量:
-//: - O(1)
-//: fail: 主な用途
-//:
-//: [目的/もくてき]:
-//: - fail の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn fail <(str)->Error> (msg):
-    let s <Span> callsite_span;
-    error_alloc ErrorKind::Failure msg some<Span> s
-
-//: context: エラーに文脈を付与する
-//:
-//: 目的:
-//: - cause に対して追加メッセージを持つ Error を返します。
-//:
-//: 実装(アルゴリズム):
-//: - 新しい Error を作り、callsite_span を付与します。
-//:
-//: 注意(重要):
-//: - 原因の保持は未実装です。
-//:
-//: 計算量:
-//: - O(1)
-//: context: 主な用途
-//:
-//: [目的/もくてき]:
-//: - context の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn context <(Error,str)->Error> (cause, msg):
-    let e <Error> error_new ErrorKind::Other msg;
-    let s <Span> callsite_span;
-    let outer <Error> error_with_span e s;
-    error_with_source outer cause
-
-//: result_context: Result の Err に文脈を付与する
-//:
-//: 目的:
-//: - Err(e) の場合のみ context を付与して返します。
-//:
-//: 実装(アルゴリズム):
-//: - match で Ok/Err を分岐します。
-//:
-//: 注意(重要):
-//: - Ok はそのまま返します。
-//:
-//: 計算量:
-//: - O(1)
-//: result_context: 主な用途
-//:
-//: [目的/もくてき]:
-//: - result_context の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn result_context <.T> <(Result<.T, Error>, str)->Result<.T, Error>> (r, msg):
-    match r:
-        Result::Ok v:
-            ok<.T, Error> v
-        Result::Err e:
-            err<.T, Error> context e msg
+//: diag_level_str: `DiagLevel` を[文字列/もじれつ]へ[変換/へんかん]する
+fn diag_level_str <(DiagLevel)->str> (level):
+    match level:
+        DiagLevel::Log:
+            "log"
+        DiagLevel::Info:
+            "info"
+        DiagLevel::Warn:
+            "warn"
+        DiagLevel::Error:
+            "error"

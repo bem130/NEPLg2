@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 
 use crate::ast::{Block, FnBody, Ident, Literal, Module, PrefixExpr, PrefixItem, Stmt, TypeExpr};
 use crate::ast::Directive;
-use crate::compiler::{BuildProfile, CompileTarget};
+use crate::compiler::{self, BuildProfile, CompileTarget, PreparedLlvmProgram};
 use crate::hir::{FuncRef, HirBlock, HirBody, HirExpr, HirExprKind, HirFunction, HirModule};
 use crate::runtime_helpers::{
     helper_base_name, helper_candidates, RuntimeHelperKind,
@@ -62,18 +62,11 @@ pub fn emit_ll_from_module_for_target(
     target: CompileTarget,
     profile: BuildProfile,
 ) -> Result<String, LlvmCodegenError> {
-    let precheck_diags = target_precheck::precheck_module_before_codegen(module, target, profile);
-    if precheck_diags
-        .iter()
-        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
-    {
-        return Err(LlvmCodegenError::TypecheckFailed {
-            reason: summarize_diagnostics_for_message(precheck_diags.as_slice()),
-        });
-    }
     let mut out = String::new();
     let entry_names = collect_active_entry_names(module, target, profile);
-    let reachable_hint = compute_reachable_hint(module, target, profile, &entry_names);
+    let prepared = compiler::prepare_module_for_llvm_codegen(module, target, profile, &entry_names)
+        .map_err(map_core_error_to_llvm_codegen_error)?;
+    let reachable_hint = (!prepared.reachable_set.is_empty()).then_some(&prepared.reachable_set);
     let raw_call_requirements = collect_required_raw_calls_fixed_point(module, target, profile);
     let raw_name_counts = collect_active_ast_raw_name_counts(module, target, profile);
     let mut raw_canonical_taken: BTreeSet<String> = BTreeSet::new();
@@ -91,7 +84,7 @@ pub fn emit_ll_from_module_for_target(
                 FnBody::LlvmIr(block) => {
                     if !should_emit_ast_llvmir_fn(
                         def,
-                        reachable_hint.as_ref(),
+                        reachable_hint,
                         raw_call_requirements.as_slice(),
                     ) {
                         continue;
@@ -115,7 +108,7 @@ pub fn emit_ll_from_module_for_target(
                     append_llvmir_block(&mut out, &normalized);
                 }
                 FnBody::Parsed(block) => {
-                    if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
+                    if !is_ast_fn_reachable(def.name.name.as_str(), reachable_hint) {
                         continue;
                     }
                     match target_precheck::select_active_raw_body(
@@ -164,7 +157,7 @@ pub fn emit_ll_from_module_for_target(
                     }
                 }
                 FnBody::Wasm(_) => {
-                    if is_ast_fn_reachable(def.name.name.as_str(), reachable_hint.as_ref()) {
+                    if is_ast_fn_reachable(def.name.name.as_str(), reachable_hint) {
                         panic!(
                             "internal compiler error: llvm codegen reached wasm function body after precheck in function '{}'",
                             def.name.name
@@ -179,14 +172,8 @@ pub fn emit_ll_from_module_for_target(
     if let Some(entry) = entry_names.last() {
         let mut resolved_entry = entry.clone();
         if !emitted_functions.iter().any(|n| n == entry) {
-            resolved_entry = try_lower_entry_from_hir(
-                module,
-                target,
-                profile,
-                entry.as_str(),
-                &mut out,
-                &mut emitted_functions,
-            )?;
+            resolved_entry =
+                try_lower_entry_from_hir(&prepared, entry.as_str(), &mut out, &mut emitted_functions)?;
         }
         if !emitted_functions.iter().any(|n| n == &resolved_entry) {
             return Err(LlvmCodegenError::MissingEntryFunction {
@@ -207,27 +194,15 @@ pub fn emit_ll_from_module_for_target(
     Ok(deduplicate_overloaded_llvm_symbols(out.as_str()))
 }
 
-fn compute_reachable_hint(
-    module: &Module,
-    target: CompileTarget,
-    profile: BuildProfile,
-    entry_names: &[String],
-) -> Option<BTreeSet<String>> {
-    if entry_names.is_empty() {
-        return None;
+fn map_core_error_to_llvm_codegen_error(err: crate::error::CoreError) -> LlvmCodegenError {
+    match err {
+        crate::error::CoreError::Diagnostics(diags) => LlvmCodegenError::TypecheckFailed {
+            reason: summarize_diagnostics_for_message(diags.as_slice()),
+        },
+        other => LlvmCodegenError::TypecheckFailed {
+            reason: other.to_string(),
+        },
     }
-    let (_, hir) = try_build_hir_with_target(module, target, profile).ok()?;
-    let mut out = BTreeSet::new();
-    for entry in entry_names {
-        let reachable = collect_reachable_functions(&hir, entry.as_str());
-        for name in reachable {
-            out.insert(name.clone());
-            if let Some(sep) = find_mangled_signature_separator(name.as_str()) {
-                out.insert(String::from(&name[..sep]));
-            }
-        }
-    }
-    Some(out)
 }
 
 fn is_ast_fn_reachable(name: &str, reachable_hint: Option<&BTreeSet<String>>) -> bool {
@@ -821,56 +796,24 @@ impl<'a> LowerCtx<'a> {
 }
 
 fn try_lower_entry_from_hir(
-    module: &Module,
-    target: CompileTarget,
-    profile: BuildProfile,
+    prepared: &PreparedLlvmProgram,
     entry: &str,
     out: &mut String,
     emitted_functions: &mut Vec<String>,
 ) -> Result<String, LlvmCodegenError> {
-    let (mut types, mut hir) = build_hir_for_llvm_lowering(module, target, profile)?;
-    crate::passes::insert_drops(&mut hir, types.unit());
-
+    let types = &prepared.program.types;
+    let hir = &prepared.program.hir_module;
     let mut function_map: BTreeMap<String, &HirFunction> = BTreeMap::new();
     for f in &hir.functions {
         function_map.insert(f.name.clone(), f);
     }
-    let resolved_entry = if function_map.contains_key(entry) {
-        String::from(entry)
-    } else if let Some(found) = function_map
-        .keys()
-        .find(|name| {
-            name.starts_with(&format!("{}__", entry))
-                || name.starts_with(&format!("{}::", entry))
-                || name.ends_with(&format!("::{}", entry))
-        })
-        .cloned()
-    {
-        found
-    } else {
-        let mut sample = function_map.keys().take(6).cloned().collect::<Vec<_>>();
-        if sample.is_empty() {
-            sample.push(String::from("<none>"));
-        }
+    let Some(resolved_entry) = prepared.resolved_entries.get(entry) else {
         return Err(LlvmCodegenError::MissingEntryFunction {
-            function: format!("{} (available: {})", entry, sample.join(", ")),
+            function: String::from(entry),
         });
     };
 
-    let mut sigs = collect_hir_signatures(&types, &hir);
-    let mut reachable = collect_reachable_functions(&hir, resolved_entry.as_str());
-    extend_reachable_with_runtime_helpers(&mut reachable, &hir, &sigs);
-    let reachable_set: BTreeSet<String> = reachable.iter().cloned().collect();
-    let pre_codegen_diags =
-        crate::passes::codegen_precheck::precheck_llvm_codegen(&types, &hir, &reachable_set);
-    if pre_codegen_diags
-        .iter()
-        .any(|d| matches!(d.severity, crate::diagnostic::Severity::Error))
-    {
-        return Err(LlvmCodegenError::TypecheckFailed {
-            reason: summarize_diagnostics_for_message(pre_codegen_diags.as_slice()),
-        });
-    }
+    let mut sigs = collect_hir_signatures(types, hir);
     let fallback_alloc_symbol = resolve_runtime_helper_symbol(
         &sigs,
         helper_candidates(RuntimeHelperKind::Alloc),
@@ -892,7 +835,7 @@ fn try_lower_entry_from_hir(
         let base_alias = find_mangled_signature_separator(local_name_raw)
             .map(|sep| &local_name_raw[..sep]);
         let needs_base = base_alias
-            .map(|base| reachable.iter().any(|n| n == base))
+            .map(|base| prepared.reachable_set.contains(base))
             .unwrap_or(false);
         let local_name = ll_symbol(ex.local_name.as_str());
         let external_name = ll_symbol(ex.name.as_str());
@@ -974,11 +917,11 @@ fn try_lower_entry_from_hir(
             }
         }
     }
-    if !reachable.is_empty() {
+    if !prepared.reachable_set.is_empty() {
         out.push('\n');
     }
 
-    for name in &reachable {
+    for name in &prepared.reachable_set {
         if emitted_functions.iter().any(|n| n == name) {
             continue;
         }
@@ -1038,7 +981,7 @@ fn try_lower_entry_from_hir(
                     &types,
                     &hir,
                     &sigs,
-                    &reachable_set,
+                    &prepared.reachable_set,
                     memory_global,
                     fallback_alloc_symbol,
                     func,
@@ -1084,7 +1027,7 @@ fn try_lower_entry_from_hir(
 
     // suppress unused warning when future passes extend signature synthesis
     sigs.clear();
-    Ok(resolved_entry)
+    Ok(resolved_entry.clone())
 }
 
 fn emit_base_alias_for_mangled(
@@ -1256,30 +1199,6 @@ fn llvm_output_mentions_symbol(out: &str, sym: &str) -> bool {
     out.contains(plain.as_str()) || out.contains(quoted.as_str())
 }
 
-fn build_hir_for_llvm_lowering(
-    module: &Module,
-    target: CompileTarget,
-    profile: BuildProfile,
-) -> Result<(TypeCtx, HirModule), LlvmCodegenError> {
-    try_build_hir_with_target(module, target, profile).map_err(|reason| LlvmCodegenError::TypecheckFailed {
-        reason,
-    })
-}
-
-fn try_build_hir_with_target(
-    module: &Module,
-    target: CompileTarget,
-    profile: BuildProfile,
-) -> Result<(TypeCtx, HirModule), String> {
-    let typed = crate::typecheck::typecheck(module, target, profile);
-    let Some(typed_module) = typed.module else {
-        return Err(summarize_diagnostics_for_message(&typed.diagnostics));
-    };
-    let mut types = typed.types;
-    let hir = crate::monomorphize::monomorphize(&mut types, typed_module);
-    Ok((types, hir))
-}
-
 fn collect_hir_signatures(types: &TypeCtx, module: &HirModule) -> BTreeMap<String, FnSig> {
     let mut out = BTreeMap::new();
     for f in &module.functions {
@@ -1297,260 +1216,6 @@ fn collect_hir_signatures(types: &TypeCtx, module: &HirModule) -> BTreeMap<Strin
         out.insert(ex.local_name.clone(), FnSig { params, ret });
     }
     out
-}
-
-fn collect_reachable_functions(module: &HirModule, entry: &str) -> Vec<String> {
-    let mut function_map: BTreeMap<String, &HirFunction> = BTreeMap::new();
-    for f in &module.functions {
-        function_map.insert(f.name.clone(), f);
-    }
-    let mut visited: BTreeSet<String> = BTreeSet::new();
-    let mut stack = Vec::new();
-    stack.push(entry.to_string());
-    while let Some(name) = stack.pop() {
-        if !visited.insert(name.clone()) {
-            continue;
-        }
-        let Some(func) = function_map.get(name.as_str()) else {
-            continue;
-        };
-        let mut callees = BTreeSet::new();
-        collect_callees_in_body(&func.body, &mut callees);
-        for c in callees {
-            if !visited.contains(c.as_str()) {
-                stack.push(c);
-            }
-        }
-    }
-    visited.into_iter().collect::<Vec<_>>()
-}
-
-fn extend_reachable_with_runtime_helpers(
-    reachable: &mut Vec<String>,
-    module: &HirModule,
-    sigs: &BTreeMap<String, FnSig>,
-) {
-    let mut helper_roots = Vec::new();
-    let push_root = |roots: &mut Vec<String>, name: Option<&str>| {
-        if let Some(n) = name {
-            if !roots.iter().any(|r| r == n) {
-                roots.push(String::from(n));
-            }
-        }
-    };
-    push_root(
-        &mut helper_roots,
-        resolve_runtime_helper_symbol(
-            sigs,
-            helper_candidates(RuntimeHelperKind::Alloc),
-            &[LlTy::I32],
-            LlTy::I32,
-        ),
-    );
-    push_root(
-        &mut helper_roots,
-        resolve_runtime_helper_symbol(
-            sigs,
-            helper_candidates(RuntimeHelperKind::Dealloc),
-            &[LlTy::I32, LlTy::I32],
-            LlTy::Void,
-        ),
-    );
-    push_root(
-        &mut helper_roots,
-        resolve_runtime_helper_symbol(
-            sigs,
-            helper_candidates(RuntimeHelperKind::Realloc),
-            &[LlTy::I32, LlTy::I32, LlTy::I32],
-            LlTy::I32,
-        ),
-    );
-    push_root(
-        &mut helper_roots,
-        resolve_symbol_name(sigs, "store_i32", &[LlTy::I32, LlTy::I32], LlTy::Void),
-    );
-    push_root(
-        &mut helper_roots,
-        resolve_symbol_name(sigs, "store_u8", &[LlTy::I32, LlTy::I32], LlTy::Void),
-    );
-    push_root(
-        &mut helper_roots,
-        resolve_symbol_name(sigs, "load_i32", &[LlTy::I32], LlTy::I32),
-    );
-    push_root(
-        &mut helper_roots,
-        resolve_symbol_name(sigs, "load_u8", &[LlTy::I32], LlTy::I32),
-    );
-    push_root(
-        &mut helper_roots,
-        resolve_symbol_name(sigs, "align8", &[LlTy::I32], LlTy::I32),
-    );
-    push_root(
-        &mut helper_roots,
-        resolve_symbol_name(sigs, "mem_size", &[], LlTy::I32),
-    );
-    push_root(
-        &mut helper_roots,
-        resolve_symbol_name(sigs, "mem_grow", &[LlTy::I32], LlTy::I32),
-    );
-    if helper_roots.is_empty() {
-        return;
-    }
-
-    let mut function_map: BTreeMap<String, &HirFunction> = BTreeMap::new();
-    for f in &module.functions {
-        function_map.insert(f.name.clone(), f);
-    }
-
-    let mut seen: BTreeSet<String> = reachable.iter().cloned().collect();
-    let mut stack = Vec::new();
-    for root in helper_roots {
-        if seen.insert(root.clone()) {
-            reachable.push(root.clone());
-            stack.push(root);
-        }
-    }
-    while let Some(name) = stack.pop() {
-        let Some(func) = function_map.get(name.as_str()) else {
-            continue;
-        };
-        let mut refs = BTreeSet::new();
-        collect_callees_in_body(&func.body, &mut refs);
-        for callee in refs {
-            if seen.insert(callee.clone()) {
-                reachable.push(callee.clone());
-                stack.push(callee);
-            }
-        }
-    }
-}
-
-fn collect_callees_in_body(body: &HirBody, out: &mut BTreeSet<String>) {
-    match body {
-        HirBody::Block(block) => collect_callees_in_block(block, out),
-        HirBody::LlvmIr(raw) => collect_callees_in_llvmir_block(raw, out),
-        HirBody::Wasm(_) => {}
-    }
-}
-
-fn collect_callees_in_block(block: &HirBlock, out: &mut BTreeSet<String>) {
-    for line in &block.lines {
-        collect_callees_in_expr(&line.expr, out);
-    }
-}
-
-fn collect_callees_in_expr(expr: &HirExpr, out: &mut BTreeSet<String>) {
-    match &expr.kind {
-        HirExprKind::Call { callee, args } => {
-            match callee {
-                FuncRef::Builtin(name) | FuncRef::User(name, _) => {
-                    out.insert(name.clone());
-                }
-                FuncRef::Trait { .. } => {}
-            }
-            for a in args {
-                collect_callees_in_expr(a, out);
-            }
-        }
-        HirExprKind::If {
-            cond,
-            then_branch,
-            else_branch,
-        } => {
-            collect_callees_in_expr(cond, out);
-            collect_callees_in_expr(then_branch, out);
-            collect_callees_in_expr(else_branch, out);
-        }
-        HirExprKind::While { cond, body } => {
-            collect_callees_in_expr(cond, out);
-            collect_callees_in_expr(body, out);
-        }
-        HirExprKind::Block(b) => collect_callees_in_block(b, out),
-        HirExprKind::Let { value, .. } | HirExprKind::Set { value, .. } => {
-            collect_callees_in_expr(value, out);
-        }
-        HirExprKind::Intrinsic { args, .. } => {
-            for a in args {
-                collect_callees_in_expr(a, out);
-            }
-        }
-        HirExprKind::AddrOf(inner) | HirExprKind::Deref(inner) => collect_callees_in_expr(inner, out),
-        HirExprKind::Match { scrutinee, arms } => {
-            collect_callees_in_expr(scrutinee, out);
-            for arm in arms {
-                collect_callees_in_expr(&arm.body, out);
-            }
-        }
-        HirExprKind::EnumConstruct { payload, .. } => {
-            if let Some(payload) = payload {
-                collect_callees_in_expr(payload, out);
-            }
-        }
-        HirExprKind::StructConstruct { fields, .. } | HirExprKind::TupleConstruct { items: fields } => {
-            for f in fields {
-                collect_callees_in_expr(f, out);
-            }
-        }
-        HirExprKind::CallIndirect { callee, args, .. } => {
-            collect_callees_in_expr(callee, out);
-            for a in args {
-                collect_callees_in_expr(a, out);
-            }
-        }
-        HirExprKind::Var(name) => {
-            if name.contains("__") || name.contains("::") {
-                out.insert(name.clone());
-            }
-        }
-        HirExprKind::FnValue(name) => {
-            out.insert(name.clone());
-        }
-        HirExprKind::LiteralI32(_)
-        | HirExprKind::LiteralF32(_)
-        | HirExprKind::LiteralBool(_)
-        | HirExprKind::LiteralStr(_)
-        | HirExprKind::Unit
-        | HirExprKind::Drop { .. } => {}
-    }
-}
-
-fn collect_callees_in_llvmir_block(
-    block: &crate::ast::LlvmIrBlock,
-    out: &mut BTreeSet<String>,
-) {
-    for line in &block.lines {
-        collect_callee_from_llvmir_line(line, out);
-    }
-}
-
-fn collect_callee_from_llvmir_line(line: &str, out: &mut BTreeSet<String>) {
-    let trimmed = line.trim();
-    if !trimmed.contains("call") {
-        return;
-    }
-    let Some(call_pos) = trimmed.find("call") else {
-        return;
-    };
-    let rest = &trimmed[(call_pos + 4)..];
-    let Some(at_pos) = rest.find('@') else {
-        return;
-    };
-    let after_at = &rest[(at_pos + 1)..];
-    let name = if let Some(stripped) = after_at.strip_prefix('"') {
-        if let Some(end_q) = stripped.find('"') {
-            &stripped[..end_q]
-        } else {
-            return;
-        }
-    } else {
-        let end = after_at
-            .find(|c: char| c == '(' || c.is_ascii_whitespace())
-            .unwrap_or(after_at.len());
-        &after_at[..end]
-    };
-    if !name.is_empty() {
-        out.insert(String::from(name));
-    }
 }
 
 fn lower_hir_function(

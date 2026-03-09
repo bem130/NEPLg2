@@ -1,0 +1,86 @@
+//: stringify: [文字列表現/もじれつひょうげん]に[変換/へんかん]する trait [群/ぐん]
+//:
+//: [目的/もくてき]:
+//: - [値/あたい]を[利用者/りようしゃ]向けの `str` へ[変換/へんかん]する `Stringify` trait を[標準化/ひょうじゅんか]します。
+//: - `alloc/string` にある[具体的/ぐたいてき]な[変換/へんかん]関数を、trait [経由/けいゆ]で[共通/きょうつう]に[使/つか]えるようにします。
+//:
+//: [注意/ちゅうい]:
+//: - `Stringify` は[人間/にんげん]に[見/み]せるための[安定/あんてい]した[文字列表現/もじれつひょうげん]を[意図/いと]します。
+//: - `Serialize` や `Debug` とは[責務/せきむ]が[異/こと]なります。
+//:
+//: [計算量/けいさんりょう]:
+//: - 各 impl に[依存/いぞん]します。`str` のような[再利用/さいりよう]では O(1)、[数値/すうち]の 10 [進/しん][変換/へんかん]では O(d) です。
+
+#indent 4
+
+#import "alloc/string" as *
+#import "core/cast" as *
+
+//: Stringify: [安定/あんてい]した[利用者向/りようしゃむ]け[文字列表現/もじれつひょうげん]
+//:
+//: [目的/もくてき]:
+//: - [値/あたい]を `str` に[変換/へんかん]し、[表示/ひょうじ]・[説明/せつめい]・[簡易/かんい]ログに[使/つか]えるようにします。
+//:
+//: [注意/ちゅうい]:
+//: - [機械/きかい]向け[保存/ほぞん]や[通信/つうしん]の[形式/けいしき]は `Serialize` で[扱/あつか]う[予定/よてい]です。
+trait Stringify:
+    fn stringify <(Self)->str> (x):
+        ""
+
+//: stringify: trait を[通/とお]して[文字列表現/もじれつひょうげん]を[得/え]る
+//:
+//: [目的/もくてき]:
+//: - `Stringify` impl を[直接/ちょくせつ] `[呼/よ]び[出/だ]す`のではなく、[共通/きょうつう]の[入口/いりぐち]として[使/つか]います。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "core/traits/stringify" as *
+//: assert_str_eq "42" stringify 42;
+//: assert_str_eq "true" stringify true;
+//: ```
+//:
+//: [実装/じっそう]:
+//: - `Stringify::stringify x` をそのまま[呼/よ]びます。
+//:
+//: [注意/ちゅうい]:
+//: - [型推論/かたすいろん]が[曖昧/あいまい]な[場合/ばあい]は[呼/よ]び[出/だ]し[側/がわ]で[型注釈/かたちゅうしゃく]が[必要/ひつよう]です。
+//:
+//: [計算量/けいさんりょう]:
+//: - impl に[依存/いぞん]します。
+fn stringify <.T: Stringify> <(.T)->str> (x):
+    Stringify::stringify x
+
+impl Stringify for str:
+    fn stringify <(str)->str> (x):
+        x
+
+impl Stringify for bool:
+    fn stringify <(bool)->str> (x):
+        from_bool x
+
+impl Stringify for i32:
+    fn stringify <(i32)->str> (x):
+        from_i32 x
+
+impl Stringify for i64:
+    fn stringify <(i64)->str> (x):
+        from_i64 x
+
+impl Stringify for i128:
+    fn stringify <(i128)->str> (x):
+        from_i128 x
+
+impl Stringify for u8:
+    fn stringify <(u8)->str> (x):
+        from_i32 cast x
+
+impl Stringify for f32:
+    fn stringify <(f32)->str> (x):
+        from_f32 x
+
+impl Stringify for f64:
+    fn stringify <(f64)->str> (x):
+        from_f64 x

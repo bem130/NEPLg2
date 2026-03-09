@@ -1,0 +1,93 @@
+//: eq: [等値比較/とうちひかく] capability を[標準化/ひょうじゅんか]する trait [群/ぐん]
+//:
+//: [目的/もくてき]:
+//: - [値/あたい]どうしが[等/ひと]しいかを[判定/はんてい]する `Eq` trait を stdlib [側/がわ]に[置/お]きます。
+//: - `core/math` にある[具体的/ぐたいてき]な `eq` overload を、trait [経由/けいゆ]で[共通的/きょうつうてき]に[使/つか]えるようにします。
+//:
+//: [注意/ちゅうい]:
+//: - ここでいう `Eq` は「[等値/とうち]かどうか」を[返/かえ]す capability です。
+//: - [近似比較/きんじひかく]や[順序比較/じゅんじょひかく]は[別/べつ]の trait / helper で[扱/あつか]います。
+//:
+//: [計算量/けいさんりょう]:
+//: - 各 impl に[依存/いぞん]します。ここで[提供/ていきょう]する[基本型/きほんがた] impl は O(1) です。
+
+#indent 4
+
+#import "core/math" as *
+#import "alloc/string" as *
+
+//: Eq: [等値比較/とうちひかく] capability
+//:
+//: [目的/もくてき]:
+//: - `Eq::eq x y` の[形/かたち]で、2つの[値/あたい]が[等/ひと]しいかを[判定/はんてい]できるようにします。
+//:
+//: [注意/ちゅうい]:
+//: - [型/かた]ごとの[意味論/いみろん]に[応/おう]じて impl する[必要/ひつよう]があります。
+//: - [利用者/りようしゃ]は `Stringify` と[違/ちが]い、「[表示/ひょうじ]が[同/おな]じ」ことと「[等値/とうち]」を[混同/こんどう]しないでください。
+trait Eq:
+    fn eq <(Self,Self)->bool> (a, b):
+        false
+
+//: eq_by_trait: trait [経由/けいゆ]で[等値比較/とうちひかく]する
+//:
+//: [目的/もくてき]:
+//: - `Eq` trait を generic bound [経由/けいゆ]で[利用/りよう]する[入口/いりぐち]を[提供/ていきょう]します。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target core
+//:| #import "core/test" as *
+//:| #import "core/traits/eq" as *
+//: assert eq_by_trait 10 10;
+//: assert not eq_by_trait 10 11;
+//: ```
+//:
+//: [実装/じっそう]:
+//: - `Eq::eq` をそのまま[呼/よ]び[出/だ]します。
+//:
+//: [計算量/けいさんりょう]:
+//: - impl に[依存/いぞん]します。
+fn eq_by_trait <.T: Eq> <(.T,.T)->bool> (a, b):
+    Eq::eq a b
+
+//: ne_by_trait: trait [経由/けいゆ]の[非等値/ひとうち]比較
+//:
+//: [目的/もくてき]:
+//: - `Eq` だけを[用/もち]いて「[等/ひと]しくない」ことを[判定/はんてい]します。
+//:
+//: [実装/じっそう]:
+//: - `Eq::eq` の[結果/けっか]を `not` で[反転/はんてん]します。
+//:
+//: [計算量/けいさんりょう]:
+//: - impl に[依存/いぞん]します。
+fn ne_by_trait <.T: Eq> <(.T,.T)->bool> (a, b):
+    not Eq::eq a b
+
+impl Eq for bool:
+    fn eq <(bool,bool)->bool> (a, b):
+        if a then b else not b
+
+impl Eq for i32:
+    fn eq <(i32,i32)->bool> (a, b):
+        eq a b
+
+impl Eq for u8:
+    fn eq <(u8,u8)->bool> (a, b):
+        eq a b
+
+impl Eq for i64:
+    fn eq <(i64,i64)->bool> (a, b):
+        eq a b
+
+impl Eq for f32:
+    fn eq <(f32,f32)->bool> (a, b):
+        eq a b
+
+impl Eq for f64:
+    fn eq <(f64,f64)->bool> (a, b):
+        eq a b
+
+impl Eq for str:
+    fn eq <(str,str)->bool> (a, b):
+        str_eq a b

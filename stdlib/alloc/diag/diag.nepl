@@ -1,18 +1,18 @@
-//: diag: alloc/diag/diag.nepl に関する機能を提供するライブラリ
+//: diag: `Diag` / `Diags` の[文字列化/もじれつか]と[表示/ひょうじ]を[担/にな]うライブラリ
 //:
 //: [目的/もくてき]:
-//: - このモジュールの公開 API を提供します。
-//: - 実装の変更時に最小限の doctest 実行経路を維持します。
+//: - `alloc/diag/error` で[定義/ていぎ]した `Diag` / `Diags` を[人間/にんげん]が[読/よ]める[文字列/もじれつ]へ[変換/へんかん]します。
+//: - std target では[標準/ひょうじゅん][出力/しゅつりょく]へ[流/なが]す helper も[提供/ていきょう]します。
+//:
+//: [実装/じっそう]:
+//: - [重大度/じゅうだいど]・error kind・message・span・notes・help を[順番/じゅんばん]に[連結/れんけつ]して[組/く]み[立/た]てます。
 //:
 //: [注意/ちゅうい]:
-//: - 利用時は各関数の「目的」「注意」「計算量」を確認してください。
+//: - ここは stringify/rendering の[暫定/ざんてい] helper です。
+//: - reboot [途中/とちゅう]では `Stringify` / `Debug` trait へ[整理/せいり]する[予定/よてい]ですが、[現時点/げんじてん]ではこのモジュールで[共通/きょうつう][表示/ひょうじ]を[担/にな]います。
 //:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//: ()
-//: ```
+//: [計算量/けいさんりょう]:
+//: - [文字列/もじれつ][連結/れんけつ]ぶんだけ O(n) です。
 
 #indent 4
 
@@ -20,367 +20,132 @@
 #import "core/math" as *
 #import "core/option" as *
 #import "alloc/string" as *
-#if[target=wasi]
+#import "alloc/collections/vec" as *
+#if[target=std]
 #import "std/stdio" as *
 
-//: diag: Error の文字列化と表示
-//:
-//: 目的:
-//: - Error/Span を文字列化し、必要なら標準出力へ表示します。
-//:
-//: 実装(アルゴリズム):
-//: - kind_str/span_to_string/diag_to_string で組み立てます。
-//:
-//: 注意(重要):
-//: - WASI ターゲットのみ表示関数を提供します。
-//:
-//: 計算量:
-//: - 文字列連結は O(n)
+//: kind_str: `Diag` の kind を[人間/にんげん]向けの[短/みじか]い[識別子/しきべつし]へ[変換/へんかん]する
+fn kind_str <(Diag)->str> (d):
+    let k <DiagKind> get d "kind";
+    let level_name <str> diag_level_str get k "level";
+    match get k "std_error":
+        Option::Some stdk:
+            let std_name <str> std_error_kind_str stdk;
+            let l1 <str> concat level_name "[";
+            let l2 <str> concat l1 std_name;
+            concat l2 "]"
+        Option::None:
+            match get k "local_kind":
+                Option::Some local:
+                    let l1 <str> concat level_name "[";
+                    let l2 <str> concat l1 local;
+                    concat l2 "]"
+                Option::None:
+                    level_name
 
-//: kind_str: ErrorKind を文字列化する
-//:
-//: 目的:
-//: - ErrorKind を英語の識別文字列に変換します。
-//:
-//: 実装(アルゴリズム):
-//: - match で各種別に対応する文字列を返します。
-//:
-//: 注意(重要):
-//: - ErrorKind 追加時はここも更新してください。
-//:
-//: 計算量:
-//: - O(1)
-//: kind_str: 主な用途
-//:
-//: [目的/もくてき]:
-//: - kind_str の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn kind_str <(ErrorKind)->str> (k):
-    match k:
-        ErrorKind::Failure:
-            "Failure"
-        ErrorKind::OutOfMemory:
-            "OutOfMemory"
-        ErrorKind::IndexOutOfBounds:
-            "IndexOutOfBounds"
-        ErrorKind::KeyNotFound:
-            "KeyNotFound"
-        ErrorKind::InvalidUtf8:
-            "InvalidUtf8"
-        ErrorKind::ParseError:
-            "ParseError"
-        ErrorKind::IoError:
-            "IoError"
-        ErrorKind::Other:
-            "Other"
-
-//: kind_color: ErrorKind に対応する色コードを返す
-//:
-//: 目的:
-//: - エラー種別に応じた表示色を返します。
-//:
-//: 実装(アルゴリズム):
-//: - match で色コードを選択します。
-//:
-//: 注意(重要):
-//: - WASI ターゲット専用です。
-//: - 端末が ANSI に対応している必要があります。
-//:
-//: 計算量:
-//: - O(1)
-#if[target=wasi]
-//: kind_color: 主な用途
-//:
-//: [目的/もくてき]:
-//: - kind_color の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn kind_color <(ErrorKind)->str> (k):
-    match k:
-        ErrorKind::Failure:
-            ansi_red
-        ErrorKind::OutOfMemory:
-            ansi_magenta
-        ErrorKind::IndexOutOfBounds:
-            ansi_yellow
-        ErrorKind::KeyNotFound:
-            ansi_yellow
-        ErrorKind::InvalidUtf8:
-            ansi_cyan
-        ErrorKind::ParseError:
-            ansi_blue
-        ErrorKind::IoError:
-            ansi_green
-        ErrorKind::Other:
-            ansi_gray
-
-//: span_to_string: Span を "file:start-end" に整形する
-//:
-//: 目的:
-//: - Span を読みやすい文字列に変換します。
-//:
-//: 実装(アルゴリズム):
-//: - from_i32 と concat を使って連結します。
-//:
-//: 注意(重要):
-//: - file_id の意味づけは呼び出し側に依存します。
-//:
-//: 計算量:
-//: - O(n)
-//: span_to_string: 主な用途
-//:
-//: [目的/もくてき]:
-//: - span_to_string の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn span_to_string <(Span)*>str> (sp):
-    let fid <str> from_i32 sp.file_id;
-    let s <str> from_i32 sp.start;
-    let e <str> from_i32 sp.end;
+//: span_to_string: `Span` を `file:start-end` へ[整形/せいけい]する
+fn span_to_string <(Span)->str> (sp):
+    let fid <str> from_i32 get sp "file_id";
+    let s <str> from_i32 get sp "start";
+    let e <str> from_i32 get sp "end";
     let t0 <str> concat fid ":";
     let t1 <str> concat t0 s;
     let t2 <str> concat t1 "-";
     concat t2 e
 
-//: diag_to_string: Error を整形した文字列にする
-//:
-//: 目的:
-//: - kind/msg/span を含む文字列を生成します。
-//:
-//: 実装(アルゴリズム):
-//: - ヘッダ行 + 位置行（あれば）を連結します。
-//:
-//: 注意(重要):
-//: - source チェーンは未実装です。
-//:
-//: 計算量:
-//: - O(n)
-//: diag_to_string: 主な用途
-//:
-//: [目的/もくてき]:
-//: - diag_to_string の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn diag_to_string <(Error)*>str> (e):
-    let p <i32> e.ptr;
-    let k <ErrorKind> kind_from_i32 load_i32 p;
-    let msg <str> load_i32 add p 4;
-    let has <i32> load_i32 add p 8;
-    let ks <str> kind_str k;
-    let h0 <str> concat "error[" ks;
-    let h1 <str> concat h0 "]: ";
-    let h2 <str> concat h1 msg;
-    let mut out <str> concat h2 "\n";
-
+fn diag_lines_loop <(Vec<str>,i32,str)->str> (lines, i, acc):
+    let n <i32> vec_len<str> lines;
     if:
-        cond:
-            eq has 1
-        then:
-            let fid <i32> load_i32 add p 12;
-            let st <i32> load_i32 add p 16;
-            let en <i32> load_i32 add p 20;
-            let sp <Span> Span fid st en;
-            let loc <str> span_to_string sp;
-            let l0 <str> concat "at " loc;
-            let l1 <str> concat l0 "\n";
-            set out concat out l1;
+        ge i n
+        then acc
         else:
+            match vec_get<str> lines i:
+                Option::Some line:
+                    let next <str> concat acc line;
+                    let next2 <str> concat next "\n";
+                    diag_lines_loop lines add i 1 next2
+                Option::None:
+                    diag_lines_loop lines add i 1 acc
+
+//: diag_to_string: `Diag` を[表示/ひょうじ]しやすい[文字列/もじれつ]へ[変換/へんかん]する
+fn diag_to_string <(Diag)->str> (d):
+    let ks <str> kind_str d;
+    let h0 <str> concat ks ": ";
+    let mut out <str> concat h0 get d "message";
+    set out concat out "\n";
+
+    match get d "span":
+        Option::Some sp:
+            let sp_s <str> span_to_string sp;
+            let l0 <str> concat "at " sp_s;
+            set out concat out l0;
+            set out concat out "\n";
+        Option::None:
             ()
 
-    out
+    let notes <Vec<str>> get d "notes";
+    let help <Vec<str>> get d "help";
+    set out diag_lines_loop notes 0 out;
+    set out diag_help_loop help 0 out;
 
-//: diag_print: Error を標準出力へ表示する
-//:
-//: 目的:
-//: - diag_to_string の結果を print します。
-//:
-//: 実装(アルゴリズム):
-//: - 文字列化して print します。
-//:
-//: 注意(重要):
-//: - WASI ターゲットのみ利用可能です。
-//:
-//: 計算量:
-//: - O(n)
-#if[target=wasi]
-//: diag_print: 主な用途
-//:
-//: [目的/もくてき]:
-//: - diag_print の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn diag_print <(Error)*>()> (e):
-    let p <i32> e.ptr;
-    let k <ErrorKind> kind_from_i32 load_i32 p;
-    let c <str> kind_color k;
-    let s <str> diag_to_string e;
-    print_color c s
+    match get d "source":
+        Option::Some src:
+            let s0 <str> concat out "source: ";
+            let s1 <str> concat s0 src;
+            concat s1 "\n"
+        Option::None:
+            out
 
-//: diag_print_msg: メッセージを Failure として表示する
-//:
-//: 目的:
-//: - msg を Failure エラーとして表示します。
-//:
-//: 実装(アルゴリズム):
-//: - error_new で Error を作り、diag_println に渡します。
-//:
-//: 注意(重要):
-//: - WASI ターゲットのみ利用可能です。
-//:
-//: 計算量:
-//: - O(n)
-#if[target=wasi]
-//: diag_print_msg: 主な用途
-//:
-//: [目的/もくてき]:
-//: - diag_print_msg の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn diag_print_msg <(str)*>()> (msg):
-    let e <Error> error_new ErrorKind::Failure msg;
-    diag_println e
+fn diag_help_loop <(Vec<str>,i32,str)->str> (items, i, acc):
+    let n <i32> vec_len<str> items;
+    if:
+        ge i n
+        then acc
+        else:
+            match vec_get<str> items i:
+                Option::Some item:
+                    let p0 <str> concat acc "help: ";
+                    let p1 <str> concat p0 item;
+                    let p2 <str> concat p1 "\n";
+                    diag_help_loop items add i 1 p2
+                Option::None:
+                    diag_help_loop items add i 1 acc
 
-//: diag_println: Error を標準出力へ表示する（改行付き）
-//:
-//: 目的:
-//: - diag_to_string の結果を println します。
-//:
-//: 実装(アルゴリズム):
-//: - 文字列化して println します。
-//:
-//: 注意(重要):
-//: - WASI ターゲットのみ利用可能です。
-//:
-//: 計算量:
-//: - O(n)
-#if[target=wasi]
-//: diag_println: 主な用途
-//:
-//: [目的/もくてき]:
-//: - diag_println の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn diag_println <(Error)*>()> (e):
-    let p <i32> e.ptr;
-    let k <ErrorKind> kind_from_i32 load_i32 p;
-    let c <str> kind_color k;
-    let s <str> diag_to_string e;
-    println_color c s
+//: diags_to_string: `Diags` を[改行/かいぎょう][区切/くぎ]りで[連結/れんけつ]する
+fn diags_to_string <(Diags)->str> (ds):
+    let items <Vec<Diag>> get ds "items";
+    diags_to_string_loop items 0 ""
 
-//: diag_debug_print: デバッグ出力
-//:
-//: 目的:
-//: - debug 出力へ Error を表示します。
-//:
-//: 実装(アルゴリズム):
-//: - 文字列化して debug を呼びます。
-//:
-//: 注意(重要):
-//: - プロファイル設定により出力されない場合があります。
-//:
-//: 計算量:
-//: - O(n)
-#if[target=wasi]
-//: diag_debug_print: 主な用途
-//:
-//: [目的/もくてき]:
-//: - diag_debug_print の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn diag_debug_print <(Error)*>()> (e):
-    let p <i32> e.ptr;
-    let k <ErrorKind> kind_from_i32 load_i32 p;
-    let c <str> kind_color k;
-    let s <str> diag_to_string e;
-    debug_color c s
+fn diags_to_string_loop <(Vec<Diag>,i32,str)->str> (items, i, acc):
+    let n <i32> vec_len<Diag> items;
+    if:
+        ge i n
+        then acc
+        else:
+            match vec_get<Diag> items i:
+                Option::Some d:
+                    let one <str> diag_to_string d;
+                    let next <str> concat acc one;
+                    diags_to_string_loop items add i 1 next
+                Option::None:
+                    diags_to_string_loop items add i 1 acc
 
-//: diag_debug_println: デバッグ出力（改行付き）
-//:
-//: 目的:
-//: - debugln 出力へ Error を表示します。
-//:
-//: 実装(アルゴリズム):
-//: - 文字列化して debugln を呼びます。
-//:
-//: 注意(重要):
-//: - プロファイル設定により出力されない場合があります。
-//:
-//: 計算量:
-//: - O(n)
-#if[target=wasi]
-//: diag_debug_println: 主な用途
-//:
-//: [目的/もくてき]:
-//: - diag_debug_println の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn diag_debug_println <(Error)*>()> (e):
-    let p <i32> e.ptr;
-    let k <ErrorKind> kind_from_i32 load_i32 p;
-    let c <str> kind_color k;
-    let s <str> diag_to_string e;
-    debugln_color c s
+#if[target=std]
+fn diag_print <(Diag)*>()> (d):
+    let s <str> diag_to_string d;
+    print s
+
+#if[target=std]
+fn diag_println <(Diag)*>()> (d):
+    let s <str> diag_to_string d;
+    println s
+
+#if[target=std]
+fn diags_print <(Diags)*>()> (ds):
+    let s <str> diags_to_string ds;
+    print s
+
+#if[target=std]
+fn diags_println <(Diags)*>()> (ds):
+    let s <str> diags_to_string ds;
+    println s

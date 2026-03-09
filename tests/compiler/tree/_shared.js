@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { candidateDistDirs } = require('../../nodesrc/util_paths');
-const { loadCompilerFromCandidates } = require('../../nodesrc/compiler_loader');
+const { candidateDistDirs } = require('../../../nodesrc/util_paths');
+const { loadCompilerFromCandidates } = require('../../../nodesrc/compiler_loader');
 
 async function loadApi(distHint = '') {
     const loaded = await loadCompilerFromCandidates(candidateDistDirs(distHint));

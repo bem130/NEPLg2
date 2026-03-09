@@ -1,0 +1,129 @@
+//: # deserialize
+//: [機械/きかい][向/む]け[文字列表現/もじれつひょうげん]から[値/あたい]を[復元/ふくげん]する trait [群/ぐん]
+//:
+//: ### [目的/もくてき]
+//: - `Deserialize` trait を[標準化/ひょうじゅんか]し、`Serialize` が[返/かえ]した `str` から[値/あたい]を[戻/もど]す[入口/いりぐち]を[共通化/きょうつうか]します。
+//: - [変換/へんかん][失敗/しっぱい]は `StdErrorKind::ParseError` として[正規化/せいきか]し、trait [利用/りよう][側/がわ]が[個別/こべつ]の整数 error code に[依存/いそん]しなくてよいようにします。
+//:
+//: ### [注意/ちゅうい]
+//: - [当面/とうめん]は `str` だけを[入力/にゅうりょく]にします。
+//: - [文法/ぶんぽう]や[人間/にんげん][向/む]け[入力/にゅうりょく]の[寛容/かんよう]な[扱/あつか]いは `Parse` の[別仕様/べつしよう]で[整理/せいり]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - 各 impl に[依存/いそん]します。`bool` は O(1)、[文字列長/もじれつちょう]を n とする[整数/せいすう][復元/ふくげん]は O(n) です。
+
+#indent 4
+
+#import "alloc/string" as *
+#import "alloc/diag/error" as *
+#import "core/result" as *
+
+//: ## Deserialize
+//: `str` から[値/あたい]を[復元/ふくげん]する[能力/のうりょく]
+//:
+//: ### [目的/もくてき]
+//: - [機械/きかい][向/む]け[文字列表現/もじれつひょうげん]から[値/あたい]を[戻/もど]し、[保存/ほぞん]や[比較/ひかく]の[往復/おうふく]を[共通/きょうつう] helper で[扱/あつか]えるようにします。
+//:
+//: ### [注意/ちゅうい]
+//: - [失敗/しっぱい]は `Result::Err StdErrorKind::ParseError` として[返/かえ]すのを[標準/ひょうじゅん]にします。
+//: - [詳細/しょうさい]な[診断/しんだん]が[必要/ひつよう]な[処理/しょり]は `Outcome` と `Diag` を[使/つか]います。
+trait Deserialize:
+    fn deserialize <(str)->Result<Self, StdErrorKind>> (s):
+        Result::Err StdErrorKind::ParseError
+
+//: ## deserialize
+//: trait を[通/とお]して `str` から[値/あたい]を[復元/ふくげん]する
+//:
+//: ### [目的/もくてき]
+//: - [呼/よ]び[出/だ]し[側/がわ]が[型/かた]ごとの[具体的/ぐたいてき] API を[意識/いしき]せず、[共通/きょうつう]の[入口/いりぐち]から[復元/ふくげん]できるようにします。
+//:
+//: ### [使用例/しようれい]
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "core/traits/deserialize" as *
+//:| #import "alloc/diag/error" as *
+//: match deserialize<i32> "42":
+//:     Result::Ok v:
+//:         assert_eq_i32 42 v
+//:     Result::Err e:
+//:         match e:
+//:             StdErrorKind::ParseError:
+//:                 test_fail "deserialize<i32> failed unexpectedly";
+//:             StdErrorKind::Failure:
+//:                 test_fail "wrong error kind";
+//:             StdErrorKind::OutOfMemory:
+//:                 test_fail "wrong error kind";
+//:             StdErrorKind::EmptyCollection:
+//:                 test_fail "wrong error kind";
+//:             StdErrorKind::IndexOutOfBounds:
+//:                 test_fail "wrong error kind";
+//:             StdErrorKind::KeyNotFound:
+//:                 test_fail "wrong error kind";
+//:             StdErrorKind::CapacityExceeded:
+//:                 test_fail "wrong error kind";
+//:             StdErrorKind::InvalidOperation:
+//:                 test_fail "wrong error kind";
+//:             StdErrorKind::InvalidUtf8:
+//:                 test_fail "wrong error kind";
+//:             StdErrorKind::IoError:
+//:                 test_fail "wrong error kind";
+//:             StdErrorKind::Other:
+//:                 test_fail "wrong error kind";
+//: ```
+//:
+//: ### [実装/じっそう]
+//: - `Deserialize::deserialize s` をそのまま[呼/よ]びます。
+//:
+//: ### [注意/ちゅうい]
+//: - [型推論/かたすいろん]が[効/き]きにくいので、[呼/よ]び[出/だ]しでは `deserialize<i32>` のような[型引数/かたひきすう]を[付/つ]ける[前提/ぜんてい]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - impl に[依存/いそん]します。
+fn deserialize <.T: Deserialize> <(str)->Result<.T, StdErrorKind>> (s):
+    Deserialize::deserialize s
+
+fn parse_err_to_std <.T> <(Result<.T, i32>)->Result<.T, StdErrorKind>> (r):
+    match r:
+        Result::Ok v:
+            Result::Ok<.T, StdErrorKind> v
+        Result::Err _e:
+            Result::Err<.T, StdErrorKind> StdErrorKind::ParseError
+
+impl Deserialize for str:
+    fn deserialize <(str)->Result<str, StdErrorKind>> (s):
+        Result::Ok<str, StdErrorKind> s
+
+impl Deserialize for bool:
+    fn deserialize <(str)->Result<bool, StdErrorKind>> (s):
+        parse_err_to_std<bool> to_bool s
+
+impl Deserialize for i32:
+    fn deserialize <(str)->Result<i32, StdErrorKind>> (s):
+        parse_err_to_std<i32> to_i32 s
+
+impl Deserialize for i64:
+    fn deserialize <(str)->Result<i64, StdErrorKind>> (s):
+        parse_err_to_std<i64> to_i64 s
+
+impl Deserialize for i128:
+    fn deserialize <(str)->Result<i128, StdErrorKind>> (s):
+        parse_err_to_std<i128> to_i128 s
+
+impl Deserialize for u8:
+    fn deserialize <(str)->Result<u8, StdErrorKind>> (s):
+        match to_i32 s:
+            Result::Ok v:
+                if and ge v 0 le v 255 then Result::Ok<u8, StdErrorKind> <u8> cast v else Result::Err<u8, StdErrorKind> StdErrorKind::ParseError
+            Result::Err _e:
+                Result::Err<u8, StdErrorKind> StdErrorKind::ParseError
+
+impl Deserialize for f32:
+    fn deserialize <(str)->Result<f32, StdErrorKind>> (s):
+        parse_err_to_std<f32> to_f32 s
+
+impl Deserialize for f64:
+    fn deserialize <(str)->Result<f64, StdErrorKind>> (s):
+        parse_err_to_std<f64> to_f64 s

@@ -876,10 +876,17 @@ fn gen_expr(
             } else {
                 let missing = match callee {
                     FuncRef::Builtin(n) | FuncRef::User(n, _) => n.clone(),
-                    FuncRef::Trait { trait_name, method, .. } => {
+                    FuncRef::Trait {
+                        trait_name,
+                        method,
+                        self_ty,
+                    } => {
                         let mut s = trait_name.clone();
                         s.push_str("::");
                         s.push_str(method);
+                        s.push_str(" [self=");
+                        s.push_str(&ctx.type_to_string(*self_ty));
+                        s.push(']');
                         s
                     }
                 };

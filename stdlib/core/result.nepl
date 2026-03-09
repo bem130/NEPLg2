@@ -184,6 +184,32 @@ fn unwrap_ok <.T, .E> <(Result<.T, .E>)->.T> (r):
         Result::Err e:
             #intrinsic "unreachable" <> ()
 
+//: ## uwok
+//: `unwrap_ok` の[短縮名/たんしゅくめい]
+//:
+//: ### [目的/もくてき]
+//: - pipe [記法/きほう]で `Result` を[連続/れんぞく]して[処理/しょり]するときに、`unwrap_ok` より[短/みじか]く[書/か]けるようにします。
+//:
+//: ### [使用例/しようれい]
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "core/result" as *
+//: assert_eq_i32 1 ok<i32, str> 1 |> uwok;
+//: ```
+//:
+//: ### [実装/じっそう]
+//: - `unwrap_ok` への[別名/べつめい]です。
+//:
+//: ### [注意/ちゅうい]
+//: - [左側/ひだりがわ]の `Result<T, E>` から `T` が[推論/すいろん]できる[場面/ばめん]では、ふつうは[型注釈/かたちゅうしゃく]は[不要/ふよう]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `unwrap_ok` と[同/おな]じです。
+fn uwok unwrap_ok;
+
 //: unwrap_err: Err の中身を取り出す（Ok は到達不能）
 //:
 //: 目的:
@@ -203,6 +229,22 @@ fn unwrap_err <.T, .E> <(Result<.T, .E>)->.E> (r):
             e
         Result::Ok v:
             #intrinsic "unreachable" <> ()
+
+//: ## uwerr
+//: `unwrap_err` の[短縮名/たんしゅくめい]
+//:
+//: ### [目的/もくてき]
+//: - `Result::Err` の[中身/なかみ]を pipe [記法/きほう]でも[短/みじか]く[取/と]り[出/だ]せるようにします。
+//:
+//: ### [実装/じっそう]
+//: - `unwrap_err` への[別名/べつめい]です。
+//:
+//: ### [注意/ちゅうい]
+//: - `Result::Ok` を[渡/わた]すと `unwrap_err` と[同/おな]じく[到達不能/とうたつふのう]になります。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `unwrap_err` と[同/おな]じです。
+fn uwerr unwrap_err;
 
 //: unwrap_or: 失敗時のデフォルトを返す
 //:

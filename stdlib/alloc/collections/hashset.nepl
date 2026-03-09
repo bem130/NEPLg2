@@ -20,9 +20,9 @@
 #import "core/math" as *
 #import "core/result" as *
 #import "core/field" as field
+#import "core/traits/hash" as *
 #import "alloc/diag/error" as *
 #import "alloc/string" as *
-#import "alloc/hash/hash32" as *
 
 struct HashSet:
     hdr <i32>
@@ -125,7 +125,7 @@ fn hashset_insert <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut full <i32> 0
@@ -181,7 +181,7 @@ fn hashset_contains <(HashSet,i32)->bool> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     hashset_contains_loop entries entry_size cap idx idx key
 
 //: hashset_remove: 主な用途
@@ -202,7 +202,7 @@ fn hashset_remove <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0
@@ -417,7 +417,7 @@ fn hashset_str_insert <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut full <i32> 0
@@ -473,7 +473,7 @@ fn hashset_str_contains <(HashSetStr,str)->bool> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     hashset_str_contains_loop entries entry_size cap idx idx key
 
 //: hashset_str_remove: 主な用途
@@ -494,7 +494,7 @@ fn hashset_str_remove <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> 8
-    let idx <i32> rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0

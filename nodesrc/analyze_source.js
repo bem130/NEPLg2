@@ -4,7 +4,7 @@
 // - nepl-web の analyze_lex / analyze_parse API を使って、lexer/parser の木構造と診断を確認する。
 //
 // 使い方:
-//   node nodesrc/analyze_source.js --stage lex -i tests/functions.n.md
+//   node nodesrc/analyze_source.js --stage lex -i tests/compiler/functions.n.md
 //   node nodesrc/analyze_source.js --stage parse -i path/to/file.nepl -o /tmp/parse.json
 //   node nodesrc/analyze_source.js --stage resolve -i path/to/file.nepl -o /tmp/resolve.json
 //   node nodesrc/analyze_source.js --stage semantics -i path/to/file.nepl -o /tmp/semantics.json

@@ -21,9 +21,9 @@
 #import "core/option" as *
 #import "core/result" as *
 #import "core/field" as field
+#import "core/traits/hash" as *
 #import "alloc/diag/error" as *
 #import "alloc/string" as *
-#import "alloc/hash/hash32" as *
 
 struct HashMap<.V>:
     hdr <i32>
@@ -89,7 +89,7 @@ fn hashmap_insert <.V> <(HashMap<.V>,i32,.V)*>Result<HashMap<.V>, Diag>> (hm, ke
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     let mut cur <i32> idx
     let mut found <i32> 0
     let mut full <i32> 0
@@ -188,7 +188,7 @@ fn hashmap_get <.V> <(HashMap<.V>,i32)->Option<.V>> (hm, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     hashmap_get_loop<.V> entries entry_size cap idx idx key
 
 //: hashmap_contains: 主な用途
@@ -225,7 +225,7 @@ fn hashmap_remove <.V> <(HashMap<.V>,i32)*>Result<HashMap<.V>, Diag>> (hm, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_i32 key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0
@@ -411,7 +411,7 @@ fn hashmap_str_insert <.V> <(HashMapStr<.V>,str,.V)*>Result<HashMapStr<.V>, Diag
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     let mut cur <i32> idx
     let mut found <i32> 0
     let mut full <i32> 0
@@ -510,7 +510,7 @@ fn hashmap_str_get <.V> <(HashMapStr<.V>,str)->Option<.V>> (hm, key):
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     hashmap_str_get_loop<.V> entries entry_size cap idx idx key
 
 //: hashmap_str_contains: 主な用途
@@ -547,7 +547,7 @@ fn hashmap_str_remove <.V> <(HashMapStr<.V>,str)*>Result<HashMapStr<.V>, Diag>> 
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_str key cap
+    let idx <i32> rem_u hash32_by_trait key cap
     let mut cur <i32> idx
     let mut done <i32> 0
     let mut removed <i32> 0

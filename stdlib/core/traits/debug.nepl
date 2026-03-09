@@ -1,0 +1,79 @@
+//: debug: [開発者/かいはつしゃ][向/む]け[表示/ひょうじ]を[与/あた]える trait [群/ぐん]
+//:
+//: [目的/もくてき]:
+//: - `Debug` trait を[標準化/ひょうじゅんか]し、[調査/ちょうさ]や[診断/しんだん]に[使/つか]う[文字列表現/もじれつひょうげん]を[揃/そろ]えます。
+//:
+//: [注意/ちゅうい]:
+//: - `Debug` は[利用者/りようしゃ]向け[表示/ひょうじ]とは[限/かぎ]りません。
+//: - [安定/あんてい]した[外部形式/がいぶけいしき]が[必要/ひつよう]な[場合/ばあい]は `Serialize` を[使/つか]う[予定/よてい]です。
+//:
+//: [計算量/けいさんりょう]:
+//: - 各 impl に[依存/いぞん]します。
+
+#indent 4
+
+#import "alloc/string" as *
+#import "core/traits/stringify" as *
+
+//: Debug: [開発者/かいはつしゃ][向/む]け[文字列表現/もじれつひょうげん]
+trait Debug:
+    fn debug_string <(Self)->str> (x):
+        ""
+
+//: debug_string: trait を[通/とお]して debug [文字列/もじれつ]を[得/え]る
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "core/traits/debug" as *
+//: assert_str_eq "\"hi\"" debug_string "hi";
+//: assert_str_eq "7" debug_string 7;
+//: ```
+//:
+//: [目的/もくてき]:
+//: - [呼/よ]び[出/だ]し[側/がわ]で trait [名/めい]を[意識/いしき]せず debug [表示/ひょうじ]を[得/え]ます。
+//:
+//: [実装/じっそう]:
+//: - `Debug::debug_string x` をそのまま[呼/よ]びます。
+//:
+//: [注意/ちゅうい]:
+//: - `str` は[通常/つうじょう]の stringify と[区別/くべつ]できるよう、[引用符/いんようふ]を[付/つ]けて[返/かえ]します。
+//:
+//: [計算量/けいさんりょう]:
+//: - impl に[依存/いぞん]します。
+fn debug_string <.T: Debug> <(.T)->str> (x):
+    Debug::debug_string x
+
+impl Debug for str:
+    fn debug_string <(str)->str> (x):
+        concat3 "\"" x "\""
+
+impl Debug for bool:
+    fn debug_string <(bool)->str> (x):
+        from_bool x
+
+impl Debug for i32:
+    fn debug_string <(i32)->str> (x):
+        from_i32 x
+
+impl Debug for i64:
+    fn debug_string <(i64)->str> (x):
+        from_i64 x
+
+impl Debug for i128:
+    fn debug_string <(i128)->str> (x):
+        from_i128 x
+
+impl Debug for u8:
+    fn debug_string <(u8)->str> (x):
+        from_i32 cast x
+
+impl Debug for f32:
+    fn debug_string <(f32)->str> (x):
+        from_f32 x
+
+impl Debug for f64:
+    fn debug_string <(f64)->str> (x):
+        from_f64 x
