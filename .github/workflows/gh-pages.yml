@@ -145,6 +145,9 @@ jobs:
                   echo "cargo_test_outcome=${{ steps.cargo_test.outcome }}" > dist/tests/outcomes.txt
                   echo "trunk_build_outcome=${{ steps.trunk_build.outcome }}" >> dist/tests/outcomes.txt
 
+                  # Copy OGP image
+                  cp -f NEPLg2.png dist/NEPLg2.png
+
             - name: Build tutorials/stdlib HTML (allowed to fail)
               id: doc_build
               if: always()

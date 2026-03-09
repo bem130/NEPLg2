@@ -76,10 +76,12 @@ function wrapHtmlPlayground(body, title, description, moduleJsPathOpt) {
 <meta name="description" content="${escapeHtml(d)}"/>
 <meta property="og:title" content="${escapeHtml(t)}"/>
 <meta property="og:description" content="${escapeHtml(d)}"/>
+<meta property="og:image" content="https://neknaj.github.io/NEPLg2/NEPLg2.png"/>
 <meta property="og:type" content="article"/>
 <meta name="twitter:card" content="summary"/>
 <meta name="twitter:title" content="${escapeHtml(t)}"/>
 <meta name="twitter:description" content="${escapeHtml(d)}"/>
+<meta name="twitter:image" content="https://neknaj.github.io/NEPLg2/NEPLg2.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&display=swap" rel="stylesheet">
