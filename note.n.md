@@ -4327,7 +4327,7 @@
   - entry の「解決済みかつ生成済み」検証を追加して compile error 化する
 - ドキュメント運用修正:
   - `todo.md` は未完了タスクのみを残す形式へ整理
-  - 進捗・履歴・計測値は `note.md` のみへ集約
+  - 進捗・履歴・計測値は `note.n.md` のみへ集約
 
 # 2026-02-03 作業メモ (wasm32 build)
 - wasm32-unknown-unknown での `cargo test --no-run` が getrandom の js feature なしで失敗していたため、`nepl-core` の wasm32 用 dev-dependencies に `getrandom` (features=["js"]) を追加した。

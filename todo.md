@@ -10,7 +10,7 @@
 - stdlib 再構築は、依存の強い基盤から順に進める（diag/trait -> compiler 前提 -> core/mem -> alloc -> runtimes -> std -> features -> tutorials/tests）。
 - compiler のバグを発見した場合は、library 側の迂回ではなく compiler 側を適切に根本から修正する。
 - 間に合わせ修正を避け、旧 API の互換維持ではなく最終構成への収束を優先する。
-- 実装完了項目はここから削除し、経過・差分・判断理由は `note.md` に記録する。
+- 実装完了項目はここから削除し、経過・差分・判断理由は `note.n.md` に記録する。
 
 stdlib 再構築 本流
 
