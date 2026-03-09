@@ -6,6 +6,7 @@
 - 実装を変更した箇所のドキュメントコメントは、後回しにせず同じタイミングで必ず整備する。
 - `todo.md` には、reboot 仕様を問題なく実装するための順序だけを書く。
 - `tests/` の各テストケースには、そのケースの[目的/もくてき]と、何を[確/たし]かめるためのものかを日本語で丁寧に書く。
+- `nodesrc/` のツールは、stdlib reboot の検証効率を上げるために適宜改良してよい。
 - stdlib 再構築は、依存の強い基盤から順に進める（diag/trait -> compiler 前提 -> core/mem -> alloc -> runtimes -> std -> features -> tutorials/tests）。
 - compiler のバグを発見した場合は、library 側の迂回ではなく compiler 側を適切に根本から修正する。
 - 間に合わせ修正を避け、旧 API の互換維持ではなく最終構成への収束を優先する。

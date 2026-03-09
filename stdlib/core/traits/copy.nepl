@@ -101,3 +101,30 @@ impl Clone for f64:
 impl Copy for f64:
     fn copy_mark <(f64)->f64> (x):
         x
+
+//: str は `Clone` / `Copy` の[両方/りょうほう]を[持/も]つ
+//:
+//: ### [目的/もくてき]
+//: - `str` は[長/なが]さつき[文字列/もじれつ] view であり、[所有権/しょゆうけん]を[持/も]たないため、[共有/きょうゆう] view の[複製/ふくせい]を capability として[明示/めいじ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [複製/ふくせい]されるのは[内容/ないよう]そのものではなく、view としての `str` です。
+impl Clone for str:
+    fn clone <(str)->str> (x):
+        x
+
+impl Copy for str:
+    fn copy_mark <(str)->str> (x):
+        x
+
+//: unit は `Clone` / `Copy` の[両方/りょうほう]を[持/も]つ
+//:
+//: ### [目的/もくてき]
+//: - `()` は[状態/じょうたい]を[持/も]たないため、move ではなく copy として[扱/あつか]ってよいことを[明示/めいじ]します。
+impl Clone for ():
+    fn clone <(())->()> (x):
+        x
+
+impl Copy for ():
+    fn copy_mark <(())->()> (x):
+        x

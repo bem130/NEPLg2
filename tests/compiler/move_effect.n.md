@@ -577,3 +577,41 @@ fn main <()*>i32> ():
     writer_flush w
     0
 ```
+
+## core/traits/copy 導入後は str の再利用が trait impl で成立する
+
+このケースは、`str` が compiler 固定表ではなく `core/traits/copy` の impl によって Copy として扱われることを確かめます。
+
+neplg2:test
+```neplg2
+#entry main
+#indent 4
+#target core
+
+#import "core/traits/copy" as *
+
+fn main <()->i32> ():
+    let s <str> "abc"
+    let t <str> s
+    let u <str> s
+    0
+```
+
+## core/traits/copy 導入後は unit の再利用が trait impl で成立する
+
+このケースは、`()` が compiler 固定表ではなく `core/traits/copy` の impl によって Copy として扱われることを確かめます。
+
+neplg2:test
+```neplg2
+#entry main
+#indent 4
+#target core
+
+#import "core/traits/copy" as *
+
+fn main <()->i32> ():
+    let u <()> ()
+    let a <()> u
+    let b <()> u
+    0
+```

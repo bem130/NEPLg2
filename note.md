@@ -8945,3 +8945,31 @@
   - `Result` と `Outcome` を overloading で共通 helper 名に揃えた。
   - 現状の trait 機能では associated type や trait generic abstraction が弱く、`Result<T,E>` と `Outcome<T,E>` を無理に trait 一つへ押し込むより helper の方が自然だった。
 - `stdlib/tests/error.n.md` に `result_and_outcome_common_helpers` を追加し、軽量 API と rich API の共通読み取りを focused に確認。
+# 2026-03-09 作業メモ (compiler 前提固定: `.nepl` で表現できる primitive の Copy を stdlib impl へ移行)
+
+- [目的/もくてき]:
+  - `todo.md` の compiler 前提固定に従い、`Copy` 判定の compiler 固定表を縮小する。
+  - `.nepl` ソースで表現できる primitive については、stdlib 側の `impl Copy/Clone` を唯一の根拠に寄せる。
+- [根本原因/こんぽんげんいん]:
+  - `TypeCtx::is_copy_with_trait_model` は trait モードでも `i32` / `u8` / `f32` / `bool` / `str` / `()` を固定表で copy とみなしていた。
+  - このため `core/traits/copy.nepl` に同内容の impl を定義しても、move 規則の最終判定が compiler 内部の知識へ依存したままだった。
+  - 一方で、参照型や `never` は現状の言語機能では `.nepl` 側に自然な impl を置きにくく、同じ扱いにはできない。
+- [変更/へんこう]:
+  - `stdlib/core/traits/copy.nepl`
+    - `str` への `Clone` / `Copy` impl を追加。
+    - `()` への `Clone` / `Copy` impl を追加。
+  - `nepl-core/src/types.rs`
+    - trait モードの `is_copy_with_trait_model` から、`.nepl` 側で表現できる primitive (`Unit` / `I32` / `U8` / `F32` / `Bool` / `Str`) の固定表判定を削除。
+    - 上記は `has_copy_impl_target` による trait impl 登録結果だけで判定するよう変更。
+    - 固定表に残したのは、現段階で source impl を自然に持ちにくい `Never` と参照型だけに絞った。
+  - `tests/compiler/move_effect.n.md`
+    - `core/traits/copy` を import したとき、`str` の再利用が `Copy` impl によって成立するケースを追加。
+    - `()` の再利用が `Copy` impl によって成立するケースを追加。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build` -> success
+  - `node` + `nodesrc/compiler_loader` による compile-only focused check:
+    - `#import "core/traits/copy" as *` を含む `str` 再利用 snippet -> `OK`
+    - 同 `()` 再利用 snippet -> `OK`
+- [状況/じょうきょう]:
+  - compiler の `Copy` 固定表は縮小され、`.nepl` 側に impl を置ける primitive は stdlib impl に寄せられた。
+  - 残る特別扱いは、現状の言語で source impl を置きにくい参照型と `never` である。

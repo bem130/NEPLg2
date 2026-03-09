@@ -368,15 +368,15 @@ impl TypeCtx {
     fn is_copy_with_trait_model(&self, id: TypeId) -> bool {
         let resolved = self.resolve_id(id);
         match self.get_ref(resolved) {
+            TypeKind::Never => true,
+            TypeKind::Reference(_, _) => true,
             TypeKind::Unit
             | TypeKind::I32
             | TypeKind::U8
             | TypeKind::F32
             | TypeKind::Bool
             | TypeKind::Str
-            | TypeKind::Never => true,
-            TypeKind::Reference(_, _) => true,
-            TypeKind::Named(_) => self.has_copy_impl_target(resolved),
+            | TypeKind::Named(_) => self.has_copy_impl_target(resolved),
             TypeKind::Tuple { items } => items.iter().all(|t| self.is_copy(*t)),
             TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_copy_impl_target(resolved),
             TypeKind::Apply { base, .. } => match self.get_ref(self.resolve_id(*base)) {
