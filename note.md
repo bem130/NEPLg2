@@ -8887,3 +8887,36 @@
   - `check_function` で generic 関数本体の型変数 binding を snapshot / restore しつつ、呼び出し側では `binding.ty` と `inst_ty` の組から各 type parameter の具体型を再推論して `resolved_args` へ反映するように修正した。
   - monomorphize の trait impl 探索は `unify` を使っていたため、cast 用の緩い一致規則まで trait 解決に混入し、`Stringify<i32>` が `u8` / `bool` / `str` など複数 impl と曖昧一致する不具合があった。
   - trait impl 選択は `same_type` による同一型一致へ切り替え、trait 解決と数値 cast の規則を分離した。
+
+# 2026-03-09 作業メモ (`Serialize` / `Deserialize` trait の導入と receiverless trait method 解決修正)
+
+- 目的:
+  - trait 能力モデルの残件だった `Serialize` / `Deserialize` を stdlib へ追加する。
+  - `Deserialize::deserialize` のように receiver を取らず返り値側で `Self` が決まる trait method が、generic helper 内でも安定に単相化されるよう compiler を修正する。
+- 変更:
+  - `stdlib/core/traits/serialize.nepl`
+    - `Serialize` trait と helper `serialize` を追加した。
+    - `str`, `bool`, `i32`, `i64`, `i128`, `u8`, `f32`, `f64` の impl を追加した。
+  - `stdlib/core/traits/deserialize.nepl`
+    - `Deserialize` trait と helper `deserialize` を追加した。
+    - `str`, `bool`, `i32`, `i64`, `i128`, `u8`, `f32`, `f64` の impl を追加した。
+    - `Result<_, i32>` を `Result<_, StdErrorKind>` に寄せる `parse_err_to_std` を追加した。
+  - `tests/stdlib/traits_serde.n.md`
+    - `[目的/もくてき]` を持つ focused test を追加し、serialize / deserialize の典型使用例を確認するようにした。
+- compiler 修正:
+  - `Deserialize::deserialize s` のような receiverless trait method reference は、従来 `Self` 用の遊離 fresh type var を stack entry に積んでいた。
+  - そのため generic helper `fn deserialize <.T: Deserialize> ...` 内で `.T` へ結び付かないまま `FuncRef::Trait { self_ty = Self }` が HIR に残り、wasm codegen で `unknown function 'Deserialize::deserialize [self=Self]'` となっていた。
+  - 修正内容:
+    - trait method reference を積む時点で、そのスコープに唯一の `.T: Trait` がある場合は fresh var ではなくその `.T` を `Self` として使うようにした。
+    - fallback の trait call 解決も、receiver 引数だけでなく expected return type と trait bound から `Self` を推論できるように整理した。
+    - `check_function` では body の型変数 binding を restore する前に HIR 全体の型 ID を resolve するようにし、単相化へ未解決 var が漏れないようにした。
+    - monomorphize では trait callee の self 解決を args 先頭型へ頼らず、`self_ty` 自体の解決結果だけを使うように戻した。
+- 検証:
+  - `NO_COLOR=false trunk build`
+    - 結果: success
+  - `node nodesrc/tests.js -i tests/stdlib/traits_serde.n.md --no-stdlib --no-tree -o /tmp/tests-traits-serde.json -j 15`
+    - 結果: `2/2 pass`
+- 結論:
+  - `Serialize` / `Deserialize` の stdlib trait 導入は成立した。
+  - 根本原因は codegen や monomorphize ではなく、receiverless trait method reference を generic body へ持ち込む時点の `Self` 束縛だった。
+  - 次は `Result` / `Outcome` を共通に扱う helper / trait 枠組みへ進む。

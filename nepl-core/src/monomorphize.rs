@@ -148,10 +148,7 @@ impl<'a> Monomorphizer<'a> {
                     self_ty,
                 } = callee
                 {
-                    let resolved = args
-                        .first()
-                        .map(|arg| self.ctx.resolve_id(arg.ty))
-                        .unwrap_or_else(|| self.ctx.resolve_id(*self_ty));
+                    let resolved = self.ctx.resolve_id(*self_ty);
                     *self_ty = resolved;
                     if let Some(name) =
                         self.resolve_trait_impl_name(trait_name.as_str(), method.as_str(), resolved)
@@ -416,10 +413,7 @@ impl<'a> Monomorphizer<'a> {
                         self_ty,
                     } => {
                         *self_ty = self.ctx.substitute(*self_ty, mapping);
-                        let resolved = args
-                            .first()
-                            .map(|arg| self.ctx.resolve_id(arg.ty))
-                            .unwrap_or_else(|| self.ctx.resolve_id(*self_ty));
+                        let resolved = self.ctx.resolve_id(*self_ty);
                         *self_ty = resolved;
                         if let Some(func_name) =
                             self.resolve_trait_impl_name(trait_name.as_str(), method.as_str(), resolved)
