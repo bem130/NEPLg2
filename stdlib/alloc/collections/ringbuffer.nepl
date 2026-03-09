@@ -1,21 +1,26 @@
-//: ringbuffer: 固定長循環バッファ（自動拡張）を扱うライブラリ
-//:
-//: [目的/もくてき]:
-//: - `push_back` / `pop_front` / `peek_front` を O(1) で扱えるキュー基盤を提供します。
-//:
-//: [実装/じっそう]:
-//: - ヘッダ `[len, cap, head, data_ptr]` を持つ構造で管理します。
-//: - 容量不足時は 2 倍拡張し、論理順序を保つように再配置します。
-//:
-//: [注意/ちゅうい]:
-//: - `push_back` は `Result<RingBuffer<.T>, Diag>` を返します。
-//: - `pop_front` / `peek_front` は `Option<.T>` を返します。
-//:
-//: [計算量/けいさんりょう]:
-//: - `len/is_empty/peek_front/pop_front` は O(1)。
-//: - `push_back` はならし O(1)、拡張時 O(n)。
-
 #indent 4
+
+//: # ringbuffer
+//: [固定長/こていちょう][循環/じゅんかん]バッファを[用/もち]いた FIFO [基盤/きばん]
+//:
+//: ### [目的/もくてき]
+//: - `push_back` / `pop_front` / `peek_front` を[備/そな]えた FIFO [基盤/きばん]を[提供/ていきょう]します。
+//: - `queue` の[内部実装/ないぶじっそう]として[使/つか]える、[前/まえ]から[取/と]り[出/だ]す[構造/こうぞう]を[提供/ていきょう]します。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダ `[len, cap, head, data_ptr]` を 16 byte の[領域/りょういき]として[保持/ほじ]します。
+//: - [要素/ようそ][本体/ほんたい]は `MemPtr<.T>` で[管理/かんり]し、[容量/ようりょう][不足/ぶそく][時/じ]は 2 [倍/ばい]へ[拡張/かくちょう]します。
+//: - [循環/じゅんかん][順序/じゅんじょ]は `head` と `len` から[論理順/ろんりじゅん]を[計算/けいさん]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `RingBuffer<.T>` は[内部/ないぶ]ヘッダと[要素/ようそ][領域/りょういき]の[所有権/しょゆうけん]を[持/も]ちます。
+//: - `ringbuffer_push_back` は[更新後/こうしんご]の `RingBuffer<.T>` を `Result` で[返/かえ]します。
+//: - [拡張/かくちょう]が[発生/はっせい]すると、[内部/ないぶ]データ[領域/りょういき]の[番地/ばんち]は[変/か]わりえます。
+//: - `ringbuffer_free` [後/ご]の[再利用/さいりよう]は[禁止/きんし]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `len` / `is_empty` / `peek_front` / `pop_front` は O(1) です。
+//: - `push_back` は[償却/しょうきゃく] O(1)、[拡張/かくちょう][発生時/はっせいじ]の[最悪/さいあく][時間/じかん][計算量/けいさんりょう]は O(n) です。
 
 #import "core/mem" as *
 #import "core/math" as *
@@ -25,126 +30,366 @@
 #import "alloc/diag/error" as *
 
 struct RingBuffer<.T>:
-    hdr <i32>
+    hdr <MemPtr<u8>>
 
+//: ## RingBuffer
+//: FIFO を[支/ささ]える[循環/じゅんかん]バッファの[所有者/しょゆうしゃ]
+//:
+//: ### [目的/もくてき]
+//: - `[len, cap, head, data_ptr]` ヘッダと[要素/ようそ][領域/りょういき]を[一体/いったい]として[扱/あつか]う[所有者/しょゆうしゃ]です。
+//:
+//: ### [注意/ちゅうい]
+//: - [値/あたい]を move すると[所有権/しょゆうけん]も move します。
+//: - `copy` [前提/ぜんてい]の[軽量/けいりょう]ハンドルではありません。
+//: - `ringbuffer_free` を[呼/よ]ぶ[責任/せきにん]は[所有/しょゆう]している[側/がわ]にあります。
+
+//: ## ringbuffer_header_len_ptr
+//: length [欄/らん]を[指/さ]す
+//:
+//: ### [目的/もくてき]
+//: - ヘッダ[先頭/せんとう]の length [欄/らん]を `MemPtr<i32>` として[得/え]ます。
+//:
+//: ### [実装/じっそう]
+//: - `hdr` の raw address をそのまま `MemPtr<i32>` として[包/つつ]みます。
+//:
+//: ### [注意/ちゅうい]
+//: - [公開/こうかい] API ではなく、`RingBuffer` [内部/ないぶ]の[補助/ほじょ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+fn ringbuffer_header_len_ptr <.T> <(RingBuffer<.T>)->MemPtr<i32>> (rb):
+    mem_ptr_wrap mem_ptr_addr get rb "hdr"
+
+//: ## ringbuffer_header_cap_ptr
+//: capacity [欄/らん]を[指/さ]す
+//:
+//: ### [目的/もくてき]
+//: - ヘッダ[中/ちゅう]の capacity [欄/らん]を `MemPtr<i32>` として[得/え]ます。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダ[先頭/せんとう]から 4 byte [進/すす]めた[位置/いち]を[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [公開/こうかい] API ではなく、`RingBuffer` [内部/ないぶ]の[補助/ほじょ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+fn ringbuffer_header_cap_ptr <.T> <(RingBuffer<.T>)->MemPtr<i32>> (rb):
+    mem_ptr_wrap add mem_ptr_addr get rb "hdr" 4
+
+//: ## ringbuffer_header_head_ptr
+//: head [欄/らん]を[指/さ]す
+//:
+//: ### [目的/もくてき]
+//: - [先頭/せんとう][要素/ようそ]の[論理位置/ろんりいち]を[表/あらわ]す `head` [欄/らん]を `MemPtr<i32>` として[得/え]ます。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダ[先頭/せんとう]から 8 byte [進/すす]めた[位置/いち]を[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [公開/こうかい] API ではなく、`RingBuffer` [内部/ないぶ]の[補助/ほじょ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+fn ringbuffer_header_head_ptr <.T> <(RingBuffer<.T>)->MemPtr<i32>> (rb):
+    mem_ptr_wrap add mem_ptr_addr get rb "hdr" 8
+
+//: ## ringbuffer_header_data_ptr_ptr
+//: data pointer [欄/らん]を[指/さ]す
+//:
+//: ### [目的/もくてき]
+//: - [要素/ようそ][領域/りょういき]の raw address を[保持/ほじ]する[欄/らん]を `MemPtr<i32>` として[得/え]ます。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダ[先頭/せんとう]から 12 byte [進/すす]めた[位置/いち]を[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [公開/こうかい] API ではなく、`RingBuffer` [内部/ないぶ]の[補助/ほじょ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+fn ringbuffer_header_data_ptr_ptr <.T> <(RingBuffer<.T>)->MemPtr<i32>> (rb):
+    mem_ptr_wrap add mem_ptr_addr get rb "hdr" 12
+
+fn ringbuffer_header_len_ptr_from_hdr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap mem_ptr_addr hdr
+
+fn ringbuffer_header_cap_ptr_from_hdr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 4
+
+fn ringbuffer_header_head_ptr_from_hdr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 8
+
+fn ringbuffer_header_data_ptr_ptr_from_hdr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 12
+
+fn ringbuffer_len_from_hdr <(MemPtr<u8>)->i32> (hdr):
+    match load_i32 ringbuffer_header_len_ptr_from_hdr hdr:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+fn ringbuffer_cap_from_hdr <(MemPtr<u8>)->i32> (hdr):
+    match load_i32 ringbuffer_header_cap_ptr_from_hdr hdr:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+fn ringbuffer_head_from_hdr <(MemPtr<u8>)->i32> (hdr):
+    match load_i32 ringbuffer_header_head_ptr_from_hdr hdr:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+fn ringbuffer_data_from_hdr <.T> <(MemPtr<u8>)->MemPtr<.T>> (hdr):
+    match load_i32 ringbuffer_header_data_ptr_ptr_from_hdr hdr:
+        Option::Some raw:
+            mem_ptr_wrap raw
+        Option::None:
+            mem_ptr_wrap 0
+
+fn ringbuffer_len_raw <.T> <(RingBuffer<.T>)->i32> (rb):
+    ringbuffer_len_from_hdr get rb "hdr"
+
+fn ringbuffer_cap_raw <.T> <(RingBuffer<.T>)->i32> (rb):
+    ringbuffer_cap_from_hdr get rb "hdr"
+
+fn ringbuffer_head_raw <.T> <(RingBuffer<.T>)->i32> (rb):
+    ringbuffer_head_from_hdr get rb "hdr"
+
+fn ringbuffer_data_ptr <.T> <(RingBuffer<.T>)->MemPtr<.T>> (rb):
+    ringbuffer_data_from_hdr<.T> get rb "hdr"
+
+//: ## ringbuffer_new
+//: [既定/きてい][容量/ようりょう]の[空/から]バッファを[作/つく]る
+//:
+//: ### [目的/もくてき]
+//: - [既定/きてい][容量/ようりょう] 8 の[空/から] `RingBuffer<.T>` を[作成/さくせい]します。
+//:
+//: ### [実装/じっそう]
+//: - `ringbuffer_with_capacity 8` を[呼/よ]びます。
+//:
+//: ### [注意/ちゅうい]
+//: - [失敗/しっぱい]は `Result::Err Diag` として[返/かえ]ります。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
 fn ringbuffer_new <.T> <()*>Result<RingBuffer<.T>, Diag>> ():
     ringbuffer_with_capacity<.T> 8
 
+//: ## ringbuffer_with_capacity
+//: [初期/しょき][容量/ようりょう]を[指定/してい]して[作成/さくせい]する
+//:
+//: ### [目的/もくてき]
+//: - [少/すく]なくとも `initial_cap` [個/こ]を[保持/ほじ]できる[空/から] `RingBuffer<.T>` を[作成/さくせい]します。
+//:
+//: ### [実装/じっそう]
+//: - [容量/ようりょう] 1 [未満/みまん]は 1 に[切/き]り[上/あ]げます。
+//: - 16 byte のヘッダと `cap * size_of<.T>` byte の[要素/ようそ][領域/りょういき]を[別々/べつべつ]に[確保/かくほ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [確保/かくほ][失敗/しっぱい]した[場合/ばあい]は `diag_out_of_memory` を[返/かえ]します。
+//: - ヘッダ[確保/かくほ]に[失敗/しっぱい]した[場合/ばあい]、すでに[確保/かくほ]したデータ[領域/りょういき]は[解放/かいほう]してから[失敗/しっぱい]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
 fn ringbuffer_with_capacity <.T> <(i32)*>Result<RingBuffer<.T>, Diag>> (initial_cap):
     let cap <i32> if lt initial_cap 1 1 initial_cap
-    let data_size <i32> mul cap size_of<.T>
-    let data <i32> alloc_raw data_size
-    if:
-        eq data 0
-        then:
-            diag_err<RingBuffer<.T>> diag_out_of_memory "ringbuffer_with_capacity(data)"
-        else:
-            let hdr <i32> alloc_raw 16
-            if:
-                eq hdr 0
-                then:
-                    dealloc_raw data data_size
-                    diag_err<RingBuffer<.T>> diag_out_of_memory "ringbuffer_with_capacity(header)"
-                else:
-                    store_i32 hdr 0
-                    store_i32 add hdr 4 cap
-                    store_i32 add hdr 8 0
-                    store_i32 add hdr 12 data
-                    ok<RingBuffer<.T>, Diag> RingBuffer hdr
+    match alloc_ptr<u8> 16:
+        Result::Err _e:
+            diag_err<RingBuffer<.T>> diag_out_of_memory "ringbuffer_with_capacity(header)"
+        Result::Ok header:
+            match alloc_ptr<.T> mul cap size_of<.T>:
+                Result::Err _e:
+                    let _ <()> uwok dealloc_ptr<u8> header 16
+                    diag_err<RingBuffer<.T>> diag_out_of_memory "ringbuffer_with_capacity(data)"
+                Result::Ok data:
+                    let rb <RingBuffer<.T>> RingBuffer header
+                    let hdr <MemPtr<u8>> get rb "hdr"
+                    let _ <()> uwok store_i32 ringbuffer_header_len_ptr_from_hdr hdr 0
+                    let _ <()> uwok store_i32 ringbuffer_header_cap_ptr_from_hdr hdr cap
+                    let _ <()> uwok store_i32 ringbuffer_header_head_ptr_from_hdr hdr 0
+                    let _ <()> uwok store_i32 ringbuffer_header_data_ptr_ptr_from_hdr hdr mem_ptr_addr data
+                    ok<RingBuffer<.T>, Diag> rb
 
+//: ## ringbuffer_len
+//: [要素数/ようそすう]を[返/かえ]す
+//:
+//: ### [目的/もくてき]
+//: - [現在/げんざい][保持/ほじ]している[要素数/ようそすう]を[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダの length [欄/らん]を[読/よ]むだけです。
+//:
+//: ### [注意/ちゅうい]
+//: - [変更/へんこう]を[伴/ともな]わない[読/よ]み[取/と]り API です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
 fn ringbuffer_len <.T> <(RingBuffer<.T>)->i32> (rb):
-    load_i32 get rb "hdr"
+    ringbuffer_len_raw<.T> rb
 
 fn ringbuffer_cap <.T> <(RingBuffer<.T>)->i32> (rb):
-    load_i32 add get rb "hdr" 4
+    ringbuffer_cap_raw<.T> rb
 
 fn ringbuffer_is_empty <.T> <(RingBuffer<.T>)->bool> (rb):
     eq ringbuffer_len<.T> rb 0
 
+//: ## ringbuffer_push_back
+//: [末尾/まつび]へ[追加/ついか]する
+//:
+//: ### [目的/もくてき]
+//: - [末尾/まつび]に `item` を[追加/ついか]し、[更新後/こうしんご]の `RingBuffer<.T>` を[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - [空/あ]きがあれば `tail = (head + len) mod cap` へ[直接/ちょくせつ][書/か]き[込/こ]みます。
+//: - [満杯/まんぱい]なら 2 [倍/ばい]へ[拡張/かくちょう]し、[論理順/ろんりじゅん]どおりに[並/なら]べ[替/か]えてから[追加/ついか]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [拡張/かくちょう]が[起/お]きると `head` は 0 に[戻/もど]ります。
+//: - [更新後/こうしんご]の `RingBuffer<.T>` を[受/う]け[取/と]る[前提/ぜんてい]なので、pipe [記法/きほう]では `|> push_back ... |> uwok` のように[束縛/そくばく]し[直/なお]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [償却/しょうきゃく] O(1)、[拡張/かくちょう][発生時/はっせいじ]の[最悪/さいあく][時間/じかん][計算量/けいさんりょう]は O(n) です。
 fn ringbuffer_push_back <.T> <(RingBuffer<.T>, .T)*>Result<RingBuffer<.T>, Diag>> (rb, item):
-    let hdr <i32> get rb "hdr"
-    let len <i32> load_i32 hdr
-    let cap <i32> load_i32 add hdr 4
-    let head <i32> load_i32 add hdr 8
-    let data <i32> load_i32 add hdr 12
-
+    let hdr <MemPtr<u8>> get rb "hdr"
+    let len <i32> ringbuffer_len_from_hdr hdr
+    let cap <i32> ringbuffer_cap_from_hdr hdr
+    let head <i32> ringbuffer_head_from_hdr hdr
+    let data <MemPtr<.T>> ringbuffer_data_from_hdr<.T> hdr
     if:
         eq len cap
         then:
             let new_cap <i32> mul cap 2
-            let new_size <i32> mul new_cap size_of<.T>
-            let new_data <i32> alloc_raw new_size
-            if:
-                eq new_data 0
-                then:
+            match alloc_ptr<.T> mul new_cap size_of<.T>:
+                Result::Err _e:
                     diag_err<RingBuffer<.T>> diag_out_of_memory "ringbuffer_push_back(grow)"
-                else:
+                Result::Ok new_data:
                     let mut i <i32> 0
                     while lt i len:
                         do:
                             let src_idx <i32> mod_s add head i cap
                             let src_off <i32> mul src_idx size_of<.T>
                             let dst_off <i32> mul i size_of<.T>
-                            store<.T> add new_data dst_off load<.T> add data src_off
+                            store<.T> add mem_ptr_addr new_data dst_off load<.T> add mem_ptr_addr data src_off
                             set i add i 1
-                    dealloc_raw data mul cap size_of<.T>
-                    store_i32 add hdr 4 new_cap
-                    store_i32 add hdr 8 0
-                    store_i32 add hdr 12 new_data
-                    let tail_idx <i32> len
-                    let tail_off <i32> mul tail_idx size_of<.T>
-                    store<.T> add new_data tail_off item
-                    store_i32 hdr add len 1
+                    let _ <()> uwok dealloc_ptr<.T> data mul cap size_of<.T>
+                    let _ <()> uwok store_i32 ringbuffer_header_cap_ptr_from_hdr hdr new_cap
+                    let _ <()> uwok store_i32 ringbuffer_header_head_ptr_from_hdr hdr 0
+                    let _ <()> uwok store_i32 ringbuffer_header_data_ptr_ptr_from_hdr hdr mem_ptr_addr new_data
+                    let tail_off <i32> mul len size_of<.T>
+                    store<.T> add mem_ptr_addr new_data tail_off item
+                    let _ <()> uwok store_i32 ringbuffer_header_len_ptr_from_hdr hdr add len 1
                     ok<RingBuffer<.T>, Diag> rb
         else:
             let tail_idx <i32> mod_s add head len cap
             let tail_off <i32> mul tail_idx size_of<.T>
-            store<.T> add data tail_off item
-            store_i32 hdr add len 1
+            store<.T> add mem_ptr_addr data tail_off item
+            let _ <()> uwok store_i32 ringbuffer_header_len_ptr_from_hdr hdr add len 1
             ok<RingBuffer<.T>, Diag> rb
 
+//: ## ringbuffer_pop_front
+//: [先頭/せんとう]から[取/と]り[出/だ]す
+//:
+//: ### [目的/もくてき]
+//: - [先頭/せんとう][要素/ようそ]を[取/と]り[出/だ]し、[存在/そんざい]しなければ `None` を[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - `len == 0` なら `None` を[返/かえ]します。
+//: - [要素/ようそ]がある[場合/ばあい]は `head` [位置/いち]を[読/よ]み、`head = (head + 1) mod cap` と `len - 1` を[更新/こうしん]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [要素/ようそ]の[物理位置/ぶつりいち]は[循環/じゅんかん]しているので、[配列/はいれつ]の 0 [番/ばん]とは[限/かぎ]りません。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
 fn ringbuffer_pop_front <.T> <(RingBuffer<.T>)*>Option<.T>> (rb):
-    let hdr <i32> get rb "hdr"
-    let len <i32> load_i32 hdr
+    let hdr <MemPtr<u8>> get rb "hdr"
+    let len <i32> ringbuffer_len_from_hdr hdr
     if:
         eq len 0
         then:
             none<.T>
         else:
-            let cap <i32> load_i32 add hdr 4
-            let head <i32> load_i32 add hdr 8
-            let data <i32> load_i32 add hdr 12
+            let cap <i32> ringbuffer_cap_from_hdr hdr
+            let head <i32> ringbuffer_head_from_hdr hdr
+            let data <MemPtr<.T>> ringbuffer_data_from_hdr<.T> hdr
             let off <i32> mul head size_of<.T>
-            let item <.T> load<.T> add data off
-            store_i32 add hdr 8 mod_s add head 1 cap
-            store_i32 hdr sub len 1
+            let item <.T> load<.T> add mem_ptr_addr data off
+            let _ <()> uwok store_i32 ringbuffer_header_head_ptr_from_hdr hdr mod_s add head 1 cap
+            let _ <()> uwok store_i32 ringbuffer_header_len_ptr_from_hdr hdr sub len 1
             some<.T> item
 
+//: ## ringbuffer_peek_front
+//: [先頭/せんとう]を[見/み]る
+//:
+//: ### [目的/もくてき]
+//: - [先頭/せんとう][要素/ようそ]を[削除/さくじょ]せずに[参照/さんしょう]します。
+//:
+//: ### [実装/じっそう]
+//: - `head` [位置/いち]を[読/よ]み、その[要素/ようそ]だけを[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [空/から]なら `None` を[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
 fn ringbuffer_peek_front <.T> <(RingBuffer<.T>)->Option<.T>> (rb):
-    let hdr <i32> get rb "hdr"
-    let len <i32> load_i32 hdr
+    let hdr <MemPtr<u8>> get rb "hdr"
+    let len <i32> ringbuffer_len_from_hdr hdr
     if:
         eq len 0
         then:
             none<.T>
         else:
-            let head <i32> load_i32 add hdr 8
-            let data <i32> load_i32 add hdr 12
+            let head <i32> ringbuffer_head_from_hdr hdr
+            let data <MemPtr<.T>> ringbuffer_data_from_hdr<.T> hdr
             let off <i32> mul head size_of<.T>
-            some<.T> load<.T> add data off
+            some<.T> load<.T> add mem_ptr_addr data off
 
+//: ## ringbuffer_clear
+//: [内容/ないよう]を[空/から]にする
+//:
+//: ### [目的/もくてき]
+//: - [保持/ほじ]している[要素数/ようそすう]を 0 に[戻/もど]して[空/から]バッファにします。
+//:
+//: ### [実装/じっそう]
+//: - `len = 0` と `head = 0` だけを[書/か]き[換/か]えます。
+//:
+//: ### [注意/ちゅうい]
+//: - [容量/ようりょう]と[確保/かくほ]ずみメモリは[維持/いじ]されます。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
 fn ringbuffer_clear <.T> <(RingBuffer<.T>)*>RingBuffer<.T>> (rb):
-    let hdr <i32> get rb "hdr"
-    store_i32 hdr 0
-    store_i32 add hdr 8 0
+    let hdr <MemPtr<u8>> get rb "hdr"
+    let _ <()> uwok store_i32 ringbuffer_header_len_ptr_from_hdr hdr 0
+    let _ <()> uwok store_i32 ringbuffer_header_head_ptr_from_hdr hdr 0
     rb
 
+//: ## ringbuffer_free
+//: [内部/ないぶ]メモリを[解放/かいほう]する
+//:
+//: ### [目的/もくてき]
+//: - [要素/ようそ][領域/りょういき]とヘッダ[領域/りょういき]を[両方/りょうほう][解放/かいほう]します。
+//:
+//: ### [実装/じっそう]
+//: - `cap * size_of<.T>` byte の[要素/ようそ][領域/りょういき]を `dealloc_ptr<.T>` し、その[後/あと]で 16 byte のヘッダを `dealloc_ptr<u8>` します。
+//:
+//: ### [注意/ちゅうい]
+//: - [解放後/かいほうご]に `rb` を[再利用/さいりよう]してはいけません。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
 fn ringbuffer_free <.T> <(RingBuffer<.T>)*>()> (rb):
-    let hdr <i32> get rb "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let data <i32> load_i32 add hdr 12
-    dealloc_raw data mul cap size_of<.T>
-    dealloc_raw hdr 16
+    let hdr <MemPtr<u8>> get rb "hdr"
+    let cap <i32> ringbuffer_cap_from_hdr hdr
+    let data <MemPtr<.T>> ringbuffer_data_from_hdr<.T> hdr
+    let _ <()> uwok dealloc_ptr<.T> data mul cap size_of<.T>
+    let _ <()> uwok dealloc_ptr<u8> hdr 16
 
 fn push_back <.T> <(RingBuffer<.T>, .T)*>Result<RingBuffer<.T>, Diag>> (rb, item):
     ringbuffer_push_back<.T> rb item

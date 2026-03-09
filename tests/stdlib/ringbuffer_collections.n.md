@@ -2,6 +2,16 @@
 
 ## ringbuffer_pipe_usage
 
+[目的/もくてき]:
+- `RingBuffer` が pipe [記法/きほう]と `Result` / `Option` を[組/く]み[合/あ]わせた[基本的/きほんてき]な[使/つか]い[方/かた]で[利用/りよう]できることを[確認/かくにん]します。
+
+[何/なに]を[確/たし]かめるか:
+- `ringbuffer_new`
+- `ringbuffer_push_back`
+- `ringbuffer_len`
+- `ringbuffer_pop_front`
+- `uwok`
+
 neplg2:test
 ret: 1
 ```neplg2
@@ -18,19 +28,19 @@ ret: 1
 fn main <()*>i32> ():
     let rb <RingBuffer<i32>>:
         ringbuffer_new<i32>
-        |> unwrap_ok<RingBuffer<i32>, Diag>
+        |> uwok
         |> ringbuffer_push_back<i32> 4
-        |> unwrap_ok<RingBuffer<i32>, Diag>
+        |> uwok
         |> ringbuffer_push_back<i32> 9
-        |> unwrap_ok<RingBuffer<i32>, Diag>
+        |> uwok
     let ok0 <bool> eq ringbuffer_len<i32> rb 2;
     let rb2 <RingBuffer<i32>>:
         ringbuffer_new<i32>
-        |> unwrap_ok<RingBuffer<i32>, Diag>
+        |> uwok
         |> ringbuffer_push_back<i32> 4
-        |> unwrap_ok<RingBuffer<i32>, Diag>
+        |> uwok
         |> ringbuffer_push_back<i32> 9
-        |> unwrap_ok<RingBuffer<i32>, Diag>
+        |> uwok
     let ok1 <bool> match rb2 |> ringbuffer_pop_front<i32>:
         Option::Some v:
             eq v 4

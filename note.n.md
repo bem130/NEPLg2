@@ -9116,3 +9116,44 @@
 - [状況/じょうきょう]:
   - `#entry` に[関/かん]する compiler 診断は、`diag id` だけでなく[位置/いち]も[前段/ぜんだん]で[安定/あんてい]して[取/と]れるようになった。
   - codegen [到達後/とうたつご]の entry [欠落/けつらく]は、front-end lowering の[不整合/ふせいごう]として[扱/あつか]える[範囲/はんい]まで[縮小/しゅくしょう]された。
+
+# 2026-03-09 作業メモ (`RegionToken` / `RingBuffer` の move 消費を field 単位へ切り替え)
+
+- [目的/もくてき]:
+  - `todo.md` の `core/mem` / `alloc` [安全化/あんぜんか]を[進/すす]めるうえで、`RegionToken<.T>` や `RingBuffer<.T>` の[所有者/しょゆうしゃ]を[繰/く]り[返/かえ]し move してしまう[箇所/かしょ]を[除去/じょきょ]する。
+  - `tests/compiler/prelude_copy.n.md`、`tests/stdlib/ringbuffer_collections.n.md`、`tests/stdlib/queue_collections.n.md` が[安定/あんてい]して[通/とお]る[状態/じょうたい]まで[持/も]っていく。
+- [根本原因/こんぽんげんいん]:
+  - `MemPtr<.T>` は `Copy` として[扱/あつか]いたいが、[所有者/しょゆうしゃ]である `RegionToken<.T>` や `RingBuffer<.T>` は `Copy` ではない。
+  - そのため `region_ptr token` や `ringbuffer_len rb` のように[所有者/しょゆうしゃ]を[丸/まる]ごと[補助/ほじょ][関数/かんすう]へ[渡/わた]す[実装/じっそう]だと、`get ... "ptr"` や `get ... "hdr"` が[複数回/ふくすうかい]の move に[見/み]えて[失敗/しっぱい]していた。
+  - compiler [側/がわ]でも、generic `Copy` / `Clone` impl を[具体型/ぐたいてきがた]へ[当/あ]てる[際/さい]に[単純/たんじゅん]な `same_type` [比較/ひかく]しかしておらず、`MemPtr<i32>` が `impl Copy<MemPtr<.T>>` に[一致/いっち]しない[不具合/ふぐあい]があった。
+- [変更/へんこう]:
+  - `nepl-core/src/types.rs`
+    - `type_pattern_matches` を追加し、`impl Copy<MemPtr<.T>>` のような[型変数/かたへんすう][入/い]り impl が[具体型/ぐたいてきがた]へ[一致/いっち]するかを[判定/はんてい]できるようにした。
+  - `nepl-core/src/typecheck.rs`
+    - `Copy` / `Clone` と trait impl [探索/たんさく]で `same_type` ではなく `type_pattern_matches` を[使/つか]うように変更。
+    - generic impl は[当面/とうめん] `Copy` / `Clone` trait のみ[許可/きょか]するようにし、それ[以外/いがい]は[従来通/じゅうらいどお]り[拒否/きょひ]する。
+  - `nepl-core/src/passes/move_check.rs`
+    - builtin/user `get` の[評価/ひょうか]で、[取得/しゅとく][結果/けっか]が `Copy` なら base を shared borrow [相当/そうとう]で[訪問/ほうもん]するようにした。
+  - `stdlib/core/traits/copy.nepl`
+    - `MemPtr<.T>` の `Copy` / `Clone` impl を追加。
+  - `stdlib/core/mem.nepl`
+    - `region_ptr_at` / `dealloc_region` などを、`token` そのものではなく `get token "ptr"` / `get token "size"` を[先/さき]に[束縛/そくばく]して[使/つか]う[形/かたち]へ変更。
+  - `stdlib/alloc/string.nepl`
+    - `RegionToken<u8>` を[複数回/ふくすうかい] helper に[渡/わた]していた[箇所/かしょ]を、`base` / `scratch` / `out_data` などの `MemPtr<u8>` へ[先/さき]に[分解/ぶんかい]して[扱/あつか]う[形/かたち]へ変更。
+  - `stdlib/alloc/collections/ringbuffer.nepl`
+    - `RingBuffer<.T>.hdr` を `MemPtr<u8>` として[一度/いちど][取/と]り[出/だ]し、`*_from_hdr` helper へ[渡/わた]す[実装/じっそう]へ整理。
+    - `ringbuffer_with_capacity` / `ringbuffer_push_back` / `ringbuffer_pop_front` / `ringbuffer_peek_front` / `ringbuffer_clear` / `ringbuffer_free` を[所有者/しょゆうしゃ]の[再消費/さいしょうひ]がない[形/かたち]へ書き直した。
+  - `tests/compiler/prelude_copy.n.md`
+    - `MemPtr<i32>` を[繰/く]り[返/かえ]し[読/よ]めること、`Copy` を[未知/みち] trait として[扱/あつか]わないことを[確認/かくにん]する focused test を追加。
+  - `tests/stdlib/ringbuffer_collections.n.md` / `tests/stdlib/queue_collections.n.md`
+    - `[目的/もくてき]` と[確認内容/かくにんないよう]を[明記/めいき]しつつ、`uwok` を[使/つか]った[現在/げんざい]の[利用形/りようけい]に合わせて更新。
+  - `todo.md`
+    - `nodesrc/tests.js` と `nodesrc/run_test.js` の[使/つか]い[分/わ]けを[方針/ほうしん]へ追加。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/tests.js -i tests/compiler/prelude_copy.n.md -i tests/stdlib/ringbuffer_collections.n.md -i tests/stdlib/queue_collections.n.md --no-stdlib --no-tree -o /tmp/tests-copy-ringbuffer-queue.json -j 15`
+    - [結果/けっか]: `6/6 pass`
+- [状況/じょうきょう]:
+  - `RegionToken<.T>` や `RingBuffer<.T>` を `Copy` にせず、[内部/ないぶ]の `MemPtr` / `i32` [欄/らん]だけを[先/さき]に[取/と]り[出/だ]して[使/つか]う[方針/ほうしん]へ[寄/よ]せた。
+  - これにより `core/mem` と `alloc/collections` の[所有権/しょゆうけん][境界/きょうかい]が[現状/げんじょう]の[言語機能/げんごきのう]に[収/おさ]まる[形/かたち]で[安定/あんてい]した。

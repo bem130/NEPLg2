@@ -877,18 +877,6 @@ pub fn typecheck(
                 );
                 continue;
             }
-            if !i.type_params.is_empty() {
-                diagnostics.push(
-                    Diagnostic::error("impl type parameters are not supported yet", i.span)
-                        .with_id(DiagnosticId::TypeImplTypeParamsUnsupported),
-                );
-                continue;
-            }
-            let mut f_labels = LabelEnv::new();
-            let (tps, _bounds_vec, _bounds_map) =
-                collect_type_params(&mut ctx, &mut f_labels, &i.type_params, &traits, &mut diagnostics);
-            let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
-            f_labels.insert(String::from("Self"), target_ty);
             let trait_name = i.trait_name.as_ref().map(|tn| tn.name.clone());
             let mut trait_self_ty = None;
             if let Some(tn) = &trait_name {
@@ -901,7 +889,26 @@ pub fn typecheck(
                 }
                 trait_self_ty = traits.get(tn).map(|info| info.self_ty);
             }
-            if type_contains_unbound_var(&ctx, target_ty) {
+            if !i.type_params.is_empty()
+                && !trait_semantics.is_copy_trait(trait_self_ty)
+                && !trait_semantics.is_clone_trait(trait_self_ty)
+            {
+                diagnostics.push(
+                    Diagnostic::error("impl type parameters are not supported yet", i.span)
+                        .with_id(DiagnosticId::TypeImplTypeParamsUnsupported),
+                );
+                continue;
+            }
+            let mut f_labels = LabelEnv::new();
+            let (tps, _bounds_vec, _bounds_map) =
+                collect_type_params(&mut ctx, &mut f_labels, &i.type_params, &traits, &mut diagnostics);
+            let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
+            f_labels.insert(String::from("Self"), target_ty);
+            let generic_impl_target = type_contains_unbound_var(&ctx, target_ty);
+            if generic_impl_target
+                && !trait_semantics.is_copy_trait(trait_self_ty)
+                && !trait_semantics.is_clone_trait(trait_self_ty)
+            {
                 diagnostics.push(
                     Diagnostic::error("impl target type must be concrete", i.target_ty.span())
                         .with_id(DiagnosticId::TypeImplTargetMustBeConcrete),
@@ -924,7 +931,8 @@ pub fn typecheck(
             }
             if impls.iter().any(|imp| {
                 imp.trait_self_ty == trait_self_ty
-                    && ctx.same_type(imp.target_ty, target_ty)
+                    && (ctx.type_pattern_matches(imp.target_ty, target_ty)
+                        || ctx.type_pattern_matches(target_ty, imp.target_ty))
             }) {
                 diagnostics.push(
                     Diagnostic::error(
@@ -954,7 +962,8 @@ pub fn typecheck(
     for (target_ty, span) in pending_copy_clone_checks {
         let has_clone_impl = impls.iter().any(|imp| {
             trait_semantics.is_clone_trait(imp.trait_self_ty)
-                && ctx.same_type(imp.target_ty, target_ty)
+                && (ctx.type_pattern_matches(imp.target_ty, target_ty)
+                    || ctx.type_pattern_matches(target_ty, imp.target_ty))
         });
         if !has_clone_impl {
             diagnostics.push(
@@ -1497,7 +1506,10 @@ pub fn typecheck(
                     continue;
                 }
             };
-            if !i.type_params.is_empty() {
+            if !i.type_params.is_empty()
+                && !trait_semantics.is_copy_trait(Some(trait_info.self_ty))
+                && !trait_semantics.is_clone_trait(Some(trait_info.self_ty))
+            {
                 diagnostics.push(
                     Diagnostic::error("impl type parameters are not supported yet", i.span)
                         .with_id(DiagnosticId::TypeImplTypeParamsUnsupported),
@@ -1510,7 +1522,10 @@ pub fn typecheck(
             let (tps, _bounds_vec, _bounds_map) =
                 collect_type_params(&mut ctx, &mut f_labels, &i.type_params, &traits, &mut diagnostics);
             let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
-            if type_contains_unbound_var(&ctx, target_ty) {
+            if type_contains_unbound_var(&ctx, target_ty)
+                && !trait_semantics.is_copy_trait(Some(trait_info.self_ty))
+                && !trait_semantics.is_clone_trait(Some(trait_info.self_ty))
+            {
                 diagnostics.push(
                     Diagnostic::error("impl target type must be concrete", i.target_ty.span())
                         .with_id(DiagnosticId::TypeImplTargetMustBeConcrete),
@@ -1847,7 +1862,7 @@ fn check_function(
                 || type_param_has_trait_bound(ctx, &type_param_bounds, resolved, bound.trait_self_ty)
                 || impls.iter().any(|imp| {
                     imp.trait_self_ty == Some(bound.trait_self_ty)
-                        && ctx.same_type(imp.target_ty, resolved)
+                        && ctx.type_pattern_matches(imp.target_ty, resolved)
                 });
         if !satisfied {
             diag_out.push(
@@ -2486,7 +2501,7 @@ impl<'a> BlockChecker<'a> {
         }
         self.impls.iter().any(|imp| {
             imp.trait_self_ty == Some(bound.trait_self_ty)
-                && self.ctx.same_type(imp.target_ty, ty)
+                && self.ctx.type_pattern_matches(imp.target_ty, ty)
         })
     }
 
@@ -6199,7 +6214,7 @@ impl<'a> BlockChecker<'a> {
                                             self.type_param_has_bound(candidate, trait_info.self_ty)
                                                 || self.impls.iter().any(|imp| {
                                                     imp.trait_self_ty == Some(trait_info.self_ty)
-                                                        && self.ctx.same_type(imp.target_ty, candidate)
+                                                        && self.ctx.type_pattern_matches(imp.target_ty, candidate)
                                                 });
                                         if candidate_ok {
                                             inferred_self_ty = Some(candidate);
@@ -6294,7 +6309,7 @@ impl<'a> BlockChecker<'a> {
                                         self.type_param_has_bound(candidate, trait_info.self_ty)
                                             || self.impls.iter().any(|imp| {
                                                 imp.trait_self_ty == Some(trait_info.self_ty)
-                                                    && self.ctx.same_type(imp.target_ty, candidate)
+                                                    && self.ctx.type_pattern_matches(imp.target_ty, candidate)
                                             });
                                     if candidate_ok {
                                         inferred_self_ty = Some(candidate);
@@ -6329,10 +6344,10 @@ impl<'a> BlockChecker<'a> {
                                 ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
                                 return None;
                             };
-                            let trait_ok = self.type_param_has_bound(self_ty, trait_info.self_ty)
-                                || self.impls.iter().any(|imp| {
-                                    imp.trait_self_ty == Some(trait_info.self_ty)
-                                        && self.ctx.same_type(imp.target_ty, self_ty)
+                                let trait_ok = self.type_param_has_bound(self_ty, trait_info.self_ty)
+                                    || self.impls.iter().any(|imp| {
+                                        imp.trait_self_ty == Some(trait_info.self_ty)
+                                        && self.ctx.type_pattern_matches(imp.target_ty, self_ty)
                                 });
                             if !trait_ok {
                                 self.diagnostics.push(Diagnostic::error(
