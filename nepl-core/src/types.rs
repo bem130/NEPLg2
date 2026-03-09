@@ -532,8 +532,13 @@ impl TypeCtx {
             | TypeKind::U8
             | TypeKind::F32
             | TypeKind::Bool
-            | TypeKind::Str
-            | TypeKind::Named(_) => self.has_copy_impl_target(resolved),
+            | TypeKind::Str => self.has_copy_impl_target(resolved),
+            TypeKind::Named(name)
+                if matches!(name.as_str(), "i64" | "i128" | "u64" | "u128" | "f64") =>
+            {
+                self.has_copy_impl_target(resolved)
+            }
+            TypeKind::Named(_) => self.has_copy_impl_target(resolved),
             TypeKind::Tuple { items } => items.iter().all(|t| self.is_copy(*t)),
             TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_copy_impl_target(resolved),
             TypeKind::Apply { base, .. } => match self.get_ref(self.resolve_id(*base)) {

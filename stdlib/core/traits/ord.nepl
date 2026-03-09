@@ -40,8 +40,10 @@ trait Ord:
 //:| #target core
 //:| #import "core/test" as *
 //:| #import "core/traits/ord" as *
-//: assert ord_lt 2 3;
-//: assert not ord_lt 3 3;
+//:| fn main <()*>i32> ():
+//:     assert ord_lt 2 3;
+//:     assert not ord_lt 3 3;
+//:     0
 //: ```
 fn ord_lt <.T: Ord> <(.T,.T)->bool> (a, b):
     Ord::lt a b

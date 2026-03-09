@@ -72,7 +72,7 @@
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let cleared <Vec<i32>>:
 //:         new<i32>
 //:         |> push 11
@@ -134,7 +134,7 @@ struct Vec<.T>:
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v new<i32>;
 //:     if eq vec_len<i32> v 0 0 1
 //: ```
@@ -166,7 +166,7 @@ fn vec_new <.T> <()->Vec<.T>> ():
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v vec_with_capacity<i32> 16;
 //:     if eq vec_cap<i32> v 16 0 1
 //: ```
@@ -196,7 +196,7 @@ fn vec_with_capacity <.T> <(i32)->Vec<.T>> (cap):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v0 new<i32>;
 //:     let v1 push v0 3;
 //:     if eq vec_len<i32> v1 1 0 1
@@ -226,7 +226,7 @@ fn vec_len <.T> <(Vec<.T>)->i32> (v):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v new<i32>;
 //:     if gt vec_cap<i32> v 0 0 1
 //: ```
@@ -256,7 +256,7 @@ fn vec_cap <.T> <(Vec<.T>)->i32> (v):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v new<i32>;
 //:     if gt vec_data_ptr<i32> v 0 0 1
 //: ```
@@ -304,7 +304,7 @@ fn vec_data_mem_ptr <.T> <(Vec<.T>)->MemPtr<.T>> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/field" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v0 new<i32>;
 //:     let v1 push v0 7;
 //:     let s vec_data_len<i32> v1;
@@ -338,7 +338,7 @@ fn vec_data_len <.T> <(Vec<.T>)->.Pair> (v):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v new<i32>;
 //:     if vec_is_empty<i32> v 0 1
 //: ```
@@ -366,7 +366,7 @@ fn vec_is_empty <.T> <(Vec<.T>)->bool> (v):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v0 new<i32>;
 //:     let v1 push v0 7;
 //:     if eq vec_len<i32> v1 1 0 1
@@ -410,7 +410,7 @@ fn vec_push <.T> <(Vec<.T>,.T)->Vec<.T>> (v, item):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v0 new<i32>;
 //:     let v1 push v0 9;
 //:     match vec_get<i32> v1 0:
@@ -455,7 +455,7 @@ fn vec_get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v0 new<i32>;
 //:     let v1 push v0 1;
 //:     vec_set<i32> v1 0 5;
@@ -497,7 +497,7 @@ fn vec_set <.T> <(Vec<.T>,i32,.T)->()> (v, idx, item):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v0 new<i32>;
 //:     let v1 push v0 4;
 //:     let p vec_pop<i32> v1;
@@ -542,7 +542,7 @@ fn vec_pop <.T> <(Vec<.T>)->.Pair> (v):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v0 new<i32>;
 //:     let v1 push v0 1;
 //:     let v2 vec_clear<i32> v1;
@@ -574,7 +574,7 @@ fn vec_clear <.T> <(Vec<.T>)->Vec<.T>> (v):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v new<i32>;
 //:     vec_free<i32> v;
 //:     0
@@ -616,7 +616,7 @@ fn cap vec_cap;
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/vec" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let v:
 //:         new<i32>
 //:         |> push 1

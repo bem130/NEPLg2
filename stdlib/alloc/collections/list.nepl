@@ -26,7 +26,7 @@
 //:| #import "alloc/collections/list" as *
 //:| #import "alloc/string" as *
 //:| #import "core/option" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let base0 <List<i32>>:
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3
@@ -77,7 +77,7 @@
 //:| #import "alloc/collections/list" as *
 //:| #import "alloc/string" as *
 //:| #import "core/option" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let src0 <List<str>>:
 //:         list_nil<str>
 //:         |> list_push_front<str> "c"
@@ -155,7 +155,7 @@ struct List<.T>:
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     if list_is_empty<i32> list_nil<i32> 0 1
 //: ```
 fn list_nil <.T> <()->List<.T>> ():
@@ -182,7 +182,7 @@ fn list_nil <.T> <()->List<.T>> ():
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let l list_cons<i32> 5 list_nil<i32>;
 //:     if list_is_empty<i32> l 1 0
 //: ```
@@ -232,7 +232,7 @@ fn list_push_front <.T> <(List<.T>,.T)->List<.T>> (lst, head):
 //:| #target std
 //:| #import "alloc/collections/list" as *
 //:| #import "core/option" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let l list_cons<i32> 8 list_nil<i32>;
 //:     match list_head<i32> l:
 //:         Option::Some x:
@@ -272,7 +272,7 @@ fn list_head <.T> <(List<.T>)->Option<.T>> (lst):
 //:| #target std
 //:| #import "alloc/collections/list" as *
 //:| #import "core/option" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let l2 <List<i32>>:
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 2
@@ -314,7 +314,7 @@ fn list_tail <.T> <(List<.T>)->Option<List<.T>>> (lst):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     if list_is_empty<i32> list_nil<i32> 0 1
 //: ```
 fn list_is_empty <.T> <(List<.T>)->bool> (lst):
@@ -341,7 +341,7 @@ fn list_is_empty <.T> <(List<.T>)->bool> (lst):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let l3 <List<i32>>:
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3
@@ -382,7 +382,7 @@ fn list_len <.T> <(List<.T>)->i32> (lst):
 //:| #target std
 //:| #import "alloc/collections/list" as *
 //:| #import "core/option" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let l3 <List<i32>>:
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3
@@ -437,7 +437,7 @@ fn list_get <.T> <(List<.T>,i32)->Option<.T>> (lst, idx):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let l0 list_nil<i32>;
 //:     let l1 list_cons<i32> 1 l0;
 //:     list_free<i32> l1;
@@ -475,7 +475,7 @@ fn list_free <.T> <(List<.T>)->()> (lst):
 //:| #target std
 //:| #import "alloc/collections/list" as *
 //:| #import "core/option" as *
-//: fn main <()->i32> ():
+//: fn main <()*>i32> ():
 //:     let l3 <List<i32>>:
 //:         list_nil<i32>
 //:         |> list_push_front<i32> 3

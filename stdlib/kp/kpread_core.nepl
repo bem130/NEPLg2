@@ -58,7 +58,9 @@ fn fd_read_mem <(i32,MemPtr<u8>,i32,MemPtr<u8>)*>i32> (fd, iov, iovcnt, nread):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//: ()
+//:| fn main <()*>i32> ():
+//:     ()
+//:     0
 //: ```
 fn scanner_new_impl <()*>Result<MemPtr<u8>,str>> ():
     let mut cap <i32> 65536;
