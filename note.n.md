@@ -9180,3 +9180,40 @@
 - [状況/じょうきょう]:
   - doctest [全体/ぜんたい]の[一括/いっかつ][再実行/さいじっこう]はまだ[途中/とちゅう]で、`stack.nepl` など collections [側/がわ]を[優先/ゆうせん]して[順次/じゅんじ] focused に[確認/かくにん]する[段階/だんかい]。
   - [簡潔/かんけつ]な doctest [専用/せんよう][枠組/わくぐ]みの[新設/しんせつ]は[保留/ほりゅう]し、[当面/とうめん]は `fn main` を[明示/めいじ]する[方針/ほうしん]で[進/すす]める。
+
+# 2026-03-09 作業メモ (stdlib ドキュメント生成ツールの汎用化と目次構造の整備)
+
+- [目的/もくてき]:
+  - tutorials と stdlib で共通のドキュメント生成ツール (`nodesrc/cli.js`) を使用できるようにし、stdlib でもインタラクティブなプレイグラウンド付き HTML を生成可能にする。
+  - stdlib ドキュメントの目次を `index.n.md` で管理し、`00_` などのプリフィックスに依存しない階層構造をサポートする。
+- [変更/へんこう]:
+  - `nodesrc/cli.js`
+    - `--site-name` と `--description-prefix` 引数を追加し、サイト名や説明文を外部から指定可能にした。
+    - `index.n.md` を優先的に検出し、出力時に `index.html` へマッピングするロジックを追加。
+  - `stdlib/index.n.md`
+    - 標準ライブラリの新しい目次ファイルとして作成。
+  - `.github/workflows/gh-pages.yml`
+    - `stdlib` のビルドを `html_play` に変更し、"NEPLg2 Standard Library" というサイト名で生成するように更新。
+  - `stdlib/nm/README.n.md` -> `stdlib/nm/README.nepl`
+    - ユーザーの要望に基づき、インデックス以外の `.n.md` を `.nepl` 形式（ドキュメントコメント付き）に変換。
+- [検証/けんしょう]:
+  - `nodesrc/cli.js` の引数パースと `index.n.md` 処理のロジックが正常に動作し、`index.html` が期待通りに生成されることを確認。
+
+# 2026-03-09 作業メモ (stdlib ドキュメントの目次階層化とタイトルの適正化)
+
+- [目的/もくてき]:
+  - `stdlib` ドキュメントの目次 (TOC) が平坦なリストになっていたのを、ディレクトリ構造に基づいた階層的な表示に改善する。
+  - サイト名に応じて目次のタイトル ("Getting Started" または "Contents") を自動的に切り替えられるようにし、ドキュメントの種類に適した表示にする。
+- [根本原因/こんぽんげんいん]:
+  - `nodesrc/cli.js` の `buildTocEntries` において、明示的なインデックスに含まれない「残り」のファイルが一律 "Other" グループにフラットに入れられていた。
+  - `nodesrc/html_gen_playground.js` の目次タイトルが "Getting Started" にハードコードされていた。
+- [変更/へんこう]:
+  - `nodesrc/cli.js`
+    - `buildTocEntries` を修正し、残りのファイルを共通のディレクトリ接頭辞でグループ化する階層化ロジックを実装。
+    - `siteName` に "tutorial" が含まれない場合は目次タイトルを "Contents" と判定し、生成処理に渡すように変更。
+  - `nodesrc/html_gen_playground.js`
+    - `renderToc` と `renderHtmlPlayground` を更新し、`tocTitle` オプションを受け取り、"Getting Started" 以外のタイトルも表示できるように変更。
+- [検証/けんしょう]:
+  - `dist/doc/stdlib/alloc/diag/diag.html` などを確認し、目次タイトルが "Contents" になり、`alloc/collections` や `core/traits` などのディレクトリ単位で階層化されていることを確認。
+- [状況/じょうきょう]:
+  - 標準ライブラリのドキュメントが、チュートリアルと同等の整理された構造で閲覧可能になった。

@@ -21,7 +21,7 @@ function renderBody(ast) {
     return renderNode(ast, { rewriteLinks: true });
 }
 
-function renderToc(tocLinks) {
+function renderToc(tocLinks, tocTitle = 'Getting Started') {
     if (!Array.isArray(tocLinks) || tocLinks.length === 0) {
         return '';
     }
@@ -37,7 +37,7 @@ function renderToc(tocLinks) {
         const cls = link.active ? `toc-link active depth-${depth}` : `toc-link depth-${depth}`;
         return `<li><a class="${cls}" href="${escapeHtml(String(link.href || ''))}">${labelHtml}</a></li>`;
     }).join('\n');
-    return `<aside class="doc-sidebar"><div class="sidebar-header"><div class="toc-title">Getting Started</div></div><ul class="toc-list">${items}</ul></aside>`;
+    return `<aside class="doc-sidebar"><div class="sidebar-header"><div class="toc-title">${escapeHtml(tocTitle)}</div></div><ul class="toc-list">${items}</ul></aside>`;
 }
 
 function buildPlaygroundVfsOverrides() {
@@ -76,10 +76,16 @@ function wrapHtmlPlayground(body, title, description, moduleJsPathOpt) {
 <meta name="description" content="${escapeHtml(d)}"/>
 <meta property="og:title" content="${escapeHtml(t)}"/>
 <meta property="og:description" content="${escapeHtml(d)}"/>
+<meta property="og:site_name" content="NEPLg2"/>
+<meta property="og:locale" content="ja_JP"/>
+<meta property="og:image" content="https://neknaj.github.io/NEPLg2/NEPLg2.png"/>
 <meta property="og:type" content="article"/>
 <meta name="twitter:card" content="summary"/>
+<meta name="twitter:site" content="@bem130"/>
+<meta name="twitter:creator" content="@bem130"/>
 <meta name="twitter:title" content="${escapeHtml(t)}"/>
 <meta name="twitter:description" content="${escapeHtml(d)}"/>
+<meta name="twitter:image" content="https://neknaj.github.io/NEPLg2/NEPLg2.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&display=swap" rel="stylesheet">
@@ -1158,7 +1164,7 @@ function renderHtmlPlayground(ast, opt) {
         ? opt.description
         : 'NEPLg2 tutorial with interactive runnable examples.';
     const moduleJsPath = (opt && opt.moduleJsPath) ? String(opt.moduleJsPath) : './nepl-web.js';
-    const tocHtml = renderToc((opt && opt.tocLinks) ? opt.tocLinks : []);
+    const tocHtml = renderToc((opt && opt.tocLinks) ? opt.tocLinks : [], (opt && opt.tocTitle) ? opt.tocTitle : 'Getting Started');
     const body = renderBody(ast);
     return wrapHtmlPlayground(body, title, description, moduleJsPath, tocHtml);
 }
