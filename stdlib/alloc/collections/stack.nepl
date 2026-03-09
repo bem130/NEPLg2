@@ -32,19 +32,19 @@
 //: fn main <()->i32> ():
 //:     let st0 <Stack<i32>>:
 //:         <Stack<i32>> new
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:         |> push 10
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:         |> push 20
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:     let ok0 if eq len st0 2 1 0;
 //:     let st1 <Stack<i32>>:
 //:         <Stack<i32>> new
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:         |> push 10
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:         |> push 20
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:     let ok1 match peek st1:
 //:         Option::Some x:
 //:             if eq x 20 1 0
@@ -52,11 +52,11 @@
 //:             0
 //:     let st2 <Stack<i32>>:
 //:         <Stack<i32>> new
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:         |> push 10
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:         |> push 20
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:     let p pop st2;
 //:     let ok2 match p:
 //:         Option::Some x:
@@ -82,11 +82,11 @@
 //: fn main <()->i32> ():
 //:     let st <Stack<str>>:
 //:         <Stack<str>> new
-//:         |> unwrap_ok<Stack<str>, Diag>
+//:         |> uwok
 //:         |> push "a"
-//:         |> unwrap_ok<Stack<str>, Diag>
+//:         |> uwok
 //:         |> push "b"
-//:         |> unwrap_ok<Stack<str>, Diag>
+//:         |> uwok
 //:     let p pop st;
 //:     let ok0 match p:
 //:         Option::Some x:
@@ -105,21 +105,119 @@
 #import "alloc/diag/error" as *
 
 struct Stack<.T>:
-    hdr <i32>
+    hdr <MemPtr<u8>>
+
+//: stack_header_len_ptr: ヘッダの length [欄/らん]を[指/さ]す
+//:
+//: ### [目的/もくてき]
+//: - `[len, cap, data_ptr]` [形式/けいしき]のヘッダ[領域/りょういき]から length [欄/らん]を `MemPtr<i32>` として[得/え]ます。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダ[先頭/せんとう]の 4 byte を `i32` [欄/らん]として[解釈/かいしゃく]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [公開/こうかい] API ではなく、`Stack` [内部/ないぶ]の[補助/ほじょ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+fn stack_header_len_ptr <.T> <(Stack<.T>)->MemPtr<i32>> (stk):
+    mem_ptr_wrap mem_ptr_addr get stk "hdr"
+
+//: stack_header_cap_ptr: ヘッダの capacity [欄/らん]を[指/さ]す
+//:
+//: ### [目的/もくてき]
+//: - ヘッダ[中/ちゅう]の capacity [欄/らん]を `MemPtr<i32>` として[得/え]ます。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダ[先頭/せんとう]から 4 byte [進/すす]めた[位置/いち]を `i32` [欄/らん]として[扱/あつか]います。
+//:
+//: ### [注意/ちゅうい]
+//: - [公開/こうかい] API ではなく、`Stack` [内部/ないぶ]の[補助/ほじょ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+fn stack_header_cap_ptr <.T> <(Stack<.T>)->MemPtr<i32>> (stk):
+    mem_ptr_wrap add mem_ptr_addr get stk "hdr" 4
+
+//: stack_header_data_ptr_ptr: ヘッダの data pointer [欄/らん]を[指/さ]す
+//:
+//: ### [目的/もくてき]
+//: - データ[領域/りょういき]の raw address を[保持/ほじ]する[欄/らん]を `MemPtr<i32>` として[得/え]ます。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダ[先頭/せんとう]から 8 byte [進/すす]めた[位置/いち]を `i32` [欄/らん]として[扱/あつか]います。
+//:
+//: ### [注意/ちゅうい]
+//: - [公開/こうかい] API ではなく、`Stack` [内部/ないぶ]の[補助/ほじょ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+fn stack_header_data_ptr_ptr <.T> <(Stack<.T>)->MemPtr<i32>> (stk):
+    mem_ptr_wrap add mem_ptr_addr get stk "hdr" 8
+
+//: stack_len_raw: [内部/ないぶ]で length を[読/よ]む
+//:
+//: ### [目的/もくてき]
+//: - `Stack` の length [欄/らん]を `i32` として[読/よ]みます。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダの length [欄/らん]を raw `load_i32` で[参照/さんしょう]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [公開/こうかい] API ではなく、`Stack` [内部/ないぶ]の[補助/ほじょ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+fn stack_len_raw <.T> <(Stack<.T>)->i32> (stk):
+    load_i32 mem_ptr_addr stack_header_len_ptr<.T> stk
+
+//: stack_cap_raw: [内部/ないぶ]で capacity を[読/よ]む
+//:
+//: ### [目的/もくてき]
+//: - `Stack` の capacity [欄/らん]を `i32` として[読/よ]みます。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダの capacity [欄/らん]を raw `load_i32` で[参照/さんしょう]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [公開/こうかい] API ではなく、`Stack` [内部/ないぶ]の[補助/ほじょ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+fn stack_cap_raw <.T> <(Stack<.T>)->i32> (stk):
+    load_i32 mem_ptr_addr stack_header_cap_ptr<.T> stk
+
+//: stack_data_ptr: [内部/ないぶ]でデータ[先頭/せんとう]を[得/え]る
+//:
+//: ### [目的/もくてき]
+//: - `Stack` の[要素/ようそ][領域/りょういき][先頭/せんとう]を `MemPtr<.T>` として[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - ヘッダに[保持/ほじ]した raw address を[読/よ]み、`MemPtr<.T>` で[包/つつ]みます。
+//:
+//: ### [注意/ちゅうい]
+//: - [公開/こうかい] API ではなく、`Stack` [内部/ないぶ]の[補助/ほじょ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+fn stack_data_ptr <.T> <(Stack<.T>)->MemPtr<.T>> (stk):
+    mem_ptr_wrap load_i32 mem_ptr_addr stack_header_data_ptr_ptr<.T> stk
 
 //: stack_new: 空のスタックを作る
 //:
-//: 目的:
-//: - 既定容量で空のスタックを返します。
+//: ### [目的/もくてき]
+//: - [既定/きてい][容量/ようりょう]の[空/から]スタックを[作成/さくせい]し、`Stack<.T>` として[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - ヘッダ 12 バイトとデータ領域を確保します。
+//: ### [実装/じっそう]
+//: - 12 byte のヘッダ[領域/りょういき]と、[既定/きてい][容量/ようりょう]ぶんの[要素/ようそ][領域/りょういき]を[別々/べつべつ]に[確保/かくほ]します。
+//: - ヘッダには `[len, cap, data_ptr]` を[保存/ほぞん]し、`Stack<.T>` はそのヘッダ[先頭/せんとう]を[保持/ほじ]します。
 //:
-//: 注意(重要):
-//: - 返り値は内部ヘッダを保持する `Stack<.T>` です。
+//: ### [注意/ちゅうい]
+//: - [失敗/しっぱい]すると `Result::Err Diag` を[返/かえ]します。
+//: - [返/かえ]る `Stack<.T>` は[内部/ないぶ]ヘッダの[所有権/しょゆうけん]を[持/も]つので、[不要/ふよう]になったら `stack_free` で[解放/かいほう]します。
 //:
-//: 計算量:
-//: - O(1)
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん][計算量/けいさんりょう]は O(1)、[追加/ついか]の[空間/くうかん][計算量/けいさんりょう]も O(1) です。
 //:
 //: 使い方:
 //:
@@ -133,42 +231,41 @@ struct Stack<.T>:
 //: fn main <()->i32> ():
 //:     let st <Stack<i32>>:
 //:         stack_new<i32>
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:     if stack_is_empty<i32> st 0 1
 //: ```
 fn stack_new <.T> <()*>Result<Stack<.T>, Diag>> ():
     let cap <i32> 8
-    let header <i32> alloc_raw 12
-    if:
-        eq header 0
-        then:
+    match alloc_ptr<u8> 12:
+        Result::Err _e:
             diag_err<Stack<.T>> diag_out_of_memory "stack_new(header)"
-        else:
-            let data <i32> alloc_raw mul cap size_of<.T>
-            if:
-                eq data 0
-                then:
-                    dealloc_raw header 12
+        Result::Ok header:
+            match alloc_ptr<.T> mul cap size_of<.T>:
+                Result::Err _e:
+                    dealloc_ptr<u8> header 12
                     diag_err<Stack<.T>> diag_out_of_memory "stack_new(data)"
-                else:
-                    store_i32 header 0
-                    store_i32 add header 4 cap
-                    store_i32 add header 8 data
-                    ok<Stack<.T>, Diag> Stack header
+                Result::Ok data:
+                    let stk <Stack<.T>> Stack header
+                    store_i32 mem_ptr_addr stack_header_len_ptr<.T> stk 0
+                    store_i32 mem_ptr_addr stack_header_cap_ptr<.T> stk cap
+                    store_i32 mem_ptr_addr stack_header_data_ptr_ptr<.T> stk mem_ptr_addr data
+                    ok<Stack<.T>, Diag> stk
 
 //: stack_push: 末尾に要素を積む
 //:
-//: 目的:
-//: - item を末尾に追加します。
+//: ### [目的/もくてき]
+//: - `item` を[末尾/まつび]に[積/つ]み、[更新後/こうしんご]のスタックを[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - 容量不足なら 2 倍に拡張して realloc します。
+//: ### [実装/じっそう]
+//: - [容量/ようりょう]が[足/た]りる[場合/ばあい]は[末尾/まつび]に[直接/ちょくせつ][書/か]き[込/こ]みます。
+//: - [容量/ようりょう][不足/ぶそく]なら 2 [倍/ばい]に[拡張/かくちょう]し、`realloc_ptr` でデータ[領域/りょういき]を[移動/いどう]してから[追加/ついか]します。
 //:
-//: 注意(重要):
-//: - 更新後のスタックを返すので、呼び出し側で束縛し直してください。
+//: ### [注意/ちゅうい]
+//: - [更新後/こうしんご]の `Stack<.T>` を[返/かえ]すので、[呼/よ]び[出/だ]し[側/がわ]で[束縛/そくばく]し[直/なお]す[必要/ひつよう]があります。
+//: - [拡張/かくちょう]が[発生/はっせい]した[場合/ばあい]、[内部/ないぶ]データ[領域/りょういき]の[番地/ばんち]は[変/か]わりえます。
 //:
-//: 計算量:
-//: - ならし O(1)
+//: ### [計算量/けいさんりょう]
+//: - [償却/しょうきゃく][時間/じかん][計算量/けいさんりょう]は O(1)、[拡張/かくちょう][発生時/はっせいじ]の[最悪/さいあく][時間/じかん][計算量/けいさんりょう]は O(n) です。
 //:
 //: 使い方:
 //:
@@ -182,52 +279,51 @@ fn stack_new <.T> <()*>Result<Stack<.T>, Diag>> ():
 //: fn main <()->i32> ():
 //:     let mut st <Stack<i32>>:
 //:         stack_new<i32>
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:     set st:
 //:         stack_push<i32> st 10
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:     if eq stack_len<i32> st 1 0 1
 //: ```
 fn stack_push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
-    let header <i32> get stk "hdr"
-    let len <i32> load_i32 header
-    let cap <i32> load_i32 add header 4
-    let data <i32> load_i32 add header 8
+    let len <i32> stack_len_raw<.T> stk
+    let cap <i32> stack_cap_raw<.T> stk
+    let data <MemPtr<.T>> stack_data_ptr<.T> stk
     if:
         eq len cap
         then:
             let new_cap <i32> mul cap 2
-            let new_data <i32> realloc_raw data mul cap size_of<.T> mul new_cap size_of<.T>
-            if:
-                eq new_data 0
-                then:
+            match realloc_ptr<.T> data mul cap size_of<.T> mul new_cap size_of<.T>:
+                Result::Err _e:
                     diag_err<Stack<.T>> diag_out_of_memory "stack_push(realloc_raw)"
-                else:
-                    store_i32 add header 4 new_cap
-                    store_i32 add header 8 new_data
+                Result::Ok new_data:
+                    store_i32 mem_ptr_addr stack_header_cap_ptr<.T> stk new_cap
+                    store_i32 mem_ptr_addr stack_header_data_ptr_ptr<.T> stk mem_ptr_addr new_data
                     let off <i32> mul len size_of<.T>
-                    store<.T> add new_data off item
-                    store_i32 header add len 1
-                    ok<Stack<.T>, Diag> Stack header
+                    store<.T> add mem_ptr_addr new_data off item
+                    store_i32 mem_ptr_addr stack_header_len_ptr<.T> stk add len 1
+                    ok<Stack<.T>, Diag> stk
         else:
             let off <i32> mul len size_of<.T>
-            store<.T> add data off item
-            store_i32 header add len 1
-            ok<Stack<.T>, Diag> Stack header
+            store<.T> add mem_ptr_addr data off item
+            store_i32 mem_ptr_addr stack_header_len_ptr<.T> stk add len 1
+            ok<Stack<.T>, Diag> stk
 
 //: stack_pop: 末尾要素を取り出す
 //:
-//: 目的:
-//: - 末尾要素を返し、長さを 1 減らします。
+//: ### [目的/もくてき]
+//: - [末尾/まつび][要素/ようそ]を[取/と]り[出/だ]し、[存在/そんざい]すれば `Option::Some` として[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - len==0 なら None、そうでなければ最後の要素を load します。
+//: ### [実装/じっそう]
+//: - `len == 0` なら `Option::None` を[返/かえ]します。
+//: - [要素/ようそ]がある[場合/ばあい]は[最後/さいご]の[添字/そえじ]を[計算/けいさん]し、`load` 後に length を 1 [減/へ]らします。
 //:
-//: 注意(重要):
-//: - 返り値は `Option<.T>` です。
+//: ### [注意/ちゅうい]
+//: - [返/かえ]り[値/あたい]は `Option<.T>` です。
+//: - [空/から]スタックを[異常/いじょう]にせず、`None` で[表/あらわ]します。
 //:
-//: 計算量:
-//: - O(1)
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん][計算量/けいさんりょう]は O(1) です。
 //:
 //: 使い方:
 //:
@@ -242,9 +338,9 @@ fn stack_push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
 //: fn main <()->i32> ():
 //:     let st <Stack<i32>>:
 //:         stack_new<i32>
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:         |> stack_push<i32> 10
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:     let p stack_pop<i32> st;
 //:     match p:
 //:         Option::Some x:
@@ -253,33 +349,33 @@ fn stack_push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
 //:             1
 //: ```
 fn stack_pop <.T> <(Stack<.T>)->Option<.T>> (stk):
-    let header <i32> get stk "hdr"
-    let len <i32> load_i32 header
+    let len <i32> stack_len_raw<.T> stk
     if:
         eq len 0
         then:
             none<.T>
         else:
             let new_len <i32> sub len 1
-            let data <i32> load_i32 add header 8
+            let data <MemPtr<.T>> stack_data_ptr<.T> stk
             let off <i32> mul new_len size_of<.T>
-            let item <.T> load<.T> add data off
-            store_i32 header new_len
+            let item <.T> load<.T> add mem_ptr_addr data off
+            store_i32 mem_ptr_addr stack_header_len_ptr<.T> stk new_len
             some<.T> item
 
 //: stack_peek: 末尾要素を覗く
 //:
-//: 目的:
-//: - 末尾要素を取り出さずに返します。
+//: ### [目的/もくてき]
+//: - [末尾/まつび][要素/ようそ]を[削除/さくじょ]せずに[参照/さんしょう]したいときに[使/つか]います。
 //:
-//: 実装(アルゴリズム):
-//: - len==0 なら None、そうでなければ最後の要素を load します。
+//: ### [実装/じっそう]
+//: - `stack_pop` と[同様/どうよう]に[最後/さいご]の[添字/そえじ]を[求/もと]めますが、length は[更新/こうしん]しません。
 //:
-//: 注意(重要):
-//: - 返り値は `Option<.T>` です。
+//: ### [注意/ちゅうい]
+//: - [返/かえ]り[値/あたい]は `Option<.T>` です。
+//: - [空/から]スタックでは `None` を[返/かえ]します。
 //:
-//: 計算量:
-//: - O(1)
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん][計算量/けいさんりょう]は O(1) です。
 //:
 //: 使い方:
 //:
@@ -294,9 +390,9 @@ fn stack_pop <.T> <(Stack<.T>)->Option<.T>> (stk):
 //: fn main <()->i32> ():
 //:     let st <Stack<i32>>:
 //:         stack_new<i32>
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:         |> stack_push<i32> 20
-//:         |> unwrap_ok<Stack<i32>, Diag>
+//:         |> uwok
 //:     match stack_peek<i32> st:
 //:         Option::Some x:
 //:             if eq x 20 0 1
@@ -304,32 +400,31 @@ fn stack_pop <.T> <(Stack<.T>)->Option<.T>> (stk):
 //:             1
 //: ```
 fn stack_peek <.T> <(Stack<.T>)->Option<.T>> (stk):
-    let header <i32> get stk "hdr"
-    let len <i32> load_i32 header
+    let len <i32> stack_len_raw<.T> stk
     if:
         eq len 0
         then:
             none<.T>
         else:
-            let data <i32> load_i32 add header 8
+            let data <MemPtr<.T>> stack_data_ptr<.T> stk
             let last <i32> sub len 1
             let off <i32> mul last size_of<.T>
-            let v <.T> load<.T> add data off
+            let v <.T> load<.T> add mem_ptr_addr data off
             some<.T> v
 
 //: stack_len: 長さを返す
 //:
-//: 目的:
-//: - len を返します。
+//: ### [目的/もくてき]
+//: - [現在/げんざい]の[要素数/ようそすう]を[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - ヘッダ先頭の i32 を読むだけです。
+//: ### [実装/じっそう]
+//: - ヘッダ[先頭/せんとう]の length [欄/らん]を[読/よ]むだけです。
 //:
-//: 注意(重要):
-//: - 変更操作ではありません。
+//: ### [注意/ちゅうい]
+//: - [変更/へんこう]を[伴/ともな]わない[読/よ]み[取/と]り API です。
 //:
-//: 計算量:
-//: - O(1)
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん][計算量/けいさんりょう]は O(1) です。
 //:
 //: 使い方:
 //:
@@ -341,27 +436,27 @@ fn stack_peek <.T> <(Stack<.T>)->Option<.T>> (stk):
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
-//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 1;
-//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 2;
+//:     let mut st <Stack<i32>> uwok stack_new<i32>;
+//:     set st uwok stack_push<i32> st 1;
+//:     set st uwok stack_push<i32> st 2;
 //:     if eq stack_len<i32> st 2 0 1
 //: ```
 fn stack_len <.T> <(Stack<.T>)->i32> (stk):
-    load_i32 get stk "hdr"
+    stack_len_raw<.T> stk
 
 //: stack_is_empty: 空か判定する
 //:
-//: 目的:
-//: - len==0 なら true を返します。
+//: ### [目的/もくてき]
+//: - スタックが[空/から]かどうかを `bool` で[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - len を読んで 0 と比較します。
+//: ### [実装/じっそう]
+//: - `stack_len` で[要素数/ようそすう]を[得/え]て 0 と[比較/ひかく]します。
 //:
-//: 注意(重要):
-//: - 変更操作ではありません。
+//: ### [注意/ちゅうい]
+//: - [変更/へんこう]を[伴/ともな]わない[読/よ]み[取/と]り API です。
 //:
-//: 計算量:
-//: - O(1)
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん][計算量/けいさんりょう]は O(1) です。
 //:
 //: 使い方:
 //:
@@ -373,7 +468,7 @@ fn stack_len <.T> <(Stack<.T>)->i32> (stk):
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+//:     let st <Stack<i32>> uwok stack_new<i32>;
 //:     if stack_is_empty<i32> st 0 1
 //: ```
 fn stack_is_empty <.T> <(Stack<.T>)->bool> (stk):
@@ -381,17 +476,18 @@ fn stack_is_empty <.T> <(Stack<.T>)->bool> (stk):
 
 //: stack_clear: すべての要素を削除する
 //:
-//: 目的:
-//: - len を 0 にして空にします。
+//: ### [目的/もくてき]
+//: - [要素数/ようそすう]を 0 に[戻/もど]し、スタックを[空/から]にします。
 //:
-//: 実装(アルゴリズム):
-//: - ヘッダ先頭を書き換えます。
+//: ### [実装/じっそう]
+//: - ヘッダの length [欄/らん]だけを書き[換/か]えます。
 //:
-//: 注意(重要):
-//: - メモリは解放されません。
+//: ### [注意/ちゅうい]
+//: - [確保/かくほ]ずみの[容量/ようりょう]は[維持/いじ]され、メモリは[解放/かいほう]されません。
+//: - [更新後/こうしんご]の `Stack<.T>` を[返/かえ]すので、[呼/よ]び[出/だ]し[側/がわ]で[束縛/そくばく]し[直/なお]します。
 //:
-//: 計算量:
-//: - O(1)
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん][計算量/けいさんりょう]は O(1) です。
 //:
 //: 使い方:
 //:
@@ -403,29 +499,29 @@ fn stack_is_empty <.T> <(Stack<.T>)->bool> (stk):
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
-//:     set st unwrap_ok<Stack<i32>, Diag> stack_push<i32> st 9;
+//:     let mut st <Stack<i32>> uwok stack_new<i32>;
+//:     set st uwok stack_push<i32> st 9;
 //:     set st stack_clear<i32> st;
 //:     if stack_is_empty<i32> st 0 1
 //: ```
 fn stack_clear <.T> <(Stack<.T>)->Stack<.T>> (stk):
-    let header <i32> get stk "hdr"
-    store_i32 header 0
+    store_i32 mem_ptr_addr stack_header_len_ptr<.T> stk 0
     stk
 
 //: stack_free: メモリを解放する
 //:
-//: 目的:
-//: - データ領域とヘッダを解放します。
+//: ### [目的/もくてき]
+//: - `Stack<.T>` が[所有/しょゆう]するデータ[領域/りょういき]とヘッダ[領域/りょういき]を[解放/かいほう]します。
 //:
-//: 実装(アルゴリズム):
-//: - cap に基づき data を解放し、ヘッダも dealloc します。
+//: ### [実装/じっそう]
+//: - capacity からデータ[領域/りょういき]の byte [数/すう]を[計算/けいさん]して `dealloc_ptr<.T>` を[呼/よ]び、[続/つづ]けてヘッダ 12 byte も[解放/かいほう]します。
 //:
-//: 注意(重要):
-//: - この後に stk を使うと未定義です。
+//: ### [注意/ちゅうい]
+//: - [解放後/かいほうご]に `stk` を[再利用/さいりよう]してはいけません。
+//: - `Stack<.T>` の[所有権/しょゆうけん]を[消費/しょうひ]する[終端/しゅうたん]操作として[扱/あつか]います。
 //:
-//: 計算量:
-//: - O(1)
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん][計算量/けいさんりょう]は O(1) です。
 //:
 //: 使い方:
 //:
@@ -437,16 +533,15 @@ fn stack_clear <.T> <(Stack<.T>)->Stack<.T>> (stk):
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
 //: fn main <()->i32> ():
-//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+//:     let st <Stack<i32>> uwok stack_new<i32>;
 //:     stack_free<i32> st;
 //:     0
 //: ```
 fn stack_free <.T> <(Stack<.T>)->()> (stk):
-    let header <i32> get stk "hdr"
-    let cap <i32> load_i32 add header 4
-    let data <i32> load_i32 add header 8
-    dealloc_raw data mul cap size_of<.T>
-    dealloc_raw header 12
+    let cap <i32> stack_cap_raw<.T> stk
+    let data <MemPtr<.T>> stack_data_ptr<.T> stk
+    let _ <()> uwok dealloc_ptr<.T> data mul cap size_of<.T>;
+    let _ <()> uwok dealloc_ptr<u8> get stk "hdr" 12;
 
 fn stack_pop_keep <.T> <(Stack<.T>)->Option<.T>> (stk):
     stack_pop<.T> stk

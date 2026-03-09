@@ -9015,3 +9015,33 @@
     - 結果: `8/8 pass`
 - [状況/じょうきょう]:
   - LLVM codegen 側には前段をやり直す helper が残っておらず、責務は `compiler.rs` の共通 lowering へ固定された。
+
+# 2026-03-09 作業メモ (`alloc/collections/stack` を typed pointer 化し、`uwok` を導入)
+
+- [目的/もくてき]:
+  - `todo.md` の `alloc` 再構築に先立ち、`Stack<.T>` の[内部/ないぶ][表現/ひょうげん]を raw `i32` から `MemPtr<u8>` / `MemPtr<.T>` [前提/ぜんてい]へ[寄/よ]せる。
+  - `Result` を pipe [記法/きほう]で[連続/れんぞく][処理/しょり]するときの[冗長/じょうちょう]さを[減/へ]らすため、`unwrap_ok` の[短縮名/たんしゅくめい] `uwok` を `core/result` に追加する。
+- [根本原因/こんぽんげんいん]:
+  - `Stack` はヘッダ[全体/ぜんたい]を raw `i32` で[保持/ほじ]し、`load_i32` / `store_i32` / `realloc_raw` へ[直結/ちょっけつ]していた。
+  - このままでは `core/mem` の型安全化が `alloc/collections` へ[波及/はきゅう]せず、`Vec` の `MemPtr` 化と[整合/せいごう]しない。
+  - [使用例/しようれい]では `unwrap_ok<Stack<i32>, Diag>` が[繰/く]り[返/かえ]され、`new |> push |> push` のような[連鎖/れんさ]が[読/よ]みにくかった。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/stack.nepl`
+    - `Stack<.T>.hdr` を `MemPtr<u8>` に変更。
+    - ヘッダの `len/cap/data_ptr` を[読/よ]む[内部/ないぶ] helper (`stack_header_len_ptr` / `stack_header_cap_ptr` / `stack_header_data_ptr_ptr` / `stack_len_raw` / `stack_cap_raw` / `stack_data_ptr`) を追加。
+    - `stack_new` / `stack_push` / `stack_pop` / `stack_peek` / `stack_len` / `stack_clear` / `stack_free` を typed memory API [前提/ぜんてい]へ更新。
+    - `stack_free` は `dealloc_ptr` の `Result<(), Diag>` を `uwok` で[消費/しょうひ]する形へ修正。
+    - [使用例/しようれい]の doctest を `uwok` [基準/きじゅん]へ寄せた。
+  - `stdlib/core/result.nepl`
+    - `uwok` (`unwrap_ok` の[短縮名/たんしゅくめい]) を追加。
+    - `uwerr` (`unwrap_err` の[短縮名/たんしゅくめい]) も追加。
+  - `stdlib/core/traits/deserialize.nepl`
+    - ruby [記法/きほう]の[分割/ぶんかつ]を修正し、`[人間/にんげん][向/む]け` に統一。
+- [検証/けんしょう]:
+  - `node nodesrc/run_test.js` に[直接/ちょくせつ] JSON を[渡/わた]して focused snippet を 2 件[実行/じっこう]。
+    - `<Stack<i32>> new |> uwok |> push 10 |> uwok |> push 20 |> uwok` + `len` -> `pass`
+    - `stack_free<i32>` を[含/ふく]む snippet -> `pass`
+- [状況/じょうきょう]:
+  - `stack` は `Vec` と[同/おな]じ方向で typed pointer [前提/ぜんてい]へ移った。
+  - `uwok` は `core/result` のみに[定義/ていぎ]し、[重複/ちょうふく][宣言/せんげん]は[避/さ]けている。
+  - `vec` などの `alloc/collections` も、この[見出/みだ]し[構造/こうぞう]と `uwok` を[基準/きじゅん]にそろえていく。
