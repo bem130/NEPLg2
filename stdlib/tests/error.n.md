@@ -76,6 +76,9 @@ fn main <()*>()> ():
 - `outcome_err`
 - `outcome_with_diags`
 - `result_to_outcome`
+- `outcome_result`
+- `outcome_is_ok`
+- `outcome_is_err`
 - `outcome_diags_or_empty`
 - `outcome_has_errors`
 
@@ -128,6 +131,13 @@ fn main <()*>()> ():
 
     let ds <Diags> diags_one diag_warn "careful";
     let ok1 <Outcome<i32, StdErrorKind>> outcome_with_diags ok0 ds;
+    match outcome_result ok1:
+        Result::Ok v:
+            assert_eq_i32 42 v;
+        Result::Err _kind:
+            test_fail "expected ok result";
+    assert outcome_is_ok ok1;
+    assert not outcome_is_err ok1;
     match get ok1 "diags":
         Option::Some got:
             assert_eq_i32 1 diags_len got;
@@ -164,6 +174,8 @@ fn main <()*>()> ():
                     test_fail "expected IoError";
                 StdErrorKind::Other:
                     test_fail "expected IoError";
+    assert not outcome_is_ok err0;
+    assert outcome_is_err err0;
     assert_eq_i32 0 diags_len outcome_diags_or_empty err0;
     assert not outcome_has_errors err0;
 

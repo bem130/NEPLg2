@@ -8920,3 +8920,22 @@
   - `Serialize` / `Deserialize` の stdlib trait 導入は成立した。
   - 根本原因は codegen や monomorphize ではなく、receiverless trait method reference を generic body へ持ち込む時点の `Self` 束縛だった。
   - 次は `Result` / `Outcome` を共通に扱う helper / trait 枠組みへ進む。
+
+# 2026-03-09 作業メモ (`Outcome` の[読/よ]み[取/と]り helper を追加)
+
+- [目的/もくてき]:
+  - `Result` と `Outcome` を[共通/きょうつう]に[扱/あつか]うため、`Outcome` [側/がわ]にも[軽量/けいりょう]な[読/よ]み[取/と]り helper を[揃/そろ]える。
+  - `match get o "result"` を[毎回/まいかい][書/か]かずに、`Outcome.result` の[成否/せいひ]を[読/よ]めるようにする。
+- [変更/へんこう]:
+  - `stdlib/alloc/diag/error.nepl`
+    - `outcome_result`
+    - `outcome_is_ok`
+    - `outcome_is_err`
+    を追加。
+  - `stdlib/tests/error.n.md`
+    - [上記/じょうき] helper の[目的/もくてき]と[確認/かくにん][内容/ないよう]を[追記/ついき]。
+- [判断/はんだん]:
+  - `Outcome` の[更新系/こうしんけい] helper は、struct field を[分解/ぶんかい]して[再構築/さいこうちく]する[言語/げんご][機能/きのう]がまだ[弱/よわ]いため[保留/ほりゅう]。
+  - [現段階/げんだんかい]では[読/よ]み[取/と]り helper を[先/さき]に[固/かた]める[方/ほう]が、stdlib reboot の[上流/じょうりゅう]として[安定/あんてい]する。
+- [検証/けんしょう]:
+  - `node nodesrc/run_test.js` に[直接/ちょくせつ] JSON を[渡/わた]し、`outcome_result` / `outcome_is_ok` / `outcome_is_err` を[使/つか]う focused snippet が `pass` になることを[確認/かくにん]。
