@@ -9045,3 +9045,15 @@
   - `stack` は `Vec` と[同/おな]じ方向で typed pointer [前提/ぜんてい]へ移った。
   - `uwok` は `core/result` のみに[定義/ていぎ]し、[重複/ちょうふく][宣言/せんげん]は[避/さ]けている。
   - `vec` などの `alloc/collections` も、この[見出/みだ]し[構造/こうぞう]と `uwok` を[基準/きじゅん]にそろえていく。
+
+# 2026-03-09 作業メモ (alloc/collections/vec: ドキュメントコメント見出しの新標準への追従)
+
+- 目的:
+  - `alloc/collections/vec.nepl` の[先頭/せんとう]と[基礎/きそ] API のドキュメントコメントを、`stdlib/core/traits/deserialize.nepl` を[基準/きじゅん]にした[新標準/しんひょうじゅん]の[見出/みだ]し[構造/こうぞう]へ[揃/そろ]える。
+- 変更:
+  - `stdlib/alloc/collections/vec.nepl`
+    - [先頭/せんとう]コメントを `# vec` 形式へ変更。
+    - `Vec`, `vec_new`, `vec_with_capacity`, `vec_len`, `vec_cap`, `vec_data_ptr`, `vec_data_mem_ptr` のコメントを `##` / `### [目的/もくてき]` / `### [実装/じっそう]` / `### [注意/ちゅうい]` / `### [計算量/けいさんりょう]` / `### [使用例/しようれい]` に整理。
+  - [実装/じっそう]本体は変更していない。
+- 検証:
+  - `printf '{...}' | node nodesrc/run_test.js` により、`new<i32> |> push 10 |> push 20` と `vec_len` を[使/つか]う focused 実行が pass。
