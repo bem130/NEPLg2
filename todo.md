@@ -15,7 +15,7 @@ stdlib 再構築 本流
 
 1. trait 能力モデルの土台を確定する
 - copy/clone 判定は compiler 内固定表を使わず、`.nepl` ソース上の trait 実装だけで決まるようにする。
-- `Result` と `Outcome` を共通に扱う helper / trait 枠組みを設計し、stdlib 全体で再利用できるようにする。
+- `Result` と `Outcome` を共通に扱う helper は導入済み。trait 抽象は associated type / trait generic 機能の整理後に再検討する。
 - `Outcome` は読み取り helper を先に整備し、struct の多フィールド抽出を要する mutating helper は言語機能側の制約を確認しながら段階的に進める。
 - `Copy` / `Clone` / `Stringify` / `Debug` / `Eq` / `Ord` / `Hash` / `Serialize` / `Deserialize` の stdlib trait 本体は先に配置済みなので、以後は `Result` / `Outcome` 共通 helper と compiler の非ハードコード化を進める。
 - 完了条件:

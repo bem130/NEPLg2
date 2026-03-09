@@ -8939,3 +8939,9 @@
   - [現段階/げんだんかい]では[読/よ]み[取/と]り helper を[先/さき]に[固/かた]める[方/ほう]が、stdlib reboot の[上流/じょうりゅう]として[安定/あんてい]する。
 - [検証/けんしょう]:
   - `node nodesrc/run_test.js` に[直接/ちょくせつ] JSON を[渡/わた]し、`outcome_result` / `outcome_is_ok` / `outcome_is_err` を[使/つか]う focused snippet が `pass` になることを[確認/かくにん]。
+
+
+- `alloc/diag/error` に `into_outcome` / `result_like_result` / `result_like_is_ok` / `result_like_is_err` を追加。
+  - `Result` と `Outcome` を overloading で共通 helper 名に揃えた。
+  - 現状の trait 機能では associated type や trait generic abstraction が弱く、`Result<T,E>` と `Outcome<T,E>` を無理に trait 一つへ押し込むより helper の方が自然だった。
+- `stdlib/tests/error.n.md` に `result_and_outcome_common_helpers` を追加し、軽量 API と rich API の共通読み取りを focused に確認。

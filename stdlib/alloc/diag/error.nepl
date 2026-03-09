@@ -314,6 +314,95 @@ fn outcome_with_diags <.T, .E> <(Outcome<.T, .E>,Diags)->Outcome<.T, .E>> (o, ds
 fn result_to_outcome <.T, .E> <(Result<.T, .E>)->Outcome<.T, .E>> (r):
     Outcome r none<Diags>
 
+//: into_outcome: `Result` を `Outcome` に[昇格/しょうかく]する[共通/きょうつう][入口/いりぐち]
+//:
+//: ### [目的/もくてき]
+//: - `Result` と `Outcome` を[同/おな]じ helper [名/めい]で[扱/あつか]い、[呼/よ]び[出/だ]し[側/がわ]が[必要/ひつよう]な[時点/じてん]で `Outcome` に[揃/そろ]えられるようにします。
+//:
+//: ### [使用例/しようれい]
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "alloc/diag/error" as *
+//: let o <Outcome<i32, StdErrorKind>> into_outcome Result::Ok<i32, StdErrorKind> 7;
+//: assert outcome_is_ok o;
+//: ```
+//:
+//: ### [実装/じっそう]
+//: - `result_to_outcome` をそのまま[呼/よ]び、[診断/しんだん][群/ぐん]なしの `Outcome` を[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `Result` [側/がわ]に[診断/しんだん][群/ぐん]はないため、[昇格/しょうかく]しても `diags` は `none` です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn into_outcome <.T, .E> <(Result<.T, .E>)->Outcome<.T, .E>> (r):
+    result_to_outcome r
+
+//: into_outcome: そのまま `Outcome` を[返/かえ]す
+//:
+//: ### [目的/もくてき]
+//: - すでに `Outcome` を[持/も]っている[値/あたい]も `Result` と[同/おな]じ helper [名/めい]で[扱/あつか]えるようにします。
+//:
+//: ### [実装/じっそう]
+//: - [入力/にゅうりょく]をそのまま[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `diags` の[有無/うむ]は[保持/ほじ]されます。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn into_outcome <.T, .E> <(Outcome<.T, .E>)->Outcome<.T, .E>> (o):
+    o
+
+//: result_like_result: `Result` をそのまま[読/よ]み[出/だ]す
+//:
+//: ### [目的/もくてき]
+//: - `Result` / `Outcome` を[共通/きょうつう] helper で[扱/あつか]うとき、[成否/せいひ]の[軸/じく]だけを[同/おな]じ[名前/なまえ]で[取/と]り[出/だ]せるようにします。
+//:
+//: ### [実装/じっそう]
+//: - [入力/にゅうりょく]の `Result` をそのまま[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn result_like_result <.T, .E> <(Result<.T, .E>)->Result<.T, .E>> (r):
+    r
+
+//: result_like_result: `Outcome` [内部/ないぶ]の `Result` を[読/よ]み[出/だ]す
+//:
+//: ### [目的/もくてき]
+//: - `Outcome` [内部/ないぶ]の `result` field を `Result` と[同/おな]じ[名前/なまえ]で[取/と]り[出/だ]せるようにします。
+//:
+//: ### [実装/じっそう]
+//: - `outcome_result` を[呼/よ]びます。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn result_like_result <.T, .E> <(Outcome<.T, .E>)->Result<.T, .E>> (o):
+    outcome_result o
+
+//: result_like_is_ok: `Result` の[成功/せいこう]を[判定/はんてい]する
+fn result_like_is_ok <.T, .E> <(Result<.T, .E>)->bool> (r):
+    is_ok r
+
+//: result_like_is_ok: `Outcome` の[成功/せいこう]を[判定/はんてい]する
+fn result_like_is_ok <.T, .E> <(Outcome<.T, .E>)->bool> (o):
+    outcome_is_ok o
+
+//: result_like_is_err: `Result` の[失敗/しっぱい]を[判定/はんてい]する
+fn result_like_is_err <.T, .E> <(Result<.T, .E>)->bool> (r):
+    is_err r
+
+//: result_like_is_err: `Outcome` の[失敗/しっぱい]を[判定/はんてい]する
+fn result_like_is_err <.T, .E> <(Outcome<.T, .E>)->bool> (o):
+    outcome_is_err o
+
 //: outcome_result: `Outcome` [内部/ないぶ]の `Result` を[取/と]り[出/だ]す
 //:
 //: [目的/もくてき]:

@@ -209,3 +209,53 @@ fn main <()*>()> ():
                 StdErrorKind::Other:
                     test_fail "expected ParseError";
 ```
+
+
+## result_and_outcome_common_helpers
+
+[目的/もくてき]:
+- `Result` と `Outcome` を[同/おな]じ helper [名/めい]で[扱/あつか]えることを[確/たし]かめます。
+- [軽量/けいりょう]な API は `Result` のまま、rich な API は `Outcome` で[返/かえ]しても、[呼/よ]び[出/だ]し[側/がわ]の[読/よ]み[取/と]り helper を[共通化/きょうつうか]できることを[確認/かくにん]します。
+
+[何/なに]を[確/たし]かめるか:
+- `into_outcome`
+- `result_like_result`
+- `result_like_is_ok`
+- `result_like_is_err`
+
+neplg2:test
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "alloc/diag/error" as *
+#import "core/result" as *
+#import "std/test" as *
+
+fn main <()*>()> ():
+    let r0 <Result<i32, StdErrorKind>> Result::Ok 9;
+    let o0 <Outcome<i32, StdErrorKind>> into_outcome r0;
+    assert result_like_is_ok r0;
+    assert result_like_is_ok o0;
+    assert not result_like_is_err r0;
+    assert not result_like_is_err o0;
+
+    match result_like_result r0:
+        Result::Ok v:
+            assert_eq_i32 9 v;
+        Result::Err _e:
+            test_fail "expected result ok";
+
+    match result_like_result o0:
+        Result::Ok v:
+            assert_eq_i32 9 v;
+        Result::Err _e:
+            test_fail "expected outcome ok";
+
+    let ds <Diags> diags_one diag_warn "careful";
+    let o1 <Outcome<i32, StdErrorKind>> outcome_with_diags outcome_ok<i32, StdErrorKind> 3 ds;
+    let o2 <Outcome<i32, StdErrorKind>> into_outcome o1;
+    assert result_like_is_ok o2;
+    assert_eq_i32 1 diags_len outcome_diags_or_empty o2;
+```
