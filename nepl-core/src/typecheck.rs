@@ -419,7 +419,7 @@ pub fn typecheck(
     let mut pending_copy_clone_checks: Vec<(TypeId, Span)> = Vec::new();
     let mut duplicate_impl_spans: BTreeSet<(u32, u32, u32)> = BTreeSet::new();
 
-    let mut entry = None;
+    let mut entry: Option<(String, Span)> = None;
     let mut externs: Vec<HirExtern> = Vec::new();
     let mut seen_directive_spans: BTreeSet<(u32, u32, u32)> = BTreeSet::new();
     let mut instantiations: BTreeMap<String, Vec<Vec<TypeId>>> = BTreeMap::new();
@@ -445,7 +445,7 @@ pub fn typecheck(
             return;
         }
         if let Directive::Entry { name } = d {
-            entry = Some(name.name.clone());
+            entry = Some((name.name.clone(), name.span));
         } else if let Directive::Extern {
             module: m,
             name: n,
@@ -1418,7 +1418,10 @@ pub fn typecheck(
             match check_function(
                 f,
                 f_ty,
-                entry.as_ref().map(|n| n == &f.name.name).unwrap_or(false),
+                entry
+                    .as_ref()
+                    .map(|(n, _)| n == &f.name.name)
+                    .unwrap_or(false),
                 target,
                 profile,
                 &[],
@@ -1635,7 +1638,7 @@ pub fn typecheck(
         }
     }
 
-    let resolved_entry = if let Some(name) = entry {
+    let resolved_entry = if let Some((name, entry_span)) = entry {
         let bindings = env.lookup_all_callables(&name);
         let mut func_symbols = Vec::new();
         for b in bindings {
@@ -1647,7 +1650,7 @@ pub fn typecheck(
             Some(func_symbols.remove(0))
         } else {
             diagnostics.push(
-                Diagnostic::error("entry function is missing or ambiguous", Span::dummy())
+                Diagnostic::error("entry function is missing or ambiguous", entry_span)
                     .with_id(DiagnosticId::TypeEntryFunctionMissingOrAmbiguous),
             );
             None

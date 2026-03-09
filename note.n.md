@@ -9088,3 +9088,31 @@
   - [実装/じっそう]本体は変更していない。
 - 検証:
   - `printf '{...}' | node nodesrc/run_test.js` により、`new<i32> |> push 10 |> push 20` と `vec_len` を[使/つか]う focused 実行が pass。
+
+# 2026-03-09 作業メモ (compiler 前提固定: `#entry` 診断の span を dummy から実位置へ修正)
+
+- [目的/もくてき]:
+  - `TypeEntryFunctionMissingOrAmbiguous` が `Span::dummy()` を[返/かえ]していた compiler [側/がわ]の[不具合/ふぐあい]を[修正/しゅうせい]し、`#entry` の[識別子/しきべつし][位置/いち]へ[診断/しんだん]を[結/むす]び[付/つ]ける。
+  - LLVM [経路/けいろ]で[後段/こうだん]に[残/のこ]っていた `entry function ... was not found in lowered module` も、同じ `diag id` と span に[寄/よ]せる。
+- [根本原因/こんぽんげんいん]:
+  - `typecheck` は `Directive::Entry` の span を[見/み]えていたが、`resolved_entry` の[曖昧/あいまい]・[欠落/けつらく]を[報告/ほうこく]するときに `Span::dummy()` を[使/つか]っていた。
+  - `compiler::resolve_hir_entry_name` も、lowering [後/ご]に entry が[見/み]つからないと `diag id` なし・dummy span [前提/ぜんてい]の[診断/しんだん]へ[落/お]ちていた。
+- [変更/へんこう]:
+  - `nepl-core/src/typecheck.rs`
+    - `entry` を `Option<(String, Span)>` で[保持/ほじ]するように変更。
+    - `TypeEntryFunctionMissingOrAmbiguous` を `#entry` の[名前/なまえ] span へ[付/つ]けるよう修正。
+    - `check_function` の entry [判定/はんてい]も tuple [前提/ぜんてい]へ[追従/ついじゅう]。
+  - `nepl-core/src/compiler.rs`
+    - `resolve_hir_entry_name` に `module` を[渡/わた]し、`#entry` [探索/たんさく] helper を追加。
+    - lowering [後/ご]に entry が[見/み]つからない[場合/ばあい]も `DiagnosticId::TypeEntryFunctionMissingOrAmbiguous` と `#entry` の span を[返/かえ]すように修正。
+  - `tests/compiler/compile_fail_diag_location.n.md`
+    - `entry_missing_uses_entry_directive_span` を追加。
+    - `diag_id: 3092` と `diag_span: 2:8` を[確認/かくにん]する compile_fail を追加。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/tests.js -i tests/compiler/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-entry-diag-location.json -j 15`
+    - [結果/けっか]: `4/4 pass`
+- [状況/じょうきょう]:
+  - `#entry` に[関/かん]する compiler 診断は、`diag id` だけでなく[位置/いち]も[前段/ぜんだん]で[安定/あんてい]して[取/と]れるようになった。
+  - codegen [到達後/とうたつご]の entry [欠落/けつらく]は、front-end lowering の[不整合/ふせいごう]として[扱/あつか]える[範囲/はんい]まで[縮小/しゅくしょう]された。
