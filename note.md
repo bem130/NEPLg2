@@ -8999,3 +8999,19 @@
   - LLVM codegen は前段を直接実行せず、`compiler.rs` の共通 lowering を前提に動く形へ寄った。
   - まだ `nepl-cli` の LLVM 分岐は `codegen_llvm::emit_ll_from_module_for_target` を直接呼ぶが、その内部は共通 front-end を通るため、責務分離の主眼は満たした。
   - 残る compiler 前提固定の本流は、copy/clone 非ハードコード化の残件と、`Diag.kind` 言語機能の準備である。
+
+# 2026-03-09 作業メモ (compiler 前提固定: LLVM codegen から旧 front-end helper を除去)
+
+- [目的/もくてき]:
+  - `codegen_llvm.rs` に残っていた旧 front-end helper 群を除去し、LLVM codegen が再び typecheck/precheck 経路を内包しない状態を保つ。
+- [変更/へんこう]:
+  - `nepl-core/src/codegen_llvm.rs`
+    - 未使用になっていた `compute_reachable_hint` / `build_hir_for_llvm_lowering` / `try_build_hir_with_target` と、その補助だった reachable/callee 収集 helper 群を削除。
+    - `emit_ll_from_module_for_target` が `compiler::prepare_module_for_llvm_codegen` 以外の front-end 経路を持たない状態にした。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - 結果: success
+  - `node nodesrc/tests.js -i tests/compiler/llvm_target.n.md -i tests/compiler/raw_body_precheck.n.md -i tests/compiler/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-llvm-frontload-2.json -j 15`
+    - 結果: `8/8 pass`
+- [状況/じょうきょう]:
+  - LLVM codegen 側には前段をやり直す helper が残っておらず、責務は `compiler.rs` の共通 lowering へ固定された。
