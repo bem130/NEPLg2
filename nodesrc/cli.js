@@ -19,6 +19,8 @@ function parseArgs(argv) {
     const inputs = [];
     const outs = {};
     const excludeDirs = [];
+    let siteName = 'NEPLg2';
+    let descriptionPrefix = 'NEPLg2';
 
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
@@ -39,11 +41,19 @@ function parseArgs(argv) {
             excludeDirs.push(argv[++i]);
             continue;
         }
+        if (a === '--site-name' && i + 1 < argv.length) {
+            siteName = argv[++i];
+            continue;
+        }
+        if (a === '--description-prefix' && i + 1 < argv.length) {
+            descriptionPrefix = argv[++i];
+            continue;
+        }
         if (a === '-h' || a === '--help') {
-            return { help: true, inputs, outs, excludeDirs };
+            return { help: true, inputs, outs, excludeDirs, siteName, descriptionPrefix };
         }
     }
-    return { help: false, inputs, outs, excludeDirs };
+    return { help: false, inputs, outs, excludeDirs, siteName, descriptionPrefix };
 }
 
 function ensureDir(p) {
@@ -185,11 +195,11 @@ function extractMarkdownForHtml(filePath) {
 }
 
 function main() {
-    const { help, inputs, outs, excludeDirs } = parseArgs(process.argv.slice(2));
+    const { help, inputs, outs, excludeDirs, siteName, descriptionPrefix } = parseArgs(process.argv.slice(2));
     const hasHtml = Boolean(outs.html);
     const hasHtmlPlay = Boolean(outs.html_play);
     if (help || inputs.length === 0 || (!hasHtml && !hasHtmlPlay)) {
-        console.log('Usage: node nodesrc/cli.js -i <input_dir_or_file> [-i ...] -o html=<output_dir> [-o html_play=<output_dir>] [--exclude-dir <name>]');
+        console.log('Usage: node nodesrc/cli.js -i <input_dir_or_file> [-i ...] -o html=<output_dir> [-o html_play=<output_dir>] [--exclude-dir <name>] [--site-name <name>] [--description-prefix <prefix>]');
         process.exit(help ? 0 : 2);
     }
 
@@ -205,7 +215,7 @@ function main() {
         const inPath = path.resolve(input);
         if (isFile(inPath)) {
             const rel = path.basename(inPath);
-            count += genOne(inPath, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets, null);
+            count += genOne(inPath, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets, null, { siteName, descriptionPrefix });
             continue;
         }
         if (!isDir(inPath)) {
@@ -217,7 +227,7 @@ function main() {
         const tocEntries = buildTocEntries(inPath, files);
         for (const f of files) {
             const rel = path.relative(inPath, f);
-            count += genOne(f, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries);
+            count += genOne(f, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries, { siteName, descriptionPrefix });
         }
     }
 
@@ -289,14 +299,23 @@ function toPosix(p) {
 }
 
 function buildTocEntries(inputRoot, files) {
-    const hasIndex = files.some(f => toPosix(path.relative(inputRoot, f)) === '00_index.n.md');
+    const hasIndex = files.some(f => {
+        const rel = toPosix(path.relative(inputRoot, f));
+        return rel === 'index.n.md' || rel === '00_index.n.md';
+    });
     const allOutRels = files.map(f => toPosix(path.relative(inputRoot, f))
         .replace(/\.n\.md$/i, '.html')
         .replace(/\.nepl$/i, '.html'))
-        .filter(outRel => outRel !== '00_index.html');
+        .filter(outRel => outRel !== 'index.html' && outRel !== '00_index.html');
     allOutRels.sort();
 
-    const indexPath = path.join(inputRoot, '00_index.n.md');
+    let indexPath = path.join(inputRoot, 'index.n.md');
+    let indexOutRel = 'index.html';
+    if (!isFile(indexPath)) {
+        indexPath = path.join(inputRoot, '00_index.n.md');
+        indexOutRel = '00_index.html';
+    }
+
     if (!isFile(indexPath)) {
         const flat = allOutRels.map(outRel => ({
             outRel,
@@ -305,9 +324,10 @@ function buildTocEntries(inputRoot, files) {
             depth: 0,
         }));
         if (hasIndex) {
+            // Note: will use index.html if found earlier, but hasIndex check might be slightly loose here
             flat.unshift({
-                outRel: '00_index.html',
-                label: '00 index',
+                outRel: 'index.html',
+                label: 'index',
                 isGroup: false,
                 depth: 0,
             });
@@ -368,9 +388,9 @@ function buildTocEntries(inputRoot, files) {
 
     const remaining = allOutRels.filter(r => !used.has(r));
     if (hasIndex) {
-        const indexLabel = outRelToTitle.get('00_index.html') || '00 index';
+        const indexLabel = outRelToTitle.get(indexOutRel) || (indexOutRel === 'index.html' ? 'Index' : '00 index');
         entries.unshift({
-            outRel: '00_index.html',
+            outRel: indexOutRel,
             label: indexLabel,
             isGroup: false,
             depth: 0,
@@ -470,33 +490,35 @@ function extractMetaFromAst(ast) {
     return { title, description };
 }
 
-function buildTutorialMeta(relPath, ast) {
+function buildPageMeta(relPath, ast, { siteName, descriptionPrefix }) {
     const baseNoExt = path.basename(relPath).replace(/\.n\.md$/i, '').replace(/\.nepl$/i, '');
     const extracted = extractMetaFromAst(ast);
 
-    let title = `NEPLg2 tutorial - ${baseNoExt}`;
+    let title = `${siteName} - ${baseNoExt}`;
     if (extracted.title) {
         const prefixMatch = baseNoExt.match(/^(\d+)/);
         const prefix = prefixMatch ? prefixMatch[1] : baseNoExt;
-        title = `NEPLg2 tutorial - ${prefix} - ${extracted.title}`;
+        title = `${siteName} - ${prefix} - ${extracted.title}`;
+    } else if (baseNoExt === '00_index' || baseNoExt === 'index') {
+        title = siteName;
     }
 
-    let description = `NEPLg2 Getting Started tutorial: ${baseNoExt}`;
+    let description = `${descriptionPrefix}: ${baseNoExt}`;
     if (extracted.description) {
-        description = `NEPLg2 Getting Started tutorial - ${extracted.description}`;
+        description = `${descriptionPrefix} - ${extracted.description}`;
     }
 
     return { title, description };
 }
 
-function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries) {
+function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries, { siteName, descriptionPrefix }) {
     const md = extractMarkdownForHtml(filePath);
     if (!md || md.trim().length === 0) {
         return 0;
     }
 
     const ast = parseNmdAst(md);
-    const { title, description } = buildTutorialMeta(relPath, ast);
+    const { title, description } = buildPageMeta(relPath, ast, { siteName, descriptionPrefix });
 
     const outRel = relPath
         .replace(/\.n\.md$/i, '.html')

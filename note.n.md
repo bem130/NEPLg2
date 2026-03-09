@@ -9088,3 +9088,21 @@
   - [実装/じっそう]本体は変更していない。
 - 検証:
   - `printf '{...}' | node nodesrc/run_test.js` により、`new<i32> |> push 10 |> push 20` と `vec_len` を[使/つか]う focused 実行が pass。
+
+# 2026-03-09 作業メモ (stdlib ドキュメント生成ツールの汎用化と目次構造の整備)
+
+- [目的/もくてき]:
+  - tutorials と stdlib で共通のドキュメント生成ツール (`nodesrc/cli.js`) を使用できるようにし、stdlib でもインタラクティブなプレイグラウンド付き HTML を生成可能にする。
+  - stdlib ドキュメントの目次を `index.n.md` で管理し、`00_` などのプリフィックスに依存しない階層構造をサポートする。
+- [変更/へんこう]:
+  - `nodesrc/cli.js`
+    - `--site-name` と `--description-prefix` 引数を追加し、サイト名や説明文を外部から指定可能にした。
+    - `index.n.md` を優先的に検出し、出力時に `index.html` へマッピングするロジックを追加。
+  - `stdlib/index.n.md`
+    - 標準ライブラリの新しい目次ファイルとして作成。
+  - `.github/workflows/gh-pages.yml`
+    - `stdlib` のビルドを `html_play` に変更し、"NEPLg2 Standard Library" というサイト名で生成するように更新。
+  - `stdlib/nm/README.n.md` -> `stdlib/nm/README.nepl`
+    - ユーザーの要望に基づき、インデックス以外の `.n.md` を `.nepl` 形式（ドキュメントコメント付き）に変換。
+- [検証/けんしょう]:
+  - `nodesrc/cli.js` の引数パースと `index.n.md` 処理のロジックが正常に動作し、`index.html` が期待通りに生成されることを確認。
