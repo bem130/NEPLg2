@@ -21,7 +21,7 @@ function renderBody(ast) {
     return renderNode(ast, { rewriteLinks: true });
 }
 
-function renderToc(tocLinks) {
+function renderToc(tocLinks, tocTitle = 'Getting Started') {
     if (!Array.isArray(tocLinks) || tocLinks.length === 0) {
         return '';
     }
@@ -37,7 +37,7 @@ function renderToc(tocLinks) {
         const cls = link.active ? `toc-link active depth-${depth}` : `toc-link depth-${depth}`;
         return `<li><a class="${cls}" href="${escapeHtml(String(link.href || ''))}">${labelHtml}</a></li>`;
     }).join('\n');
-    return `<aside class="doc-sidebar"><div class="sidebar-header"><div class="toc-title">Getting Started</div></div><ul class="toc-list">${items}</ul></aside>`;
+    return `<aside class="doc-sidebar"><div class="sidebar-header"><div class="toc-title">${escapeHtml(tocTitle)}</div></div><ul class="toc-list">${items}</ul></aside>`;
 }
 
 function buildPlaygroundVfsOverrides() {
@@ -1158,7 +1158,7 @@ function renderHtmlPlayground(ast, opt) {
         ? opt.description
         : 'NEPLg2 tutorial with interactive runnable examples.';
     const moduleJsPath = (opt && opt.moduleJsPath) ? String(opt.moduleJsPath) : './nepl-web.js';
-    const tocHtml = renderToc((opt && opt.tocLinks) ? opt.tocLinks : []);
+    const tocHtml = renderToc((opt && opt.tocLinks) ? opt.tocLinks : [], (opt && opt.tocTitle) ? opt.tocTitle : 'Getting Started');
     const body = renderBody(ast);
     return wrapHtmlPlayground(body, title, description, moduleJsPath, tocHtml);
 }

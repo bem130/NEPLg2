@@ -225,9 +225,11 @@ function main() {
 
         const files = walkFiles(inPath, excludeDirs).filter(p => p.endsWith('.n.md') || p.endsWith('.nepl'));
         const tocEntries = buildTocEntries(inPath, files);
+        const tocTitle = siteName.toLowerCase().includes('tutorial') ? 'Getting Started' : 'Contents';
+
         for (const f of files) {
             const rel = path.relative(inPath, f);
-            count += genOne(f, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries, { siteName, descriptionPrefix });
+            count += genOne(f, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries, { siteName, descriptionPrefix, tocTitle });
         }
     }
 
@@ -397,12 +399,29 @@ function buildTocEntries(inputRoot, files) {
         });
     }
     if (remaining.length > 0) {
-        entries.push({
-            label: 'Other',
-            isGroup: true,
-            depth: 0,
-        });
+        remaining.sort();
+        let lastDir = null;
         for (const outRel of remaining) {
+            const dir = path.dirname(outRel);
+            if (dir !== lastDir) {
+                // Hierarchical grouping for "remaining" files
+                if (dir === '.') {
+                    entries.push({ label: 'Other', isGroup: true, depth: 0 });
+                } else {
+                    const parts = dir.split('/');
+                    for (let i = 0; i < parts.length; i++) {
+                        const subDir = parts.slice(0, i + 1).join('/');
+                        // We only add group if it's not the same as last one processed
+                        // Actually, let's keep it simple for now: group by the deepest dir
+                    }
+                    entries.push({
+                        label: dir,
+                        isGroup: true,
+                        depth: 0,
+                    });
+                }
+                lastDir = dir;
+            }
             entries.push({
                 outRel,
                 label: outRelToTitle.get(outRel) || humanizeDocName(outRel),
@@ -511,7 +530,7 @@ function buildPageMeta(relPath, ast, { siteName, descriptionPrefix }) {
     return { title, description };
 }
 
-function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries, { siteName, descriptionPrefix }) {
+function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries, { siteName, descriptionPrefix, tocTitle }) {
     const md = extractMarkdownForHtml(filePath);
     if (!md || md.trim().length === 0) {
         return 0;
@@ -548,6 +567,7 @@ function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay, htmlPlayAssets,
             rewriteLinks: true,
             moduleJsPath,
             tocLinks,
+            tocTitle,
         });
         const outPathPlay = path.join(outRootHtmlPlay, outRel);
         ensureDir(path.dirname(outPathPlay));

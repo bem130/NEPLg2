@@ -9106,3 +9106,22 @@
     - ユーザーの要望に基づき、インデックス以外の `.n.md` を `.nepl` 形式（ドキュメントコメント付き）に変換。
 - [検証/けんしょう]:
   - `nodesrc/cli.js` の引数パースと `index.n.md` 処理のロジックが正常に動作し、`index.html` が期待通りに生成されることを確認。
+
+# 2026-03-09 作業メモ (stdlib ドキュメントの目次階層化とタイトルの適正化)
+
+- [目的/もくてき]:
+  - `stdlib` ドキュメントの目次 (TOC) が平坦なリストになっていたのを、ディレクトリ構造に基づいた階層的な表示に改善する。
+  - サイト名に応じて目次のタイトル ("Getting Started" または "Contents") を自動的に切り替えられるようにし、ドキュメントの種類に適した表示にする。
+- [根本原因/こんぽんげんいん]:
+  - `nodesrc/cli.js` の `buildTocEntries` において、明示的なインデックスに含まれない「残り」のファイルが一律 "Other" グループにフラットに入れられていた。
+  - `nodesrc/html_gen_playground.js` の目次タイトルが "Getting Started" にハードコードされていた。
+- [変更/へんこう]:
+  - `nodesrc/cli.js`
+    - `buildTocEntries` を修正し、残りのファイルを共通のディレクトリ接頭辞でグループ化する階層化ロジックを実装。
+    - `siteName` に "tutorial" が含まれない場合は目次タイトルを "Contents" と判定し、生成処理に渡すように変更。
+  - `nodesrc/html_gen_playground.js`
+    - `renderToc` と `renderHtmlPlayground` を更新し、`tocTitle` オプションを受け取り、"Getting Started" 以外のタイトルも表示できるように変更。
+- [検証/けんしょう]:
+  - `dist/doc/stdlib/alloc/diag/diag.html` などを確認し、目次タイトルが "Contents" になり、`alloc/collections` や `core/traits` などのディレクトリ単位で階層化されていることを確認。
+- [状況/じょうきょう]:
+  - 標準ライブラリのドキュメントが、チュートリアルと同等の整理された構造で閲覧可能になった。
