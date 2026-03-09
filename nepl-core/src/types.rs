@@ -362,7 +362,13 @@ impl TypeCtx {
         if self.copy_trait_enabled {
             return self.is_copy_with_trait_model(id);
         }
-        self.is_copy_eligible(id)
+        let resolved = self.resolve_id(id);
+        match self.get_ref(resolved) {
+            TypeKind::Never => true,
+            TypeKind::Reference(_, _) => true,
+            TypeKind::Var(v) => v.binding.map(|b| self.is_copy(b)).unwrap_or(false),
+            _ => false,
+        }
     }
 
     fn is_copy_with_trait_model(&self, id: TypeId) -> bool {

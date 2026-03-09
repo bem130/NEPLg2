@@ -258,6 +258,37 @@
     - `Hash` trait
     - `hash32_by_trait`
     - `i32`
+
+# 2026-03-09 作業メモ (compiler 前提固定: `#prelude` 最小実装と Copy 固定表撤去)
+
+- [目的/もくてき]:
+  - `todo.md` の `compiler 前提` 残件だった `Copy` 固定表依存を、[実際/じっさい]に source [側/がわ]から trait impl を[供給/きょうきゅう]できる[状態/じょうたい]へ[移/うつ]す。
+  - parser だけに[存在/そんざい]していた `#prelude` / `#no_prelude` を loader [段階/だんかい]でも[解釈/かいしゃく]し、copy/clone 非ハードコード化の[前提/ぜんてい]を[整/ととの]える。
+- [原因/げんいん]:
+  - `#prelude` と `#no_prelude` は lexer / parser / AST にだけ[存在/そんざい]し、loader では[無視/むし]されていた。
+  - そのため `Copy` / `Clone` impl を source [側/がわ]から[既定/きてい][供給/きょうきゅう]できず、`TypeCtx::is_copy` に primitive 固定表フォールバックを[残/のこ]す[必要/ひつよう]があった。
+- [変更/へんこう]:
+  - `nepl-core/src/loader.rs`
+    - root module [限定/げんてい]で `#prelude` / `#no_prelude` を[処理/しょり]するように[変更/へんこう]した。
+    - `#no_prelude` がない root module には[既定/きてい]で `std/prelude_base` を[読/よ]み[込/こ]む。
+    - import/include の[再帰/さいき] load では default prelude を[適用/てきよう]しないようにして、stdlib [内部/ないぶ] import での[循環/じゅんかん]を[避/さ]けた。
+  - `stdlib/std/prelude_base.nepl`
+    - [最小/さいしょう] prelude として[追加/ついか]した。
+    - [当面/とうめん]は `core/traits/copy` だけを[読/よ]み[込/こ]み、copy/clone 能力の source [供給/きょうきゅう]に[絞/しぼ]った。
+  - `nepl-core/src/types.rs`
+    - `TypeCtx::is_copy` の最終フォールバックから primitive 固定表を[削除/さくじょ]した。
+    - `Copy` trait が[見/み]えていない[場合/ばあい]は、[参照/さんしょう]型と `Never` だけを compiler [内在/ないざい]の copy として[扱/あつか]う。
+  - `tests/compiler/prelude_copy.n.md`
+    - default prelude で `Copy` bound が[通/とお]ることを[確認/かくにん]する focused case を[追加/ついか]した。
+    - `#prelude std/prelude_base` と `#no_prelude` を[併記/へいき]しても、[明示的/めいじてき] prelude が[優先/ゆうせん]されることを[固定/こてい]した。
+    - `#no_prelude` だけでは `Copy` trait [供給/きょうきゅう]が[消/き]え、`.T: Copy` が `3073` で[落/お]ちることを[追加/ついか]した。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/compiler/prelude_copy.n.md -i tests/compiler/resolve.n.md --no-stdlib --no-tree -o /tmp/tests-prelude-only.json -j 15` -> `14/14 pass`
+  - `node nodesrc/tests.js -i tests/compiler/prelude_copy.n.md --no-stdlib --no-tree -o /tmp/tests-prelude-copy-only.json -j 15` -> `3/3 pass`
+- [判断/はんだん]:
+  - `Copy` の source [供給/きょうきゅう]は default prelude を[通/とお]すことで[既存/きぞん]コードを[壊/こわ]さずに[移行/いこう]できる。
+  - `#no_prelude` は「標準 capability を[含/ふく]めて自前で[管理/かんり]する」ための opt-out として[機能/きのう]する。
     - `bool`
     - `u8`
     - `i64`

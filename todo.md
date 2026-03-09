@@ -15,23 +15,20 @@
 stdlib 再構築 本流
 
 1. trait 能力モデルの土台を確定する
-- copy/clone 判定は compiler 内固定表を使わず、`.nepl` ソース上の trait 実装だけで決まるようにする。
 - `Result` と `Outcome` を共通に扱う helper は導入済み。trait 抽象は associated type / trait generic 機能の整理後に再検討する。
 - `Outcome` は読み取り helper を先に整備し、struct の多フィールド抽出を要する mutating helper は言語機能側の制約を確認しながら段階的に進める。
-- `Copy` / `Clone` / `Stringify` / `Debug` / `Eq` / `Ord` / `Hash` / `Serialize` / `Deserialize` の stdlib trait 本体は先に配置済みなので、以後は `Result` / `Outcome` 共通 helper と compiler の非ハードコード化を進める。
+- `Copy` / `Clone` / `Stringify` / `Debug` / `Eq` / `Ord` / `Hash` / `Serialize` / `Deserialize` の stdlib trait 本体と `Result` / `Outcome` 共通 helper は配置済みなので、以後は associated type / trait generic 機能を前提に抽象化の整理を進める。
 - 完了条件:
   - trait 能力の責務が `core` / `alloc` / `std` の配置と一致する。
-  - compiler 側の copy/clone ハードコード撤去方針が実装可能な形に落ちる。
+  - 追加の trait 抽象が必要かどうかを、言語機能の到達点に合わせて判断できる。
 
 2. compiler 前提を固定する
-- copy/clone 非ハードコード化の実装経路を compiler 側で確定する。
 - codegen では診断を出さず、前段で診断を完結させる。
 - wasm/llvm の診断規則を共通化する。
 - `_raw` 名依存や backend ごとの差分診断を前段の共通検査へ寄せる。
 - 完了条件:
   - codegen 到達時は基本的に生成成功前提となる。
   - 同一入力で wasm/llvm が同一診断を返す。
-  - copy/clone 能力が compiler 内固定表なしで解決される。
 
 3. `Diag.kind` を支える言語機能追加の計画と前段実装を進める
 - 軽量実体を持ちながら階層識別子として扱える kind 表現を言語機能として追加する。
