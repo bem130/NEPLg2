@@ -6,7 +6,7 @@
 #import "alloc/string" as *
 #import "alloc/collections/vec" as *
 #import "core/option" as *
-#import "platforms/wasix/tui" as tui
+#import "features/tui" as tui
 #import "./editor_text" as et
 
 fn line_byte_at <(str,i32)*>i32> (line, idx):
@@ -495,16 +495,16 @@ fn draw_editor <(i32,i32,i32,i32,str,i32,str,str,i32)*>()> (buf, cols, rows, fra
         else:
             ();
     let ntext <i32> len text;
-    let p <.Pair> et::cursor_line_col text cursor;
+    let p et::cursor_line_col text cursor;
     let line_count <i32> count_source_lines text;
     let t0 <str> concat " NEPLg2 TUI Editor / Tab " from_i32 add tab 1;
     let s0 <str> concat " Frame: " from_i32 frame;
     let s1 <str> concat s0 "  Len: ";
     let s2 <str> concat s1 from_i32 ntext;
     let s3 <str> concat s2 "  Ln: ";
-    let s4 <str> concat s3 from_i32 add get p 0 1;
+    let s4 <str> concat s3 from_i32 add get p "line" 1;
     let s5 <str> concat s4 "  Col: ";
-    let s6 <str> concat s5 from_i32 add get p 1 1;
+    let s6 <str> concat s5 from_i32 add get p "col" 1;
     let s7 <str> concat s6 "  Lines: ";
     let s8 <str> concat s7 from_i32 line_count;
     tui::buffer_set_line buf 1 tui::line_box t0 cols;
@@ -526,9 +526,9 @@ fn draw_editor <(i32,i32,i32,i32,str,i32,str,str,i32)*>()> (buf, cols, rows, fra
             set r add r 1;
     tui::buffer_set_line buf rows tui::line_box path cols;
     tui::buffer_present_diff buf;
-    let cur_row <i32> add 3 get p 0;
+    let cur_row <i32> add 3 get p "line";
     let cur_col_base <i32> add 2 gutter_w;
-    let cur_col_raw <i32> add cur_col_base get p 1;
+    let cur_col_raw <i32> add cur_col_base get p "col";
     let mut cur_col <i32> cur_col_raw;
     let cur_col_max <i32> add 1 left_w;
     let cur_col_limit <i32> add cur_col_max 1;

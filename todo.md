@@ -77,13 +77,13 @@ stdlib 再構築 本流
   - `std` が target 依存標準 API の facade として一貫する。
   - `kpread` / `kpwrite` の一般化可能部分が `std/streamio` 側へ移る。
 
-8. `features` 層を定義し直す
-- GUI / HTTP / TUI / 音声再生のような外部 API / FFI / デバイス接続を `features` へ配置する。
+8. `features` 層の残作業を整理する
+- GUI / HTTP / 音声再生のような外部 API / FFI / デバイス接続を `features` へ配置する。
 - regex や audio buffer/processing のような計算・データ処理を `core` / `alloc` へ戻す。
 - `features` は `std` や `runtimes` の上に載る追加機能群として整理する。
 - 完了条件:
   - `features` の責務が `std` と混ざらない。
-  - `tui.nepl` を含む既存外部連携コードの配置方針が固定される。
+  - TUI 以外の既存外部連携コードの配置方針も固定される。
 
 9. tests / tutorials / docs を新 stdlib に追従させる
 - `compile_fail` に `diag_id` を付ける。

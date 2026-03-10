@@ -11,7 +11,7 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/field" as *
-#import "platforms/wasix/tui" as tui
+#import "features/tui" as tui
 
 // メニュー項目数
 // 0=New Game, 1=Settings, 2=High Scores, 3=Quit

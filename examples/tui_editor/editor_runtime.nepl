@@ -3,7 +3,7 @@
 
 #import "core/math" as *
 #import "core/mem" as *
-#import "platforms/wasix/tui" as tui
+#import "features/tui" as tui
 
 fn safe_cols <(i32)*>i32> (cols):
     if:

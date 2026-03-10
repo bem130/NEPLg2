@@ -4,14 +4,14 @@
 
 #import "std/stdio" as *
 #import "core/field" as *
-#import "platforms/wasix/tui" as tui
+#import "features/tui" as tui
 
 fn main <()*>()> ():
     println "WASIX TUI Demo";
     
-    let size <.Pair> tui::get_terminal_size;
-    let cols <i32> get size 0
-    let rows <i32> get size 1
+    let size tui::get_terminal_size;
+    let cols <i32> get size "cols"
+    let rows <i32> get size "rows"
 
     print "Terminal Size: ";
     print_i32 cols;

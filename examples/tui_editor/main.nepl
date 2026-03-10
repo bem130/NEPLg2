@@ -7,7 +7,7 @@
 #import "std/stdio" as *
 #import "core/math" as *
 #import "core/field" as *
-#import "platforms/wasix/tui" as tui
+#import "features/tui" as tui
 #import "./editor_text" as et
 #import "./editor_render" as er
 #import "./editor_fs" as efs
@@ -60,9 +60,9 @@ fn main <()*>()> ():
     let mut insert_mode <bool> false;
     let mut pending_g <bool> false;
     let mut frame <i32> 0;
-    let size0 <.Pair> tui::get_terminal_size;
-    let mut cols <i32> rt::safe_cols get size0 0;
-    let mut rows <i32> rt::safe_rows get size0 1;
+    let size0 tui::get_terminal_size;
+    let mut cols <i32> rt::safe_cols get size0 "cols";
+    let mut rows <i32> rt::safe_rows get size0 "rows";
     let mut buf <i32> tui::buffer_new cols rows;
     let mut quit <bool> false;
     let mut dirty <bool> true;
@@ -77,9 +77,9 @@ fn main <()*>()> ():
 
     while not quit:
         do:
-            let size <.Pair> tui::get_terminal_size;
-            let ncols <i32> rt::safe_cols get size 0;
-            let nrows <i32> rt::safe_rows get size 1;
+            let size tui::get_terminal_size;
+            let ncols <i32> rt::safe_cols get size "cols";
+            let nrows <i32> rt::safe_rows get size "rows";
             if:
                 rt::should_resize cols rows ncols nrows
                 then:

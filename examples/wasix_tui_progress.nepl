@@ -10,7 +10,7 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/field" as *
-#import "platforms/wasix/tui" as tui
+#import "features/tui" as tui
 
 // プログレスバーを描画する (pct: 0-100)
 fn draw_progress_bar <(i32,i32)*>()> (pct, bar_width):

@@ -1,0 +1,27 @@
+//: # tui
+//: TUI / terminal UI の公式 facade
+//:
+//: ### [目的/もくてき]
+//: - TUI は `std` ではなく `features` 層で扱う、という reboot 方針に合わせて、利用者向け入口を提供します。
+//: - 現在の WASIX 実装詳細は `platforms/wasix/tui` に閉じ込め、この file から再公開します。
+//:
+//: ### [実装/じっそう]
+//: - 現段階では `platforms/wasix/tui` をそのまま merge import する薄い facade です。
+//: - 将来 target ごとの差分実装が増えても、利用者側の import path は `features/tui` に固定できます。
+//:
+//: ### [注意/ちゅうい]
+//: - 実行には現在 `#target wasix` を前提とします。
+//: - 端末制御や ANSI 描画の具体的な制約は `platforms/wasix/tui` 側の各 API comment に従います。
+//:
+//: neplg2:test[skip]
+//: ```neplg2
+//:| #entry main
+//:| #target wasix
+//:| #import "features/tui" as tui
+//: fn main <()*>()> ():
+//:     tui::cursor_home;
+//: ```
+
+#indent 4
+
+#import "platforms/wasix/tui" as @merge

@@ -9675,3 +9675,56 @@
 - [状況/じょうきょう]:
   - `std` facade 周辺の実装・comment・focused test・利用者向け補助 doc の前提が一致した。
   - 次段では `std` 本体の残り target 依存 API と、`features` / tutorials 側の追従状況を見ていく。
+
+# 2026-03-10 作業メモ (`features/tui` facade を追加し、WASIX TUI API を named struct ベースへ整理)
+
+- [目的/もくてき]:
+  - todo 8 の `features` 層整理として、TUI の利用者向け入口を `platforms/wasix/tui` 直参照から `features/tui` に固定する。
+  - 旧 `.Pair` ベースの座標・サイズ API が current compiler / examples で不安定になっていたため、public API を named struct ベースへ寄せる。
+- [根本原因/こんぽんげんいん]:
+  - repo には `stdlib/platforms/wasix/tui.nepl` しかなく、examples も全て platform 直 import していたため、reboot 方針の「TUI は `features` 層」という責務分離が未反映だった。
+  - さらに `get_terminal_size` と `editor_text::cursor_line_col` が `.Pair` を返し、call site では `get x 0` / `get x 1` に依存していたが、multi-file の wasix examples ではこの経路が `D3006` を起こしていた。
+  - `Tuple:` 自体を戻り値に使うことではなく、「外部 API と helper の意味を番号 access に押し込んだこと」が不安定さと可読性低下の共通原因だった。
+  - あわせて型注釈内の `tui::TerminalSize` のような `::` path は現状 parser が受け付けず、編集禁止メモにある未実装項目と衝突していたため、call site は推論前提にする必要があった。
+- [変更/へんこう]:
+  - `stdlib/features/tui.nepl`
+    - `platforms/wasix/tui` を `@merge` で再公開する公式 facade を新設した。
+    - module comment を新 policy に合わせて記述し、利用者向け import path を `features/tui` に固定した。
+  - `stdlib/platforms/wasix/tui.nepl`
+    - `TerminalSize` struct を追加した。
+    - `get_terminal_size` の戻り値を `Tuple:` から `TerminalSize` へ変更した。
+    - parser error の原因だった `if` layout 内の不要な末尾 `;` 3 箇所を除去した。
+  - `examples/tui_editor/editor_text.nepl`
+    - `CursorLineCol` struct を追加し、`cursor_line_col` の戻り値を named struct 化した。
+  - `examples/tui_editor/editor_render.nepl`
+    - `cursor_line_col` の利用を `get p "line"` / `get p "col"` に変更した。
+  - `examples/wasix_tui_demo.nepl`
+  - `examples/wasix_tui_fullscreen.nepl`
+  - `examples/wasix_tui_menu.nepl`
+  - `examples/wasix_tui_progress.nepl`
+  - `examples/wasix_tui_text_render.nepl`
+  - `examples/tui_editor/main.nepl`
+  - `examples/tui_editor/editor_runtime.nepl`
+  - これらの import を `platforms/wasix/tui` から `features/tui` へ変更した。
+  - `examples/wasix_tui_demo.nepl` / `examples/wasix_tui_fullscreen.nepl` / `examples/wasix_tui_text_render.nepl` / `examples/tui_editor/main.nepl`
+    - 端末サイズの参照を `get size "cols"` / `get size "rows"` に変更した。
+- [設計/せっけい][判断/はんだん]:
+  - TUI の facade 追加だけで止めず、example まで `features/tui` に揃えたのは、「利用者が最初に見る path」を固定しないと reboot 後の責務分離が定着しないためである。
+  - 端末サイズや cursor 座標は public helper として意味が明確なので、匿名 tuple より named struct の方が API として安定で、field access 廃止方針とも整合する。
+  - 型注釈 path 未対応は compiler 側の未実装事項なので、今回は library 側で回避不能な箇所だけ inference に寄せ、構文拡張そのものには踏み込まなかった。
+- [検証/けんしょう]:
+  - `target/debug/nepl-cli -i examples/wasix_tui_demo.nepl --target wasix --output /tmp/wasix-tui-demo-check` -> success
+  - `target/debug/nepl-cli -i examples/tui_editor/main.nepl --target wasix --output /tmp/tui-editor-check` -> success
+  - `target/debug/nepl-cli -i examples/wasix_tui_menu.nepl --target wasix --output /tmp/wasix-tui-menu-check` -> success
+  - `target/debug/nepl-cli -i examples/wasix_tui_progress.nepl --target wasix --output /tmp/wasix-tui-progress-check` -> success
+  - `target/debug/nepl-cli -i examples/wasix_tui_fullscreen.nepl --target wasix --output /tmp/wasix-tui-fullscreen-check` -> success
+  - `target/debug/nepl-cli -i examples/wasix_tui_text_render.nepl --target wasix --output /tmp/wasix-tui-text-render-check` -> success
+  - `node nodesrc/tui_regression.js --timeout-ms 8000`
+    - [結果/けっか]: `ok: true`
+    - [確認/かくにん]: 全 16 scenario が `exit_code = 0`
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/cli.js -i stdlib/features/tui.nepl -o html=/tmp/features-tui-doc-html`
+    - [結果/けっか]: `generated 1 html file(s)`
+- [状況/じょうきょう]:
+  - TUI の利用者向け入口は `features/tui` に固定され、todo 8 のうち TUI 配置は完了した。
+  - `features` 層には GUI / HTTP / 音声など未整理の領域が残るため、todo 8 自体は「残作業整理」として継続する。

@@ -9,7 +9,7 @@
 #import "std/stdio" as *
 #import "core/math" as *
 #import "core/field" as *
-#import "platforms/wasix/tui" as tui
+#import "features/tui" as tui
 
 fn draw_text_demo <(i32,i32,i32,i32)*>()> (buf, cols, rows, frame):
     tui::buffer_set_line buf 1 tui::style_text 6 0 tui::line_top cols;
@@ -64,18 +64,18 @@ fn main <()*>()> ():
             tui::hide_cursor;
             tui::clear_screen;
 
-            let size0 <.Pair> tui::get_terminal_size;
-            let mut cols <i32> get size0 0;
-            let mut rows <i32> get size0 1;
+            let size0 tui::get_terminal_size;
+            let mut cols <i32> get size0 "cols";
+            let mut rows <i32> get size0 "rows";
             let mut buf <i32> tui::buffer_new cols rows;
             let mut frame <i32> 0;
             let mut quit <bool> false;
 
             while not quit:
                 do:
-                    let size <.Pair> tui::get_terminal_size;
-                    let ncols <i32> get size 0;
-                    let nrows <i32> get size 1;
+                    let size tui::get_terminal_size;
+                    let ncols <i32> get size "cols";
+                    let nrows <i32> get size "rows";
                     if:
                         or ne ncols cols ne nrows rows
                         then:

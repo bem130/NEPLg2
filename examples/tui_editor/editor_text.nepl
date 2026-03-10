@@ -262,7 +262,11 @@ fn move_down <(str,i32)*>i32> (text, idx):
             let next_len <i32> sub next_end next_start;
             add next_start if lt col next_len col next_len
 
-fn cursor_line_col <(str,i32)*>.Pair> (text, idx):
+struct CursorLineCol:
+    line <i32>
+    col <i32>
+
+fn cursor_line_col <(str,i32)*>CursorLineCol> (text, idx):
     let c <i32> clamp_idx text idx;
     let mut i <i32> 0;
     let mut line <i32> 0;
@@ -277,9 +281,7 @@ fn cursor_line_col <(str,i32)*>.Pair> (text, idx):
                 else:
                     set col add col 1;
             set i add i 1;
-    Tuple:
-        line
-        col
+    CursorLineCol line col
 
 fn get_line_at <(str,i32)*>str> (text, line_no):
     if:

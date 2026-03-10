@@ -44,6 +44,17 @@
 //: - offset 20: line_buffered (u8/bool)
 //: - (24 bytes allocated for safety)
 
+//: TerminalSize: 端末の列数と行数
+//:
+//: [目的/もくてき]:
+//: - `get_terminal_size` の戻り値を名前付き field で扱い、呼び出し側の意図を明確にします。
+//:
+//: [注意/ちゅうい]:
+//: - `cols` と `rows` は 0 のことがあります。TTY 取得に失敗した場合も 0,0 を返します。
+struct TerminalSize:
+    cols <i32>
+    rows <i32>
+
 fn get_tty_state <()*>i32> ():
     let ptr <i32> alloc_raw 24;
     let errno <i32> wasix_tty_get ptr;
@@ -121,11 +132,17 @@ fn restore_mode <(i32)*>i32> (old_state):
         else:
             -1
 
-//: get_terminal_size: ターミナルのサイズ (cols, rows) を取得する
+//: get_terminal_size: ターミナルのサイズを取得する
 //:
-//: 目的:
-//: - 現在のターミナルの列数と行数を取得します。
-fn get_terminal_size <()*>.Pair> ():
+//: [目的/もくてき]:
+//: - 現在のターミナルの列数と行数を `TerminalSize` として取得します。
+//:
+//: [実装/じっそう]:
+//: - WASIX の TTY 状態を読み、`cols` / `rows` を取り出して構造化して返します。
+//:
+//: [注意/ちゅうい]:
+//: - 取得に失敗した場合は `TerminalSize 0 0` を返します。
+fn get_terminal_size <()*>TerminalSize> ():
     let state <i32> get_tty_state;
     if:
         ne state 0
@@ -133,13 +150,9 @@ fn get_terminal_size <()*>.Pair> ():
             let c <i32> get_cols state;
             let r <i32> get_rows state;
             dealloc_raw state 24;
-            Tuple:
-                c
-                r
+            TerminalSize c r
         else:
-            Tuple:
-                0
-                0
+            TerminalSize 0 0
 
 //: --- ANSI 画面制御ヘルパー ---
 
@@ -392,7 +405,7 @@ fn line_clip_to_cols <(str,i32)*>str> (s, cols):
                                             if:
                                                 and not lt b 192 lt b 224
                                                 then 2
-                                                else 1;
+                                                else 1
                     let ch_w <i32> if lt b 128 1 2;
                     let next_w <i32> add w ch_w;
                     if:
@@ -457,7 +470,7 @@ fn text_wrap_lines <(str,i32)*>Vec<str>> (text, cols):
                                                     if:
                                                         and not lt b 192 lt b 224
                                                         then 2
-                                                        else 1;
+                                                        else 1
                             let ch_w <i32> if lt b 128 1 2;
                             let next_w <i32> add line_w ch_w;
                             if:
@@ -539,7 +552,7 @@ fn buffer_set_wrapped_text <(i32,i32,i32,i32,str)*>()> (b, start_row, cols, heig
                                                     if:
                                                         and not lt b0 192 lt b0 224
                                                         then 2
-                                                        else 1;
+                                                        else 1
                             let ch_w <i32> if lt b0 128 1 2;
                             let next_w <i32> add line_w ch_w;
                             if:
