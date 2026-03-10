@@ -597,12 +597,13 @@ diag_id: 3053
 #target std
 
 #import "core/result" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 
 fn main <()*>i32> ():
-    let w <Writer> unwrap_ok writer_new
-    let w2 <Writer> w
-    writer_flush w
+    let w <StreamWriter> unwrap_ok open WriteStream::Stdio
+    let w2 <StreamWriter> w
+    flush w
     0
 ```
 

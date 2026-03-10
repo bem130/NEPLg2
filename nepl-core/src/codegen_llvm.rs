@@ -262,7 +262,7 @@ fn llty_for_type_expr(ty: &TypeExpr) -> Option<LlTy> {
         TypeExpr::Unit | TypeExpr::Never => Some(LlTy::Void),
         TypeExpr::I32 | TypeExpr::U8 | TypeExpr::Bool | TypeExpr::Str => Some(LlTy::I32),
         TypeExpr::F32 => Some(LlTy::F32),
-        TypeExpr::Named(name) if name == "i64" => Some(LlTy::I64),
+        TypeExpr::Named(name) if name == "i64" || name == "u64" => Some(LlTy::I64),
         TypeExpr::Named(name) if name == "f64" => Some(LlTy::F64),
         TypeExpr::Reference(_, _)
         | TypeExpr::Boxed(_)
@@ -2164,7 +2164,7 @@ fn lower_hir_expr(
                 if let Some(ty) = type_args.first() {
                     let size = match types.get(types.resolve_id(*ty)) {
                         TypeKind::U8 => 1,
-                        TypeKind::Named(ref n) if n == "i64" || n == "f64" => 8,
+        TypeKind::Named(ref n) if n == "i64" || n == "u64" || n == "f64" => 8,
                         TypeKind::Unit => 0,
                         _ => 4,
                     };
@@ -2366,6 +2366,27 @@ fn lower_hir_expr(
                     repr: out,
                 }));
             }
+            if name == "i32_to_u32" {
+                if args.len() != 1 {
+                    panic!(
+                        "internal compiler error: intrinsic i32_to_u32 expects one argument in '{}'",
+                        ctx.function_name
+                    );
+                }
+                let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    panic!(
+                        "internal compiler error: intrinsic i32_to_u32 value must produce a value in '{}'",
+                        ctx.function_name
+                    );
+                };
+                if v.ty != LlTy::I32 {
+                    panic!(
+                        "internal compiler error: intrinsic i32_to_u32 expects i32 in '{}' (got {:?})",
+                        ctx.function_name, v.ty
+                    );
+                }
+                return Ok(Some(v));
+            }
             if name == "u8_to_i32" {
                 if args.len() != 1 {
                     panic!(
@@ -2391,6 +2412,69 @@ fn lower_hir_expr(
                     ty: LlTy::I32,
                     repr: out,
                 }));
+            }
+            if name == "u32_to_i32" {
+                if args.len() != 1 {
+                    panic!(
+                        "internal compiler error: intrinsic u32_to_i32 expects one argument in '{}'",
+                        ctx.function_name
+                    );
+                }
+                let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    panic!(
+                        "internal compiler error: intrinsic u32_to_i32 value must produce a value in '{}'",
+                        ctx.function_name
+                    );
+                };
+                if v.ty != LlTy::I32 {
+                    panic!(
+                        "internal compiler error: intrinsic u32_to_i32 expects i32 in '{}' (got {:?})",
+                        ctx.function_name, v.ty
+                    );
+                }
+                return Ok(Some(v));
+            }
+            if name == "i64_to_u64" {
+                if args.len() != 1 {
+                    panic!(
+                        "internal compiler error: intrinsic i64_to_u64 expects one argument in '{}'",
+                        ctx.function_name
+                    );
+                }
+                let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    panic!(
+                        "internal compiler error: intrinsic i64_to_u64 value must produce a value in '{}'",
+                        ctx.function_name
+                    );
+                };
+                if v.ty != LlTy::I64 {
+                    panic!(
+                        "internal compiler error: intrinsic i64_to_u64 expects i64 in '{}' (got {:?})",
+                        ctx.function_name, v.ty
+                    );
+                }
+                return Ok(Some(v));
+            }
+            if name == "u64_to_i64" {
+                if args.len() != 1 {
+                    panic!(
+                        "internal compiler error: intrinsic u64_to_i64 expects one argument in '{}'",
+                        ctx.function_name
+                    );
+                }
+                let Some(v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    panic!(
+                        "internal compiler error: intrinsic u64_to_i64 value must produce a value in '{}'",
+                        ctx.function_name
+                    );
+                };
+                if v.ty != LlTy::I64 {
+                    panic!(
+                        "internal compiler error: intrinsic u64_to_i64 expects i64 in '{}' (got {:?})",
+                        ctx.function_name, v.ty
+                    );
+                }
+                return Ok(Some(v));
             }
             panic!(
                 "internal compiler error: unsupported intrinsic '{}' reached llvm lowering in '{}'",
@@ -2455,7 +2539,7 @@ fn llty_for_type(types: &TypeCtx, ty: TypeId) -> LlTy {
         TypeKind::Unit | TypeKind::Never => LlTy::Void,
         TypeKind::I32 | TypeKind::U8 | TypeKind::Bool | TypeKind::Str => LlTy::I32,
         TypeKind::F32 => LlTy::F32,
-        TypeKind::Named(name) if name == "i64" => LlTy::I64,
+        TypeKind::Named(name) if name == "i64" || name == "u64" => LlTy::I64,
         TypeKind::Named(name) if name == "f64" => LlTy::F64,
         TypeKind::Reference(_, _) => LlTy::I32,
         TypeKind::Box(_) => LlTy::I32,

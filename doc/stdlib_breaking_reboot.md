@@ -34,6 +34,14 @@
 - `_raw` / `_safe` のような実装都合の命名は公開面から排除する。
 - 低レベル API は内部実装または隔離層に閉じ込め、利用者に直接露出しない。
 
+### 3.2.1 read/write 系命名の統一
+
+- `io` / `streamio` と、その上に載る stdlib の入出力 API は、`read` / `write` / `writeln` / `flush` / `close` の bare 名を正とする。
+- `scanner_read_*` / `writer_write_*` / `stream_write_*` のような prefix 付き別名は残さない。
+- `read_i32` / `write_str` / `write_f64` のような型名 suffix 付き公開 API も残さない。
+- 型ごとの差異は引数型・返り値型・trait 制約・オーバーロード解決で表し、命名規則で補わない。
+- 後方互換 alias や移行期間用 wrapper は設けず、既存コードは新しい bare 名へ書き換える。
+
 ### 3.3 能力は trait で表す
 
 - `Copy` / `Clone` / `Eq` / `Ord` / `Hash` / `Stringify` / `Debug` / `Parse` などの能力は trait で表す。
@@ -445,11 +453,11 @@ stdlib/
 
 ## 10. 個別論点
 
-### 10.1 `kpread` / `kpwrite` の昇格
+### 10.1 `kpread` / `kpwrite` の統合
 
 - 現在の `kpread` / `kpwrite` は `kp` にあるが、責務としては「まとめて入出力する stream parser / formatter」であり、一般化可能である。
-- そのため中核機能は `std/streamio` へ昇格させる。
-- `kp` 側には、競技向けの薄いラッパ・ショートカット・テンプレート的機能だけを残す。
+- そのため機能は `std/streamio` へ統合し、公開 API としての `kpread` / `kpwrite` は最終的に残さない。
+- 競技プログラミング向けの説明やサンプルも、最終形では `std/streamio` の bare `read` / `write` / `writeln` / `flush` を直接使う形へ寄せる。
 - `stdio` だけでなく `fs`、将来の他 stream 実装にも同じ parser / formatter を適用できる設計を目指す。
 
 ### 10.2 `std` と `streamio` の関係

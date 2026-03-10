@@ -575,7 +575,7 @@ fn valtype(kind: &TypeKind) -> Option<ValType> {
         TypeKind::Function { .. } => Some(ValType::I32),
         TypeKind::Var(_) => Some(ValType::I32),
         TypeKind::Named(name) => match name.as_str() {
-            "i64" => Some(ValType::I64),
+            "i64" | "u64" => Some(ValType::I64),
             "f64" => Some(ValType::F64),
             _ => Some(ValType::I32),
         },
@@ -976,7 +976,7 @@ fn gen_expr(
                 let ty = type_args[0];
                 let size = match ctx.get(ty) {
                     TypeKind::U8 => 1,
-                    TypeKind::Named(name) if name == "i64" || name == "f64" => 8,
+                    TypeKind::Named(name) if name == "i64" || name == "u64" || name == "f64" => 8,
                     _ => match valtype(&ctx.get(ty)) {
                         Some(_) => 4,
                         None => 0,
@@ -988,7 +988,7 @@ fn gen_expr(
                 let ty = type_args[0];
                 let align = match ctx.get(ty) {
                     TypeKind::U8 => 1,
-                    TypeKind::Named(name) if name == "i64" || name == "f64" => 8,
+                    TypeKind::Named(name) if name == "i64" || name == "u64" || name == "f64" => 8,
                     _ => match valtype(&ctx.get(ty)) {
                         Some(_) => 4,
                         None => 0,
@@ -1155,6 +1155,9 @@ fn gen_expr(
                 insts.push(Instruction::I32Const(255));
                 insts.push(Instruction::I32And);
                 Some(ValType::I32)
+            } else if name == "i32_to_u32" {
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
+                Some(ValType::I32)
             } else if name == "f32_to_i32" {
                 // signed trunc f32 -> i32
                 gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
@@ -1163,6 +1166,15 @@ fn gen_expr(
             } else if name == "u8_to_i32" {
                 gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
                 Some(ValType::I32)
+            } else if name == "u32_to_i32" {
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
+                Some(ValType::I32)
+            } else if name == "i64_to_u64" {
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
+                Some(ValType::I64)
+            } else if name == "u64_to_i64" {
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
+                Some(ValType::I64)
             } else if name == "reinterpret_i32_f32" {
                 // bitcast i32 -> f32
                 gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);

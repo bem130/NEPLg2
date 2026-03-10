@@ -24,7 +24,7 @@ fn valtype(kind: &TypeKind) -> Option<ValType> {
         TypeKind::Function { .. } => Some(ValType::I32),
         TypeKind::Var(_) => Some(ValType::I32),
         TypeKind::Named(name) => match name.as_str() {
-            "i64" => Some(ValType::I64),
+            "i64" | "u64" => Some(ValType::I64),
             "f64" => Some(ValType::F64),
             _ => Some(ValType::I32),
         },
@@ -439,8 +439,12 @@ pub(crate) fn is_supported_wasm_intrinsic(name: &str) -> bool {
             | "callsite_span"
             | "i32_to_f32"
             | "i32_to_u8"
+            | "i32_to_u32"
             | "f32_to_i32"
             | "u8_to_i32"
+            | "u32_to_i32"
+            | "i64_to_u64"
+            | "u64_to_i64"
             | "reinterpret_i32_f32"
             | "reinterpret_f32_i32"
             | "add"

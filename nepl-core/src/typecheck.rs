@@ -4151,10 +4151,24 @@ impl<'a> BlockChecker<'a> {
                         self.ctx.f32()
                     } else if intrin.name == "i32_to_u8" {
                         self.ctx.u8()
+                    } else if intrin.name == "i32_to_u32" {
+                        self.ctx
+                            .lookup_named("u32")
+                            .unwrap_or_else(|| self.ctx.register_named("u32".to_string(), TypeKind::Named("u32".to_string())))
                     } else if intrin.name == "f32_to_i32" {
                         self.ctx.i32()
                     } else if intrin.name == "u8_to_i32" {
                         self.ctx.i32()
+                    } else if intrin.name == "u32_to_i32" {
+                        self.ctx.i32()
+                    } else if intrin.name == "i64_to_u64" {
+                        self.ctx
+                            .lookup_named("u64")
+                            .unwrap_or_else(|| self.ctx.register_named("u64".to_string(), TypeKind::Named("u64".to_string())))
+                    } else if intrin.name == "u64_to_i64" {
+                        self.ctx
+                            .lookup_named("i64")
+                            .unwrap_or_else(|| self.ctx.register_named("i64".to_string(), TypeKind::Named("i64".to_string())))
                     } else if intrin.name == "reinterpret_i32_f32" {
                         self.ctx.f32()
                     } else if intrin.name == "reinterpret_f32_i32" {
@@ -4306,6 +4320,7 @@ impl<'a> BlockChecker<'a> {
                     if intrin.name == "i32_to_f32"
                         || intrin.name == "reinterpret_i32_f32"
                         || intrin.name == "i32_to_u8"
+                        || intrin.name == "i32_to_u32"
                     {
                         if args.len() != 1 {
                             self.diagnostics.push(Diagnostic::error(
@@ -4331,17 +4346,55 @@ impl<'a> BlockChecker<'a> {
                                 *sp,
                             ).with_id(DiagnosticId::TypeIntrinsicArgTypeMismatch));
                         }
-                    } else if intrin.name == "u8_to_i32" {
+                    } else if intrin.name == "u8_to_i32" || intrin.name == "u32_to_i32" {
                         if args.len() != 1 {
                             self.diagnostics.push(Diagnostic::error(
                                 "intrinsic expects 1 argument",
                                 *sp,
                             ).with_id(DiagnosticId::TypeIntrinsicArgArityMismatch));
-                        } else if let Err(_) = self.ctx.unify(args[0].ty, self.ctx.u8()) {
+                        } else {
+                            let expected = if intrin.name == "u8_to_i32" {
+                                self.ctx.u8()
+                            } else {
+                                self.ctx
+                                    .lookup_named("u32")
+                                    .unwrap_or_else(|| self.ctx.register_named("u32".to_string(), TypeKind::Named("u32".to_string())))
+                            };
+                            if let Err(_) = self.ctx.unify(args[0].ty, expected) {
+                                self.diagnostics.push(Diagnostic::error(
+                                    format!(
+                                        "intrinsic argument type mismatch (expected {})",
+                                        self.ctx.type_to_string(expected)
+                                    ),
+                                    *sp,
+                                ).with_id(DiagnosticId::TypeIntrinsicArgTypeMismatch));
+                            }
+                        }
+                    } else if intrin.name == "i64_to_u64" || intrin.name == "u64_to_i64" {
+                        if args.len() != 1 {
                             self.diagnostics.push(Diagnostic::error(
-                                "intrinsic argument type mismatch (expected u8)",
+                                "intrinsic expects 1 argument",
                                 *sp,
-                            ).with_id(DiagnosticId::TypeIntrinsicArgTypeMismatch));
+                            ).with_id(DiagnosticId::TypeIntrinsicArgArityMismatch));
+                        } else {
+                            let expected = if intrin.name == "i64_to_u64" {
+                                self.ctx
+                                    .lookup_named("i64")
+                                    .unwrap_or_else(|| self.ctx.register_named("i64".to_string(), TypeKind::Named("i64".to_string())))
+                            } else {
+                                self.ctx
+                                    .lookup_named("u64")
+                                    .unwrap_or_else(|| self.ctx.register_named("u64".to_string(), TypeKind::Named("u64".to_string())))
+                            };
+                            if let Err(_) = self.ctx.unify(args[0].ty, expected) {
+                                self.diagnostics.push(Diagnostic::error(
+                                    format!(
+                                        "intrinsic argument type mismatch (expected {})",
+                                        self.ctx.type_to_string(expected)
+                                    ),
+                                    *sp,
+                                ).with_id(DiagnosticId::TypeIntrinsicArgTypeMismatch));
+                            }
                         }
                     }
 

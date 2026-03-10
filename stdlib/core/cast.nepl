@@ -218,9 +218,25 @@ fn bitcast_f32_to_i32 <(f32)->i32> (v):
 fn cast <(i32)->i64> (v):
     extend_s v
 
+//: cast: i32 を u32 に変換する
+fn cast <(i32)->u32> (v):
+    #intrinsic "i32_to_u32" <> (v)
+
+//: cast: u32 を i32 に変換する
+fn cast <(u32)->i32> (v):
+    #intrinsic "u32_to_i32" <> (v)
+
 //: cast: i64 を i32 に変換する
 fn cast <(i64)->i32> (v):
     wrap v
+
+//: cast: i64 を u64 に変換する
+fn cast <(i64)->u64> (v):
+    #intrinsic "i64_to_u64" <> (v)
+
+//: cast: u64 を i64 に変換する
+fn cast <(u64)->i64> (v):
+    #intrinsic "u64_to_i64" <> (v)
 
 //: cast: i32 を f64 に変換する
 fn cast <(i32)->f64> (v):

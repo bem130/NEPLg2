@@ -27,7 +27,10 @@ function readStdinAll() {
 }
 
 function writeJson(obj) {
-    process.stdout.write(JSON.stringify(obj));
+    process.stdout.write(JSON.stringify(obj, (_key, value) => {
+        if (typeof value === 'bigint') return value.toString();
+        return value;
+    }));
 }
 
 function mkTmpPath(prefix) {
@@ -59,6 +62,14 @@ function decodeExpectedReturn(expectedRet, rawValue, memory) {
         if (len < 0 || addr + 4 + len > view.byteLength) return null;
         const bytes = new Uint8Array(memory.buffer, addr + 4, len);
         return new TextDecoder('utf-8').decode(bytes);
+    }
+    if (typeof rawValue === 'bigint') {
+        const minSafe = BigInt(Number.MIN_SAFE_INTEGER);
+        const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+        if (rawValue >= minSafe && rawValue <= maxSafe) {
+            return Number(rawValue);
+        }
+        return rawValue.toString();
     }
     return rawValue;
 }

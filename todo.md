@@ -14,6 +14,8 @@
 - stdlib 再構築は、依存の強い基盤から順に進める（diag/trait -> compiler 前提 -> core/mem -> alloc -> runtimes -> std -> features -> tutorials/tests）。
 - compiler のバグを発見した場合は、library 側の迂回ではなく compiler 側を適切に根本から修正する。
 - 間に合わせ修正を避け、旧 API の互換維持ではなく最終構成への収束を優先する。
+- `io` / `streamio` と、それに準ずる stdlib の入出力 API は bare 名 `read` / `write` / `writeln` / `flush` / `close` を正とし、`scanner_read_*` / `writer_write_*` / `read_i32` / `write_str` のような prefix / suffix 付き命名は残さない。
+- 入出力 API の型差はオーバーロードと trait で解決し、後方互換 alias は作らない。既存コードはすべて新しい bare 名へ書き換える。
 - 実装完了項目はここから削除し、経過・差分・判断理由は `note.n.md` に記録する。
 
 stdlib 再構築 本流
@@ -71,11 +73,12 @@ stdlib 再構築 本流
 7. `std` と `std/streamio` を再構築する
 - `std/streamio` を `alloc/io` 抽象の上に構築する。
 - `stdio` / `fs` / `env/cliarg` を `std` 配下へ整理し、`runtimes` を直接見せない facade にする。
-- `kpread` / `kpwrite` の中核を `std/streamio` へ昇格させ、`kp` 側には競技向け薄ラッパだけを残す。
+- `kpread` / `kpwrite` の機能を `std/streamio` へ統合し、公開 API としての `kpread` / `kpwrite` は最終的に撤去する。
+- `io` / `streamio` / `kpread` / `kpwrite` を含む stdlib 全体の入出力 API から prefix / suffix 付き read/write 名を撤去し、bare overload へ統一する。
 - `TUI` は `std` ではなく `features/tui` として扱う。
 - 完了条件:
   - `std` が target 依存標準 API の facade として一貫する。
-  - `kpread` / `kpwrite` の一般化可能部分が `std/streamio` 側へ移る。
+  - `kpread` / `kpwrite` を使わずに `std/streamio` だけで同等の入出力が書ける。
 
 8. `features` 層の残作業を整理する
 - GUI / HTTP / 音声再生のような外部 API / FFI / デバイス接続を `features` へ配置する。
@@ -106,6 +109,16 @@ stdlib 再構築と直接は関係しない別件
 
 ---
 ### 以下LLM編集禁止 (人の指示領域)
+
+# stdio, io
+io,streamioは全て型名のprefix,suffixを用いず単にread,writeだけで扱えるようにする
+ioのtargetをfsやstdioやnetworkやeventとすると、
+`read target` や `write target data` の形式、或いはpipeを用いて `target |> read` や `target |> write data`の形式で書けるようにする
+単発は前者、いくつか纏めて書き込むときは後者、
+或いは pipeで処理してきたdataを `data |> write target` のようにもようにする
+targetはそれぞれ型のオーバーロードで扱えるように適切に型を付け、traitで統一的に扱う
+ioのtargetはEnumなどで引数で切り替えるようにして
+streamioのtargetはそれぞれのstream
 
 <...> の中(型注釈や型引数として読む場所)で`::` PathSep を許可
 それに従って型の名前空間,importの挙動を適切に修正
