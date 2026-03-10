@@ -249,7 +249,7 @@ fn safe_line <(i32, i32)->str> (lines_mem, i):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn close_one_section <(Stack<NestSection>, Vec<Node>)->Vec<Node>> (stk, root):
+fn close_one_section <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
     match stack_pop_keep<NestSection> stk:
         Option::Some sec:
             let node <Node> Node::Section sec;
@@ -283,7 +283,7 @@ fn close_one_section <(Stack<NestSection>, Vec<Node>)->Vec<Node>> (stk, root):
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn close_to_level <(Stack<NestSection>, Vec<Node>, i32)->Vec<Node>> (stk, root, new_level):
+fn close_to_level <(Stack<NestSection>, Vec<Node>, i32)*>Vec<Node>> (stk, root, new_level):
     // Close while top.level >= new_level
     let mut r <Vec<Node>> root;
     let mut done <bool> false;
@@ -317,7 +317,7 @@ fn close_to_level <(Stack<NestSection>, Vec<Node>, i32)->Vec<Node>> (stk, root, 
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn close_all_sections <(Stack<NestSection>, Vec<Node>)->Vec<Node>> (stk, root):
+fn close_all_sections <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
     let mut r <Vec<Node>> root;
     let mut done <bool> false;
     while not done:

@@ -9881,3 +9881,36 @@
   - `node nodesrc/run_doctest.js -i tutorials/getting_started/04_strings_and_stdio.n.md -n 1` -> pass
   - `node nodesrc/run_doctest.js -i tutorials/getting_started/09_import_and_structure.n.md -n 1` -> pass
   - `node nodesrc/run_doctest.js -i tutorials/getting_started/11_testing_workflow.n.md -n 1` -> pass
+
+# 2026-03-10 作業メモ (`result` / `nm/parser` doctest failure の根本修正)
+
+- [目的/もくてき]:
+  - old failure list にあった `result.nepl doctest#5` と `parser.nepl doctest#2/#3` を、現在の仕様と照らして根本から直す。
+  - `parser` 利用側の `nm.n.md` と `html_gen` まで focused に確認し、局所修正で終わっていないことを確かめる。
+- [根本原因/こんぽんげんいん]:
+  - `stdlib/core/result.nepl`
+    - `uwok` の使用例が旧 pipe 解釈を前提に `assert_eq_i32 1 ok<i32, str> 1 |> uwok;` と書かれており、現行 parser では `assert_eq_i32` 呼び出しの途中に pipe を差し込めないため `D3006` / `D3013` になっていた。
+    - これは compiler bug ではなく、doctest の文法前提が古かった。
+  - `stdlib/nm/parser.nepl`
+    - `close_one_section` / `close_to_level` / `close_all_sections` は `stack_push` により `Stack<NestSection>` を更新するのに、pure signature のまま残っていた。
+    - その結果、module compile 時に `D3025 pure context cannot call impure function` と `D3016` が発生していた。
+- [変更/へんこう]:
+  - `stdlib/core/result.nepl`
+    - `uwok` doctest を `assert_eq_i32 1 uwok ok<i32, str> 1;` に更新し、現行 syntax で alias の意味が伝わる例に差し替えた。
+  - `stdlib/nm/parser.nepl`
+    - `close_one_section`
+    - `close_to_level`
+    - `close_all_sections`
+      - signature を `*>Vec<Node>` に更新し、`Stack` 更新を行う helper として effect を明示した。
+- [設計/せっけい][判断/はんだん]:
+  - `result` では parser を緩めるのではなく、現在の言語仕様に合う doctest へ更新するのが正しい。
+  - `parser` では `stack_push` を隠して pure を装うより、helper 自身を impure と明示する方が effect model に整合する。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/core/result.nepl -n 5` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/nm/parser.nepl -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/nm/parser.nepl -n 3` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/nm/html_gen.nepl -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/nm.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/nm.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/nm.n.md -i stdlib/nm/parser.nepl -i stdlib/nm/html_gen.nepl -i stdlib/core/result.nepl --no-stdlib --no-tree -o /tmp/tests-nm-result-focus.json -j 15`
+    - [結果/けっか]: `12/12 pass`
