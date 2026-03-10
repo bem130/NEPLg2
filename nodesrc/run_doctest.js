@@ -59,6 +59,7 @@ function buildCase(inputPath, index) {
         argv: Array.isArray(dt.argv) ? dt.argv.map((v) => String(v)) : [],
         expected_stdout: dt.stdout ?? null,
         expected_stderr: dt.stderr ?? null,
+        expected_ret: Object.prototype.hasOwnProperty.call(dt, 'ret') ? dt.ret : null,
         expected_diag_ids: Array.isArray(dt.diag_ids) ? dt.diag_ids : [],
         expected_diag_spans: Array.isArray(dt.diag_spans) ? dt.diag_spans : [],
     };
@@ -106,6 +107,7 @@ function extractActualDiagSpans(compileErrorText) {
 function applyExpectations(result, testCase) {
     const r = { ...result };
     const tags = Array.isArray(testCase.tags) ? testCase.tags : [];
+    const importsStdTest = /#import\s+"std\/test"\s+as\s+\*/.test(String(testCase.source || ''));
 
     if (tags.includes('compile_fail')) {
         if (!r.ok) {
@@ -152,6 +154,23 @@ function applyExpectations(result, testCase) {
         return r;
     }
 
+    if (Object.prototype.hasOwnProperty.call(testCase, 'expected_ret')
+        && testCase.expected_ret !== null
+        && testCase.expected_ret !== undefined) {
+        const expected = testCase.expected_ret;
+        const actual = Object.prototype.hasOwnProperty.call(r, 'return_value') ? r.return_value : null;
+        if (expected !== actual) {
+            r.ok = false;
+            r.status = 'fail';
+            r.error = [
+                'return value mismatch',
+                `expected: ${JSON.stringify(expected)}`,
+                `actual:   ${JSON.stringify(actual)}`,
+            ].join('\n');
+            return r;
+        }
+    }
+
     if (testCase.expected_stdout !== null) {
         const expected = normalizeOutputByTags(testCase.expected_stdout, tags);
         const actual = normalizeOutputByTags(r.stdout || '', tags);
@@ -182,6 +201,16 @@ function applyExpectations(result, testCase) {
         }
     }
 
+    if (importsStdTest && testCase.expected_stdout === null) {
+        const actual = normalizeOutputByTags(r.stdout || '', tags);
+        if (/^FAIL:/m.test(actual)) {
+            r.ok = false;
+            r.status = 'fail';
+            r.error = 'std/test reported FAIL output';
+            return r;
+        }
+    }
+
     return r;
 }
 
@@ -200,6 +229,7 @@ async function main() {
         tags: testCase.tags,
         stdin: testCase.stdin,
         argv: testCase.argv,
+        expected_ret: testCase.expected_ret,
         distHint,
     });
     const result = applyExpectations(raw, testCase);

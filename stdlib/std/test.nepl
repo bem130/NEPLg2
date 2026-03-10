@@ -8,37 +8,39 @@
 #if[target=std]
 #import "std/stdio" as *
 
-//: test: 標準ライブラリ用の[簡易/かんい]テスト支援
+//: # test
+//: [標準/ひょうじゅん]ライブラリ[用/よう]の[簡易/かんい]テスト[支援/しえん]
 //:
-//: [目的/もくてき]:
-//: - stdlib と tutorials で共通に使う `assert_*` と、`Result<(),str>` を集約して最後にまとめて失敗させる `check_*` / `finish_checks` を提供します。
-//: - 単発の assert と、複数検査を継続実行する collectable な検査の両方を同じモジュールで扱います。
+//: ### [目的/もくてき]
+//: - stdlib と tutorials で共通に使う `assert_*` / `check_*` / `finish_checks` を提供し、[失敗/しっぱい]を trap ではなく `Result<(),str>` として[表現/ひょうげん]します。
+//: - [単発/たんぱつ]の[検査/けんさ]と、[複数/ふくすう][検査/けんさ]を[継続/けいぞく][実行/じっこう]する collectable な[検査/けんさ]の[両方/りょうほう]を[同/おな]じモジュールで[扱/あつか]います。
 //:
-//: [実装/じっそう]:
-//: - 単発の `assert_*` は対応する `check_*` の結果を受け、`Err` のときだけ `test_fail` で停止します。
-//: - 集約検査は `Vec<Result<(),str>>` を使って保持し、`finish_checks` が summary と失敗詳細をまとめて表示します。
+//: ### [実装/じっそう]
+//: - [単発/たんぱつ]の `assert_*` は[対応/たいおう]する `check_*` の[結果/けっか]を[受/う]け、`Err` のときだけ `FAIL:` [形式/けいしき]の[表示/ひょうじ]を[行/おこな]ったうえで `Result::Err` を[返/かえ]します。
+//: - [集約/しゅうやく][検査/けんさ]は `Vec<Result<(),str>>` を[保持/ほじ]し、`finish_checks` が summary と[失敗/しっぱい][詳細/しょうさい]を[表示/ひょうじ]して `Result<(),str>` に[畳/たた]みます。
 //:
-//: [注意/ちゅうい]:
-//: - 失敗時は最終的に trap するため、通常のアプリケーション制御には使わず、テスト用途に限定してください。
-//: - 表示は `#target std` のときだけ行います。`std` 以外の target でも失敗時の trap 自体は発生します。
+//: ### [注意/ちゅうい]
+//: - [失敗/しっぱい]の[最終/さいしゅう][判定/はんてい]は `result_exit_code` や `checks_exit_code` のような helper で i32 に[落/お]とし、runner [側/がわ]で[比較/ひかく]する[前提/ぜんてい]です。
+//: - [表示/ひょうじ]は `#target std` のときだけ[行/おこな]います。`std` 以外の target では `Result` だけが[返/かえ]ります。
 //: - doctest は[使/つか]い[方/かた]の[保証/ほしょう]が目的であり、境界条件や回帰確認は `tests/stdlib/*` 側で行います。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - `assert_*` と `check_*` の単体判定は O(1) か、比較対象の長さに応じた O(n) です。
-//: - 集約 API は summary 文字列構築を含むため、`finish_checks` 全体では O(n^2) になりえます。
+//: - 集約 API は summary [文字列/もじれつ][構築/こうちく]を[含/ふく]むため、`finish_checks` [全体/ぜんたい]では O(n^2) になりえます。
 
-//: test_str_eq: 文字列が等しいか判定する
+//: ## test_str_eq
+//: [文字列/もじれつ]が[等/ひと]しいか[判定/はんてい]する
 //:
-//: 目的:
+//: ### [目的/もくてき]
 //: - a と b の内容が同じなら true を返します。
 //:
-//: 実装(アルゴリズム):
+//: ### [実装/じっそう]
 //: - 長さ一致を確認し、バイト単位で比較します。
 //:
-//: 注意(重要):
+//: ### [注意/ちゅうい]
 //: - UTF-8 のバイト列として比較します。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
 //: - [空間/くうかん]: O(n)（再帰呼び出しぶん）
 fn test_str_eq <(str,str)->bool> (a,b):
@@ -51,18 +53,19 @@ fn test_str_eq <(str,str)->bool> (a,b):
         else:
             false
 
-//: test_str_eq_loop: 文字列比較の内部ループ
+//: ## test_str_eq_loop
+//: [文字列/もじれつ][比較/ひかく]の[内部/ないぶ]ループ
 //:
-//: 目的:
+//: ### [目的/もくてき]
 //: - i を進めながら各バイトを比較します。
 //:
-//: 実装(アルゴリズム):
+//: ### [実装/じっそう]
 //: - 一致なら再帰、差異があれば false を返します。
 //:
-//: 注意(重要):
+//: ### [注意/ちゅうい]
 //: - 呼び出し側で長さ一致を確認している前提です。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
 //: - [空間/くうかん]: O(n)（再帰呼び出しぶん）
 fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
@@ -79,19 +82,20 @@ fn test_str_eq_loop <(str,str,i32,i32)->bool> (a,b,len,i):
                 then test_str_eq_loop a b len add i 1
                 else false
 
-//: test_print_fail: 失敗メッセージを表示する（WASI）
+//: ## test_print_fail
+//: [失敗/しっぱい]メッセージを[表示/ひょうじ]する
 //:
-//: 目的:
+//: ### [目的/もくてき]
 //: - msg を赤色で標準出力へ表示します。
 //:
-//: 実装(アルゴリズム):
+//: ### [実装/じっそう]
 //: - ANSI 赤色コードで色付けして出力します。
 //:
-//: 注意(重要):
-//: - WASI ターゲットのみ対応です。
+//: ### [注意/ちゅうい]
+//: - `#target std` の[表示/ひょうじ] helper です。
 //: - 端末が ANSI に対応している必要があります。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
 //: - [空間/くうかん]: O(n)
 #if[target=std]
@@ -100,157 +104,147 @@ fn test_print_fail <(str)*>()> (msg):
     let m0 <str> concat "FAIL: " msg;
     println_color ansi_red m0
 
-//: test_checked: 成功ログを表示する（WASI）
+//: ## test_checked
+//: [成功/せいこう]ログを[表示/ひょうじ]する
 //:
-//: 目的:
-//: - "Checked " 付きの成功ログを色付きで表示します。
+//: ### [目的/もくてき]
+//: - "Checked " [付/つ]きの[成功/せいこう]ログを[色付/いろづ]きで[表示/ひょうじ]し、`Result::Ok ()` を[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
+//: ### [実装/じっそう]
 //: - 文字列を連結し、ansi_green で出力します。
 //:
-//: 注意(重要):
-//: - WASI ターゲットのみ対応です。
+//: ### [注意/ちゅうい]
+//: - `#target std` の[表示/ひょうじ] helper です。
 //: - 端末が ANSI に対応している必要があります。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
 //: - [空間/くうかん]: O(n)
 #if[target=std]
 #if[target=std]
-fn test_checked <(str)*>()> (msg):
+fn test_checked <(str)*>Result<(),str>> (msg):
     print_color ansi_green "Checked ";
     println msg;
+    Result<(),str>::Ok ()
 
-//: test_fail: 失敗メッセージを出して異常終了する
+//: ## test_fail
+//: [失敗/しっぱい]メッセージを[出/だ]して `Result::Err` を[返/かえ]す
 //:
-//: 目的:
-//: - msg を表示して trap で終了します。
+//: ### [目的/もくてき]
+//: - msg を `FAIL:` [形式/けいしき]で[表示/ひょうじ]し、[安全/あんぜん]に `Result::Err` として[失敗/しっぱい]を[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - test_print_fail を呼び、最後に trap を実行します。
+//: ### [実装/じっそう]
+//: - `#target std` では `test_print_fail` を[呼/よ]び、そのあと `Result::Err msg` を[返/かえ]します。
 //:
-//: 注意(重要):
-//: - 失敗は回復不能です。
+//: ### [注意/ちゅうい]
+//: - この helper [自体/じたい]は trap しません。[最終/さいしゅう][判定/はんてい]は[呼/よ]び[出/だ]し[側/がわ]が[行/おこな]います。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
 //: - [空間/くうかん]: O(n)
-fn noshadow test_fail <(str)*>()> (msg):
+fn noshadow test_fail <(str)*>Result<(),str>> (msg):
+    #if[target=std]
     test_print_fail msg;
-    trap;
+    Result<(),str>::Err msg
 
-//: trap: 異常終了させる
+//: ## checks_new
+//: [集約/しゅうやく][検査/けんさ][列/れつ]の[空/から]ベクタを[作/つく]る
 //:
-//: 目的:
-//: - 失敗を即座に検出するため異常終了します。
-//:
-//: 実装(アルゴリズム):
-//: - 0 除算で trap させます。
-//:
-//: 注意(重要):
-//: - 正常なプログラムでは使わないでください。
-//:
-//: [計算量/けいさんりょう]:
-//: - [時間/じかん]: O(1)
-//: - [空間/くうかん]: O(1)
-fn trap <()*>()> ():
-    #intrinsic "unreachable" <> ()
-
-//: checks_new: 集約検査列の空ベクタを作る
-//:
-//: [目的/もくてき]:
+//: ### [目的/もくてき]
 //: - `finish_checks` に渡す `Vec<Result<(),str>>` を空の状態で作ります。
 //: - `push` の型引数を毎回書かずに collectable な検査列を組み立てる入口として使います。
 //:
-//: [実装/じっそう]:
+//: ### [実装/じっそう]
 //: - `new<Result<(),str>>` を呼び、検査結果専用の空ベクタを返します。
 //:
-//: [注意/ちゅうい]:
+//: ### [注意/ちゅうい]
 //: - 返り値は `Result<(),str>` 専用です。
 //: - 以後の追加は `checks_push` を使うと型引数を書かずに済みます。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//: fn main <()*>()> ():
+//: fn main <()*>i32> ():
 //:     let checks <Vec<Result<(),str>>> checks_new;
-//:     finish_checks checks;
+//:     checks_exit_code checks
 //: ```
 fn checks_new <()*>Vec<Result<(),str>>> ():
     vec_new<Result<(),str>>
 
-//: checks_push: 集約検査列に 1 件追加する
+//: ## checks_push
+//: [集約/しゅうやく][検査/けんさ][列/れつ]に 1 [件/けん][追加/ついか]する
 //:
-//: [目的/もくてき]:
+//: ### [目的/もくてき]
 //: - `Result<(),str>` を `Vec<Result<(),str>>` に追加し、pipe で連結しやすい形を提供します。
 //:
-//: [実装/じっそう]:
+//: ### [実装/じっそう]
 //: - `vec_push<Result<(),str>>` を固定して呼び、`push` の型推論詳細を利用者へ露出させません。
 //:
-//: [注意/ちゅうい]:
+//: ### [注意/ちゅうい]
 //: - 検査そのものは `check_*` 側で評価済みであり、この関数は格納しかしません。
 //: - 返り値は同じベクタなので、`|> checks_push ... |> checks_push ...` と連結できます。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: 償却 O(1)
 //: - [最悪/さいあく][時間/じかん]: O(n)（再確保が起きる場合）
 //: - [空間/くうかん]: 償却 O(1)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//: fn main <()*>()> ():
+//: fn main <()*>i32> ():
 //:     let checks <Vec<Result<(),str>>>:
 //:         checks_new
 //:         |> checks_push check true
 //:         |> checks_push check true
-//:     finish_checks checks;
+//:     checks_exit_code checks
 //: ```
 fn checks_push <(Vec<Result<(),str>>,Result<(),str>)*>Vec<Result<(),str>>> (checks, r):
     vec_push<Result<(),str>> checks r
 
-//: check: 条件を即時終了せず `Result<(),str>` として返す
+//: ## check
+//: [条件/じょうけん]を `Result<(),str>` として[返/かえ]す
 //:
-//: [目的/もくてき]:
+//: ### [目的/もくてき]
 //: - `assert` と同じ条件判定を行い、その場で停止せず `Result<(),str>` として返します。
 //: - 複数の検査を `Vec<Result<(),str>>` に集約して最後にまとめて判定したいときに使います。
 //:
-//: [実装/じっそう]:
+//: ### [実装/じっそう]
 //: - `ok` が true なら `Ok(())`、false なら固定メッセージ付きの `Err` を返します。
 //:
-//: [注意/ちゅうい]:
+//: ### [注意/ちゅうい]
 //: - 失敗時に詳細な説明が必要なら、この関数ではなく `check_eq_i32` や `check_str_eq` のような専用版を使ってください。
 //: - この関数自体は何も表示しません。表示と最終失敗判定は `finish_checks` が担当します。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//: fn main <()*>()> ():
+//: fn main <()*>i32> ():
 //:     let checks <Vec<Result<(),str>>>:
 //:         checks_new
 //:         |> checks_push check true
 //:         |> checks_push check true
-//:     finish_checks checks;
+//:     checks_exit_code checks
 //: ```
 fn check <(bool)->Result<(),str>> (okv):
     if:
@@ -260,35 +254,36 @@ fn check <(bool)->Result<(),str>> (okv):
         else:
             Result<(),str>::Err "check failed"
 
-//: check_eq_i32: i32 の等値検査を `Result<(),str>` として返す
+//: ## check_eq_i32
+//: i32 の[等値/とうち][検査/けんさ]を `Result<(),str>` として[返/かえ]す
 //:
-//: [目的/もくてき]:
+//: ### [目的/もくてき]
 //: - `expected` と `actual` の比較結果を即時停止ではなく値として返します。
 //:
-//: [実装/じっそう]:
+//: ### [実装/じっそう]
 //: - 等しければ `Ok(())`、異なれば `expected` と `actual` を文字列化したメッセージ付き `Err` を返します。
 //:
-//: [注意/ちゅうい]:
+//: ### [注意/ちゅうい]
 //: - `assert_eq_i32` はこの関数の結果を受けてただちに失敗終了する薄いラッパです。
 //: - 失敗を複数件まとめたいときはこの関数を `Vec<Result<(),str>>` に積んでください。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//: fn main <()*>()> ():
+//: fn main <()*>i32> ():
 //:     let checks <Vec<Result<(),str>>>:
 //:         checks_new
 //:         |> checks_push check_eq_i32 10 add 4 6
 //:         |> checks_push check_eq_i32 3 sub 8 5
-//:     finish_checks checks;
+//:     checks_exit_code checks
 //: ```
 fn check_eq_i32 <(i32,i32)->Result<(),str>> (expected, actual):
     if:
@@ -303,19 +298,20 @@ fn check_eq_i32 <(i32,i32)->Result<(),str>> (expected, actual):
             let m2 <str> concat m1 sa
             Result<(),str>::Err m2
 
-//: check_ne: bool が等しくないことを `Result<(),str>` として返す
+//: ## check_ne
+//: bool が[等/ひと]しくないことを `Result<(),str>` として[返/かえ]す
 //:
-//: [目的/もくてき]:
+//: ### [目的/もくてき]
 //: - `a` と `b` が同じなら詳細メッセージ付き `Err`、違えば `Ok(())` を返します。
 //:
-//: [実装/じっそう]:
+//: ### [実装/じっそう]
 //: - bool の組み合わせを分岐し、一致時だけ値を文字列化して失敗メッセージを組み立てます。
 //:
-//: [注意/ちゅうい]:
+//: ### [注意/ちゅうい]
 //: - bool 専用です。
 //: - true/false のどちらで一致したかを失敗メッセージに含めます。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 fn check_ne <(bool,bool)->Result<(),str>> (a, b):
@@ -346,34 +342,35 @@ fn check_ne <(bool,bool)->Result<(),str>> (a, b):
                     let m2 <str> concat m1 sb
                     Result<(),str>::Err m2
 
-//: check_str_eq: 文字列の等値検査を `Result<(),str>` として返す
+//: ## check_str_eq
+//: [文字列/もじれつ]の[等値/とうち][検査/けんさ]を `Result<(),str>` として[返/かえ]す
 //:
-//: [目的/もくてき]:
+//: ### [目的/もくてき]
 //: - 文字列比較の結果を、直ちに停止せずに後段へ渡せる形で返します。
 //:
-//: [実装/じっそう]:
+//: ### [実装/じっそう]
 //: - `test_str_eq` で UTF-8 バイト列を比較し、不一致時だけ詳細メッセージを組み立てます。
 //:
-//: [注意/ちゅうい]:
+//: ### [注意/ちゅうい]
 //: - 比較単位は Unicode の文字数ではなく UTF-8 のバイト列です。
 //: - 長い文字列では、失敗メッセージ自体の生成にも連結コストがかかります。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
 //: - [空間/くうかん]: O(n)（失敗時メッセージ生成ぶん）
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//: fn main <()*>()> ():
+//: fn main <()*>i32> ():
 //:     let checks <Vec<Result<(),str>>>:
 //:         checks_new
 //:         |> checks_push check_str_eq "hello" concat "he" "llo"
-//:     finish_checks checks;
+//:     checks_exit_code checks
 //: ```
 fn check_str_eq <(str,str)->Result<(),str>> (expected, actual):
     if:
@@ -387,19 +384,20 @@ fn check_str_eq <(str,str)->Result<(),str>> (expected, actual):
             let m3 <str> concat m2 "\""
             Result<(),str>::Err m3
 
-//: check_ok_i32: `Result<i32,i32>` が `Ok` であることを値として返す
+//: ## check_ok_i32
+//: `Result<i32,i32>` が `Ok` であることを[値/あたい]として[返/かえ]す
 //:
-//: [目的/もくてき]:
+//: ### [目的/もくてき]
 //: - `Result::Ok` を期待する検査を集約可能な `Result<(),str>` に変換します。
 //:
-//: [実装/じっそう]:
+//: ### [実装/じっそう]
 //: - `match` で `Ok/Err` を分け、`Err` の場合だけ失敗メッセージを返します。
 //:
-//: [注意/ちゅうい]:
+//: ### [注意/ちゅうい]
 //: - `Result<i32,i32>` 専用です。
 //: - `Ok` の中身は返さず、成功・失敗だけを返します。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 fn check_ok_i32 <(Result<i32,i32>)->Result<(),str>> (r):
@@ -411,19 +409,20 @@ fn check_ok_i32 <(Result<i32,i32>)->Result<(),str>> (r):
             let m0 <str> concat "assert_ok_i32 failed: Err=" se
             Result<(),str>::Err m0
 
-//: check_err_i32: `Result<i32,i32>` が `Err` であることを値として返す
+//: ## check_err_i32
+//: `Result<i32,i32>` が `Err` であることを[値/あたい]として[返/かえ]す
 //:
-//: [目的/もくてき]:
+//: ### [目的/もくてき]
 //: - `Result::Err` を期待する検査を集約可能な `Result<(),str>` に変換します。
 //:
-//: [実装/じっそう]:
+//: ### [実装/じっそう]
 //: - `match` で `Ok/Err` を分け、`Ok` の場合だけ失敗メッセージを返します。
 //:
-//: [注意/ちゅうい]:
+//: ### [注意/ちゅうい]
 //: - `Result<i32,i32>` 専用です。
 //: - `Err` の中身は返さず、成功・失敗だけを返します。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 fn check_err_i32 <(Result<i32,i32>)->Result<(),str>> (r):
@@ -435,18 +434,19 @@ fn check_err_i32 <(Result<i32,i32>)->Result<(),str>> (r):
         Result::Err e:
             Result<(),str>::Ok ()
 
-//: check_status_str: 集約表示用の状態文字列を返す
+//: ## check_status_str
+//: [集約/しゅうやく][表示/ひょうじ][用/よう]の[状態/じょうたい][文字列/もじれつ]を[返/かえ]す
 //:
-//: [目的/もくてき]:
+//: ### [目的/もくてき]
 //: - `Result<(),str>` を `ok` / `err` の短い表示へ変換します。
 //:
-//: [実装/じっそう]:
+//: ### [実装/じっそう]
 //: - `Ok` と `Err` を `match` で分岐します。
 //:
-//: [注意/ちゅうい]:
+//: ### [注意/ちゅうい]
 //: - 集約表示専用の内部 helper です。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 fn check_status_str <(Result<(),str>)->str> (r):
@@ -622,7 +622,7 @@ fn checks_report_failures <(Vec<Result<(),str>>,str)*>()> (checks, summary):
     dealloc_raw checks_mem size_of<Vec<Result<(),str>>>;
 
 //: ## finish_checks
-//: [複数/ふくすう][検査/けんさ]をまとめて[報告/ほうこく]し、[失敗/しっぱい]があれば[最後/さいご]に[落/お]とす
+//: [複数/ふくすう][検査/けんさ]をまとめて[報告/ほうこく]し、`Result<(),str>` に[畳/たた]む
 //:
 //: ### [目的/もくてき]
 //: - `Vec<Result<(),str>>` として[集約/しゅうやく]した[検査/けんさ]を[最後/さいご]にまとめて[評価/ひょうか]します。
@@ -630,14 +630,15 @@ fn checks_report_failures <(Vec<Result<(),str>>,str)*>()> (checks, summary):
 //:
 //: ### [実装/じっそう]
 //: - まず `checks_summary` で `[ok,err,...]` [形式/けいしき]の[要約/ようやく]を[作/つく]ります。
-//: - [失敗/しっぱい]が 1 [件/けん]でもあれば summary と[各/かく] `Err` の[詳細/しょうさい]を[表示/ひょうじ]して `trap` します。
-//: - [失敗/しっぱい]がなければ summary を `Checked ...` として[表示/ひょうじ]します。
+//: - [失敗/しっぱい]が 1 [件/けん]でもあれば summary と[各/かく] `Err` の[詳細/しょうさい]を[表示/ひょうじ]して `Result::Err summary` を[返/かえ]します。
+//: - [失敗/しっぱい]がなければ summary を `Checked ...` として[表示/ひょうじ]し、`Result::Ok ()` を[返/かえ]します。
 //: - move model に[合/あ]わせ、[入力/にゅうりょく]の `Vec<Result<(),str>>` は 1 [回/かい]だけ memory に[保存/ほぞん]してから helper へ[渡/わた]します。
 //:
 //: ### [注意/ちゅうい]
 //: - [想定/そうてい][用途/ようと]は `<Vec<Result<(),str>>> new |> push check_* ...` のような[段階的/だんかいてき][収集/しゅうしゅう]です。
 //: - [失敗/しっぱい]の[添字/そえじ]は 0 [始/はじ]まりです。summary の `err` と[同/おな]じ[並/なら]びで[対応/たいおう]します。
-//: - [標準/ひょうじゅん][出力/しゅつりょく]への[表示/ひょうじ]は `#target std` のときのみ[行/おこな]いますが、[失敗時/しっぱいじ]の[最終/さいしゅう] `trap` [自体/じたい]はどの target でも[行/おこな]います。
+//: - [標準/ひょうじゅん][出力/しゅつりょく]への[表示/ひょうじ]は `#target std` のときのみ[行/おこな]います。
+//: - runner [連携/れんけい]で[終了/しゅうりょう] code が[必要/ひつよう]な[場合/ばあい]は `checks_exit_code` を[使/つか]います。
 //:
 //: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n^2)（summary [文字列/もじれつ][構築/こうちく]を[含/ふく]む）
@@ -651,15 +652,15 @@ fn checks_report_failures <(Vec<Result<(),str>>,str)*>()> (checks, summary):
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "core/math" as *
-//: fn main <()*>()> ():
+//: fn main <()*>i32> ():
 //:     let checks <Vec<Result<(),str>>>:
 //:         checks_new
 //:         |> checks_push check_eq_i32 3 add 1 2
 //:         |> checks_push check_str_eq "ok" "ok"
 //:         |> checks_push check_ok_i32 Result::Ok 7
-//:     finish_checks checks;
+//:     checks_exit_code checks
 //: ```
-fn finish_checks <(Vec<Result<(),str>>)*>()> (checks):
+fn finish_checks <(Vec<Result<(),str>>)*>Result<(),str>> (checks):
     let checks_mem <i32> alloc_raw size_of<Vec<Result<(),str>>>;
     store<Vec<Result<(),str>>> checks_mem checks;
     let summary <str> checks_summary load<Vec<Result<(),str>>> checks_mem;
@@ -669,61 +670,106 @@ fn finish_checks <(Vec<Result<(),str>>)*>()> (checks):
             #if[target=std]
             checks_report_failures load<Vec<Result<(),str>>> checks_mem summary
             dealloc_raw checks_mem size_of<Vec<Result<(),str>>>
-            trap
+            Result<(),str>::Err summary
         else:
             #if[target=std]
             test_checked summary
             dealloc_raw checks_mem size_of<Vec<Result<(),str>>>
+            Result<(),str>::Ok ()
 
-//: assert: 条件が false のとき失敗する
+//: ## result_exit_code
+//: `Result<(),str>` を i32 の[終了/しゅうりょう] code へ[変換/へんかん]する
 //:
-//: 目的:
-//: - ok が false ならメッセージを表示して trap します。
+//: ### [目的/もくてき]
+//: - [安全/あんぜん]な `Result<(),str>` [表現/ひょうげん]を、runner が[比較/ひかく]できる i32 に[落/お]とします。
 //:
-//: 実装(アルゴリズム):
+//: ### [実装/じっそう]
+//: - `Ok` なら 0、`Err` なら 1 を[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [詳細/しょうさい]な[失敗/しっぱい][内容/ないよう]の[表示/ひょうじ]は `test_fail` や `finish_checks` が[担当/たんとう]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(1)
+//: - [空間/くうかん]: O(1)
+fn result_exit_code <(Result<(),str>)->i32> (r):
+    match r:
+        Result::Ok v:
+            0
+        Result::Err e:
+            1
+
+//: ## checks_exit_code
+//: [集約/しゅうやく][検査/けんさ]を i32 の[終了/しゅうりょう] code へ[変換/へんかん]する
+//:
+//: ### [目的/もくてき]
+//: - `finish_checks` の[結果/けっか]をそのまま `main` の[返/かえ]り[値/あたい]へ[繋/つな]げられるようにします。
+//:
+//: ### [実装/じっそう]
+//: - `finish_checks` を[呼/よ]んでから `result_exit_code` へ[渡/わた]します。
+//:
+//: ### [注意/ちゅうい]
+//: - summary や `FAIL:` [表示/ひょうじ]は `finish_checks` [側/がわ]で[行/おこな]われます。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `finish_checks` に[準/じゅん]じます。
+fn checks_exit_code <(Vec<Result<(),str>>)*>i32> (checks):
+    result_exit_code finish_checks checks
+
+//: ## assert
+//: [条件/じょうけん]が false のとき[失敗/しっぱい]する
+//:
+//: ### [目的/もくてき]
+//: - ok が false なら `FAIL:` [表示/ひょうじ]つきの `Result::Err` を[返/かえ]します。
+//:
+//: ### [実装/じっそう]
 //: - if で分岐し、false なら test_fail を呼びます。
 //:
-//: 注意(重要):
+//: ### [注意/ちゅうい]
 //: - ok は bool である必要があります。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     assert true;
-//:     assert eq 3 add 1 2;
+//: fn main <()*>i32> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push assert true
+//:         |> checks_push assert eq 3 add 1 2
+//:     checks_exit_code checks
 //: ```
-fn noshadow assert <(bool)*>()> (ok):
+fn noshadow assert <(bool)*>Result<(),str>> (ok):
     match check ok:
         Result::Ok v:
-            ()
+            Result<(),str>::Ok ()
         Result::Err msg:
             test_fail msg
 
-//: assert_eq_i32: i32 の等値を検証する
+//: ## assert_eq_i32
+//: i32 の[等値/とうち]を[検証/けんしょう]する
 //:
-//: 目的:
+//: ### [目的/もくてき]
 //: - expected と actual が等しいことを保証します。
 //:
-//: 実装(アルゴリズム):
+//: ### [実装/じっそう]
 //: - eq の結果が false なら詳細メッセージを作って test_fail します。
 //:
-//: 注意(重要):
+//: ### [注意/ちゅうい]
 //: - i32 専用です。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -731,66 +777,74 @@ fn noshadow assert <(bool)*>()> (ok):
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "core/math" as *
-//: fn main <()*>()> ():
-//:     assert_eq_i32 6 add 1 5;
-//:     assert_eq_i32 3 sub 10 7;
+//: fn main <()*>i32> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push assert_eq_i32 6 add 1 5
+//:         |> checks_push assert_eq_i32 3 sub 10 7
+//:     checks_exit_code checks
 //: ```
-fn noshadow assert_eq_i32 <(i32,i32)*>()> (expected, actual):
+fn noshadow assert_eq_i32 <(i32,i32)*>Result<(),str>> (expected, actual):
     match check_eq_i32 expected actual:
         Result::Ok v:
-            ()
+            Result<(),str>::Ok ()
         Result::Err msg:
             test_fail msg
 
-//: assert_ne: bool が等しくないことを検証する
+//: ## assert_ne
+//: bool が[等/ひと]しくないことを[検証/けんしょう]する
 //:
-//: 目的:
+//: ### [目的/もくてき]
 //: - a と b が同じなら詳細メッセージを作って test_fail します。
 //:
-//: 実装(アルゴリズム):
+//: ### [実装/じっそう]
 //: - a の値で分岐し、b との一致を確認します。
 //:
-//: 注意(重要):
+//: ### [注意/ちゅうい]
 //: - bool 専用です。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
-//: fn main <()*>()> ():
-//:     assert_ne true false;
-//:     assert_ne false true;
+//: fn main <()*>i32> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push assert_ne true false
+//:         |> checks_push assert_ne false true
+//:     checks_exit_code checks
 //: ```
-fn noshadow assert_ne <(bool,bool)*>()> (a, b):
+fn noshadow assert_ne <(bool,bool)*>Result<(),str>> (a, b):
     match check_ne a b:
         Result::Ok v:
-            ()
+            Result<(),str>::Ok ()
         Result::Err msg:
             test_fail msg
 
-//: assert_str_eq: 文字列が等しいことを検証する
+//: ## assert_str_eq
+//: [文字列/もじれつ]が[等/ひと]しいことを[検証/けんしょう]する
 //:
-//: 目的:
+//: ### [目的/もくてき]
 //: - expected と actual が同じであることを保証します。
 //:
-//: 実装(アルゴリズム):
+//: ### [実装/じっそう]
 //: - test_str_eq で比較し、false なら詳細メッセージを作って test_fail します。
 //:
-//: 注意(重要):
+//: ### [注意/ちゅうい]
 //: - UTF-8 のバイト列として比較します。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
 //: - [空間/くうかん]: O(n)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -798,33 +852,37 @@ fn noshadow assert_ne <(bool,bool)*>()> (a, b):
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "alloc/string" as *
-//: fn main <()*>()> ():
-//:     assert_str_eq "prefix-suffix" concat "prefix-" "suffix";
-//:     assert_str_eq "true" from_bool true;
+//: fn main <()*>i32> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push assert_str_eq "prefix-suffix" concat "prefix-" "suffix"
+//:         |> checks_push assert_str_eq "true" from_bool true
+//:     checks_exit_code checks
 //: ```
-fn noshadow assert_str_eq <(str,str)*>()> (expected, actual):
+fn noshadow assert_str_eq <(str,str)*>Result<(),str>> (expected, actual):
     match check_str_eq expected actual:
         Result::Ok v:
-            ()
+            Result<(),str>::Ok ()
         Result::Err msg:
             test_fail msg
 
-//: assert_ok_i32: Result が Ok であることを検証する
+//: ## assert_ok_i32
+//: `Result` が `Ok` であることを[検証/けんしょう]する
 //:
-//: 目的:
+//: ### [目的/もくてき]
 //: - Result::Ok を受け付け、Err なら詳細メッセージを作って test_fail します。
 //:
-//: 実装(アルゴリズム):
+//: ### [実装/じっそう]
 //: - match で Ok/Err を分岐します。
 //:
-//: 注意(重要):
+//: ### [注意/ちゅうい]
 //: - Result<i32,i32> 専用です。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -832,32 +890,33 @@ fn noshadow assert_str_eq <(str,str)*>()> (expected, actual):
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "core/result" as *
-//: fn main <()*>()> ():
-//:     assert_ok_i32 Result<i32,i32>::Ok 42;
+//: fn main <()*>i32> ():
+//:     result_exit_code assert_ok_i32 Result<i32,i32>::Ok 42
 //: ```
-fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
+fn noshadow assert_ok_i32 <(Result<i32,i32>)*>Result<(),str>> (r):
     match check_ok_i32 r:
         Result::Ok v:
-            ()
+            Result<(),str>::Ok ()
         Result::Err msg:
             test_fail msg
 
-//: assert_err_i32: Result が Err であることを検証する
+//: ## assert_err_i32
+//: `Result` が `Err` であることを[検証/けんしょう]する
 //:
-//: 目的:
+//: ### [目的/もくてき]
 //: - Result::Err を受け付け、Ok なら詳細メッセージを作って test_fail します。
 //:
-//: 実装(アルゴリズム):
+//: ### [実装/じっそう]
 //: - match で Ok/Err を分岐します。
 //:
-//: 注意(重要):
+//: ### [注意/ちゅうい]
 //: - Result<i32,i32> 専用です。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
 //: - [空間/くうかん]: O(1)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -865,12 +924,12 @@ fn noshadow assert_ok_i32 <(Result<i32,i32>)*>()> (r):
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "core/result" as *
-//: fn main <()*>()> ():
-//:     assert_err_i32 Result<i32,i32>::Err 7;
+//: fn main <()*>i32> ():
+//:     result_exit_code assert_err_i32 Result<i32,i32>::Err 7
 //: ```
-fn noshadow assert_err_i32 <(Result<i32,i32>)*>()> (r):
+fn noshadow assert_err_i32 <(Result<i32,i32>)*>Result<(),str>> (r):
     match check_err_i32 r:
         Result::Ok v:
-            ()
+            Result<(),str>::Ok ()
         Result::Err msg:
             test_fail msg

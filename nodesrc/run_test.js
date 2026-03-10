@@ -48,6 +48,21 @@ function formatError(e) {
     return message;
 }
 
+function decodeExpectedReturn(expectedRet, rawValue, memory) {
+    if (expectedRet === null || expectedRet === undefined) return rawValue;
+    if (typeof expectedRet === 'string') {
+        if (!memory || !Number.isFinite(rawValue)) return null;
+        const addr = Number(rawValue) | 0;
+        const view = new DataView(memory.buffer);
+        if (addr < 0 || addr + 4 > view.byteLength) return null;
+        const len = view.getInt32(addr, true);
+        if (len < 0 || addr + 4 + len > view.byteLength) return null;
+        const bytes = new Uint8Array(memory.buffer, addr + 4, len);
+        return new TextDecoder('utf-8').decode(bytes);
+    }
+    return rawValue;
+}
+
 function runWasiBytes(wasmBytes, stdinText, argv = []) {
     const wasmPath = mkTmpPath('nepl-doctest') + '.wasm';
     const stdinPath = mkTmpPath('wasi-stdin');
@@ -74,12 +89,26 @@ function runWasiBytes(wasmBytes, stdinText, argv = []) {
 
     let trapped = false;
     let trapError = null;
+    let returnValue = null;
+    let memory = null;
     try {
         const module = new WebAssembly.Module(Buffer.from(wasmBytes));
         const instance = new WebAssembly.Instance(module, {
             wasi_snapshot_preview1: wasi.wasiImport,
         });
-        wasi.start(instance);
+        memory = instance.exports.memory || null;
+        if (typeof instance.exports.main === 'function') {
+            if (typeof wasi.initialize === 'function' && instance.exports.memory) {
+                const initExports = { memory: instance.exports.memory };
+                if (typeof instance.exports._initialize === 'function') {
+                    initExports._initialize = instance.exports._initialize;
+                }
+                wasi.initialize({ exports: initExports });
+            }
+            returnValue = instance.exports.main();
+        } else {
+            returnValue = wasi.start(instance);
+        }
     } catch (e) {
         trapped = true;
         trapError = e;
@@ -102,6 +131,8 @@ function runWasiBytes(wasmBytes, stdinText, argv = []) {
         trapError: trapError ? formatError(trapError) : null,
         stdout: out,
         stderr: err,
+        returnValue,
+        memory,
     };
 }
 
@@ -157,6 +188,8 @@ function runWasixBytes(wasmBytes, stdinText, argv = []) {
                 stdout,
                 stderr,
                 exitCode: null,
+                returnValue: null,
+                memory: null,
             });
         });
         child.on('close', (code) => {
@@ -166,6 +199,8 @@ function runWasixBytes(wasmBytes, stdinText, argv = []) {
                 stdout,
                 stderr,
                 exitCode: typeof code === 'number' ? code : null,
+                returnValue: null,
+                memory: null,
             });
         });
 
@@ -181,6 +216,8 @@ function runWasixBytes(wasmBytes, stdinText, argv = []) {
                 stdout,
                 stderr,
                 exitCode: null,
+                returnValue: null,
+                memory: null,
             });
         }, timeoutMs);
     });
@@ -363,6 +400,7 @@ async function runSingle(req, preloaded) {
         const tags = Array.isArray(req.tags) ? req.tags : [];
         const stdinText = req.stdin || '';
         const argv = Array.isArray(req.argv) ? req.argv.map((v) => String(v)) : [];
+        const expectedRet = Object.prototype.hasOwnProperty.call(req, 'expected_ret') ? req.expected_ret : null;
         const loaded = preloaded || await createRunner(req.distHint || '');
         const { api, meta } = loaded;
         if (hasTag(tags, 'skip')) {
@@ -414,6 +452,11 @@ async function runSingle(req, preloaded) {
         }
 
         const runRes = await runTargetBytes(source, wasmU8, stdinText, argv);
+        const decodedReturn = decodeExpectedReturn(
+            expectedRet,
+            runRes.returnValue,
+            runRes.memory,
+        );
 
         if (hasTag(tags, 'should_panic')) {
             const ok = runRes.trapped;
@@ -424,6 +467,7 @@ async function runSingle(req, preloaded) {
                 phase: 'run',
                 stdout: runRes.stdout,
                 stderr: runRes.stderr,
+                return_value: decodedReturn,
                 error: ok ? null : 'expected should_panic, but program finished without trap',
                 runtime: { trapped: runRes.trapped, trapError: runRes.trapError },
                 compiler: { distDir: meta.distDir, js: meta.jsFile, wasm: meta.wasmFile },
@@ -439,6 +483,7 @@ async function runSingle(req, preloaded) {
             phase: 'run',
             stdout: runRes.stdout,
             stderr: runRes.stderr,
+            return_value: decodedReturn,
             error: ok ? null : (runRes.trapError || 'program trapped'),
             runtime: { trapped: runRes.trapped, trapError: runRes.trapError },
             compiler: { distDir: meta.distDir, js: meta.jsFile, wasm: meta.wasmFile },

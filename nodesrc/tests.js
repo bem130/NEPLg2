@@ -205,6 +205,7 @@ function collectTestsFromPath(inputPath) {
                 argv: Array.isArray(dt.argv) ? dt.argv.map((v) => String(v)) : [],
                 expected_stdout: dt.stdout ?? null,
                 expected_stderr: dt.stderr ?? null,
+                expected_ret: Object.prototype.hasOwnProperty.call(dt, 'ret') ? dt.ret : null,
                 expected_diag_ids: Array.isArray(dt.diag_ids) ? dt.diag_ids : [],
                 expected_diag_spans: Array.isArray(dt.diag_spans) ? dt.diag_spans : [],
             });
@@ -289,6 +290,7 @@ async function runAllLegacy(cases, jobs, distHint) {
                 tags: c.tags,
                 stdin: c.stdin || '',
                 argv: Array.isArray(c.argv) ? c.argv : [],
+                expected_ret: Object.prototype.hasOwnProperty.call(c, 'expected_ret') ? c.expected_ret : null,
                 distHint,
             };
             const r = await runSingle(req, loaded);
@@ -351,6 +353,7 @@ async function runAllThreadPool(cases, jobs, distHint) {
                     tags: c.tags,
                     stdin: c.stdin || '',
                     argv: Array.isArray(c.argv) ? c.argv : [],
+                    expected_ret: Object.prototype.hasOwnProperty.call(c, 'expected_ret') ? c.expected_ret : null,
                     distHint,
                 },
             });
@@ -487,8 +490,12 @@ function applyDoctestExpectations(result, testCase, options = {}) {
     const expectedDiagSpans = Array.isArray(testCase?.expected_diag_spans)
         ? testCase.expected_diag_spans.filter((v) => v && Number.isFinite(Number(v.line)) && Number.isFinite(Number(v.col)))
         : [];
+    const wantsRet = Object.prototype.hasOwnProperty.call(testCase || {}, 'expected_ret')
+        && testCase.expected_ret !== null
+        && testCase.expected_ret !== undefined;
     const wantsStdout = testCase?.expected_stdout !== null && testCase?.expected_stdout !== undefined;
     const wantsStderr = testCase?.expected_stderr !== null && testCase?.expected_stderr !== undefined;
+    const importsStdTest = /#import\s+"std\/test"\s+as\s+\*/.test(String(testCase?.source || ''));
 
     if (r.status !== 'pass') return r;
     if (r.phase === 'skip') return r;
@@ -530,7 +537,22 @@ function applyDoctestExpectations(result, testCase, options = {}) {
         }
         return r;
     }
-    if (!wantsStdout && !wantsStderr) return r;
+    if (wantsRet) {
+        const expected = testCase.expected_ret;
+        const actual = Object.prototype.hasOwnProperty.call(r, 'return_value') ? r.return_value : null;
+        if (expected !== actual) {
+            r.ok = false;
+            r.status = 'fail';
+            r.phase = r.phase || 'run';
+            r.error = [
+                'return value mismatch',
+                `expected: ${JSON.stringify(expected)}`,
+                `actual:   ${JSON.stringify(actual)}`,
+            ].join('\n');
+            return r;
+        }
+    }
+    if (!wantsRet && !wantsStdout && !wantsStderr) return r;
     const strictIo = wantsStdout
         || wantsStderr
         || !!options.assertIo
@@ -567,6 +589,17 @@ function applyDoctestExpectations(result, testCase, options = {}) {
                 `expected: ${JSON.stringify(expected)}`,
                 `actual:   ${JSON.stringify(actual)}`,
             ].join('\n');
+            return r;
+        }
+    }
+
+    if (importsStdTest && !wantsStdout) {
+        const actual = normalizeOutputByTags(String(r.stdout || ''), tags);
+        if (/^FAIL:/m.test(actual)) {
+            r.ok = false;
+            r.status = 'fail';
+            r.phase = r.phase || 'run';
+            r.error = 'std/test reported FAIL output';
             return r;
         }
     }

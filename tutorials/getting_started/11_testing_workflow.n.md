@@ -7,29 +7,34 @@
 ## 仕様を先にテストで固定する
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "std/test" as *
 
 fn abs_i32 <(i32)->i32> (x):
     if lt x 0 then sub 0 x else x
 
-fn main <()*> ()> ():
-    assert_eq_i32 0 abs_i32 0
-    assert_eq_i32 8 abs_i32 8
-    assert_eq_i32 8 abs_i32 -8
-    test_checked "abs_i32 cases"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 0 abs_i32 0
+        |> checks_push assert_eq_i32 8 abs_i32 8
+        |> checks_push assert_eq_i32 8 abs_i32 -8
+    checks_exit_code checks
 ```
 
 ## 失敗時の読みやすい出力
 
-`test_checked` を使うと、どの塊が通ったかを小さく区切って確認できます。
+`test_checked` や `finish_checks` は `Result<(),str>` を返すので、`checks_exit_code` や `result_exit_code` で `main` の戻り値へ落とします。
 
 neplg2:test[stdio, normalize_newlines, strip_ansi]
+ret: 0
 stdout: "Checked section-a\nChecked section-b\n"
 ```neplg2
 | #entry main
@@ -38,9 +43,9 @@ stdout: "Checked section-a\nChecked section-b\n"
 |
 #import "std/test" as *
 
-fn main <()*> ()> ():
-    test_checked "section-a";
-    test_checked "section-b";
+fn main <()*>i32> ():
+    let _a <Result<(),str>> test_checked "section-a";
+    result_exit_code test_checked "section-b"
 ```
 
 ## テスト追加の実務手順

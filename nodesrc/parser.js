@@ -55,6 +55,16 @@ function parseMetaValue(raw) {
     return s;
 }
 
+function parseRetValue(raw) {
+    const parsed = parseMetaValue(raw);
+    if (typeof parsed === 'number') return parsed;
+    if (typeof parsed !== 'string') return parsed;
+    const s = parsed.trim();
+    if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+    if (/^-?(?:\d+\.\d*|\d*\.\d+)$/.test(s)) return parseFloat(s);
+    return parsed;
+}
+
 function parseDiagSpanEntry(raw) {
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
         const line = Number(raw.line);
@@ -125,6 +135,7 @@ function scanForDoctests(lines, opts) {
             argv: null,
             stdout: null,
             stderr: null,
+            ret: null,
             diag_ids: [],
             diag_spans: [],
         };
@@ -133,7 +144,7 @@ function scanForDoctests(lines, opts) {
         let j = i + 1;
         while (j < lines.length) {
             const l2 = opts.lineTransform(lines[j]);
-            const mm = l2.match(/^\s*(stdin|argv|stdout|stderr|diag_id|diag_ids|diag_span|diag_spans)\s*:\s*(.*?)\s*$/);
+            const mm = l2.match(/^\s*(stdin|argv|stdout|stderr|ret|diag_id|diag_ids|diag_span|diag_spans)\s*:\s*(.*?)\s*$/);
             if (mm) {
                 const k = mm[1];
                 if (k === 'diag_id') {
@@ -157,7 +168,7 @@ function scanForDoctests(lines, opts) {
                 } else if (k === 'diag_spans') {
                     meta.diag_spans.push(...parseDiagSpanList(mm[2] ?? ''));
                 } else {
-                    meta[k] = parseMetaValue(mm[2]);
+                    meta[k] = k === 'ret' ? parseRetValue(mm[2]) : parseMetaValue(mm[2]);
                 }
             }
             if (/^\s*```\s*neplg2\s*$/.test(l2)) break;
@@ -189,6 +200,7 @@ function scanForDoctests(lines, opts) {
             argv: meta.argv,
             stdout: meta.stdout,
             stderr: meta.stderr,
+            ret: meta.ret,
             diag_ids: meta.diag_ids,
             diag_spans: meta.diag_spans,
         });

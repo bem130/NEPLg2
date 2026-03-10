@@ -10018,3 +10018,59 @@
 - [追記/ついき]:
   - `doc/stdlib_doc_comment_policy.md` を[再確認/さいかくにん]し、`stdlib/std/test.nepl` の今回[変更/へんこう]した helper comment を `##` / `###` [形式/けいしき]へ[揃/そろ]えた。
   - [実装/じっそう]が raw data [走査/そうさ]へ[変/か]わったこと、move model に[合/あ]わせて temporary memory を[使/つか]うことが comment に[反映/はんえい]されていることを[確認/かくにん]した。
+
+# 2026-03-10 作業メモ (`std/test` を trap 前提から `Result` 前提へ再設計)
+
+- [目的/もくてき]:
+  - [強制/きょうせい][終了/しゅうりょう]ベースの[古/ふる]い test [機構/きこう]を[廃止/はいし]し、`Result<(),str>` を[中心/ちゅうしん]にした[安全/あんぜん]な test API へ[移行/いこう]する。
+  - あわせて `nodesrc` 側で `ret:` を[実際/じっさい]に[検査/けんさ]できるようにし、`Result` を i32 の[終了/しゅうりょう] code へ[落/お]として runner と[接続/せつぞく]する。
+- [根本原因/こんぽんげんいん]:
+  - `stdlib/std/test.nepl`
+    - `test_fail` / `finish_checks` / `assert_*` が trap を[前提/ぜんてい]にしており、reboot の「[安全/あんぜん] API [優先/ゆうせん]」「[値中心/あたいちゅうしん]・[式指向/しきしこう]」と[矛盾/むじゅん]していた。
+    - `check_*` はすでに `Result<(),str>` を[返/かえ]していたのに、[最終/さいしゅう][出口/でぐち]だけが trap へ[潰/つぶ]されていた。
+  - `nodesrc`
+    - doctest parser / runner が `ret:` を[無視/むし]していたため、[安全/あんぜん]な test [失敗/しっぱい]を[戻/もど]り[値/あたい]で runner に[伝/つた]える[経路/けいろ]が[存在/そんざい]しなかった。
+    - Node WASI [実行/じっこう]も `_start` [経由/けいゆ]では `main` の[戻/もど]り[値/あたい]を[捨/す]てていた。
+- [変更/へんこう]:
+  - `nodesrc/parser.js`
+    - doctest meta に `ret:` を[追加/ついか]した。
+    - bare `ret: 0` を[文字列/もじれつ]ではなく[数値/すうち]として[解釈/かいしゃく]する `parseRetValue` を[追加/ついか]した。
+  - `nodesrc/run_test.js`
+    - `wasi.start()` [一本/いっぽん]ではなく、`wasi.initialize({ exports: { memory, _initialize? } })` のあと exported `main` を[直接/ちょくせつ][呼/よ]ぶ[経路/けいろ]を[追加/ついか]した。
+    - これにより stdout/stderr を[保/たも]ったまま `main` の[戻/もど]り[値/あたい]を `return_value` として[取得/しゅとく]できるようにした。
+    - `ret:` が JSON [文字列/もじれつ]のときは NEPL の `str` [表現/ひょうげん]（`[len:i32][bytes...]`）として[復号/ふくごう]するようにした。
+  - `nodesrc/tests.js` / `nodesrc/run_doctest.js`
+    - `expected_ret` を parser から[受/う]け[取/と]って[比較/ひかく]するようにした。
+    - `std/test` を import している case で `FAIL:` [行/ぎょう]が[出/で]たのに stdout expectation が[明示/めいじ]されていない[場合/ばあい]は fail とするようにした。
+  - `stdlib/std/test.nepl`
+    - file header と[関連/かんれん] helper comment を reboot 後の doc comment policy に[沿/そ]って[全面的/ぜんめんてき]に[更新/こうしん]した。
+    - `test_fail` を trap ではなく `Result<(),str>::Err msg` を[返/かえ]す helper に[変更/へんこう]した。
+    - `test_checked` を `Result<(),str>::Ok ()` を[返/かえ]す helper に[変更/へんこう]した。
+    - `finish_checks` を trap ではなく `Result<(),str>` に[畳/たた]む helper に[変更/へんこう]した。
+    - `assert` / `assert_eq_i32` / `assert_ne` / `assert_str_eq` / `assert_ok_i32` / `assert_err_i32` を `Result<(),str>` [返却/へんきゃく]へ[変更/へんこう]した。
+    - `result_exit_code` / `checks_exit_code` を[追加/ついか]し、`main <()*>i32>` から runner へ[安全/あんぜん]に[合否/ごうひ]を[返/かえ]せるようにした。
+  - `tests/stdlib/std_test_collect.n.md`
+    - success / failure case を `ret: 0` / `ret: 1` + `checks_exit_code` [前提/ぜんてい]へ[変更/へんこう]した。
+    - `[should_panic]` は[削除/さくじょ]した。
+  - `tutorials/getting_started/11_testing_workflow.n.md`
+    - `std/test` の[現行/げんこう][推奨/すいしょう]は `Result<(),str>` + `checks_exit_code` / `result_exit_code` であることに[合/あ]わせて example を[更新/こうしん]した。
+- [設計/せっけい][判断/はんだん]:
+  - reboot の[方針/ほうしん]では test helper も[値/あたい]を[返/かえ]すべきであり、trap は public API の[最終/さいしゅう][表現/ひょうげん]に[残/のこ]すべきでないと[判断/はんだん]した。
+  - [既存/きそん]の unit-return test を[一度/いちど]に[全件/ぜんけん][書/か]き[換/か]えなくても[安全/あんぜん]に[移行/いこう]できるよう、runner [側/がわ]で `FAIL:` [出力/しゅつりょく]を[失敗/しっぱい]と[見/み]なす[規則/きそく]を[追加/ついか]した。
+  - `ret:` の[未実装/みじっそう]を[放置/ほうち]したまま `std/test` だけ `Result` 化しても[出口/でぐち]がないため、`nodesrc` [側/がわ]を[先/さき]に[整備/せいび]するのが[根本修正/こんぽんしゅうせい]と[判断/はんだん]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i /tmp/ret_probe.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/compiler/ret_string_example.n.md -n 1` -> pass
+  - `node nodesrc/tests.js -i tests/compiler/ret_string_example.n.md -i tests/stdlib/proptest.n.md --no-stdlib --no-tree -o /tmp/tests-ret-focus.json -j 4`
+    - [結果/けっか]: `4/4 pass`
+  - `node nodesrc/run_doctest.js -i stdlib/std/test.nepl -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/std_test_collect.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/std_test_collect.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/11_testing_workflow.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/11_testing_workflow.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i stdlib/std/test.nepl -i tests/stdlib/std_test_collect.n.md -i tutorials/getting_started/11_testing_workflow.n.md --no-stdlib --no-tree -o /tmp/tests-std-test-safe-result.json -j 4`
+    - [結果/けっか]: `16/16 pass`
+  - `node nodesrc/tests.js -i tests/compiler/ret_string_example.n.md -i tests/stdlib/proptest.n.md -i stdlib/std/test.nepl -i tests/stdlib/std_test_collect.n.md -i tutorials/getting_started/11_testing_workflow.n.md --no-stdlib --no-tree -o /tmp/tests-safe-test-ret-focus.json -j 4`
+    - [結果/けっか]: `20/20 pass`
+  - `node nodesrc/cli.js -i stdlib/std/test.nepl -i tutorials/getting_started/11_testing_workflow.n.md -o html=/tmp/std-test-safe-doc-html`
+    - [結果/けっか]: `generated 2 html file(s)`
