@@ -10,6 +10,7 @@
 - stdlib のドキュメントコメント内 `neplg2:test` は `nodesrc/tests.js` が `.nepl` 内の `//:` doctest として走査・実行する。stdlib 側の doctest を確認したいときは `node nodesrc/tests.js -i stdlib/... --no-tree -o ... -j 15` を基本形にする。
 - `tests/compiler/*` と `tests/stdlib/*` の通常テストも `nodesrc/tests.js` で実行する。compiler 側だけを見るときは `-i tests/compiler/...`、stdlib 側だけを見るときは `-i tests/stdlib/...` を使い、移行中は範囲を絞って原因を切り分ける。
 - doctest 1 件だけを最短で確認したいときは `nodesrc/run_test.js` に JSON を渡す focused 実行も使ってよい。
+- stdlib / tutorials / tests に埋め込まれた doctest 1 件を直接確認したいときは `node nodesrc/run_doctest.js -i <file> -n <index>` を使って、該当ケースだけを再現する。
 - stdlib 再構築は、依存の強い基盤から順に進める（diag/trait -> compiler 前提 -> core/mem -> alloc -> runtimes -> std -> features -> tutorials/tests）。
 - compiler のバグを発見した場合は、library 側の迂回ではなく compiler 側を適切に根本から修正する。
 - 間に合わせ修正を避け、旧 API の互換維持ではなく最終構成への収束を優先する。

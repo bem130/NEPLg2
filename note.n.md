@@ -9244,3 +9244,46 @@
 - [状況/じょうきょう]:
   - ここでの[修正/しゅうせい]は、doctest を[通/とお]すための[場当/ばあ]たり[対応/たいおう]ではなく、`Vec.data` の `MemPtr` 化と impure [署名/しょめい]の[整合性/せいごうせい]を[回復/かいふく]するもの。
   - 次は `nodesrc` [側/がわ]の doctest focused [実行/じっこう][経路/けいろ]を[安定化/あんていか]し、既存 stdlib doctest を[順次/じゅんじ][通過/つうか]させる。
+
+# 2026-03-10 作業メモ (nodesrc: doctest 1 件 focused 実行の追加)
+
+- [目的/もくてき]:
+  - `nodesrc/tests.js` の[集約/しゅうやく][実行/じっこう]を[待/ま]たずに、stdlib reboot [中/ちゅう]の doctest 1 件を[直接/ちょくせつ][再現/さいげん]できる[入口/いりぐち]を[追加/ついか]する。
+  - `stack.nepl` のように[特定/とくてい] file の doctest を[順番/じゅんばん]に[潰/つぶ]したい[場面/ばめん]で、`run_test.js` 向け JSON を[手書/てが]きせずに[確認/かくにん]できるようにする。
+- [根本原因/こんぽんげんいん]:
+  - `nodesrc/tests.js` は doctest [全体/ぜんたい]の[集約/しゅうやく]には[向/む]くが、stdlib reboot [中/ちゅう]の[局所的/きょくしょてき]な[原因/げんいん][切/き]り[分/わ]けには[重/おも]い。
+  - `nodesrc/run_test.js` は 1 件[実行/じっこう]の[核/かく]を[持/も]つが、file / doctest index から[直接/ちょくせつ][呼/よ]ぶ[薄/うす]い CLI がなかった。
+- [変更/へんこう]:
+  - `nodesrc/run_doctest.js`
+    - `parseFile` で file [中/ちゅう]の doctest を[読/よ]み、`-n` で[指定/してい]した 1 件だけを `runSingle` に[流/なが]す CLI を[追加/ついか]した。
+    - `compile_fail` の `diag_id` / `diag_span` [確認/かくにん]も `tests.js` と[同/おな]じ[基準/きじゅん]で[適用/てきよう]する。
+  - `todo.md`
+    - stdlib reboot [中/ちゅう]の focused doctest [実行/じっこう]では `node nodesrc/run_doctest.js -i <file> -n <index>` を[使/つか]う[方針/ほうしん]を[追記/ついき]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/stack.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/core/traits/deserialize.nepl -n 1`
+    - [結果/けっか]: pass
+- [状況/じょうきょう]:
+  - 既存 stdlib doctest を[順次/じゅんじ][通/とお]す[際/さい]の[入口/いりぐち]が[揃/そろ]い、`tests.js` の[重/おも]い[集約/しゅうやく][実行/じっこう]に[頼/たよ]らずに[局所/きょくしょ][確認/かくにん]できるようになった。
+
+# 2026-03-10 作業メモ (`nodesrc/README.md` の追加と doctest 実行経路の整理)
+
+- [目的/もくてき]:
+  - `nodesrc/` [配下/はいか]の[道具/どうぐ]が[増/ふ]えてきたため、stdlib reboot [中/ちゅう]に「どの[目的/もくてき]でどの script を[使/つか]うか」を 1 [枚/まい]で[確認/かくにん]できるようにする。
+  - doctest / 通常 tests / 解析 / HTML [生成/せいせい]の[入口/いりぐち]を[明確/めいかく]にし、`todo.md` の[運用/うんよう][方針/ほうしん]と[一致/いっち]させる。
+- [変更/へんこう]:
+  - `nodesrc/README.md`
+    - `tests.js` / `run_doctest.js` / `run_test.js` / `analyze_source.js` / `analyze_tests_json.js` / `cli.js` の[使/つか]い[分/わ]けを、[目的別/もくてきべつ]に[整理/せいり]した。
+    - stdlib reboot [中/ちゅう]によく[使/つか]う[手順/てじゅん]として、doctest 1 件の[修正/しゅうせい]、compiler [不具合/ふぐあい]の[切/き]り[分/わ]け、通常 tests と doctest の[分離/ぶんり][確認/かくにん]を[記述/きじゅつ]した。
+  - `todo.md`
+    - `run_doctest.js` を[使/つか]った focused doctest [実行/じっこう]を[標準/ひょうじゅん]の[運用/うんよう]として[追記/ついき]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/stack.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/core/traits/deserialize.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/cliarg.n.md -n 3`
+    - [結果/けっか]: `compile_fail` + `diag_id: D3006` [確認/かくにん] pass
+- [状況/じょうきょう]:
+  - stdlib reboot [中/ちゅう]の doctest [修正/しゅうせい]は、まず `run_doctest.js` で 1 件を[固/かた]め、そのあと `tests.js` で[小/ちい]さい[範囲/はんい]を[集約/しゅうやく][確認/かくにん]する[流/なが]れで[進/すす]められるようになった。
