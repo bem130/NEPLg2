@@ -10318,3 +10318,32 @@
   - `node nodesrc/run_doctest.js -i tutorials/getting_started/18_recursion_and_termination.n.md -n 2` -> pass
   - `node nodesrc/tests.js -i tutorials/getting_started/15_match_patterns.n.md -i tutorials/getting_started/17_namespace_and_alias.n.md -i tutorials/getting_started/18_recursion_and_termination.n.md --no-stdlib --no-tree -o /tmp/tests-safe-result-batch4.json -j 4`
     - [結果/けっか]: `6/6 pass`
+
+# 2026-03-10 作業メモ (`list` / `hashset` / `hashset_str` fixture を explicit report 流儀へ追従)
+
+- [目的/もくてき]:
+  - `stdlib/tests/list.n.md`, `stdlib/tests/hashset.n.md`, `stdlib/tests/hashset_str.n.md` を、[現行/げんこう]の `Vec<Result<(),str>>` + explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - collection fixture [群/ぐん]でも `test_checked` を[途中/とちゅう]で[挟/はさ]む[古/ふる]い[書/か]き[方/かた]を[除去/じょきょ]し、test [末尾/まつび]で 1 [回/かい]だけ `checks_print_report` を[呼/よ]ぶ[構造/こうぞう]へ[統一/とういつ]する。
+- [根本原因/こんぽんげんいん]:
+  - 3 fixture とも `assert_*` / `test_fail` / `test_checked` を[逐次/ちくじ][実行/じっこう]する[旧流儀/きゅうりゅうぎ]が[残/のこ]っていた。
+  - `list` は `Option` [分岐/ぶんき]が[多/おお]く、`hashset` / `hashset_str` は alias / remove / contains [確認/かくにん]が[散在/さんざい]していて、[途中/とちゅう]で[何度/なんど]も success log を[出/だ]していた。
+- [変更/へんこう]:
+  - `stdlib/tests/list.n.md`
+    - `ret: 0` と `core/result` import を[追加/ついか]した。
+    - `let mut checks` を[導入/どうにゅう]し、`Option` [分岐/ぶんき]の `Some` / `None` [両方/りょうほう]を `checks_push` へ[集約/しゅうやく]した。
+    - test [末尾/まつび]で `checks_print_report checks` を[呼/よ]び、その[後/あと]に `checks_exit_code` を[返/かえ]す[形/かたち]へ[変更/へんこう]した。
+  - `stdlib/tests/hashset.n.md`
+    - `ret: 0` を[追加/ついか]し、insert / remove / alias [確認/かくにん]を `Vec<Result<(),str>>` に[集約/しゅうやく]した。
+    - `test_checked "new"` などの[途中/とちゅう]ログは[除去/じょきょ]し、[最後/さいご]に 1 [回/かい]だけ report を[出/だ]す[形/かたち]へ[変更/へんこう]した。
+  - `stdlib/tests/hashset_str.n.md`
+    - `ret: 0` を[追加/ついか]し、content / remove / alias [確認/かくにん]を `Vec<Result<(),str>>` に[集約/しゅうやく]した。
+    - [終了/しゅうりょう] report は `checks_print_report` + `checks_exit_code` [構成/こうせい]へ[変更/へんこう]した。
+- [設計/せっけい][判断/はんだん]:
+  - `hashset` / `hashset_str` は stdout [比較/ひかく]の[価値/かち]がある collection fixture なので、tutorial と[異/こと]なり explicit report を[残/のこ]した。
+  - `list` も[途中/とちゅう] success log を[積/つ]むより、[最後/さいご]に[全体/ぜんたい]を[見/み]せるほうが `Vec<Result>` [設計/せっけい]と[整合/せいごう]すると[判断/はんだん]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/tests/list.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/hashset.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/hashset_str.n.md -n 1` -> pass
+  - `node nodesrc/tests.js -i stdlib/tests/list.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/hashset_str.n.md --no-stdlib --no-tree -o /tmp/tests-collections-batch1.json -j 4`
+    - [結果/けっか]: `3/3 pass`
