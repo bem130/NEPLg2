@@ -1,45 +1,35 @@
 #indent 4
 
-//: result: 成功(Ok)と失敗(Err)を表す型と基本操作
+//: # result
+//: [成功/せいこう](Ok) と [失敗/しっぱい](Err) を[表/あらわ]す[基本型/きほんがた]と helper
 //:
-//: 目的:
-//: - 処理の成功/失敗を明示的に扱うための型とユーティリティを提供します。
+//: ### [目的/もくてき]
+//: - [処理/しょり]の[成功/せいこう] / [失敗/しっぱい]を[値/あたい]として[明示的/めいじてき]に[扱/あつか]うための `Result` と[基本操作/きほんそうさ]を[提供/ていきょう]します。
+//: - reboot [後/ご]の stdlib で「[安全/あんぜん] API は `Result` / `Outcome` を[返/かえ]す」という[方針/ほうしん]を[支/ささ]える[最小基盤/さいしょうきばん]です。
 //:
-//: 実装(アルゴリズム):
-//: - enum Result を定義し、match による分岐で操作します。
+//: ### [注意/ちゅうい]
+//: - `unwrap_ok` / `unwrap_err` は[便宜上/べんぎじょう][残/のこ]している unsafe helper であり、[通常/つうじょう]は `match` や `unwrap_or` を[優先/ゆうせん]してください。
+//: - doctest では trap [依存/いぞん]の `should_panic` を[使/つか]わず、[安全/あんぜん]な[分岐/ぶんき]と `ret:` [比較/ひかく]で[確認/かくにん]します。
 //:
-//: 注意(重要):
-//: - unwrap 系は Err で到達不能になります（安全ではありません）。
-//:
-//: 計算量:
-//: - すべて O(1)
-//:
-//: ---
+//: ### [計算量/けいさんりょう]
+//: - [基本操作/きほんそうさ]はすべて O(1) です。
 //:
 //: neplg2:test
+//: ret: 0
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "core/result" as *
-//: fn main <()*>()> ():
-//:     assert is_ok ok<i32, str> 1;
-//:     assert is_err err<i32, str> "oops";
-//:     assert_eq_i32 1 unwrap_ok ok<i32, str> 1;
-//:     assert_str_eq "oops" unwrap_err err<i32, str> "oops";
-//:     assert_eq_i32 9 unwrap_or err<i32, str> "x" 9;
-//: ```
-//:
-//: neplg2:test[should_panic]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//:| #import "core/result" as *
-//: // Err を unwrap_ok すると unreachable で落ちることを期待
-//: fn main <()*>()> ():
-//:     unwrap_ok err<i32, str> "boom";
-//:     ()
+//: fn main <()*>i32> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push assert is_ok ok<i32, str> 1
+//:         |> checks_push assert is_err err<i32, str> "oops"
+//:         |> checks_push assert_eq_i32 1 unwrap_ok ok<i32, str> 1
+//:         |> checks_push assert_str_eq "oops" unwrap_err err<i32, str> "oops"
+//:         |> checks_push assert_eq_i32 9 unwrap_or err<i32, str> "x" 9
+//:     checks_exit_code checks
 //: ```
 //:
 //: neplg2:test[compile_fail]
@@ -66,11 +56,14 @@
 //: fn strlen <(str)->i32> (s):
 //:     4
 //:
-//: fn main <()*>()> ():
+//: fn main <()*>i32> ():
 //:     let a map ok<i32,str> 9 inc;
 //:     let b map_err err<i32,str> "oops" strlen;
-//:     assert_eq_i32 10 unwrap_ok a;
-//:     assert_eq_i32 4 unwrap_err b;
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push assert_eq_i32 10 unwrap_ok a
+//:         |> checks_push assert_eq_i32 4 unwrap_err b
+//:     checks_exit_code checks
 //: ```
 
 

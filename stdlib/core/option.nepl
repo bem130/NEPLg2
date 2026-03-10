@@ -2,48 +2,39 @@
 
 #import "core/mem" as *
 
-//: option: 値の有無を表す型と基本操作
+//: # option
+//: [値/あたい]の[有無/うむ]を[表/あらわ]す[基本型/きほんがた]と helper
 //:
-//: 目的:
-//: - 存在する値(Some)と不在(None)を安全に扱うための抽象を提供します。
+//: ### [目的/もくてき]
+//: - [存在/そんざい]する[値/あたい] (`Some`) と[不在/ふざい] (`None`) を[明示的/めいじてき]に[扱/あつか]う `Option` と[基本操作/きほんそうさ]を[提供/ていきょう]します。
+//: - reboot [後/ご]の stdlib で「[単純/たんじゅん]な[欠如/けつじょ]は `Option`、[失敗理由/しっぱいりゆう]つきは `Result`」という[責務分離/せきむぶんり]を[支/ささ]える[最小基盤/さいしょうきばん]です。
 //:
-//: 実装(アルゴリズム):
-//: - enum Option を定義し、match による分岐で操作します。
+//: ### [注意/ちゅうい]
+//: - `unwrap` は[便宜上/べんぎじょう][残/のこ]している unsafe helper であり、[通常/つうじょう]は `match` や `option_unwrap_or` を[優先/ゆうせん]してください。
+//: - doctest では trap [依存/いぞん]の `should_panic` を[使/つか]わず、[安全/あんぜん]な[分岐/ぶんき]と `ret:` [比較/ひかく]で[確認/かくにん]します。
 //:
-//: 注意(重要):
-//: - unwrap 系は None で到達不能になります（安全ではありません）。
-//:
-//: 計算量:
-//: - すべて O(1)
-//:
-//: ---
+//: ### [計算量/けいさんりょう]
+//: - [基本操作/きほんそうさ]はすべて O(1) です。
 //:
 //: neplg2:test
+//: ret: 0
 //: ```neplg2
 //:| #entry main
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "core/option" as *
-//: fn main <()*>()> ():
-//:     assert is_some some 123;
-//:     assert is_none none<i32>;
-//:     assert_eq_i32 123 unwrap some 123;
-//:     assert_eq_i32 7 option_unwrap_or none<i32> 7;
-//: ```
-//:
-//: neplg2:test[should_panic]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "std/test" as *
-//:| #import "core/option" as *
-//: // None を unwrap すると unreachable で落ちることを期待
-//: fn main <()*>()> ():
-//:     unwrap none<i32>;
-//:     ()
+//: fn main <()*>i32> ():
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push assert is_some some 123
+//:         |> checks_push assert is_none none<i32>
+//:         |> checks_push assert_eq_i32 123 unwrap some 123
+//:         |> checks_push assert_eq_i32 7 option_unwrap_or none<i32> 7
+//:     checks_exit_code checks
 //: ```
 //:
 //: neplg2:test
+//: ret: 0
 //: ```neplg2
 //:| #entry main
 //:| #target std
@@ -53,13 +44,16 @@
 //: fn inc <(i32)->i32> (x):
 //:     add x 1
 //:
-//: fn main <()*>()> ():
+//: fn main <()*>i32> ():
 //:     let a0 option_map some 9 inc;
 //:     let a1 option_map some 9 inc;
 //:     let b option_map none<i32> inc;
-//:     assert is_some a0;
-//:     assert is_none b;
-//:     assert_eq_i32 10 unwrap a1;
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push assert is_some a0
+//:         |> checks_push assert is_none b
+//:         |> checks_push assert_eq_i32 10 unwrap a1
+//:     checks_exit_code checks
 //: ```
 
 

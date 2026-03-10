@@ -10074,3 +10074,38 @@
     - [結果/けっか]: `20/20 pass`
   - `node nodesrc/cli.js -i stdlib/std/test.nepl -i tutorials/getting_started/11_testing_workflow.n.md -o html=/tmp/std-test-safe-doc-html`
     - [結果/けっか]: `generated 2 html file(s)`
+
+# 2026-03-10 作業メモ (`Option` / `Result` の入門系 doctest を安全な test 流儀へ追従)
+
+- [目的/もくてき]:
+  - `std/test` の `Result` [中心/ちゅうしん]設計へ[合/あ]わせて、`core/result` / `core/option` の doctest と、[対応/たいおう]する tutorial / stdlib fixture を[安全/あんぜん]な `ret:` + `checks_exit_code` [前提/ぜんてい]へ[移行/いこう]する。
+- [根本原因/こんぽんげんいん]:
+  - `stdlib/core/result.nepl` と `stdlib/core/option.nepl` に、trap [前提/ぜんてい]の `neplg2:test[should_panic]` が[残/のこ]っていた。
+  - `tutorials/getting_started/05_option.n.md`, `tutorials/getting_started/06_result.n.md`, `stdlib/tests/option.n.md`, `stdlib/tests/result.n.md` も unit-return + `test_fail` / `assert_*` [直呼/ちょくよ]びの[古/ふる]い test [流儀/りゅうぎ]のままだった。
+  - `std/test` [側/がわ]はすでに `Result<(),str>` を[返/かえ]すように[変/か]わっているため、[入門用/にゅうもんよう]の[文書/ぶんしょ]が[古/ふる]いままだと reboot [後/ご]の[設計哲学/せっけいてつがく]と[説明/せつめい]が[食/く]い[違/ちが]う。
+- [変更/へんこう]:
+  - `stdlib/core/result.nepl`
+    - file header を reboot 後の[方針/ほうしん]に[沿/そ]う[説明/せつめい]へ[更新/こうしん]した。
+    - `should_panic` doctest を[削除/さくじょ]し、`ret: 0` + `checks_exit_code` [前提/ぜんてい]の[安全/あんぜん]な doctest へ[置換/ちかん]した。
+  - `stdlib/core/option.nepl`
+    - file header を reboot 後の[方針/ほうしん]に[沿/そ]う[説明/せつめい]へ[更新/こうしん]した。
+    - `should_panic` doctest を[削除/さくじょ]し、`ret: 0` + `checks_exit_code` [前提/ぜんてい]の[安全/あんぜん]な doctest へ[置換/ちかん]した。
+  - `tutorials/getting_started/05_option.n.md`
+    - `match` [例/れい]と `option_unwrap_or` [例/れい]を `ret: 0` + `checks_exit_code` [前提/ぜんてい]へ[更新/こうしん]した。
+    - `match` [分岐/ぶんき]の[中/なか]で `checks_push` できるよう `let mut checks` に[変更/へんこう]した。
+  - `tutorials/getting_started/06_result.n.md`
+    - `Ok/Err` [例/れい]と `Result` を[返/かえ]す[関数/かんすう][例/れい]を `ret: 0` + `checks_exit_code` [前提/ぜんてい]へ[更新/こうしん]した。
+    - [分岐/ぶんき]で[蓄積/ちくせき]する `checks` を `let mut` に[変更/へんこう]した。
+  - `stdlib/tests/result.n.md`, `stdlib/tests/option.n.md`
+    - fixture を `ret: 0` + `checks_exit_code` [前提/ぜんてい]へ[変更/へんこう]した。
+    - [逐次的/ちくじてき]な `assert_*` [直列/ちょくれつ]ではなく、`checks_push` [経由/けいゆ]で[収集/しゅうしゅう]する[形/かたち]へ[揃/そろ]えた。
+- [設計/せっけい][判断/はんだん]:
+  - `unwrap` 系 helper [自体/じたい]は[互換上/ごかんじょう][残/のこ]しているが、[入門用/にゅうもんよう]の doctest で trap [期待/きたい]を[推奨/すいしょう]しないことを[優先/ゆうせん]した。
+  - `core/result` / `core/option` の[説明/せつめい]は、unsafe helper の[存在/そんざい]を[注意/ちゅうい]として[明記/めいき]しつつ、[通常/つうじょう]は `match` / `unwrap_or` を[優先/ゆうせん]する reboot [後/ご]の[姿勢/しせい]へ[寄/よ]せた。
+  - tutorial / fixture では `FAIL:` [表示/ひょうじ]だけに[依存/いぞん]せず、runner と[直結/ちょっけつ]できる `ret:` [比較/ひかく]を[明示/めいじ]するほうが、[現行/げんこう] test [哲学/てつがく]と[整合/せいごう]すると[判断/はんだん]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/core/result.nepl -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/core/option.nepl -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/06_result.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i stdlib/core/result.nepl -i stdlib/core/option.nepl -i stdlib/tests/result.n.md -i stdlib/tests/option.n.md -i tutorials/getting_started/05_option.n.md -i tutorials/getting_started/06_result.n.md --no-stdlib --no-tree -o /tmp/tests-option-result-safe.json -j 4`
+    - [結果/けっか]: `12/12 pass`
