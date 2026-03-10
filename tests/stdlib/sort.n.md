@@ -76,8 +76,8 @@ fn make_vec4 <()->Vec<i32>> ():
 fn main <()->i32> ():
     let v sort_quick_ret<i32> make_vec4;
     let s vec_data_len<i32> v;
-    let p <i32> get s 0;
-    let n <i32> get s 1;
+    let p <i32> mem_ptr_addr get s "data";
+    let n <i32> get s "len";
     let bn <bool> eq n 4;
     let b0 <bool> eq load_i32 add p 0 1;
     let b1 <bool> eq load_i32 add p 4 2;
@@ -102,7 +102,7 @@ fn main <()->i32> ():
     let v0 vec_new<i32>;
     let v1 sort_quick_ret<i32> v0;
     let s vec_data_len<i32> v1;
-    get s 1
+    get s "len"
 ```
 
 ## sort_quick_ret_len1_noop
@@ -122,7 +122,7 @@ fn main <()->i32> ():
     let v1 vec_push<i32> v0 42;
     let v2 sort_quick_ret<i32> v1;
     let s vec_data_len<i32> v2;
-    get s 1
+    get s "len"
 ```
 
 ## sort_quick_ret_vec_is_reusable_after_sort
@@ -144,7 +144,7 @@ fn main <()->i32> ():
     let v3 sort_quick_ret<i32> v2;
     let v4 vec_push<i32> v3 5;
     let s vec_data_len<i32> v4;
-    get s 1
+    get s "len"
 ```
 
 ## sort_heap_i32_basic
@@ -198,8 +198,8 @@ fn make_vec4 <()->Vec<i32>> ():
 fn main <()->i32> ():
     let v sort_heap_ret<i32> make_vec4;
     let s vec_data_len<i32> v;
-    let p <i32> get s 0;
-    let n <i32> get s 1;
+    let p <i32> mem_ptr_addr get s "data";
+    let n <i32> get s "len";
     let bn <bool> eq n 4;
     let b0 <bool> eq load_i32 add p 0 1;
     let b1 <bool> eq load_i32 add p 4 2;
@@ -224,7 +224,7 @@ fn main <()->i32> ():
     let v0 vec_new<i32>;
     let v1 sort_heap_ret<i32> v0;
     let s vec_data_len<i32> v1;
-    get s 1
+    get s "len"
 ```
 
 ## sort_heap_ret_len1_noop
@@ -244,7 +244,7 @@ fn main <()->i32> ():
     let v1 vec_push<i32> v0 42;
     let v2 sort_heap_ret<i32> v1;
     let s vec_data_len<i32> v2;
-    get s 1
+    get s "len"
 ```
 
 ## sort_heap_ret_vec_is_reusable_after_sort
@@ -266,7 +266,7 @@ fn main <()->i32> ():
     let v3 sort_heap_ret<i32> v2;
     let v4 vec_push<i32> v3 5;
     let s vec_data_len<i32> v4;
-    get s 1
+    get s "len"
 ```
 
 ## sort_merge_ret_i32_sorted_values
@@ -295,8 +295,8 @@ fn make_vec4 <()->Vec<i32>> ():
 fn main <()->i32> ():
     let v sort_merge_ret<i32> make_vec4;
     let s vec_data_len<i32> v;
-    let p <i32> get s 0;
-    let n <i32> get s 1;
+    let p <i32> mem_ptr_addr get s "data";
+    let n <i32> get s "len";
     let bn <bool> eq n 4;
     let b0 <bool> eq load_i32 add p 0 1;
     let b1 <bool> eq load_i32 add p 4 2;
@@ -321,7 +321,7 @@ fn main <()->i32> ():
     let v0 vec_new<i32>;
     let v1 sort_merge_ret<i32> v0;
     let s vec_data_len<i32> v1;
-    get s 1
+    get s "len"
 ```
 
 ## sort_merge_ret_len1_noop
@@ -341,7 +341,7 @@ fn main <()->i32> ():
     let v1 vec_push<i32> v0 42;
     let v2 sort_merge_ret<i32> v1;
     let s vec_data_len<i32> v2;
-    get s 1
+    get s "len"
 ```
 
 ## sort_merge_ret_vec_is_reusable_after_sort
@@ -363,7 +363,7 @@ fn main <()->i32> ():
     let v3 sort_merge_ret<i32> v2;
     let v4 vec_push<i32> v3 5;
     let s vec_data_len<i32> v4;
-    get s 1
+    get s "len"
 ```
 
 ## sort_default_dispatch_i32
