@@ -10437,3 +10437,32 @@
   - `node nodesrc/run_doctest.js -i tests/stdlib/collections_diag.n.md -n 6` -> pass
   - `node nodesrc/tests.js -i tests/stdlib/fs.n.md -i tests/stdlib/collections_diag.n.md --no-stdlib --no-tree -o /tmp/tests-fs-collections-diag-explicit.json -j 4`
     - [結果/けっか]: `8/8 pass`
+
+# 2026-03-10 作業メモ (`cast` / `math` fixture と `02b` / `16_debug` tutorial を explicit report 流儀へ追従)
+
+- [目的/もくてき]:
+  - `stdlib/tests/cast.n.md`, `stdlib/tests/math.n.md`, `tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md`, `tutorials/getting_started/16_debug_and_ansi.n.md` を、[現行/げんこう]の explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - [単純/たんじゅん]な success log [依存/いぞん]の case を[先/さき]に[解消/かいしょう]し、`error.n.md` のような[複雑/ふくざつ]分岐 case と[分離/ぶんり]して[進/すす]める。
+- [根本原因/こんぽんげんいん]:
+  - `cast` / `math` fixture はすでに `Vec<Result<(),str>>` を[導入/どうにゅう]していたが、[最後/さいご]だけ `test_checked` に[頼/たよ]る[過渡期/かとき]の[形/かたち]が[残/のこ]っていた。
+  - `02b` tutorial は `assert_*` と `test_checked` の[単発/たんぱつ] success log に[戻/もど]っており、safe `Result` + explicit print の reboot [後/ご][方針/ほうしん]と[不一致/ふいっち]だった。
+  - `16_debug_and_ansi` の `std/test` 例も、`test_checked` の[旧/きゅう] stdout [形式/けいしき]を[前提/ぜんてい]にしていた。
+- [変更/へんこう]:
+  - `stdlib/tests/cast.n.md`
+    - [末尾/まつび]の `test_checked "cast conversions"` を[除去/じょきょ]し、`checks_print_report` + `checks_exit_code` へ[置換/ちかん]した。
+  - `stdlib/tests/math.n.md`
+    - `cast` fixture と[同様/どうよう]に、[最後/さいご]の success log を explicit report [形/けい]へ[変更/へんこう]した。
+  - `tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md`
+    - 5 [件/けん]の doctest を `i32` return + `Vec<Result<(),str>>` [集約/しゅうやく]へ[変更/へんこう]した。
+    - [解析/かいせき]系は `Result::Err` を message つきで[積/つ]み、[最後/さいご]に `checks_print_report` を[明示的/めいじてき]に[呼/よ]ぶ[形/かたち]へ[揃/そろ]えた。
+    - `from_i64 sub <i64> cast 0 <i64> cast 42` は `check_str_eq` [移行後/いこうご]に overload [曖昧/あいまい]になったため、`neg42` [中間値/ちゅうかんち]を[導入/どうにゅう]して[式/しき][境界/きょうかい]を[明確化/めいかくか]した。
+  - `tutorials/getting_started/16_debug_and_ansi.n.md`
+    - `std/test` と[組/く]み[合/あ]わせる例を `checks_print_report` [前提/ぜんてい]へ[変更/へんこう]し、stdout [期待値/きたいち]を `Checked [ok]` / `[0] ok` [形式/けいしき]へ[更新/こうしん]した。
+- [設計/せっけい][判断/はんだん]:
+  - tutorial でも success [表示/ひょうじ]の[出所/でどころ]を test case [側/がわ]へ[寄/よ]せることで、「runner が[勝手/かって]に[表示/ひょうじ]する」のではなく「test case が[最後/さいご]に[明示/めいじ]して[表示/ひょうじ]する」という reboot [後/ご] test [哲学/てつがく]を[一貫/いっかん]させた。
+  - `16_debug_and_ansi` は ANSI [自体/じたい]の[確認/かくにん]と `std/test` [連携/れんけい]の[確認/かくにん]を[分離/ぶんり]し、[後者/こうしゃ]は `strip_ansi` [下/か]でも[読/よ]みやすい machine/human report [形式/けいしき]へ[追従/ついじゅう]させた。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/16_debug_and_ansi.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i stdlib/tests/cast.n.md -i stdlib/tests/math.n.md -i tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md -i tutorials/getting_started/16_debug_and_ansi.n.md --no-stdlib --no-tree -o /tmp/tests-explicit-report-batch3.json -j 4`
+    - [結果/けっか]: `9/9 pass`

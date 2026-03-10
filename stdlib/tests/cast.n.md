@@ -39,6 +39,6 @@ fn main <()*>i32> ():
         |> checks_push assert cast_42_bool
         |> checks_push assert_ne true cast_0_bool
         |> checks_push assert_eq_i32 222 cast b
-    let _done <Result<(),str>> test_checked "cast conversions";
-    checks_exit_code checks
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

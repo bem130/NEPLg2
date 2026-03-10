@@ -44,6 +44,6 @@ fn main <()*>i32> ():
         |> checks_push assert le 2 2
         |> checks_push assert eq 5 5
         |> checks_push assert ne 5 6
-    let _done <Result<(),str>> test_checked "math core ops";
-    checks_exit_code checks
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

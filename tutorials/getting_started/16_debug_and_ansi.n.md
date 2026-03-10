@@ -23,16 +23,21 @@ fn main <()*> ()> ():
 ## `std/test` と組み合わせる
 
 neplg2:test[stdio, normalize_newlines, strip_ansi]
-stdout: "Checked color-ready\n"
+stdout: "Checked [ok]\n[0] ok\n"
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "std/test" as *
+#import "core/result" as *
 
-fn main <()*> ()> ():
-    test_checked "color-ready";
+fn main <()*> i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push Result<(),str>::Ok ()
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 注意点

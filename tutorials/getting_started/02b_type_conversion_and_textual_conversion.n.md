@@ -21,13 +21,17 @@ neplg2:test
 | #target std
 |
 #import "core/cast" as *
+#import "core/result" as *
 #import "std/test" as *
 
-fn main <()*> ()> ():
+fn main <()*> i32> ():
     let x64 <i64> cast 42
     let x32 <i32> cast x64
-    assert_eq_i32 42 x32
-    test_checked "explicit numeric cast"
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push check_eq_i32 42 x32
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## `from_*` は[表示用/ひょうじよう]の[文字列/もじれつ]を[作/つく]る
@@ -43,13 +47,18 @@ neplg2:test
 |
 #import "alloc/string" as *
 #import "core/cast" as *
+#import "core/result" as *
 #import "std/test" as *
 
-fn main <()*> ()> ():
-    assert_str_eq "42" from_i32 42
-    assert_str_eq "-42" from_i64 sub <i64> cast 0 <i64> cast 42
-    assert_str_eq "true" from_bool true
-    test_checked "text formatting lives in alloc/string"
+fn main <()*> i32> ():
+    let neg42 <i64> sub <i64> cast 0 <i64> cast 42
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push check_str_eq "42" from_i32 42
+        |> checks_push check_str_eq "-42" from_i64 neg42
+        |> checks_push check_str_eq "true" from_bool true
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## `to_*` は `Result` を[返/かえ]す
@@ -66,20 +75,22 @@ neplg2:test
 #import "core/result" as *
 #import "std/test" as *
 
-fn main <()*> ()> ():
+fn main <()*> i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new
     match to_i32 "123":
         Result::Ok v:
-            assert_eq_i32 123 v
+            set checks checks_push checks check_eq_i32 123 v
         Result::Err _:
-            assert_eq_i32 1 0
+            set checks checks_push checks Result<(),str>::Err "to_i32 123 failed"
 
     match to_bool "false":
         Result::Ok v:
-            assert_eq_i32 0 cast v
+            set checks checks_push checks check_eq_i32 0 cast v
         Result::Err _:
-            assert_eq_i32 1 0
+            set checks checks_push checks Result<(),str>::Err "to_bool false failed"
 
-    test_checked "parsing returns Result"
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## [基数/きすう][付/つ]き[変換/へんかん]
@@ -98,20 +109,22 @@ neplg2:test
 #import "core/cast" as *
 #import "std/test" as *
 
-fn main <()*> ()> ():
+fn main <()*> i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new
     match from_i32_radix 10 2:
         Result::Ok s:
-            assert_str_eq "1010" s
+            set checks checks_push checks check_str_eq "1010" s
         Result::Err _:
-            assert_eq_i32 1 0
+            set checks checks_push checks Result<(),str>::Err "from_i32_radix 10 2 failed"
 
     match to_i64_radix "-ff" 16:
         Result::Ok v:
-            assert_eq_i32 -255 <i32> cast v
+            set checks checks_push checks check_eq_i32 -255 <i32> cast v
         Result::Err _:
-            assert_eq_i32 1 0
+            set checks checks_push checks Result<(),str>::Err "to_i64_radix -ff 16 failed"
 
-    test_checked "radix conversion"
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## i128 / u128 の[大/おお]きい[整数/せいすう]
@@ -132,22 +145,24 @@ neplg2:test
 #import "core/cast" as *
 #import "std/test" as *
 
-fn main <()*> ()> ():
+fn main <()*> i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new
     let big <i128> i128 <i64> cast 1 <i64> cast 0
 
     match from_i128_radix big 16:
         Result::Ok s:
-            assert_eq_i32 17 len s
+            set checks checks_push checks check_eq_i32 17 len s
         Result::Err _:
-            assert_eq_i32 1 0
+            set checks checks_push checks Result<(),str>::Err "from_i128_radix big 16 failed"
 
     match to_u128_radix "10000000000000000" 16:
         Result::Ok v:
-            assert_eq_i32 1 <i32> cast get v "hi"
+            set checks checks_push checks check_eq_i32 1 <i32> cast get v "hi"
         Result::Err _:
-            assert_eq_i32 1 0
+            set checks checks_push checks Result<(),str>::Err "to_u128_radix 10000000000000000 16 failed"
 
-    test_checked "wide integer textual conversion"
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## [使/つか]い[分/わ]け
