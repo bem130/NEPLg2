@@ -10376,3 +10376,29 @@
   - `node nodesrc/run_doctest.js -i stdlib/tests/json.n.md -n 1` -> pass
   - `node nodesrc/tests.js -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/rand.n.md -i stdlib/tests/json.n.md --no-stdlib --no-tree -o /tmp/tests-stdlib-safe-result-batch2.json -j 4`
     - [結果/けっか]: `4/4 pass`
+
+# 2026-03-10 作業メモ (`traits_hash` / `traits_serde` stdlib test を explicit report 流儀へ追従)
+
+- [目的/もくてき]:
+  - `tests/stdlib/traits_hash.n.md` と `tests/stdlib/traits_serde.n.md` を、[現行/げんこう]の safe `Result` + explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - trait [能力/のうりょく]そのものの[回帰/かいき]は[維持/いじ]したまま、fixture [側/がわ]だけを reboot [後/ご]の test [哲学/てつがく]へ[寄/よ]せる。
+- [根本原因/こんぽんげんいん]:
+  - `traits_hash` / `traits_serde` は reboot [後/ご]に[追加/ついか]された trait 回帰なのに、test case [本体/ほんたい]は `assert_*` / `test_fail` / `test_checked` を[逐次/ちくじ][実行/じっこう]する[旧流儀/きゅうりゅうぎ]のままだった。
+  - とくに `deserialize` の[異常系/いじょうけい]は `ParseError` [判定/はんてい]のたびに[途中/とちゅう]で log を[出/だ]しており、`checks_print_report` を[最後/さいご]に 1 [回/かい]だけ[呼/よ]ぶという[現行/げんこう] test [方針/ほうしん]と[不整合/ふせいごう]だった。
+- [変更/へんこう]:
+  - `tests/stdlib/traits_hash.n.md`
+    - 2 [件/けん]の doctest とも `Vec<Result<(),str>>` を[導入/どうにゅう]し、`Hash` trait helper / hashmap / hashset [確認/かくにん]を `checks_push` に[集約/しゅうやく]した。
+    - `Option::None` [分岐/ぶんき]は `Result::Err` として[保持/ほじ]し、[最後/さいご]に `checks_print_report` + `checks_exit_code` を[呼/よ]ぶ[構造/こうぞう]へ[変更/へんこう]した。
+  - `tests/stdlib/traits_serde.n.md`
+    - `serialize` / `deserialize` の[各検査/かくけんさ]を `check_str_eq` / `check_eq_i32` / `check` に[置換/ちかん]した。
+    - `ParseError` [判定/はんてい]は `test_checked` を[呼/よ]ばず `Result::Ok ()` を[積/つ]む[形/かたち]へ[変更/へんこう]し、wrong error kind は `Result::Err` に[統一/とういつ]した。
+- [設計/せっけい][判断/はんだん]:
+  - trait 回帰 test は stdout [出力/しゅつりょく]を[観察/かんさつ]したほうが[失敗箇所/しっぱいかしょ]を[追/お]いやすいため、tutorial のような silent exit code [単独/たんどく]ではなく explicit report を[残/のこ]した。
+  - `Deserialize` の[異常系/いじょうけい]は[多分岐/たぶんき]だが、runner [側/がわ]の trap や early print に[頼/たよ]らず、[値/あたい]として[最後/さいご]まで[持/も]ち[運/はこ]ぶ[方針/ほうしん]を[優先/ゆうせん]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/traits_hash.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/traits_hash.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/traits_serde.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/traits_serde.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/traits_hash.n.md -i tests/stdlib/traits_serde.n.md --no-stdlib --no-tree -o /tmp/tests-traits-safe-result-batch.json -j 4`
+    - [結果/けっか]: `4/4 pass`

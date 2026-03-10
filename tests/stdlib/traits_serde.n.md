@@ -13,13 +13,16 @@ neplg2:test
 #target std
 #import "std/test" as *
 #import "core/traits/serialize" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
-    assert_str_eq "true" serialize true;
-    assert_str_eq "42" serialize 42;
-    assert_str_eq "9001" serialize <i64> cast 9001;
-    assert_str_eq "abc" serialize "abc";
-    0
+    let mut checks <Vec<Result<(),str>>> checks_new;
+    set checks checks_push checks check_str_eq "true" serialize true;
+    set checks checks_push checks check_str_eq "42" serialize 42;
+    set checks checks_push checks check_str_eq "9001" serialize <i64> cast 9001;
+    set checks checks_push checks check_str_eq "abc" serialize "abc";
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## deserialize_trait_for_primitives
@@ -36,46 +39,50 @@ neplg2:test
 #import "std/test" as *
 #import "core/traits/deserialize" as *
 #import "alloc/diag/error" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
     match deserialize<i32> "42":
         Result::Ok v:
-            assert_eq_i32 42 v
+            set checks checks_push checks check_eq_i32 42 v
         Result::Err _e:
-            test_fail "deserialize<i32> failed";
+            set checks checks_push checks Result<(),str>::Err "deserialize<i32> failed";
 
     match deserialize<bool> "false":
         Result::Ok v:
-            assert not v
+            set checks checks_push checks check not v
         Result::Err _e:
-            test_fail "deserialize<bool> failed";
+            set checks checks_push checks Result<(),str>::Err "deserialize<bool> failed";
 
     match deserialize<i32> "oops":
         Result::Ok _v:
-            test_fail "deserialize<i32> should fail on text";
+            set checks checks_push checks Result<(),str>::Err "deserialize<i32> should fail on text";
         Result::Err e:
             match e:
                 StdErrorKind::ParseError:
-                    test_checked "parse-error";
+                    set checks checks_push checks Result<(),str>::Ok ();
                 StdErrorKind::Failure:
-                    test_fail "wrong error kind";
+                    set checks checks_push checks Result<(),str>::Err "wrong error kind";
                 StdErrorKind::OutOfMemory:
-                    test_fail "wrong error kind";
+                    set checks checks_push checks Result<(),str>::Err "wrong error kind";
                 StdErrorKind::EmptyCollection:
-                    test_fail "wrong error kind";
+                    set checks checks_push checks Result<(),str>::Err "wrong error kind";
                 StdErrorKind::IndexOutOfBounds:
-                    test_fail "wrong error kind";
+                    set checks checks_push checks Result<(),str>::Err "wrong error kind";
                 StdErrorKind::KeyNotFound:
-                    test_fail "wrong error kind";
+                    set checks checks_push checks Result<(),str>::Err "wrong error kind";
                 StdErrorKind::CapacityExceeded:
-                    test_fail "wrong error kind";
+                    set checks checks_push checks Result<(),str>::Err "wrong error kind";
                 StdErrorKind::InvalidOperation:
-                    test_fail "wrong error kind";
+                    set checks checks_push checks Result<(),str>::Err "wrong error kind";
                 StdErrorKind::InvalidUtf8:
-                    test_fail "wrong error kind";
+                    set checks checks_push checks Result<(),str>::Err "wrong error kind";
                 StdErrorKind::IoError:
-                    test_fail "wrong error kind";
+                    set checks checks_push checks Result<(),str>::Err "wrong error kind";
                 StdErrorKind::Other:
-                    test_fail "wrong error kind";
-    0
+                    set checks checks_push checks Result<(),str>::Err "wrong error kind";
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

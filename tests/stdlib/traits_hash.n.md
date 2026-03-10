@@ -14,12 +14,15 @@ neplg2:test
 #import "std/test" as *
 #import "core/traits/hash" as *
 #import "alloc/hash/hash32" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
-    assert_eq_i32 hash32_i32 123456 hash32_by_trait 123456;
-    assert_eq_i32 hash32_str "abc" hash32_by_trait "abc";
-    assert ne hash32_by_trait 123456 hash32_by_trait 123457;
-    0
+    let mut checks <Vec<Result<(),str>>> checks_new;
+    set checks checks_push checks check_eq_i32 hash32_i32 123456 hash32_by_trait 123456;
+    set checks checks_push checks check_eq_i32 hash32_str "abc" hash32_by_trait "abc";
+    set checks checks_push checks check ne hash32_by_trait 123456 hash32_by_trait 123457;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## hashmap_and_hashset_use_hash_trait
@@ -69,28 +72,31 @@ fn must_hss <(Result<HashSetStr, Diag>)*>HashSetStr> (r):
             #intrinsic "unreachable" <> ()
 
 fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
     let hm <HashMap<i32>> must_hm hashmap_new<i32>;
     let hm <HashMap<i32>> must_hm hashmap_insert<i32> hm 10 99;
     match hashmap_get<i32> hm 10:
         Option::Some v:
-            assert_eq_i32 99 v
+            set checks checks_push checks check_eq_i32 99 v
         Option::None:
-            test_fail "hashmap_get did not return inserted value";
+            set checks checks_push checks Result<(),str>::Err "hashmap_get did not return inserted value";
 
     let hs <HashSet> must_hs hashset_new;
     let hs <HashSet> must_hs hashset_insert hs 42;
-    assert hashset_contains hs 42;
+    set checks checks_push checks check hashset_contains hs 42;
 
     let hms <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
     let hms <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hms "key" 7;
     match hashmap_str_get<i32> hms "key":
         Option::Some v:
-            assert_eq_i32 7 v
+            set checks checks_push checks check_eq_i32 7 v
         Option::None:
-            test_fail "hashmap_str_get did not return inserted value";
+            set checks checks_push checks Result<(),str>::Err "hashmap_str_get did not return inserted value";
 
     let hss <HashSetStr> must_hss hashset_str_new;
     let hss <HashSetStr> must_hss hashset_str_insert hss "abc";
-    assert hashset_str_contains hss "abc";
-    0
+    set checks checks_push checks check hashset_str_contains hss "abc";
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
