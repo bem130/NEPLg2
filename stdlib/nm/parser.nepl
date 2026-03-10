@@ -684,7 +684,7 @@ fn parse_inlines <(str)->Vec<Inline>> (s):
                                             if:
                                                 ge parts_len 2
                                                 then:
-                                                    let parts_data <i32> get parts "data";
+                                                    let parts_data <i32> mem_ptr_addr get parts "data";
                                                     let main <str> load<str> parts_data;
                                                     let mut subs <Vec<str>> vec_new<str>;
                                                     let mut idx <i32> 1;
@@ -900,7 +900,7 @@ fn inlines_to_json <(Vec<Inline>)->str> (v):
     let mut sb <StringBuilder> string_builder_new;
     set sb sb_append sb "[";
     let n <i32> get v "len";
-    let v_data <i32> get v "data";
+    let v_data <i32> mem_ptr_addr get v "data";
     let mut i <i32> 0;
     while lt i n:
         do:
@@ -930,7 +930,7 @@ fn inlines_to_json <(Vec<Inline>)->str> (v):
                     set sb sb_append sb "\",\"subs\":[";
                     let subs <Vec<str>> get g "subs";
                     let m <i32> get subs "len";
-                    let subs_data <i32> get subs "data";
+                    let subs_data <i32> mem_ptr_addr get subs "data";
                     let mut j <i32> 0;
                     while lt j m:
                         do:
@@ -1020,7 +1020,7 @@ fn nodes_to_json <(Vec<Node>)->str> (nodes):
     let mut sb <StringBuilder> string_builder_new;
     set sb sb_append sb "[";
     let n <i32> get nodes "len";
-    let nodes_data <i32> get nodes "data";
+    let nodes_data <i32> mem_ptr_addr get nodes "data";
     let mut i <i32> 0;
     while lt i n:
         do:

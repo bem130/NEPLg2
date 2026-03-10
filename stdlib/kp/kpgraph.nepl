@@ -32,7 +32,7 @@
 //:     let mat <i32> get g "mat";
 //:     let dist <Vec<i32>> dense_graph_bfs_dist_raw n mat 0;
 //:
-//:     let data <i32> get dist "data";
+//:     let data <i32> mem_ptr_addr get dist "data";
 //:     let mut w <Writer> unwrap_ok writer_new;
 //:     let mut i <i32> 0;
 //:     while lt i n:

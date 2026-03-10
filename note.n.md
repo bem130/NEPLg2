@@ -9217,3 +9217,30 @@
   - `dist/doc/stdlib/alloc/diag/diag.html` などを確認し、目次タイトルが "Contents" になり、`alloc/collections` や `core/traits` などのディレクトリ単位で階層化されていることを確認。
 - [状況/じょうきょう]:
   - 標準ライブラリのドキュメントが、チュートリアルと同等の整理された構造で閲覧可能になった。
+
+# 2026-03-10 作業メモ (doctest main 追従後の collections / nm / fs 整合性修正)
+
+- [目的/もくてき]:
+  - stdlib doctest に `fn main <()*>i32>` を[明示/めいじ]したあとに[露出/ろしゅつ]した、collections / kp / nm / fs [側/がわ]の[整合性/せいごうせい][崩/くず]れを[根本/こんぽん]から[直/なお]す。
+  - とくに `Vec.data` の `MemPtr` 化に[追従/ついじゅう]していない[箇所/かしょ]と、`stack_free` の impure / pure [不一致/ふいっち]を[先/さき]に[解消/かいしょう]する。
+- [根本原因/こんぽんげんいん]:
+  - `Vec<.T>.data` を `MemPtr<.T>` に[移行/いこう]したあとも、doctest や一部の nm / fs [実装/じっそう]が raw `i32` [前提/ぜんてい]の `get ... "data"` を[残/のこ]していた。
+  - `stack_free` は `dealloc_ptr` を[呼/よ]ぶのに pure [署名/しょめい]のままだったため、doctest を[通/とお]す[過程/かてい]で impure API [整合性/せいごうせい]の[破綻/はたん]が[表面化/ひょうめんか]した。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/stack.nepl`
+    - `stack_free` を `fn stack_free <.T> <(Stack<.T>)*>()>` に[修正/しゅうせい]し、`dealloc_ptr` を[呼/よ]ぶ[実体/じったい]と[署名/しょめい]を[一致/いっち]させた。
+    - `uwok dealloc_ptr ...` の[行末/ぎょうまつ] `;` を[外/はず]し、[式/しき]として[素直/すなお]に[消費/しょうひ]する[形/かたち]へ[揃/そろ]えた。
+  - `stdlib/kp/kpgraph.nepl`
+    - doctest の `dist.data` [参照/さんしょう]を `mem_ptr_addr get dist "data"` へ[修正/しゅうせい]した。
+  - `stdlib/std/fs.nepl`
+    - `Vec<u8>` の[内部/ないぶ][領域/りょういき]を raw `i32` として[読/よ]んでいた[箇所/かしょ]を `mem_ptr_addr buf.data` へ[修正/しゅうせい]した。
+  - `stdlib/nm/parser.nepl` / `stdlib/nm/html_gen.nepl`
+    - `Vec<...>.data` を raw `i32` [前提/ぜんてい]で[読/よ]んでいた[箇所/かしょ]を、`mem_ptr_addr get ... "data"` へ[機械的/きかいてき]に[追従/ついじゅう]させた。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/stack.nepl --no-tree -o /tmp/tests-stack-doctest-v3.json -j 15`
+    - [状況/じょうきょう]: この[環境/かんきょう]では JSON [出力/しゅつりょく]まで[時間/じかん]がかかるため、focused [実行/じっこう]の[完了/かんりょう][確認/かくにん]を[継続中/けいぞくちゅう]。
+- [状況/じょうきょう]:
+  - ここでの[修正/しゅうせい]は、doctest を[通/とお]すための[場当/ばあ]たり[対応/たいおう]ではなく、`Vec.data` の `MemPtr` 化と impure [署名/しょめい]の[整合性/せいごうせい]を[回復/かいふく]するもの。
+  - 次は `nodesrc` [側/がわ]の doctest focused [実行/じっこう][経路/けいろ]を[安定化/あんていか]し、既存 stdlib doctest を[順次/じゅんじ][通過/つうか]させる。

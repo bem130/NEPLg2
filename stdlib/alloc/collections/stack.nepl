@@ -551,14 +551,14 @@ fn stack_clear <.T> <(Stack<.T>)->Stack<.T>> (stk):
 //:     stack_free<i32> st;
 //:     0
 //: ```
-fn stack_free <.T> <(Stack<.T>)->()> (stk):
+fn stack_free <.T> <(Stack<.T>)*>()> (stk):
     let hdr <MemPtr<u8>> get stk "hdr"
     let cap_ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr hdr 4
     let data_ptr_ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr hdr 8
     let cap <i32> load_i32 mem_ptr_addr cap_ptr
     let data <MemPtr<.T>> mem_ptr_wrap load_i32 mem_ptr_addr data_ptr_ptr
-    let _ <()> uwok dealloc_ptr<.T> data mul cap size_of<.T>;
-    let _ <()> uwok dealloc_ptr<u8> hdr 12;
+    let _ <()> uwok dealloc_ptr<.T> data mul cap size_of<.T>
+    let _ <()> uwok dealloc_ptr<u8> hdr 12
 
 fn stack_pop_keep <.T> <(Stack<.T>)->Option<.T>> (stk):
     stack_pop<.T> stk

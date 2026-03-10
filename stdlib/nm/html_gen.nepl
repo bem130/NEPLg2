@@ -84,7 +84,7 @@ fn escape_html <(str)->str> (s):
 fn render_inlines <(Vec<Inline>)->str> (v):
     let mut sb <StringBuilder> string_builder_new;
     let n <i32> get v "len";
-    let v_data <i32> get v "data";
+    let v_data <i32> mem_ptr_addr get v "data";
     let mut i <i32> 0;
     while lt i n:
         do:
@@ -109,7 +109,7 @@ fn render_inlines <(Vec<Inline>)->str> (v):
                     set sb sb_append sb "</span>";
                     let subs <Vec<str>> get g "subs";
                     let m <i32> get subs "len";
-                    let subs_data <i32> get subs "data";
+                    let subs_data <i32> mem_ptr_addr get subs "data";
                     let mut j <i32> 0;
                     while lt j m:
                         do:
@@ -138,7 +138,7 @@ fn render_inlines <(Vec<Inline>)->str> (v):
 fn render_nodes <(Vec<Node>)->str> (nodes):
     let mut sb <StringBuilder> string_builder_new;
     let n <i32> get nodes "len";
-    let nodes_data <i32> get nodes "data";
+    let nodes_data <i32> mem_ptr_addr get nodes "data";
     let mut i <i32> 0;
     while lt i n:
         do:

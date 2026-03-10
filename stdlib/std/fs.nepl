@@ -379,7 +379,7 @@ fn fs_bytes_to_string <(Vec<u8>)*>str> (buf):
                             ()
                         Result::Err _:
                             ()
-                    let data <i32> buf.data;
+                    let data <i32> mem_ptr_addr buf.data;
                     let mut i <i32> 0;
                     while lt i len:
                         do:
