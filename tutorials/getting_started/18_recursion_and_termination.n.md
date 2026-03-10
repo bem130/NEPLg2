@@ -9,12 +9,14 @@ NEPLg2 でも、関数は自分自身を呼び出せます。
 `n <= 0` を停止条件にして、無限再帰を防ぎます。
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "std/test" as *
 
 fn sum_to <(i32)->i32> (n):
@@ -25,11 +27,14 @@ fn sum_to <(i32)->i32> (n):
             let prev <i32> sub n 1
             add n sum_to prev
 |
-fn main <()*>()> ():
-    assert_eq_i32 0 sum_to 0
-    assert_eq_i32 1 sum_to 1
-    assert_eq_i32 15 sum_to 5
-    test_checked "recursion with base case"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 0 sum_to 0
+        |> checks_push assert_eq_i32 1 sum_to 1
+        |> checks_push assert_eq_i32 15 sum_to 5
+    let _done <Result<(),str>> test_checked "recursion with base case";
+    checks_exit_code checks
 ```
 
 ## 条件分岐を `if:` で分けて書く
@@ -37,12 +42,14 @@ fn main <()*>()> ():
 処理が長くなる場合は `if:` 形式にすると読みやすくなります。
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "std/test" as *
 
 fn fib <(i32)->i32> (n):
@@ -56,11 +63,14 @@ fn fib <(i32)->i32> (n):
             let b <i32> fib n2
             add a b
 |
-fn main <()*>()> ():
-    assert_eq_i32 0 fib 0
-    assert_eq_i32 1 fib 1
-    assert_eq_i32 8 fib 6
-    test_checked "recursive if-colon form"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 0 fib 0
+        |> checks_push assert_eq_i32 1 fib 1
+        |> checks_push assert_eq_i32 8 fib 6
+    let _done <Result<(),str>> test_checked "recursive if-colon form";
+    checks_exit_code checks
 ```
 
 ## 実装上の注意

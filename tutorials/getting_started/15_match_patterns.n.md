@@ -6,12 +6,14 @@
 ## Option を `match` で処理する
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "core/option" as *
+#import "core/result" as *
 #import "std/test" as *
 
 fn describe_opt <(Option<i32>)->i32> (v):
@@ -21,15 +23,19 @@ fn describe_opt <(Option<i32>)->i32> (v):
         Option::None:
             -1
 
-fn main <()*> ()> ():
-    assert_eq_i32 42 describe_opt some<i32> 42
-    assert_eq_i32 -1 describe_opt none<i32>
-    test_checked "match option"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 42 describe_opt some<i32> 42
+        |> checks_push assert_eq_i32 -1 describe_opt none<i32>
+    let _done <Result<(),str>> test_checked "match option";
+    checks_exit_code checks
 ```
 
 ## Result を `match` で処理する
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
@@ -45,8 +51,11 @@ fn result_code <(Result<i32,str>)->i32> (r):
         Result::Err e:
             0
 
-fn main <()*> ()> ():
-    assert_eq_i32 7 result_code Result::Ok 7
-    assert_eq_i32 0 result_code Result::Err "ng"
-    test_checked "match result"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 7 result_code Result::Ok 7
+        |> checks_push assert_eq_i32 0 result_code Result::Err "ng"
+    let _done <Result<(),str>> test_checked "match result";
+    checks_exit_code checks
 ```

@@ -10295,3 +10295,26 @@
   - `node nodesrc/run_doctest.js -i stdlib/tests/hash.n.md -n 1` -> pass
   - `node nodesrc/tests.js -i tutorials/getting_started/19_pipe_operator.n.md -i tutorials/getting_started/20_generics_basics.n.md -i tutorials/getting_started/21_trait_bounds_basics.n.md -i stdlib/tests/hash.n.md --no-stdlib --no-tree -o /tmp/tests-safe-result-batch5.json -j 4`
     - [結果/けっか]: `7/7 pass`
+
+# 2026-03-10 作業メモ (`match` / namespace / recursion tutorial の safe `Result` 化)
+
+- [目的/もくてき]:
+  - `15_match_patterns`, `17_namespace_and_alias`, `18_recursion_and_termination` を、[現行/げんこう]の safe `Result` [流儀/りゅうぎ]へ[揃/そろ]える。
+  - `match` / `::` / [再帰/さいき]という[言語/げんご][中心/ちゅうしん]の chapter に unit-return test が[残/のこ]らないようにする。
+- [根本原因/こんぽんげんいん]:
+  - 3 [章/しょう]とも `fn main <()*>()> ():` と `assert_*` [直列/ちょくれつ][実行/じっこう]の[旧流儀/きゅうりゅうぎ]が[残/のこ]っていた。
+  - reboot [後/ご]の `std/test` は `Result<(),str>` [中心/ちゅうしん]に[再設計/さいせっけい]されているため、ここが[旧来/きゅうらい]のままだと tutorial [全体/ぜんたい]で[流儀/りゅうぎ]が[揺/ゆ]れる。
+- [変更/へんこう]:
+  - `tutorials/getting_started/15_match_patterns.n.md`
+    - `Option` / `Result` の `match` 例を `ret: 0` + `checks_exit_code` [前提/ぜんてい]へ[変更/へんこう]した。
+  - `tutorials/getting_started/17_namespace_and_alias.n.md`
+    - alias [経由/けいゆ]の[関数呼/かんすうよ]び[出/だ]しと `Option::Some` / `Option::None` 例を safe `Result` [流儀/りゅうぎ]へ[変更/へんこう]した。
+  - `tutorials/getting_started/18_recursion_and_termination.n.md`
+    - `sum_to` / `fib` の[再帰/さいき]例を `ret: 0` + `checks_exit_code` [前提/ぜんてい]へ[変更/へんこう]した。
+- [設計/せっけい][判断/はんだん]:
+  - これらの chapter は stdout [比較/ひかく]を[伴/ともな]わないため、`checks_print_report` は[入/い]れず、[最小限/さいしょうげん]の safe `Result` だけを[適用/てきよう]した。
+  - tutorial [本文/ほんぶん]の[主題/しゅだい]は[構文/こうぶん]なので、test helper [側/がわ]の[記述量/きじゅつりょう]は[必要最低限/ひつようさいていげん]に[留/とど]めた。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/18_recursion_and_termination.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i tutorials/getting_started/15_match_patterns.n.md -i tutorials/getting_started/17_namespace_and_alias.n.md -i tutorials/getting_started/18_recursion_and_termination.n.md --no-stdlib --no-tree -o /tmp/tests-safe-result-batch4.json -j 4`
+    - [結果/けっか]: `6/6 pass`
