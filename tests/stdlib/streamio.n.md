@@ -67,6 +67,49 @@ fn main <()*>i32> ():
     0
 ```
 
+## stream_writer_text_and_i32
+
+neplg2:test
+stdout: "sum=42\n"
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/streamio" as *
+#import "core/result" as *
+
+fn main <()*>i32> ():
+    let mut w <StreamWriter> unwrap_ok stream_writer_new;
+    set w stream_writer_write_str w "sum=";
+    set w stream_writer_write_i32_ln w 42;
+    set w stream_writer_flush w;
+    stream_writer_free w;
+    0
+```
+
+## stream_writer_space_and_i64
+
+neplg2:test
+stdout: "1 2\n"
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/streamio" as *
+#import "core/cast" as *
+
+fn main <()*>i32> ():
+    let mut w <StreamWriter> unwrap_ok stream_writer_new;
+    set w stream_writer_write_i32 w 1;
+    set w stream_writer_write_space w;
+    set w stream_writer_write_i64_ln w <i64> cast 2;
+    set w stream_writer_flush w;
+    stream_writer_free w;
+    0
+```
+
 ## stdin_binary_reader_to_stdout
 
 neplg2:test

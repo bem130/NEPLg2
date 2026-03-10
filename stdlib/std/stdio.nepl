@@ -142,39 +142,74 @@ fn fd_read <(i32,i32,i32,i32)*>i32> (_fd,iovs,iovs_len,nread_ptr):
 //: ### [目的/もくてき]
 //: - `std/streamio` が binary write を `str` [変換/へんかん]なしで[実行/じっこう]できるようにします。
 //:
+//: ### [関連/かんれん]
+//: - [所有権/しょゆうけん]を[移/うつ]さない byte span [出力/しゅつりょく]は `stdio_write_mem` を[使/つか]います。
+//:
 //: ### [実装/じっそう]
-//: - `ByteBuf` の pointer/length をそのまま 1 [要素/ようそ]の iovec に[載/の]せ、`fd_write` を 1 [回/かい][呼/よ]びます。
+//: - `ByteBuf` の pointer/length を `stdio_write_mem` へ[渡/わた]し、partial write を[吸収/きゅうしゅう]しながら stdout へ[出力/しゅつりょく]します。
 //:
 //: ### [注意/ちゅうい]
 //: - vector [自体/じたい]の[所有権/しょゆうけん]や[確保領域/かくほりょういき]は[呼/よ]び[出/だ]し[側/がわ]が[管理/かんり]します。
-//: - `std/stdio` の[既存/きそん] `print` と[同様/どうよう]に、[部分/ぶぶん][書/か]き[込/こ]みの[再試行/さいしこう]や[詳細/しょうさい] error [報告/ほうこく]はまだ[行/おこな]いません。
+//: - [詳細/しょうさい] error [報告/ほうこく]はまだ[行/おこな]いません。
 //: - [失敗/しっぱい]しても unit を[返/かえ]して[打/う]ち[切/き]ります。error を[利用者/りようしゃ]へ[返/かえ]すのは `std/stdio` [自体/じたい]の Result [化/か]と[同時/どうじ]に[整理/せいり]する[予定/よてい]です。
 //:
 //: ### [計算量/けいさんりょう]
 //: - [書/か]き[込/こ]み byte [数/すう]を n として O(n) です。
+fn stdio_write_mem <(MemPtr<u8>,i32)*>()> (data, data_len):
+    let data_ptr <i32> mem_ptr_addr data;
+    if:
+        le data_len 0
+        then:
+            ()
+        else:
+            match std_alloc 8:
+                Result::Err _:
+                    ()
+                Result::Ok iov:
+                    match std_alloc 4:
+                        Result::Err _:
+                            std_free iov 8;
+                            ()
+                        Result::Ok nwritten:
+                            let mut off <i32> 0;
+                            let mut done <i32> 0;
+                            while eq done 0:
+                                do:
+                                    if:
+                                        ge off data_len
+                                        then:
+                                            set done 1;
+                                            ()
+                                        else:
+                                            store_i32 iov add data_ptr off;
+                                            store_i32 add iov 4 sub data_len off;
+                                            store_i32 nwritten 0;
+                                            let errno <i32> fd_write 1 iov 1 nwritten;
+                                            if:
+                                                ne errno 0
+                                                then:
+                                                    set done 1;
+                                                    ()
+                                                else:
+                                                    let n <i32> load_i32 nwritten;
+                                                    if:
+                                                        eq n 0
+                                                        then:
+                                                            set done 1;
+                                                            ()
+                                                        else:
+                                                            set off add off n;
+                                                            ();
+                            std_free nwritten 4;
+                            std_free iov 8;
+                            ()
+
 fn stdio_write_bytes <(ByteBuf)*>()> (bytes):
     let data <MemPtr<u8>> get bytes "ptr";
     let data_len <i32> get bytes "len";
-    let data_ptr <i32> mem_ptr_addr data;
-    match std_alloc 8:
-        Result::Err _:
-            io_bytebuf_free bytes;
-            ()
-        Result::Ok iov:
-            match std_alloc 4:
-                Result::Err _:
-                    std_free iov 8;
-                    io_bytebuf_free bytes;
-                    ()
-                Result::Ok nwritten:
-                    store_i32 iov data_ptr;
-                    store_i32 add iov 4 data_len;
-                    store_i32 nwritten 0;
-                    let _errno <i32> fd_write 1 iov 1 nwritten;
-                    std_free nwritten 4;
-                    std_free iov 8;
-                    io_bytebuf_free bytes;
-                    ()
+    stdio_write_mem data data_len;
+    io_bytebuf_free bytes;
+    ()
 
 //: ## stdio_read_all_bytes
 //: stdin の[残/のこ]りを `ByteBuf` として[読/よ]み[込/こ]む
@@ -199,7 +234,7 @@ fn stdio_read_all_bytes <()*>ByteBuf> ():
 //: - s をそのまま stdout に書き込みます。
 //:
 //: 実装(アルゴリズム):
-//: - iovec を 1 要素で作り、fd_write を呼びます。
+//: - `stdio_write_mem` を[使/つか]い、partial write を[吸収/きゅうしゅう]しながら stdout へ[書/か]き[出/だ]します。
 //:
 //: 注意(重要):
 //: - エラーは無視します。
@@ -225,22 +260,7 @@ fn stdio_read_all_bytes <()*>ByteBuf> ():
 //:     print "sample";
 //: ```
 fn noshadow print <(str)*>()> (s):
-    match std_alloc 8:
-        Result::Err _:
-            ()
-        Result::Ok iov:
-            match std_alloc 4:
-                Result::Err _:
-                    std_free iov 8;
-                    ()
-                Result::Ok nwritten:
-                    store_i32 iov add s 4;
-                    store_i32 add iov 4 load_i32 s;
-                    store_i32 nwritten 0;
-                    let _errno <i32> fd_write 1 iov 1 nwritten;
-                    std_free nwritten 4;
-                    std_free iov 8;
-                    ()
+    stdio_write_mem string_data_ptr s load_i32 s
 
 //: read_all: 標準入力を読み込む（固定長）
 //:

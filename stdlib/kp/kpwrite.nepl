@@ -2,11 +2,11 @@
 //: [競技/きょうぎ]プログラミング[向/む]けの[高速/こうそく][出力/しゅつりょく] helper [群/ぐん]
 //:
 //: ### [目的/もくてき]
-//: - `Writer` を[通/とお]して `std/stdio` への[書/か]き[込/こ]みを[一時/いちじ]バッファに[集約/しゅうやく]し、`print` / `println` を[多用/たよう]するより[少/すく]ない syscall で[出力/しゅつりょく]できるようにします。
-//: - `kp` の helper ですが、[将来/しょうらい] `std/streamio` に[昇格/しょうかく]することを[想定/そうてい]して、`Writer` の[所有権/しょゆうけん]と[解放責任/かいほうせきにん]が[分/わ]かる[形/かたち]で[保守/ほしゅ]します。
+//: - `Writer` を[通/とお]して stdout buffering を[簡潔/かんけつ]に[使/つか]えるようにします。
+//: - [中核/ちゅうかく]の buffer [所有/しょゆう]・flush・text/[数値/すうち][出力/しゅつりょく]は `std/streamio` へ[移/うつ]し、`kp` [側/がわ]には[競技/きょうぎ][向/む]けの[名前/なまえ]だけを[残/のこ]します。
 //:
 //: ### [注意/ちゅうい]
-//: - `Writer` は[内部/ないぶ]で[確保/かくほ]した[出力/しゅつりょく]バッファと header [領域/りょういき]を[所有/しょゆう]するため、`Copy` / `Clone` は[実装/じっそう]しません。
+//: - `Writer` は `std/streamio.StreamWriter` を 1 [個/こ][保持/ほじ]する薄い wrapper です。
 //: - [使/つか]い[終/お]わったら `writer_free` で[解放/かいほう]してください。`writer_flush` は[出力/しゅつりょく]だけを[行/おこな]い、[所有権/しょゆうけん]は[解放/かいほう]しません。
 //:
 //: ### [計算量/けいさんりょう]
@@ -26,673 +26,81 @@
 #indent 4
 #target std
 
-#import "core/mem" as *
-#import "core/math" as *
-#import "core/cast" as *
 #import "core/result" as *
-#import "std/stdio" as *
+#import "std/streamio" as *
 
 //: ## Writer
-//: [後入先出/あといれさきだし]ではなく[追記型/ついきがた]で[出力/しゅつりょく]を[蓄積/ちくせき]する writer
+//: `std/streamio.StreamWriter` を[競技/きょうぎ][向/む]け API [名/めい]で[包/つつ]む wrapper
 //:
 //: ### [目的/もくてき]
-//: - [呼/よ]び[出/だ]し[側/がわ]からは[軽量/けいりょう]な handle として[見/み]せつつ、[内部/ないぶ]では header と[可変/かへん]バッファを[保持/ほじ]します。
+//: - 既存の `kpwrite` [利用/りよう]コードを[壊/こわ]さずに、buffered writer [本体/ほんたい]を `std` へ[移管/いかん]します。
 //:
 //: ### [注意/ちゅうい]
-//: - `header` は writer [内部状態/ないぶじょうたい]の[先頭/せんとう]を[指/さ]す `MemPtr<u8>` です。
-//: - この型は[所有権/しょゆうけん]を[持/も]つため `Copy` / `Clone` にしてはいけません。
+//: - [内部/ないぶ]の `inner` は[所有権/しょゆうけん]を[持/も]つため `Copy` / `Clone` は[実装/じっそう]しません。
 struct Writer:
-    header <MemPtr<u8>>
-    marker <(i32)->i32>
+    inner <StreamWriter>
 
-struct WriterBuf:
-    ptr <MemPtr<u8>>
-    cap <i32>
-
-enum WriterHeaderField:
-    BufPtr
-    Cap
-    WriteLen
-    IovPtr
-    NwPtr
-
-fn writer_noncopy_marker <(i32)->i32> (x):
-    x
-
-fn writer_wrap <(MemPtr<u8>)->Writer> (raw):
-    Writer raw @writer_noncopy_marker
-
-fn writer_header_region <(MemPtr<u8>)->RegionToken<u8>> (w_mem):
-    region_new w_mem 20
-
-fn writer_header_off <(WriterHeaderField)->i32> (field):
-    match field:
-        WriterHeaderField::BufPtr:
-            0
-        WriterHeaderField::Cap:
-            4
-        WriterHeaderField::WriteLen:
-            8
-        WriterHeaderField::IovPtr:
-            12
-        WriterHeaderField::NwPtr:
-            16
-
-fn writer_header_ptr <(MemPtr<u8>,WriterHeaderField)->Result<MemPtr<i32>,str>> (w_mem, field):
-    region_ptr_at<u8,i32> writer_header_region w_mem writer_header_off field
-
-fn writer_load_header <(MemPtr<u8>,WriterHeaderField)->Result<i32,str>> (w_mem, field):
-    match writer_header_ptr w_mem field:
-        Result::Err _e:
-            Result<i32,str>::Err "kpwrite.writer_load_header failed"
-        Result::Ok p:
-            match load_i32 p:
-                Option::Some v:
-                    Result<i32,str>::Ok v
-                Option::None:
-                    Result<i32,str>::Err "kpwrite.writer_load_header failed"
-
-fn writer_store_header <(MemPtr<u8>,WriterHeaderField,i32)->Result<(),str>> (w_mem, field, v):
-    match writer_header_ptr w_mem field:
-        Result::Err _e:
-            Result<(),str>::Err "kpwrite.writer_store_header failed"
-        Result::Ok p:
-            match store_i32 p v:
-                Result::Ok _:
-                    Result<(),str>::Ok ()
-                Result::Err _e:
-                    Result<(),str>::Err "kpwrite.writer_store_header failed"
-
-fn writer_load_header_ptr <(MemPtr<u8>,WriterHeaderField)->Result<MemPtr<u8>,str>> (w_mem, field):
-    match writer_load_header w_mem field:
-        Result::Ok v:
-            Result<MemPtr<u8>,str>::Ok mem_ptr_wrap v
-        Result::Err e:
-            Result<MemPtr<u8>,str>::Err e
-
-//: writer_try_free: 解放失敗を無視して領域を解放する内部補助
-//:
-//: 目的:
-//: - 初期化失敗時の巻き戻しで、解放失敗を追加エラーにせず処理を継続します。
-//:
-//: 注意:
-//: - ptr<=0 は何もしません。
-//: - この関数は内部補助用途です。
-fn writer_try_free_ptr <.T> <(MemPtr<.T>,i32)*>()> (ptr, size):
-    match dealloc_ptr<.T> ptr size:
-        Result::Ok _:
-            ()
-        Result::Err _e:
-            ()
-
-//: writer_alloc_buf: writer 用バッファを段階的に確保する内部補助
-//:
-//: 目的:
-//: - 4096 -> 1024 -> 256 の順で確保を試行し、最初に成功した構成を返します。
-//:
-//: 注意:
-//: - すべて失敗した場合は `Result::Err` を返します。
-fn writer_alloc_buf <()*>Result<WriterBuf,str>> ():
-    match alloc_ptr<u8> 4096:
-        Result::Ok p0:
-            Result<WriterBuf,str>::Ok WriterBuf p0 4096
-        Result::Err _e0:
-            match alloc_ptr<u8> 1024:
-                Result::Ok p1:
-                    Result<WriterBuf,str>::Ok WriterBuf p1 1024
-                Result::Err _e1:
-                    match alloc_ptr<u8> 256:
-                        Result::Ok p2:
-                            Result<WriterBuf,str>::Ok WriterBuf p2 256
-                        Result::Err _e2:
-                            Result<WriterBuf,str>::Err "kpwrite.writer_new buffer alloc failed"
-
-fn writer_new_header <()*>Result<MemPtr<u8>,str>> ():
-    match writer_alloc_buf:
-        Result::Err e:
-            Result<MemPtr<u8>,str>::Err e
-        Result::Ok b:
-            let buf <MemPtr<u8>> get b "ptr";
-            let cap <i32> get b "cap";
-            match alloc_ptr<u8> 8:
-                Result::Err _e:
-                    writer_try_free_ptr<u8> buf cap;
-                    Result<MemPtr<u8>,str>::Err "kpwrite.writer_new iov alloc failed"
-                Result::Ok iov:
-                    match alloc_ptr<u8> 4:
-                        Result::Err _e:
-                            writer_try_free_ptr<u8> iov 8;
-                            writer_try_free_ptr<u8> buf cap;
-                            Result<MemPtr<u8>,str>::Err "kpwrite.writer_new nw alloc failed"
-                        Result::Ok nw:
-                            match alloc_ptr<u8> 20:
-                                Result::Err _e:
-                                    writer_try_free_ptr<u8> nw 4;
-                                    writer_try_free_ptr<u8> iov 8;
-                                    writer_try_free_ptr<u8> buf cap;
-                                    Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header alloc failed"
-                                Result::Ok w:
-                                    match writer_store_header w WriterHeaderField::BufPtr mem_ptr_addr buf:
-                                        Result::Err _e:
-                                            writer_try_free_ptr<u8> w 20;
-                                            writer_try_free_ptr<u8> nw 4;
-                                            writer_try_free_ptr<u8> iov 8;
-                                            writer_try_free_ptr<u8> buf cap;
-                                            Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
-                                        Result::Ok _:
-                                            match writer_store_header w WriterHeaderField::Cap cap:
-                                                Result::Err _e:
-                                                    writer_try_free_ptr<u8> w 20;
-                                                    writer_try_free_ptr<u8> nw 4;
-                                                    writer_try_free_ptr<u8> iov 8;
-                                                    writer_try_free_ptr<u8> buf cap;
-                                                    Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
-                                                Result::Ok _:
-                                                    match writer_store_header w WriterHeaderField::WriteLen 0:
-                                                        Result::Err _e:
-                                                            writer_try_free_ptr<u8> w 20;
-                                                            writer_try_free_ptr<u8> nw 4;
-                                                            writer_try_free_ptr<u8> iov 8;
-                                                            writer_try_free_ptr<u8> buf cap;
-                                                            Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
-                                                        Result::Ok _:
-                                                            match writer_store_header w WriterHeaderField::IovPtr mem_ptr_addr iov:
-                                                                Result::Err _e:
-                                                                    writer_try_free_ptr<u8> w 20;
-                                                                    writer_try_free_ptr<u8> nw 4;
-                                                                    writer_try_free_ptr<u8> iov 8;
-                                                                    writer_try_free_ptr<u8> buf cap;
-                                                                    Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
-                                                                Result::Ok _:
-                                                                    match writer_store_header w WriterHeaderField::NwPtr mem_ptr_addr nw:
-                                                                        Result::Err _e:
-                                                                            writer_try_free_ptr<u8> w 20;
-                                                                            writer_try_free_ptr<u8> nw 4;
-                                                                            writer_try_free_ptr<u8> iov 8;
-                                                                            writer_try_free_ptr<u8> buf cap;
-                                                                            Result<MemPtr<u8>,str>::Err "kpwrite.writer_new header init failed"
-                                                                        Result::Ok _:
-                                                                            Result<MemPtr<u8>,str>::Ok w
+fn writer_wrap <(StreamWriter)->Writer> (inner):
+    Writer inner
 
 fn writer_new <()*>Result<Writer,str>> ():
-    let raw_res <Result<MemPtr<u8>,str>> writer_new_header;
-    match raw_res:
-        Result::Ok raw:
-            Result<Writer,str>::Ok writer_wrap raw
+    match stream_writer_new:
+        Result::Ok inner:
+            Result<Writer,str>::Ok writer_wrap inner
         Result::Err e:
             Result<Writer,str>::Err e
 
-//: writer_free: writer の確保領域を解放する
-//:
-//: 注意:
-//: - 未 flush のデータは捨てられます。必要なら先に writer_flush を呼んでください。
-//:
-//: 計算量:
-//: - O(1)
-fn writer_free_handle <(Writer)*>()> (w):
-    let w_mem <MemPtr<u8>> get w "header";
-    let mut can_free_parts <bool> true;
-    let mut buf <MemPtr<u8>> mem_ptr_wrap 0;
-    let mut cap <i32> 0;
-    let mut iov <MemPtr<u8>> mem_ptr_wrap 0;
-    let mut nw  <MemPtr<u8>> mem_ptr_wrap 0;
+fn writer_free <(Writer)*>()> (w):
+    let inner <StreamWriter> get w "inner";
+    stream_writer_free inner
 
-    match writer_load_header_ptr w_mem WriterHeaderField::BufPtr:
-        Result::Ok v:
-            set buf v;
-            ()
-        Result::Err _e:
-            set can_free_parts false;
-            ();
-    match writer_load_header w_mem WriterHeaderField::Cap:
-        Result::Ok v:
-            set cap v;
-            ()
-        Result::Err _e:
-            set can_free_parts false;
-            ();
-    match writer_load_header_ptr w_mem WriterHeaderField::IovPtr:
-        Result::Ok v:
-            set iov v;
-            ()
-        Result::Err _e:
-            set can_free_parts false;
-            ();
-    match writer_load_header_ptr w_mem WriterHeaderField::NwPtr:
-        Result::Ok v:
-            set nw v;
-            ()
-        Result::Err _e:
-            set can_free_parts false;
-            ();
+fn writer_flush <(Writer)*>Writer> (w):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_flush inner
 
-    if:
-        can_free_parts
-        then:
-            writer_try_free_ptr<u8> buf cap;
-            writer_try_free_ptr<u8> iov 8;
-            writer_try_free_ptr<u8> nw 4
-        else:
-            ()
-    match dealloc_ptr<u8> w_mem 20:
-        Result::Ok _:
-            ()
-        Result::Err _e:
-            ()
-    ()
+fn writer_ensure <(Writer,i32)*>Writer> (w, need):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_ensure inner need
 
-//: writer_flush: バッファ内容を stdout に書き出す
-//:
-//: 実装:
-//: - fd_write は部分書き込みの可能性があるので off を進めるループにします。
-//: - 競プロ用途として、エラー時は打ち切って len=0 にします（簡易）。
-//:
-//: 計算量:
-//: - O(len)
-fn writer_flush_handle <(Writer)*>Writer> (w):
-    let w_mem <MemPtr<u8>> get w "header";
-    match writer_load_header w_mem WriterHeaderField::BufPtr:
-        Result::Err _e:
-            w
-        Result::Ok buf:
-            match writer_load_header w_mem WriterHeaderField::Cap:
-                Result::Err _e:
-                    w
-                Result::Ok cap:
-                    match writer_load_header w_mem WriterHeaderField::WriteLen:
-                        Result::Err _e:
-                            w
-                        Result::Ok write_len:
-                            if:
-                                or eq write_len 0 le cap 0
-                                then:
-                                    w
-                                else:
-                                    match writer_load_header w_mem WriterHeaderField::IovPtr:
-                                        Result::Err _e:
-                                            w
-                                        Result::Ok iov:
-                                            match writer_load_header w_mem WriterHeaderField::NwPtr:
-                                                Result::Err _e:
-                                                    w
-                                                Result::Ok nw:
+fn writer_put_u8 <(Writer,i32)*>Writer> (w, b):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_put_u8 inner b
 
-                                                    let mut off <i32> 0;
-                                                    let mut done <i32> 0;
+fn writer_writeln <(Writer)*>Writer> (w):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_writeln inner
 
-                                                    while eq done 0:
-                                                        if:
-                                                            ge off write_len
-                                                            then:
-                                                                set done 1;
-                                                                ()
-                                                            else:
-                                                                store_i32 iov add buf off;
-                                                                store_i32 add iov 4 sub write_len off;
-                                                                store_i32 nw 0;
+fn writer_write_str <(Writer,str)*>Writer> (w, s):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_str inner s
 
-                                                                let errno <i32> fd_write 1 iov 1 nw;
-                                                                if:
-                                                                    ne errno 0
-                                                                    then:
-                                                                        set done 1;
-                                                                        ()
-                                                                    else:
-                                                                        let n <i32> load_i32 nw;
-                                                                        if:
-                                                                            eq n 0
-                                                                            then:
-                                                                                set done 1;
-                                                                                ()
-                                                                            else:
-                                                                                set off add off n;
-                                                                                ();
+fn writer_write_i32 <(Writer,i32)*>Writer> (w, v):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_i32 inner v
 
-                                                    match writer_store_header w_mem WriterHeaderField::WriteLen 0:
-                                                        Result::Ok _:
-                                                            ()
-                                                        Result::Err _e:
-                                                            ();
-                                                    w
+fn writer_write_u64 <(Writer,i64)*>Writer> (w, v):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_u64 inner v
 
-//: writer_ensure: need バイト分の空きを確保する（足りなければ flush）
-//:
-//: 注意:
-//: - need が cap を超えるケースは呼び出し側で避けてください（この版は最小実装）。
-fn writer_ensure_handle <(Writer,i32)*>Writer> (w, need):
-    let w_mem <MemPtr<u8>> get w "header";
-    match writer_load_header w_mem WriterHeaderField::Cap:
-        Result::Err _e:
-            w
-        Result::Ok cap:
-            match writer_load_header w_mem WriterHeaderField::WriteLen:
-                Result::Err _e:
-                    w
-                Result::Ok write_len:
-                    let required <i32> add write_len need;
-                    if:
-                        le required cap
-                        then:
-                            w
-                        else:
-                            writer_flush_handle w
+fn writer_write_i64 <(Writer,i64)*>Writer> (w, v):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_i64 inner v
 
-//: writer_put_u8: 1 バイト追記する
-//:
-//: 計算量:
-//: - O(1)（flush が入ると O(len)）
-fn writer_put_u8_handle <(Writer,i32)*>Writer> (w, b):
-    let w_mem <MemPtr<u8>> get w "header";
-    match writer_load_header w_mem WriterHeaderField::Cap:
-        Result::Err _e:
-            w
-        Result::Ok cap:
-            if:
-                le cap 0
-                then:
-                    w
-                else:
-                    let w1 <Writer> writer_ensure_handle w 1;
-                    match writer_load_header w_mem WriterHeaderField::BufPtr:
-                        Result::Err _e:
-                            w1
-                        Result::Ok buf:
-                            match writer_load_header w_mem WriterHeaderField::WriteLen:
-                                Result::Err _e:
-                                    w1
-                                Result::Ok write_len:
-                                    store_u8 add buf write_len b;
-                                    match writer_store_header w_mem WriterHeaderField::WriteLen add write_len 1:
-                                        Result::Ok _:
-                                            ()
-                                        Result::Err _e:
-                                            ();
-                                    w1
+fn writer_write_f64_fixed <(Writer,f64,i32)*>Writer> (w, v, precision):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_f64_fixed inner v precision
 
-//: writer_writeln: 改行 '\n' を出力する
-fn writer_writeln_handle <(Writer)*>Writer> (w):
-    writer_put_u8_handle w 10
+fn writer_write_f64 <(Writer,f64)*>Writer> (w, v):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_f64 inner v
 
-//: writer_write_str: str を追記する
-//:
-//: 注意:
-//: - str は [len][bytes] 形式なので、bytes 先頭は add s 4 です。
-fn writer_write_str_handle <(Writer,str)*>Writer> (w, s):
-    let w_mem <MemPtr<u8>> get w "header";
-    let n <i32> load_i32 s;
-    match writer_load_header w_mem WriterHeaderField::Cap:
-        Result::Err _e:
-            w
-        Result::Ok cap:
-            if:
-                or le n 0 le cap 0
-                then:
-                    w
-                else:
-                    let w1 <Writer> writer_ensure_handle w n;
+fn writer_write_f32_fixed <(Writer,f32,i32)*>Writer> (w, v, precision):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_f32_fixed inner v precision
 
-                    match writer_load_header w_mem WriterHeaderField::BufPtr:
-                        Result::Err _e:
-                            w1
-                        Result::Ok buf:
-                            match writer_load_header w_mem WriterHeaderField::WriteLen:
-                                Result::Err _e:
-                                    w1
-                                Result::Ok write_len:
-                                    let src <i32> add s 4;
-
-                                    let mut i <i32> 0;
-                                    while lt i n:
-                                        do:
-                                            let dst_off <i32> add write_len i;
-                                            let dst_ptr <i32> add buf dst_off;
-                                            let src_ptr <i32> add src i;
-                                            let ch <i32> load_u8 src_ptr;
-                                            store_u8 dst_ptr ch;
-                                            set i add i 1;
-
-                                    let new_len <i32> add write_len n;
-                                    match writer_store_header w_mem WriterHeaderField::WriteLen new_len:
-                                        Result::Ok _:
-                                            ()
-                                        Result::Err _e:
-                                            ();
-                                    w1
-
-//: writer_write_i32: i32 を 10 進で出力する（ヒープ確保なし）
-//:
-//: 実装:
-//: - INT_MIN は abs overflow するので定数文字列で処理します。
-//: - それ以外は桁数 d を数えて、バッファ末尾から埋めます（反転不要）。
-//:
-//: 計算量:
-//: - O(桁数)
-fn writer_write_i32_handle <(Writer,i32)*>Writer> (w, v):
-    let w_mem <MemPtr<u8>> get w "header";
-    if:
-        eq v -2147483648
-        then:
-            writer_write_str_handle w "-2147483648"
-        else:
-            if:
-                eq v 0
-                then:
-                    writer_put_u8_handle w 48
-                else:
-                    let mut ww <Writer> w;
-                    let mut x <i32> v;
-
-                    if:
-                        lt x 0
-                        then:
-                            set ww writer_put_u8_handle ww 45;
-                            let zero <i32> 0;
-                            set x sub zero x;
-                            ()
-                        else:
-                            ();
-
-                    let mut t <i32> x;
-                    let mut d <i32> 0;
-                    while lt 0 t:
-                        do:
-                            set d add d 1;
-                            set t div_s t 10;
-
-                    set ww writer_ensure_handle ww d;
-                    match writer_load_header w_mem WriterHeaderField::BufPtr:
-                        Result::Err _e:
-                            ww
-                        Result::Ok buf:
-                            match writer_load_header w_mem WriterHeaderField::WriteLen:
-                                Result::Err _e:
-                                    ww
-                                Result::Ok old_len:
-                                    let new_len <i32> add old_len d;
-                                    match writer_store_header w_mem WriterHeaderField::WriteLen new_len:
-                                        Result::Ok _:
-                                            ()
-                                        Result::Err _e:
-                                            ();
-
-                                    let mut n <i32> x;
-                                    let mut i <i32> 0;
-                                    let end <i32> add old_len d;
-                                    let endm1 <i32> sub end 1;
-
-                                    while lt i d:
-                                        do:
-                                            let rem <i32> mod_s n 10;
-                                            let off <i32> sub endm1 i;
-                                            let code <i32> add 48 rem;
-                                            let p <i32> add buf off;
-                                            store_u8 p code;
-                                            set n div_s n 10;
-                                            set i add i 1;
-
-                                    ww
-
-//: writer_write_u64: i64 ビット列を符号なし 10 進として出力する
-//:
-//: 目的:
-//: - `u64` 相当値を 10 進文字列で出力します。
-//:
-//: 実装:
-//: - `div_u` / `rem_u` で桁を逆順に取り出し、末尾から埋めます。
-//: - 内部表現は `i64` ですが、比較・除算・剰余は unsigned 系を使います。
-//:
-//: 注意:
-//: - 引数型は `i64` ですが、`u64` ビット列として解釈されます。
-//:
-//: 計算量:
-//: - O(桁数)
-fn writer_write_u64_handle <(Writer,i64)*>Writer> (w, v):
-    let w_mem <MemPtr<u8>> get w "header";
-    let zero <i64> cast 0;
-    let ten <i64> cast 10;
-    if:
-        eq v zero
-        then:
-            writer_put_u8_handle w 48
-        else:
-            let mut ww <Writer> w;
-            let mut t <i64> v;
-            let mut d <i32> 0;
-            while gt_u t zero:
-                do:
-                    set d add d 1;
-                    set t div_u t ten;
-
-            set ww writer_ensure_handle ww d;
-            match writer_load_header w_mem WriterHeaderField::BufPtr:
-                Result::Err _e:
-                    ww
-                Result::Ok buf:
-                    match writer_load_header w_mem WriterHeaderField::WriteLen:
-                        Result::Err _e:
-                            ww
-                        Result::Ok old_len:
-                            let new_len <i32> add old_len d;
-                            match writer_store_header w_mem WriterHeaderField::WriteLen new_len:
-                                Result::Ok _:
-                                    ()
-                                Result::Err _e:
-                                    ();
-
-                            let mut n <i64> v;
-                            let mut i <i32> 0;
-                            let end <i32> add old_len d;
-                            let endm1 <i32> sub end 1;
-                            while lt i d:
-                                do:
-                                    let rem64 <i64> rem_u n ten;
-                                    let rem <i32> cast rem64;
-                                    let off <i32> sub endm1 i;
-                                    let code <i32> add 48 rem;
-                                    let p <i32> add buf off;
-                                    store_u8 p code;
-                                    set n div_u n ten;
-                                    set i add i 1;
-
-                            ww
-
-//: writer_write_i64: i64 を符号付き 10 進で出力する
-//:
-//: 目的:
-//: - `i64` を符号付き 10 進文字列として出力します。
-//:
-//: 実装:
-//: - 負数の場合は `-` を出力し、`0 - v` を unsigned として `writer_write_u64` に渡します。
-//: - `i64::MIN` も 2 の補数のまま安全に処理できます。
-//:
-//: 計算量:
-//: - O(桁数)
-fn writer_write_i64_handle <(Writer,i64)*>Writer> (w, v):
-    let zero <i64> cast 0;
-    if:
-        lt v zero
-        then:
-            let w1 <Writer> writer_put_u8_handle w 45;
-            let abs_u <i64> sub zero v;
-            writer_write_u64_handle w1 abs_u
-        else:
-            writer_write_u64_handle w v
-
-//: writer_write_f64_fixed: f64 を固定小数点で出力する
-//:
-//: 目的:
-//: - `v` を小数点以下 `precision` 桁で出力します。
-//:
-//: 実装:
-//: - 符号、整数部、少数部を順に出力します。
-//: - 少数部は 10 倍を繰り返して 1 桁ずつ生成します。
-//:
-//: 注意:
-//: - `NaN` / `inf` は未対応です。
-//:
-//: 計算量:
-//: - O(precision + 桁数)
-fn writer_write_f64_fixed_handle <(Writer,f64,i32)*>Writer> (w, v, precision):
-    let mut x <f64> v;
-    let zero <f64> cast 0;
-    let is_neg <bool> lt x zero;
-    let mut ww <Writer> w;
-    if:
-        is_neg
-        then:
-            set ww writer_put_u8_handle ww 45;
-            let nx <f64> neg x;
-            set x nx;
-            ()
-        else:
-            ();
-
-    let int_part <i64> cast x;
-    set ww writer_write_u64_handle ww int_part;
-
-    if:
-        le precision 0
-        then:
-            ww
-        else:
-            set ww writer_put_u8_handle ww 46;
-            let int_as_f64 <f64> cast int_part;
-            let mut frac <f64> sub x int_as_f64;
-            let ten <f64> cast 10;
-            let mut i <i32> 0;
-            while lt i precision:
-                do:
-                    let frac10 <f64> mul frac ten;
-                    set frac frac10;
-                    let digit <i32> cast frac;
-                    set ww writer_put_u8_handle ww add 48 digit;
-                    let digit_f <f64> cast digit;
-                    let next_frac <f64> sub frac digit_f;
-                    set frac next_frac;
-                    set i add i 1;
-            ww
-
-//: writer_write_f64: f64 を小数点以下 6 桁で出力する
-//:
-//: 計算量:
-//: - O(桁数)
-fn writer_write_f64_handle <(Writer,f64)*>Writer> (w, v):
-    writer_write_f64_fixed_handle w v 6
-
-//: writer_write_f32_fixed: f32 を固定小数点で出力する
-//:
-//: 計算量:
-//: - O(precision + 桁数)
-fn writer_write_f32_fixed_handle <(Writer,f32,i32)*>Writer> (w, v, precision):
-    let v64 <f64> cast v;
-    writer_write_f64_fixed_handle w v64 precision
-
-//: writer_write_f32: f32 を小数点以下 6 桁で出力する
-//:
-//: 計算量:
-//: - O(桁数)
-fn writer_write_f32_handle <(Writer,f32)*>Writer> (w, v):
-    writer_write_f32_fixed_handle w v 6
+fn writer_write_f32 <(Writer,f32)*>Writer> (w, v):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_f32 inner v
 
 //: writer_write_space: 半角スペースを 1 文字出力する
 //:
@@ -700,7 +108,7 @@ fn writer_write_f32_handle <(Writer,f32)*>Writer> (w, v):
 //: - 競技プログラミングで頻出の「値を空白区切りで出力する」処理を簡潔にします。
 //:
 //: [実装/じっそう]:
-//: - `writer_put_u8` で ASCII 32 (`' '`) を 1 バイト出力します。
+//: - `std/streamio.stream_writer_write_space` を呼びます。
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
@@ -720,8 +128,9 @@ fn writer_write_f32_handle <(Writer,f32)*>Writer> (w, v):
 //:     set w writer_flush w;
 //:     writer_free w
 //: ```
-fn writer_write_space_handle <(Writer)*>Writer> (w):
-    writer_put_u8_handle w 32
+fn writer_write_space <(Writer)*>Writer> (w):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_space inner
 
 //: writer_write_i32_ln: i32 を出力して改行する
 //:
@@ -729,7 +138,7 @@ fn writer_write_space_handle <(Writer)*>Writer> (w):
 //: - `writer_write_i32` と `writer_writeln` の定型連結を 1 呼び出しで提供します。
 //:
 //: [実装/じっそう]:
-//: - 数値を出力した後、改行 `\n` を続けて出力します。
+//: - `std/streamio.stream_writer_write_i32_ln` を呼びます。
 //:
 //: [計算量/けいさんりょう]:
 //: - O(桁数)
@@ -746,9 +155,9 @@ fn writer_write_space_handle <(Writer)*>Writer> (w):
 //:     set w writer_flush w;
 //:     writer_free w
 //: ```
-fn writer_write_i32_ln_handle <(Writer,i32)*>Writer> (w, v):
-    let w1 <Writer> writer_write_i32_handle w v;
-    writer_writeln_handle w1
+fn writer_write_i32_ln <(Writer,i32)*>Writer> (w, v):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_i32_ln inner v
 
 //: writer_write_i64_ln: i64 を出力して改行する
 //:
@@ -756,7 +165,7 @@ fn writer_write_i32_ln_handle <(Writer,i32)*>Writer> (w, v):
 //: - `writer_write_i64` と `writer_writeln` をまとめ、64bit 出力の定型を簡潔にします。
 //:
 //: [実装/じっそう]:
-//: - 数値本体を 10 進で出力し、末尾に改行を付与します。
+//: - `std/streamio.stream_writer_write_i64_ln` を呼びます。
 //:
 //: [計算量/けいさんりょう]:
 //: - O(桁数)
@@ -773,70 +182,16 @@ fn writer_write_i32_ln_handle <(Writer,i32)*>Writer> (w, v):
 //:     set w writer_flush w;
 //:     writer_free w
 //: ```
-fn writer_write_i64_ln_handle <(Writer,i64)*>Writer> (w, v):
-    let w1 <Writer> writer_write_i64_handle w v;
-    writer_writeln_handle w1
+fn writer_write_i64_ln <(Writer,i64)*>Writer> (w, v):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_i64_ln inner v
 
 //: writer_write_f64_ln: f64 を出力して改行する
-fn writer_write_f64_ln_handle <(Writer,f64)*>Writer> (w, v):
-    let w1 <Writer> writer_write_f64_handle w v;
-    writer_writeln_handle w1
+fn writer_write_f64_ln <(Writer,f64)*>Writer> (w, v):
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_f64_ln inner v
 
 //: writer_write_f32_ln: f32 を出力して改行する
-fn writer_write_f32_ln_handle <(Writer,f32)*>Writer> (w, v):
-    let w1 <Writer> writer_write_f32_handle w v;
-    writer_writeln_handle w1
-
-fn writer_free <(Writer)*>()> (w):
-    writer_free_handle w
-
-fn writer_flush <(Writer)*>Writer> (w):
-    writer_flush_handle w
-
-fn writer_ensure <(Writer,i32)*>Writer> (w, need):
-    writer_ensure_handle w need
-
-fn writer_put_u8 <(Writer,i32)*>Writer> (w, b):
-    writer_put_u8_handle w b
-
-fn writer_writeln <(Writer)*>Writer> (w):
-    writer_writeln_handle w
-
-fn writer_write_str <(Writer,str)*>Writer> (w, s):
-    writer_write_str_handle w s
-
-fn writer_write_i32 <(Writer,i32)*>Writer> (w, v):
-    writer_write_i32_handle w v
-
-fn writer_write_u64 <(Writer,i64)*>Writer> (w, v):
-    writer_write_u64_handle w v
-
-fn writer_write_i64 <(Writer,i64)*>Writer> (w, v):
-    writer_write_i64_handle w v
-
-fn writer_write_f64_fixed <(Writer,f64,i32)*>Writer> (w, v, precision):
-    writer_write_f64_fixed_handle w v precision
-
-fn writer_write_f64 <(Writer,f64)*>Writer> (w, v):
-    writer_write_f64_handle w v
-
-fn writer_write_f32_fixed <(Writer,f32,i32)*>Writer> (w, v, precision):
-    writer_write_f32_fixed_handle w v precision
-
-fn writer_write_f32 <(Writer,f32)*>Writer> (w, v):
-    writer_write_f32_handle w v
-
-fn writer_write_space <(Writer)*>Writer> (w):
-    writer_write_space_handle w
-
-fn writer_write_i32_ln <(Writer,i32)*>Writer> (w, v):
-    writer_write_i32_ln_handle w v
-
-fn writer_write_i64_ln <(Writer,i64)*>Writer> (w, v):
-    writer_write_i64_ln_handle w v
-
-fn writer_write_f64_ln <(Writer,f64)*>Writer> (w, v):
-    writer_write_f64_ln_handle w v
-
 fn writer_write_f32_ln <(Writer,f32)*>Writer> (w, v):
-    writer_write_f32_ln_handle w v
+    let inner <StreamWriter> get w "inner";
+    writer_wrap stream_writer_write_f32_ln inner v

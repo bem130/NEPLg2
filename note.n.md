@@ -9490,3 +9490,43 @@
 - [状況/じょうきょう]:
   - `tests.js` と `run_doctest.js` の I/O 検証期待は揃った。
   - 今後 `stdout:` / `stderr:` を書いた doctest は、追加フラグなしでも mismatch で落ちる。
+
+# 2026-03-10 作業メモ (`kpwrite` の buffered writer core を `std/streamio` へ移管)
+
+- [目的/もくてき]:
+  - `todo.md` の「`kpwrite` の中核を `std/streamio` へ昇格させる」を進め、stdout buffering を `kp` 専用実装のまま持たない構成へ寄せる。
+  - partial write ループが `kpwrite` 側へ散らばっていた状態を解消し、`std/stdio` と `std/streamio` の責務境界を整理する。
+- [根本原因/こんぽんげんいん]:
+  - これまでの `kpwrite` は buffer 所有、header 管理、partial write 吸収、文字列/数値整形を 1 module に抱えており、`std/streamio` は stdin/stdout の最小 facade に留まっていた。
+  - そのため stdout buffering の一般化可能部分を他 module が再利用できず、`kp` 側に syscall 由来の実装詳細が残っていた。
+  - あわせて stdout への部分書き込み吸収が `print` / `stdio_write_bytes` と `kpwrite` で別経路になっており、同じ stdout 出力でも責務が分散していた。
+- [変更/へんこう]:
+  - `stdlib/std/stdio.nepl`
+    - `stdio_write_mem` を追加し、`MemPtr<u8>` と長さを受けて partial write を吸収しながら stdout へ書く共通経路を追加した。
+    - `print` と `stdio_write_bytes` はこの helper を使う形へ整理した。
+  - `stdlib/std/streamio.nepl`
+    - `StreamWriter` を追加し、buffer 所有・header 管理・flush・text/i32/i64/f32/f64 出力を `std` 側で提供するようにした。
+    - `stream_writer_new` / `stream_writer_free` / `stream_writer_flush` / `stream_writer_put_u8` / `stream_writer_write_str` / `stream_writer_write_i32` / `stream_writer_write_i64` / `stream_writer_write_f64` などを追加した。
+    - `stream_writer_flush` は `stdio_write_mem` を使うことで stdout 側の部分書き込み吸収と経路を共有するようにした。
+  - `stdlib/kp/kpwrite.nepl`
+    - `Writer` を `StreamWriter` 1 個だけを保持する薄い wrapper に置き換えた。
+    - 既存の `writer_*` API 名は維持しつつ、実体は `stream_writer_*` へ委譲する形に整理した。
+  - `tests/stdlib/streamio.n.md`
+    - `StreamWriter` を `std/streamio` から直接使う focused case を追加し、text/i32/space helper を回帰固定した。
+- [設計/せっけい][判断/はんだん]:
+  - `kpwrite` のうち「競技向けの名前」ではなく「stdout buffering という汎用機能」は `std` に置くのが reboot 方針と一致すると判断した。
+  - partial write の吸収は writer ごとに持たせず、stdout 書き出し経路の最下層である `std/stdio` に集約した。
+  - `kpwrite` の public API は既存テスト資産を維持するため残し、内部実装だけを `StreamWriter` wrapper 化した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/std/streamio.nepl -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 5` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/streamio.n.md -i stdlib/std/streamio.nepl -i stdlib/kp/kpwrite.nepl -i tests/stdlib/kp.n.md -i tests/stdlib/kp_i64.n.md --no-stdlib --no-tree -o /tmp/tests-streamio-kpwrite-kp-focus.json -j 15`
+    - [結果/けっか]: `21/21 pass`
+  - `/tmp/tests-streamio-kpwrite-kp-focus.json`
+    - [確認/かくにん]: `summary.total = 21`, `summary.passed = 21`, `summary.failed = 0`
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/cli.js -i stdlib/std/streamio.nepl -i stdlib/kp/kpwrite.nepl -o html=/tmp/streamio-kpwrite-doc-html`
+    - [結果/けっか]: `generated 2 html file(s)`
+- [状況/じょうきょう]:
+  - `kpwrite` の buffered writer core は `std/streamio` へ移り、`kp` 側は薄い wrapper 構成になった。
+  - `kpread` の一般化可能部分はまだ `kp` 側に残っているため、todo 7 は継続中である。
