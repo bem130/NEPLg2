@@ -10972,3 +10972,34 @@
   - `node nodesrc/tests.js -i stdlib/tests/hash.n.md -i tests/stdlib/traits_hash.n.md --no-stdlib --no-tree -o /tmp/tests-hash-focus.json -j 4`
     - [結果/けっか]: `4/4 pass`
     - output JSON: `/tmp/tests-hash-focus.json`
+
+# 2026-03-11 作業メモ (collection fixture / selfhost_req の reboot 追従)
+
+- [目的/もくてき]:
+  - `tests/stdlib/collections_diag.n.md` と `tests/stdlib/selfhost_req.n.md` に[残/のこ]っていた old collection API [参照/さんしょう]を current bare API へ[揃/そろ]える。
+  - host filesystem の preopen に[依存/いぞん]する unstable file I/O testcase を reboot [方針/ほうしん]に[沿/そ]って stable な `Result` [検証/けんしょう]へ[戻/もど]す。
+- [根本原因/こんぽんげんいん]:
+  - `collections_diag` は collection reboot [前/まえ]の `hashmap_new` / `hashmap_insert` / `hashset_new` / `hashset_insert` が[残存/ざんそん]しており、public API と fixture が[乖離/かいり]していた。
+  - `selfhost_req` の string map case は[既/すで]に `HashMap<str,.V>` へ[統合/とうごう]された後も `HashMapStr` / `hashmap_str_*` 参照が[残/のこ]っていた。
+  - `selfhost_req` の file I/O case は host filesystem の positive-path read を doctest [本体/ほんたい]で[期待/きたい]しており、preopen [条件/じょうけん]で `ret: 0` が[不安定/ふあんてい]になっていた。
+- [変更/へんこう]:
+  - `tests/stdlib/collections_diag.n.md`
+    - `HashMap<i32,i32>` / `HashSet<i32>` を[明示/めいじ]し、`new` / `insert` / `remove` の bare API へ[書/か]き[換/か]えた。
+    - [説明文/せつめいぶん]の `hashmap_insert` / `hashset_insert` も current 名 `insert` へ[揃/そろ]えた。
+  - `tests/stdlib/selfhost_req.n.md`
+    - string map case を `HashMap<str,i32>` + `new<str,i32>` / `insert<str,i32>` / `get<str,i32>` へ[移行/いこう]した。
+    - compile-fail case も `new<Point, str>` / `insert<Point, str>` の bare API [表記/ひょうき]へ[更新/こうしん]し、current collection API でも `D3081` [期待/きたい]が[崩/くず]れないことを[確認/かくにん]した。
+    - file I/O case は host positive-path read をやめ、missing file に[対/たい]して `Result::Err` が[返/かえ]ることを stable に[検証/けんしょう]する testcase へ[変更/へんこう]した。
+- [設計/せっけい][判断/はんだん]:
+  - `std/fs` は `tests/stdlib/fs.n.md` でも[整理/せいり]したとおり、host preopen に[依存/いぞん]する positive-path read を fixture の[成功条件/せいこうじょうけん]にしない。`Result` と helper [意味論/いみろん]の[検証/けんしょう]を stable に[固定/こてい]する。
+  - `selfhost_req` は Rust 側 request の[痕跡/こんせき]を[残/のこ]しつつも、current reboot public API と[一致/いっち]する[形/かたち]へ[追従/ついじゅう]させる。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/collections_diag.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/selfhost_req.n.md -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/selfhost_req.n.md -n 6`
+    - [結果/けっか]: pass (`compile_fail`)
+  - `node nodesrc/tests.js -i tests/stdlib/collections_diag.n.md -i tests/stdlib/selfhost_req.n.md --no-stdlib --no-tree -o /tmp/tests-collections-selfhost-current.json -j 4`
+    - [結果/けっか]: `12/12 pass`
+    - output JSON: `/tmp/tests-collections-selfhost-current.json`

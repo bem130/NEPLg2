@@ -23,9 +23,9 @@ neplg2:test
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let hm0 <HashMap<i32>> unwrap_ok<HashMap<i32>, Diag> hashmap_new<i32>;
-    let hm1 <HashMap<i32>> unwrap_ok<HashMap<i32>, Diag> hashmap_insert<i32> hm0 1 10;
-    match hashmap_remove<i32> hm1 99:
+    let hm0 <HashMap<i32,i32>> unwrap_ok<HashMap<i32,i32>, Diag> new<i32,i32>;
+    let hm1 <HashMap<i32,i32>> unwrap_ok<HashMap<i32,i32>, Diag> insert<i32,i32> hm0 1 10;
+    match remove<i32,i32> hm1 99:
         Result::Ok _h:
             set checks checks_push checks Result<(),str>::Err "expected KeyNotFound";
         Result::Err d:
@@ -54,9 +54,9 @@ neplg2:test
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let hs0 <HashSet> unwrap_ok hashset_new;
-    let hs1 <HashSet> unwrap_ok hashset_insert hs0 1;
-    match hashset_remove hs1 99:
+    let hs0 <HashSet<i32>> unwrap_ok<HashSet<i32>, Diag> new<i32>;
+    let hs1 <HashSet<i32>> unwrap_ok<HashSet<i32>, Diag> insert<i32> hs0 1;
+    match remove<i32> hs1 99:
         Result::Ok _h:
             set checks checks_push checks Result<(),str>::Err "expected KeyNotFound";
         Result::Err d:
@@ -68,7 +68,7 @@ fn main <()*>i32> ():
 ## hashmap_insert_capacity_exceeded_returns_diag
 
 [目的/もくてき]:
-- `HashMap` が[容量/ようりょう]の[上限/じょうげん]に[達/たっ]したあとに `hashmap_insert` すると `Err(Diag)` が[返/かえ]ることを[確/たし]かめます。
+- `HashMap` が[容量/ようりょう]の[上限/じょうげん]に[達/たっ]したあとに `insert` すると `Err(Diag)` が[返/かえ]ることを[確/たし]かめます。
 
 [何/なに]を[確/たし]かめるか:
 - [容量/ようりょう][超過/ちょうか]は `StdErrorKind::CapacityExceeded` として[報告/ほうこく]される。
@@ -86,14 +86,14 @@ neplg2:test
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let mut hm <HashMap<i32>> unwrap_ok<HashMap<i32>, Diag> hashmap_new<i32>;
+    let mut hm <HashMap<i32,i32>> unwrap_ok<HashMap<i32,i32>, Diag> new<i32,i32>;
     let mut i <i32> 0;
     while lt i 16:
         do:
-            set hm unwrap_ok<HashMap<i32>, Diag> hashmap_insert<i32> hm i i;
+            set hm unwrap_ok<HashMap<i32,i32>, Diag> insert<i32,i32> hm i i;
             set i add i 1;
 
-    match hashmap_insert<i32> hm 999 1:
+    match insert<i32,i32> hm 999 1:
         Result::Ok _h:
             set checks checks_push checks Result<(),str>::Err "expected CapacityExceeded";
         Result::Err d:
@@ -105,7 +105,7 @@ fn main <()*>i32> ():
 ## hashset_insert_capacity_exceeded_returns_diag
 
 [目的/もくてき]:
-- `HashSet` が[容量/ようりょう]の[上限/じょうげん]に[達/たっ]したあとに `hashset_insert` すると `Err(Diag)` が[返/かえ]ることを[確/たし]かめます。
+- `HashSet` が[容量/ようりょう]の[上限/じょうげん]に[達/たっ]したあとに `insert` すると `Err(Diag)` が[返/かえ]ることを[確/たし]かめます。
 
 [何/なに]を[確/たし]かめるか:
 - [容量/ようりょう][超過/ちょうか]は `StdErrorKind::CapacityExceeded` として[報告/ほうこく]される。
@@ -123,14 +123,14 @@ neplg2:test
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let mut hs <HashSet> unwrap_ok hashset_new;
+    let mut hs <HashSet<i32>> unwrap_ok<HashSet<i32>, Diag> new<i32>;
     let mut i <i32> 0;
     while lt i 16:
         do:
-            set hs unwrap_ok hashset_insert hs i;
+            set hs unwrap_ok<HashSet<i32>, Diag> insert<i32> hs i;
             set i add i 1;
 
-    match hashset_insert hs 999:
+    match insert<i32> hs 999:
         Result::Ok _h:
             set checks checks_push checks Result<(),str>::Err "expected CapacityExceeded";
         Result::Err d:
