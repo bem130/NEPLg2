@@ -1,469 +1,190 @@
-//: btreemap: alloc/collections/btreemap.nepl に関する機能を提供するライブラリ
+//: # btreemap
+//: [順序付き/じゅんじょつき] map
 //:
-//: [目的/もくてき]:
-//: - このモジュールの公開 API を提供します。
-//: - 実装の変更時に最小限の doctest 実行経路を維持します。
+//: ### [目的/もくてき]
+//: - `BTreeMap<.K, .V>` を[提供/ていきょう]し、`new` / `insert` / `get` / `contains` / `remove` / `len` / `clear` / `free` の bare 名で[扱/あつか]えるようにします。
+//: - key の[比較/ひかく]は `Ord` trait に[委譲/いじょう]し、`i32` 固定から[脱却/だっきゃく]します。
 //:
-//: [注意/ちゅうい]:
-//: - 利用時は各関数の「目的」「注意」「計算量」を確認してください。
+//: ### [実装/じっそう]
+//: - [名前/なまえ]は `BTreeMap` ですが、[現実/げんじつ]の[内部表現/ないぶひょうげん]は[整列済/せいれつず]み key/value [配列/はいれつ]です。
+//: - [検索/けんさく]は lower_bound、[挿入/そうにゅう] / [削除/さくじょ]は shift で[実装/じっそう]します。
 //:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| fn main <()*>i32> ():
-//:     ()
-//:     0
-//: ```
+//: ### [注意/ちゅうい]
+//: - [本物/ほんもの]の B-tree ではありません。
+//: - `Ord` impl が[全順序/ぜんじゅんじょ]を[満/み]たすことを[前提/ぜんてい]にします。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `get` / `contains` は O(log n)、`insert` / `remove` は O(n) です。
 
 #indent 4
 
 #import "core/mem" as *
 #import "core/option" as *
 #import "core/field" as *
+#import "core/traits/ord" as *
 
-struct BTreeMap<.V>:
+//: ## BTreeMap
+//: [順序付き/じゅんじょつき] key/value [配列/はいれつ]の[本体/ほんたい]
+struct BTreeMap<.K,.V>:
     hdr <i32>
 
-// btreemap: i32 キーの順序付きマップ
-//
-// 目的:
-// - i32 キーと .V 値の対応を順序付きで保持します。
-//
-// 実装(アルゴリズム):
-// - ヘッダに len/cap と keys/vals 配列へのポインタを保持します。
-// - keys は昇順に保ち、二分探索で位置を求めます。
-// - 挿入/削除時は配列をシフトします。
-//
-// 注意(重要):
-// - 実装は配列ベースです（本物の B 木ではありません）。
-// - キーは i32 固定です。
-// - 挿入/削除は O(n) です。
-//
-// 計算量:
-// - 検索: O(log n)
-// - 挿入/削除: O(n)
+fn keys_ptr <(i32)->i32> (hdr):
+    load_i32 add hdr 8
 
-// btreemap_new: 空のマップを作る
-//
-// 目的:
-// - 既定容量で空のマップを返します。
-//
-// 実装(アルゴリズム):
-// - ヘッダ 16 バイトと keys/vals 配列を確保します。
-// - ヘッダは [len][cap][keys_ptr][vals_ptr] です。
-//
-// 注意(重要):
-// - 返り値はヘッダのポインタです。
-//
-// 計算量:
-// - O(1)
-//: btreemap_new: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_new の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_new <.V> <()*>BTreeMap<.V>> ():
-    let cap <i32> 8
-    let keys <i32> alloc_raw mul cap 4
-    let vals <i32> alloc_raw mul cap size_of<.V>
-    let header <i32> alloc_raw 16
-    store_i32 header 0
-    store_i32 add header 4 cap
-    store_i32 add header 8 keys
-    store_i32 add header 12 vals
-    BTreeMap<.V> header
+fn values_ptr <(i32)->i32> (hdr):
+    load_i32 add hdr 12
 
-// btreemap_len: 要素数を返す
-//
-// 目的:
-// - マップの要素数を返します。
-//
-// 実装(アルゴリズム):
-// - ヘッダ先頭の len を返します。
-//
-// 注意(重要):
-// - 変更操作ではありません。
-//
-// 計算量:
-// - O(1)
-//: btreemap_len: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_len の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_len <.V> <(BTreeMap<.V>)->i32> (hm):
-    let hdr <i32> get hm "hdr"
-    load_i32 hdr
+fn key_eq <.K: Ord> <(.K,.K)->bool> (a, b):
+    and not ord_lt a b not ord_lt b a
 
-// btreemap_is_empty: 空か判定する
-//
-// 目的:
-// - 要素数が 0 なら true を返します。
-//
-// 実装(アルゴリズム):
-// - len==0 を判定します。
-//
-// 注意(重要):
-// - 変更操作ではありません。
-//
-// 計算量:
-// - O(1)
-//: btreemap_is_empty: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_is_empty の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_is_empty <.V> <(BTreeMap<.V>)->bool> (hm):
-    eq btreemap_len<.V> hm 0
-
-// btreemap_lower_bound: 二分探索で挿入位置を求める
-//
-// 目的:
-// - key を挿入すべき位置（lower_bound）を返します。
-//
-// 実装(アルゴリズム):
-// - 再帰で [low,high) を二分します。
-//
-// 注意(重要):
-// - keys はソート済みである必要があります。
-//
-// 計算量:
-// - O(log n)
-//: btreemap_lower_bound: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_lower_bound の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_lower_bound <(i32,i32,i32,i32)->i32> (keys, key, low, high):
+fn lower_bound <.K: Ord> <(i32,.K,i32,i32)->i32> (keys, key, low, high):
     if:
         lt low high
         then:
             let mid <i32> div_s add low high 2
-            let k <i32> load_i32 add keys mul mid 4
+            let saved <.K> load<.K> add keys mul mid size_of<.K>
             if:
-                lt k key
-                then btreemap_lower_bound keys key add mid 1 high
-                else btreemap_lower_bound keys key low mid
-        else:
-            low
+                ord_lt saved key
+                then lower_bound<.K> keys key add mid 1 high
+                else lower_bound<.K> keys key low mid
+        else low
 
-// btreemap_is_at: idx が key と一致するか判定する
-//
-// 目的:
-// - idx が範囲内かつ keys[idx]==key なら true を返します。
-//
-// 実装(アルゴリズム):
-// - idx<len を確認し、キーを比較します。
-//
-// 注意(重要):
-// - keys はソート済みである必要があります。
-//
-// 計算量:
-// - O(1)
-//: btreemap_is_at: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_is_at の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_is_at <(i32,i32,i32,i32)->bool> (keys, len, idx, key):
+fn is_at <.K: Ord> <(i32,i32,i32,.K)->bool> (keys, len, idx, key):
     if:
         lt idx len
-        then:
-            let k2 <i32> load_i32 add keys mul idx 4
-            eq k2 key
-        else:
-            false
+        then key_eq<.K> load<.K> add keys mul idx size_of<.K> key
+        else false
 
-// btreemap_get: キーから値を取得する
-//
-// 目的:
-// - key に対応する値を Option で返します。
-//
-// 実装(アルゴリズム):
-// - lower_bound で位置を求め、一致なら値を返します。
-//
-// 注意(重要):
-// - 見つからない場合は None です。
-//
-// 計算量:
-// - O(log n)
-//: btreemap_get: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_get の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_get <.V> <(BTreeMap<.V>,i32)->Option<.V>> (hm, key):
+fn grow <.K,.V> <(BTreeMap<.K,.V>)*>BTreeMap<.K,.V>> (hm):
     let hdr <i32> get hm "hdr"
-    let len <i32> load_i32 hdr
-    let keys <i32> load_i32 add hdr 8
-    let vals <i32> load_i32 add hdr 12
-    let idx <i32> btreemap_lower_bound keys key 0 len
+    let len0 <i32> load_i32 hdr
+    let cap0 <i32> load_i32 add hdr 4
+    let keys0 <i32> keys_ptr hdr
+    let vals0 <i32> values_ptr hdr
+    let cap1 <i32> mul cap0 2
+    let keys1 <i32> alloc_raw mul cap1 size_of<.K>
+    let vals1 <i32> alloc_raw mul cap1 size_of<.V>
+    let mut i <i32> 0
+    while lt i len0:
+        do:
+            store<.K> add keys1 mul i size_of<.K> load<.K> add keys0 mul i size_of<.K>
+            store<.V> add vals1 mul i size_of<.V> load<.V> add vals0 mul i size_of<.V>
+            set i add i 1
+    dealloc_raw keys0 mul cap0 size_of<.K>
+    dealloc_raw vals0 mul cap0 size_of<.V>
+    store_i32 add hdr 4 cap1
+    store_i32 add hdr 8 keys1
+    store_i32 add hdr 12 vals1
+    hm
+
+//: ## new
+//: [空/から]の `BTreeMap<.K, .V>` を[作/つく]る
+fn new <.K,.V> <()*>BTreeMap<.K,.V>> ():
+    let cap <i32> 8
+    let keys <i32> alloc_raw mul cap size_of<.K>
+    let vals <i32> alloc_raw mul cap size_of<.V>
+    let hdr <i32> alloc_raw 16
+    store_i32 hdr 0
+    store_i32 add hdr 4 cap
+    store_i32 add hdr 8 keys
+    store_i32 add hdr 12 vals
+    BTreeMap hdr
+
+//: ## len
+//: [要素数/ようそすう]を[返/かえ]す
+fn len <.K,.V> <(BTreeMap<.K,.V>)->i32> (hm):
+    load_i32 get hm "hdr"
+
+//: ## contains
+//: key の[存在/そんざい]を[確/たし]かめる
+fn contains <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)->bool> (hm, key):
+    let hdr <i32> get hm "hdr"
+    let len0 <i32> load_i32 hdr
+    let keys <i32> keys_ptr hdr
+    let idx <i32> lower_bound<.K> keys key 0 len0
+    is_at<.K> keys len0 idx key
+
+//: ## get
+//: key に[対応/たいおう]する value を[返/かえ]す
+fn get <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)->Option<.V>> (hm, key):
+    let hdr <i32> get hm "hdr"
+    let len0 <i32> load_i32 hdr
+    let keys <i32> keys_ptr hdr
+    let vals <i32> values_ptr hdr
+    let idx <i32> lower_bound<.K> keys key 0 len0
     if:
-        btreemap_is_at keys len idx key
-        then:
-            let v <.V> load<.V> add vals mul idx size_of<.V>
-            some<.V> v
-        else:
-            none<.V>
+        is_at<.K> keys len0 idx key
+        then some<.V> load<.V> add vals mul idx size_of<.V>
+        else none<.V>
 
-// btreemap_contains: キーの存在確認
-//
-// 目的:
-// - key が存在するかを返します。
-//
-// 実装(アルゴリズム):
-// - lower_bound で位置を求め、一致を確認します。
-//
-// 注意(重要):
-// - 値は取り出しません。
-//
-// 計算量:
-// - O(log n)
-//: btreemap_contains: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_contains の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_contains <.V> <(BTreeMap<.V>,i32)->bool> (hm, key):
-    let hdr <i32> get hm "hdr"
-    let len <i32> load_i32 hdr
-    let keys <i32> load_i32 add hdr 8
-    let idx <i32> btreemap_lower_bound keys key 0 len
-    btreemap_is_at keys len idx key
-
-// btreemap_insert: キーに値を設定する
-//
-// 目的:
-// - key に val を格納します（既存なら上書き）。
-//
-// 実装(アルゴリズム):
-// - lower_bound で位置を求めます。
-// - 既存なら上書きして旧値を返します。
-// - 新規なら配列をシフトして挿入します。
-//
-// 注意(重要):
-// - 返り値は旧値の Option です。
-//
-// 計算量:
-// - O(n)
-//: btreemap_insert: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_insert の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_insert <.V> <(BTreeMap<.V>,i32,.V)*>BTreeMap<.V>> (hm, key, val):
-    let hdr <i32> get hm "hdr"
-    let len <i32> load_i32 hdr
-    let mut cap <i32> load_i32 add hdr 4
-    let mut keys <i32> load_i32 add hdr 8
-    let mut vals <i32> load_i32 add hdr 12
-    let idx <i32> btreemap_lower_bound keys key 0 len
+//: ## insert
+//: key/value を[挿入/そうにゅう]または[更新/こうしん]する
+fn insert <.K: Ord,.V> <(BTreeMap<.K,.V>,.K,.V)*>BTreeMap<.K,.V>> (hm, key, value):
+    let hdr0 <i32> get hm "hdr"
+    let len_init <i32> load_i32 hdr0
+    let cap_init <i32> load_i32 add hdr0 4
+    let hm1 <BTreeMap<.K,.V>>:
+        if:
+            eq len_init cap_init
+            then grow<.K,.V> hm
+            else hm
+    let hdr <i32> get hm1 "hdr"
+    let len0 <i32> load_i32 hdr
+    let keys <i32> keys_ptr hdr
+    let vals <i32> values_ptr hdr
+    let idx <i32> lower_bound<.K> keys key 0 len0
     if:
-        btreemap_is_at keys len idx key
+        is_at<.K> keys len0 idx key
         then:
-            store<.V> add vals mul idx size_of<.V> val
-            hm
+            store<.V> add vals mul idx size_of<.V> value
+            hm1
         else:
-            if:
-                eq len cap
-                then:
-                    let new_cap <i32> mul cap 2
-                    set keys realloc_raw keys mul cap 4 mul new_cap 4
-                    set vals realloc_raw vals mul cap size_of<.V> mul new_cap size_of<.V>
-                    set cap new_cap
-                    store_i32 add hdr 4 cap
-                    store_i32 add hdr 8 keys
-                    store_i32 add hdr 12 vals
-                else:
-                    ()
-            let mut i <i32> sub len 1
-            while le idx i:
+            let mut i <i32> len0
+            while gt i idx:
                 do:
-                    let k <i32> load_i32 add keys mul i 4
-                    store_i32 add keys mul add i 1 4 k
-                    let v <.V> load<.V> add vals mul i size_of<.V>
-                    store<.V> add vals mul add i 1 size_of<.V> v
-                    set i sub i 1
-            store_i32 add keys mul idx 4 key
-            store<.V> add vals mul idx size_of<.V> val
-            store_i32 hdr add len 1
-            hm
+                    let from <i32> sub i 1
+                    store<.K> add keys mul i size_of<.K> load<.K> add keys mul from size_of<.K>
+                    store<.V> add vals mul i size_of<.V> load<.V> add vals mul from size_of<.V>
+                    set i from
+            store<.K> add keys mul idx size_of<.K> key
+            store<.V> add vals mul idx size_of<.V> value
+            store_i32 hdr add len0 1
+            hm1
 
-// btreemap_remove: キーを削除する
-//
-// 目的:
-// - key を削除し、値があれば Some で返します。
-//
-// 実装(アルゴリズム):
-// - lower_bound で位置を求め、一致なら左詰めします。
-//
-// 注意(重要):
-// - 返り値は削除した値の Option です。
-//
-// 計算量:
-// - O(n)
-//: btreemap_remove: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_remove の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_remove <.V> <(BTreeMap<.V>,i32)*>BTreeMap<.V>> (hm, key):
+//: ## remove
+//: key を[削除/さくじょ]する
+fn remove <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)*>BTreeMap<.K,.V>> (hm, key):
     let hdr <i32> get hm "hdr"
-    let len <i32> load_i32 hdr
-    let keys <i32> load_i32 add hdr 8
-    let vals <i32> load_i32 add hdr 12
-    let idx <i32> btreemap_lower_bound keys key 0 len
+    let len0 <i32> load_i32 hdr
+    let keys <i32> keys_ptr hdr
+    let vals <i32> values_ptr hdr
+    let idx <i32> lower_bound<.K> keys key 0 len0
     if:
-        btreemap_is_at keys len idx key
-        then:
-            let mut i <i32> add idx 1
-            while lt i len:
-                do:
-                    let k <i32> load_i32 add keys mul i 4
-                    store_i32 add keys mul sub i 1 4 k
-                    let v <.V> load<.V> add vals mul i size_of<.V>
-                    store<.V> add vals mul sub i 1 size_of<.V> v
-                    set i add i 1
-            store_i32 hdr sub len 1
-            hm
+        not is_at<.K> keys len0 idx key
+        then hm
         else:
+            let mut i <i32> idx
+            while lt i sub len0 1:
+                do:
+                    let nxt <i32> add i 1
+                    store<.K> add keys mul i size_of<.K> load<.K> add keys mul nxt size_of<.K>
+                    store<.V> add vals mul i size_of<.V> load<.V> add vals mul nxt size_of<.V>
+                    set i nxt
+            store_i32 hdr sub len0 1
             hm
 
-// btreemap_clear: すべての要素を削除する
-//
-// 目的:
-// - len を 0 にして空にします。
-//
-// 実装(アルゴリズム):
-// - len だけを 0 にします。
-//
-// 注意(重要):
-// - メモリは解放されません。
-//
-// 計算量:
-// - O(1)
-//: btreemap_clear: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_clear の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_clear <.V> <(BTreeMap<.V>)*>BTreeMap<.V>> (hm):
+//: ## clear
+//: [全要素/ぜんようそ]を[削除/さくじょ]する
+fn clear <.K,.V> <(BTreeMap<.K,.V>)*>BTreeMap<.K,.V>> (hm):
     let hdr <i32> get hm "hdr"
     store_i32 hdr 0
     hm
 
-// btreemap_free: メモリを解放する
-//
-// 目的:
-// - keys/vals とヘッダを解放します。
-//
-// 実装(アルゴリズム):
-// - cap に基づいて領域を解放します。
-//
-// 注意(重要):
-// - この後 hm を使うと未定義です。
-//
-// 計算量:
-// - O(1)
-//: btreemap_free: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreemap_free の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreemap_free <.V> <(BTreeMap<.V>)*>()> (hm):
+//: ## free
+//: [内部/ないぶ]メモリを[解放/かいほう]する
+fn free <.K,.V> <(BTreeMap<.K,.V>)*>()> (hm):
     let hdr <i32> get hm "hdr"
     let cap <i32> load_i32 add hdr 4
-    let keys <i32> load_i32 add hdr 8
-    let vals <i32> load_i32 add hdr 12
-    dealloc_raw keys mul cap 4
-    dealloc_raw vals mul cap size_of<.V>
+    dealloc_raw keys_ptr hdr mul cap size_of<.K>
+    dealloc_raw values_ptr hdr mul cap size_of<.V>
     dealloc_raw hdr 16

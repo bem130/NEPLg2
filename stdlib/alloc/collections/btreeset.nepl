@@ -1,412 +1,158 @@
-//: btreeset: alloc/collections/btreeset.nepl に関する機能を提供するライブラリ
+//: # btreeset
+//: [順序付き/じゅんじょつき] set
 //:
-//: [目的/もくてき]:
-//: - このモジュールの公開 API を提供します。
-//: - 実装の変更時に最小限の doctest 実行経路を維持します。
+//: ### [目的/もくてき]
+//: - `BTreeSet<.T>` を[提供/ていきょう]し、`new` / `insert` / `contains` / `remove` / `len` / `clear` / `free` の bare 名で[扱/あつか]えるようにします。
+//: - [要素/ようそ]の[比較/ひかく]は `Ord` trait に[委譲/いじょう]し、`i32` 固定の collection から[脱却/だっきゃく]します。
 //:
-//: [注意/ちゅうい]:
-//: - 利用時は各関数の「目的」「注意」「計算量」を確認してください。
+//: ### [実装/じっそう]
+//: - [名前/なまえ]は `BTreeSet` ですが、[実体/じったい]は[整列済/せいれつず]み key [配列/はいれつ]です。
+//: - [検索/けんさく]は lower_bound、[挿入/そうにゅう] / [削除/さくじょ]は shift で[実装/じっそう]します。
 //:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| fn main <()*>i32> ():
-//:     ()
-//:     0
-//: ```
+//: ### [注意/ちゅうい]
+//: - [本物/ほんもの]の B-tree ではありません。
+//: - `Ord` impl が[全順序/ぜんじゅんじょ]を[満/み]たすことを[前提/ぜんてい]にします。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `contains` は O(log n)、`insert` / `remove` は O(n) です。
 
 #indent 4
 
 #import "core/mem" as *
-#import "core/field" as *
+#import "core/field" as field
+#import "core/traits/ord" as *
 
-struct BTreeSet:
+//: ## BTreeSet
+//: [順序付き/じゅんじょつき] key [配列/はいれつ]の[本体/ほんたい]
+struct BTreeSet<.T>:
     hdr <i32>
 
-// btreeset: i32 要素の順序付き集合
-//
-// 目的:
-// - i32 の集合を順序付きで保持します。
-//
-// 実装(アルゴリズム):
-// - ヘッダに len/cap と keys 配列へのポインタを保持します。
-// - keys は昇順に保ち、二分探索で位置を求めます。
-// - 挿入/削除時は配列をシフトします。
-//
-// 注意(重要):
-// - 実装は配列ベースです（本物の B 木ではありません）。
-// - 要素は i32 固定です。
-// - 挿入/削除は O(n) です。
-//
-// 計算量:
-// - 検索: O(log n)
-// - 挿入/削除: O(n)
+fn btreeset_keys_ptr <(i32)->i32> (hdr):
+    load_i32 add hdr 8
 
-// btreeset_new: 空の集合を作る
-//
-// 目的:
-// - 既定容量で空の集合を返します。
-//
-// 実装(アルゴリズム):
-// - ヘッダ 12 バイトと keys 配列を確保します。
-// - ヘッダは [len][cap][keys_ptr] です。
-//
-// 注意(重要):
-// - 返り値はヘッダのポインタです。
-//
-// 計算量:
-// - O(1)
-//: btreeset_new: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreeset_new の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreeset_new <()*>BTreeSet> ():
-    let cap <i32> 8
-    let keys <i32> alloc_raw mul cap 4
-    let header <i32> alloc_raw 12
-    store_i32 header 0
-    store_i32 add header 4 cap
-    store_i32 add header 8 keys
-    BTreeSet header
+fn btreeset_key_eq <.T: Ord> <(.T,.T)->bool> (a, b):
+    and not ord_lt a b not ord_lt b a
 
-// btreeset_len: 要素数を返す
-//
-// 目的:
-// - 集合の要素数を返します。
-//
-// 実装(アルゴリズム):
-// - ヘッダ先頭の len を返します。
-//
-// 注意(重要):
-// - 変更操作ではありません。
-//
-// 計算量:
-// - O(1)
-//: btreeset_len: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreeset_len の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreeset_len <(BTreeSet)->i32> (s):
-    let hdr <i32> get s "hdr"
-    load_i32 hdr
-
-// btreeset_is_empty: 空か判定する
-//
-// 目的:
-// - 要素数が 0 なら true を返します。
-//
-// 実装(アルゴリズム):
-// - len==0 を判定します。
-//
-// 注意(重要):
-// - 変更操作ではありません。
-//
-// 計算量:
-// - O(1)
-//: btreeset_is_empty: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreeset_is_empty の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreeset_is_empty <(BTreeSet)->bool> (s):
-    eq btreeset_len s 0
-
-// btreeset_lower_bound: 二分探索で挿入位置を求める
-//
-// 目的:
-// - key を挿入すべき位置（lower_bound）を返します。
-//
-// 実装(アルゴリズム):
-// - 再帰で [low,high) を二分します。
-//
-// 注意(重要):
-// - keys はソート済みである必要があります。
-//
-// 計算量:
-// - O(log n)
-//: btreeset_lower_bound: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreeset_lower_bound の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreeset_lower_bound <(i32,i32,i32,i32)->i32> (keys, key, low, high):
+fn btreeset_lower_bound <.T: Ord> <(i32,.T,i32,i32)->i32> (keys, key, low, high):
     if:
         lt low high
         then:
             let mid <i32> div_s add low high 2
-            let k <i32> load_i32 add keys mul mid 4
+            let saved <.T> load<.T> add keys mul mid size_of<.T>
             if:
-                lt k key
-                then btreeset_lower_bound keys key add mid 1 high
-                else btreeset_lower_bound keys key low mid
-        else:
-            low
+                ord_lt saved key
+                then btreeset_lower_bound<.T> keys key add mid 1 high
+                else btreeset_lower_bound<.T> keys key low mid
+        else low
 
-// btreeset_is_at: idx が key と一致するか判定する
-//
-// 目的:
-// - idx が範囲内かつ keys[idx]==key なら true を返します。
-//
-// 実装(アルゴリズム):
-// - idx<len を確認し、キーを比較します。
-//
-// 注意(重要):
-// - keys はソート済みである必要があります。
-//
-// 計算量:
-// - O(1)
-//: btreeset_is_at: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreeset_is_at の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreeset_is_at <(i32,i32,i32,i32)->bool> (keys, len, idx, key):
+fn btreeset_is_at <.T: Ord> <(i32,i32,i32,.T)->bool> (keys, len0, idx, key):
     if:
-        lt idx len
-        then:
-            let k2 <i32> load_i32 add keys mul idx 4
-            eq k2 key
-        else:
-            false
+        lt idx len0
+        then btreeset_key_eq<.T> load<.T> add keys mul idx size_of<.T> key
+        else false
 
-// btreeset_contains: 要素の存在確認
-//
-// 目的:
-// - key が存在するかを返します。
-//
-// 実装(アルゴリズム):
-// - lower_bound で位置を求め、一致を確認します。
-//
-// 注意(重要):
-// - 変更操作ではありません。
-//
-// 計算量:
-// - O(log n)
-//: btreeset_contains: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreeset_contains の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreeset_contains <(BTreeSet,i32)->bool> (s, key):
-    let hdr <i32> get s "hdr"
-    let len <i32> load_i32 hdr
-    let keys <i32> load_i32 add hdr 8
-    let idx <i32> btreeset_lower_bound keys key 0 len
-    btreeset_is_at keys len idx key
+fn btreeset_grow <.T> <(BTreeSet<.T>)*>BTreeSet<.T>> (set0):
+    let hdr <i32> field::get set0 "hdr"
+    let len0 <i32> load_i32 hdr
+    let cap0 <i32> load_i32 add hdr 4
+    let keys0 <i32> btreeset_keys_ptr hdr
+    let cap1 <i32> mul cap0 2
+    let keys1 <i32> alloc_raw mul cap1 size_of<.T>
+    let mut i <i32> 0
+    while lt i len0:
+        do:
+            store<.T> add keys1 mul i size_of<.T> load<.T> add keys0 mul i size_of<.T>
+            set i add i 1
+    dealloc_raw keys0 mul cap0 size_of<.T>
+    store_i32 add hdr 4 cap1
+    store_i32 add hdr 8 keys1
+    set0
 
-// btreeset_insert: 要素を追加する
-//
-// 目的:
-// - key を集合に追加します。
-//
-// 実装(アルゴリズム):
-// - lower_bound で位置を求め、未存在なら配列をシフトして挿入します。
-//
-// 注意(重要):
-// - 返り値は追加成功フラグです。
-//
-// 計算量:
-// - O(n)
-//: btreeset_insert: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreeset_insert の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreeset_insert <(BTreeSet,i32)*>BTreeSet> (s, key):
-    let hdr <i32> get s "hdr"
-    let len <i32> load_i32 hdr
-    let mut cap <i32> load_i32 add hdr 4
-    let mut keys <i32> load_i32 add hdr 8
-    let idx <i32> btreeset_lower_bound keys key 0 len
-    if:
-        btreeset_is_at keys len idx key
-        then:
-            s
-        else:
-            if:
-                eq len cap
-                then:
-                    let new_cap <i32> mul cap 2
-                    set keys realloc_raw keys mul cap 4 mul new_cap 4
-                    set cap new_cap
-                    store_i32 add hdr 4 cap
-                    store_i32 add hdr 8 keys
-                else:
-                    ()
-            let mut i <i32> sub len 1
-            while le idx i:
-                do:
-                    let k <i32> load_i32 add keys mul i 4
-                    store_i32 add keys mul add i 1 4 k
-                    set i sub i 1
-            store_i32 add keys mul idx 4 key
-            store_i32 hdr add len 1
-            s
-
-// btreeset_remove: 要素を削除する
-//
-// 目的:
-// - key を削除します。
-//
-// 実装(アルゴリズム):
-// - lower_bound で位置を求め、一致なら左詰めします。
-//
-// 注意(重要):
-// - 返り値は削除成功フラグです。
-//
-// 計算量:
-// - O(n)
-//: btreeset_remove: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreeset_remove の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreeset_remove <(BTreeSet,i32)*>BTreeSet> (s, key):
-    let hdr <i32> get s "hdr"
-    let len <i32> load_i32 hdr
-    let keys <i32> load_i32 add hdr 8
-    let idx <i32> btreeset_lower_bound keys key 0 len
-    if:
-        btreeset_is_at keys len idx key
-        then:
-            let mut i <i32> add idx 1
-            while lt i len:
-                do:
-                    let k <i32> load_i32 add keys mul i 4
-                    store_i32 add keys mul sub i 1 4 k
-                    set i add i 1
-            store_i32 hdr sub len 1
-            s
-        else:
-            s
-
-// btreeset_clear: すべての要素を削除する
-//
-// 目的:
-// - len を 0 にして空にします。
-//
-// 実装(アルゴリズム):
-// - len だけを 0 にします。
-//
-// 注意(重要):
-// - メモリは解放されません。
-//
-// 計算量:
-// - O(1)
-//: btreeset_clear: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreeset_clear の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreeset_clear <(BTreeSet)*>BTreeSet> (s):
-    let hdr <i32> get s "hdr"
+//: ## new
+//: [空/から]の `BTreeSet<.T>` を[作/つく]る
+fn new <.T> <()*>BTreeSet<.T>> ():
+    let cap <i32> 8
+    let keys <i32> alloc_raw mul cap size_of<.T>
+    let hdr <i32> alloc_raw 12
     store_i32 hdr 0
-    s
+    store_i32 add hdr 4 cap
+    store_i32 add hdr 8 keys
+    BTreeSet hdr
 
-// btreeset_free: メモリを解放する
-//
-// 目的:
-// - keys とヘッダを解放します。
-//
-// 実装(アルゴリズム):
-// - cap に基づいて領域を解放します。
-//
-// 注意(重要):
-// - この後 s を使うと未定義です。
-//
-// 計算量:
-// - O(1)
-//: btreeset_free: 主な用途
-//:
-//: [目的/もくてき]:
-//: - btreeset_free の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn btreeset_free <(BTreeSet)*>()> (s):
-    let hdr <i32> get s "hdr"
+//: ## len
+//: [要素数/ようそすう]を[返/かえ]す
+fn len <.T> <(BTreeSet<.T>)->i32> (set0):
+    load_i32 field::get set0 "hdr"
+
+//: ## contains
+//: key の[存在/そんざい]を[確/たし]かめる
+fn contains <.T: Ord> <(BTreeSet<.T>,.T)->bool> (set0, key):
+    let hdr <i32> field::get set0 "hdr"
+    let len0 <i32> load_i32 hdr
+    let keys <i32> btreeset_keys_ptr hdr
+    let idx <i32> btreeset_lower_bound<.T> keys key 0 len0
+    btreeset_is_at<.T> keys len0 idx key
+
+//: ## insert
+//: key を[集合/しゅうごう]へ[挿入/そうにゅう]する
+fn insert <.T: Ord> <(BTreeSet<.T>,.T)*>BTreeSet<.T>> (set0, key):
+    let hdr0 <i32> field::get set0 "hdr"
+    let len_init <i32> load_i32 hdr0
+    let cap_init <i32> load_i32 add hdr0 4
+    let set1 <BTreeSet<.T>>:
+        if:
+            eq len_init cap_init
+            then btreeset_grow<.T> set0
+            else set0
+    let hdr <i32> field::get set1 "hdr"
+    let len0 <i32> load_i32 hdr
+    let keys <i32> btreeset_keys_ptr hdr
+    let idx <i32> btreeset_lower_bound<.T> keys key 0 len0
+    if:
+        btreeset_is_at<.T> keys len0 idx key
+        then set1
+        else:
+            let mut i <i32> len0
+            while gt i idx:
+                do:
+                    let from <i32> sub i 1
+                    store<.T> add keys mul i size_of<.T> load<.T> add keys mul from size_of<.T>
+                    set i from
+            store<.T> add keys mul idx size_of<.T> key
+            store_i32 hdr add len0 1
+            set1
+
+//: ## remove
+//: key を[集合/しゅうごう]から[削除/さくじょ]する
+fn remove <.T: Ord> <(BTreeSet<.T>,.T)*>BTreeSet<.T>> (set0, key):
+    let hdr <i32> field::get set0 "hdr"
+    let len0 <i32> load_i32 hdr
+    let keys <i32> btreeset_keys_ptr hdr
+    let idx <i32> btreeset_lower_bound<.T> keys key 0 len0
+    if:
+        not btreeset_is_at<.T> keys len0 idx key
+        then set0
+        else:
+            let mut i <i32> idx
+            while lt i sub len0 1:
+                do:
+                    let nxt <i32> add i 1
+                    store<.T> add keys mul i size_of<.T> load<.T> add keys mul nxt size_of<.T>
+                    set i nxt
+            store_i32 hdr sub len0 1
+            set0
+
+//: ## clear
+//: [全要素/ぜんようそ]を[削除/さくじょ]する
+fn clear <.T> <(BTreeSet<.T>)*>BTreeSet<.T>> (set0):
+    let hdr <i32> field::get set0 "hdr"
+    store_i32 hdr 0
+    set0
+
+//: ## free
+//: [内部/ないぶ]メモリを[解放/かいほう]する
+fn free <.T> <(BTreeSet<.T>)*>()> (set0):
+    let hdr <i32> field::get set0 "hdr"
     let cap <i32> load_i32 add hdr 4
-    let keys <i32> load_i32 add hdr 8
-    dealloc_raw keys mul cap 4
+    dealloc_raw btreeset_keys_ptr hdr mul cap size_of<.T>
     dealloc_raw hdr 12

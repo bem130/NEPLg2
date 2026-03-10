@@ -74,90 +74,96 @@ fn main <()*>i32> ():
     if and ok0 ok1 1 0
 ```
 
-## pipe_btreemap_alias_usage
+## pipe_btreemap_usage
 
 neplg2:test
-ret: 1
 ```neplg2
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/btreemap" as *
-#import "core/math" as *
+#import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
 #import "core/option" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
-    let m0 <BTreeMap<i32>>:
-        btreemap_new<i32>
-        |> btreemap_insert<i32> 3 30
-        |> btreemap_insert<i32> 1 10
-    let ok0 <bool> eq btreemap_len<i32> m0 2;
-    let m1 <BTreeMap<i32>>:
-        btreemap_new<i32>
-        |> btreemap_insert<i32> 3 30
-        |> btreemap_insert<i32> 1 10
-    let ok1 <bool> match btreemap_get<i32> m1 3:
+    let mut checks <Vec<Result<(),str>>> checks_new;
+    let m0 <BTreeMap<i32,i32>>:
+        new<i32,i32>
+        |> insert<i32,i32> 3 30
+        |> insert<i32,i32> 1 10
+    set checks checks_push checks check_eq_i32 2 len<i32,i32> m0;
+    let m1 <BTreeMap<i32,i32>>:
+        new<i32,i32>
+        |> insert<i32,i32> 3 30
+        |> insert<i32,i32> 1 10
+    match get<i32,i32> m1 3:
         Option::Some v:
-            eq v 30
+            set checks checks_push checks check_eq_i32 30 v
         Option::None:
-            false
-    let m2 <BTreeMap<i32>>:
-        btreemap_new<i32>
-        |> btreemap_insert<i32> 3 30
-        |> btreemap_insert<i32> 1 10
-    let ok2 <bool> btreemap_contains<i32> m2 1;
-    if and ok0 and ok1 ok2 1 0
+            set checks checks_push checks Result<(),str>::Err "pipe btreemap get failed";
+    let m2 <BTreeMap<i32,i32>>:
+        new<i32,i32>
+        |> insert<i32,i32> 3 30
+        |> insert<i32,i32> 1 10
+    set checks checks_push checks check contains<i32,i32> m2 1;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
-## pipe_btreeset_alias_usage
+## pipe_btreeset_usage
 
 neplg2:test
-ret: 1
 ```neplg2
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/btreeset" as *
-#import "core/math" as *
+#import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
+#import "core/result" as *
+
+fn new_set <()*>BTreeSet<i32>> ():
+    new<i32>
 
 fn main <()*>i32> ():
-    let s0 <BTreeSet>:
-        btreeset_new
-        |> btreeset_insert 5
-        |> btreeset_insert 2
-    let ok0 <bool> btreeset_contains s0 5;
-    let s1 <BTreeSet>:
-        btreeset_new
-        |> btreeset_insert 5
-        |> btreeset_insert 2
-    let ok1 <bool> eq btreeset_len s1 2;
-    let s2 <BTreeSet>:
-        btreeset_new
-        |> btreeset_insert 5
-        |> btreeset_insert 2
-        |> btreeset_remove 5
-    let ok2 <bool> if btreeset_contains s2 5 false true;
-    if and ok0 and ok1 ok2 1 0
+    let mut checks <Vec<Result<(),str>>> checks_new;
+    let s0 <BTreeSet<i32>>:
+        new_set
+        |> insert<i32> 5
+        |> insert<i32> 2
+    set checks checks_push checks check contains<i32> s0 5;
+    let s1 <BTreeSet<i32>>:
+        new_set
+        |> insert<i32> 5
+        |> insert<i32> 2
+    set checks checks_push checks check_eq_i32 2 len<i32> s1;
+    let s2 <BTreeSet<i32>>:
+        new_set
+        |> insert<i32> 5
+        |> insert<i32> 2
+        |> remove<i32> 5
+    set checks checks_push checks check not contains<i32> s2 5;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## pipe_hashmap_usage
 
 neplg2:test
-ret: 1
 ```neplg2
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/hashmap" as *
+#import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
 #import "alloc/diag/error" as *
-#import "core/math" as *
 #import "core/option" as *
 #import "core/result" as *
 
-fn must_hm <(Result<HashMap<i32>, Diag>)*>HashMap<i32>> (r):
+fn must_hm <(Result<HashMap<i32,i32>, Diag>)*>HashMap<i32,i32>> (r):
     match r:
         Result::Ok hm:
             hm
@@ -165,76 +171,82 @@ fn must_hm <(Result<HashMap<i32>, Diag>)*>HashMap<i32>> (r):
             #intrinsic "unreachable" <> ()
 
 fn main <()*>i32> ():
-    let hm0 <HashMap<i32>>:
-        hashmap_new<i32>
+    let mut checks <Vec<Result<(),str>>> checks_new;
+    let hm0 <HashMap<i32,i32>>:
+        new<i32,i32>
         |> must_hm
-        |> hashmap_insert<i32> 7 70
+        |> insert<i32,i32> 7 70
         |> must_hm
-        |> hashmap_insert<i32> 9 90
+        |> insert<i32,i32> 9 90
         |> must_hm
-    let ok0 <bool> eq hashmap_len<i32> hm0 2;
-    let hm1 <HashMap<i32>>:
-        hashmap_new<i32>
+    set checks checks_push checks check_eq_i32 2 len<i32,i32> hm0;
+    let hm1 <HashMap<i32,i32>>:
+        new<i32,i32>
         |> must_hm
-        |> hashmap_insert<i32> 7 70
+        |> insert<i32,i32> 7 70
         |> must_hm
-        |> hashmap_insert<i32> 9 90
+        |> insert<i32,i32> 9 90
         |> must_hm
-    let ok1 <bool> match hashmap_get<i32> hm1 9:
+    match get<i32,i32> hm1 9:
         Option::Some v:
-            eq v 90
+            set checks checks_push checks check_eq_i32 90 v
         Option::None:
-            false
-    let hm2 <HashMap<i32>>:
-        hashmap_new<i32>
+            set checks checks_push checks Result<(),str>::Err "pipe hashmap get failed";
+    let hm2 <HashMap<i32,i32>>:
+        new<i32,i32>
         |> must_hm
-        |> hashmap_insert<i32> 7 70
+        |> insert<i32,i32> 7 70
         |> must_hm
-        |> hashmap_insert<i32> 9 90
+        |> insert<i32,i32> 9 90
         |> must_hm
-    let ok2 <bool> hashmap_contains<i32> hm2 7;
-    if and ok0 and ok1 ok2 1 0
+    set checks checks_push checks check contains<i32,i32> hm2 7;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## pipe_hashset_usage
 
 neplg2:test
-ret: 1
 ```neplg2
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/hashset" as *
+#import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
 #import "alloc/diag/error" as *
-#import "core/math" as *
 #import "core/result" as *
 
-fn must_hs <(Result<HashSet,Diag>)*>HashSet> (r):
+fn must_hs <(Result<HashSet<i32>,Diag>)*>HashSet<i32>> (r):
     match r:
         Result::Ok hs:
             hs
         Result::Err _d:
             #intrinsic "unreachable" <> ()
 
+fn new_hs <()*>Result<HashSet<i32>,Diag>> ():
+    new<i32>
+
 fn main <()*>i32> ():
-    let hs0 <HashSet>:
-        hashset_new
+    let mut checks <Vec<Result<(),str>>> checks_new;
+    let hs0 <HashSet<i32>>:
+        new_hs
         |> must_hs
-        |> hashset_insert 4
+        |> insert<i32> 4
         |> must_hs
-        |> hashset_insert 8
+        |> insert<i32> 8
         |> must_hs
-    let ok2 <bool> eq hashset_len hs0 2;
-    let hs1 <HashSet>:
-        hashset_new
+    set checks checks_push checks check_eq_i32 2 len<i32> hs0;
+    let hs1 <HashSet<i32>>:
+        new_hs
         |> must_hs
-        |> hashset_insert 4
+        |> insert<i32> 4
         |> must_hs
-        |> hashset_insert 8
+        |> insert<i32> 8
         |> must_hs
-    let ok3 <bool> hashset_contains hs1 8;
-    if and ok2 ok3 1 0
+    set checks checks_push checks check contains<i32> hs1 8;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## pipe_ringbuffer_usage

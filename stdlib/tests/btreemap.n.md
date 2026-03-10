@@ -3,76 +3,92 @@
 ## btreemap_insert_and_len
 
 neplg2:test
-ret: 1
 ```neplg2
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/btreemap" as *
-#import "core/math" as *
+#import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32 }
+#import "core/result" as *
 
 fn main <()*>i32> ():
-    let mut m <BTreeMap<i32>> btreemap_new<i32>;
-    set m btreemap_insert<i32> m 5 50;
-    set m btreemap_insert<i32> m 1 10;
-    set m btreemap_insert<i32> m 3 30;
-    if eq btreemap_len<i32> m 3 1 0
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
+    let m0 <BTreeMap<i32,i32>>:
+        new<i32,i32>
+        |> insert<i32,i32> 5 50
+        |> insert<i32,i32> 1 10
+        |> insert<i32,i32> 3 30
+    set checks checks_push checks check_eq_i32 3 len<i32,i32> m0;
+
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## btreemap_get_and_remove
 
 neplg2:test
-ret: 1
 ```neplg2
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/btreemap" as *
-#import "core/math" as *
+#import "std/test" as *
 #import "core/option" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
-    let m0 <BTreeMap<i32>>:
-        btreemap_new<i32>
-        |> btreemap_insert<i32> 3 30
-        |> btreemap_insert<i32> 1 10
-    let ok0 <bool> match btreemap_get<i32> m0 3:
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
+    let m0 <BTreeMap<i32,i32>>:
+        new<i32,i32>
+        |> insert<i32,i32> 3 30
+        |> insert<i32,i32> 1 10
+    match get<i32,i32> m0 3:
         Option::Some v:
-            eq v 30
+            set checks checks_push checks check_eq_i32 30 v
         Option::None:
-            false
-    let m1 <BTreeMap<i32>>:
-        btreemap_new<i32>
-        |> btreemap_insert<i32> 3 30
-        |> btreemap_insert<i32> 1 10
-        |> btreemap_remove<i32> 1
-    let ok1 eq btreemap_len<i32> m1 1;
-    if and ok0 ok1 1 0
+            set checks checks_push checks Result<(),str>::Err "btreemap get did not return inserted value";
+
+    let m1 <BTreeMap<i32,i32>>:
+        new<i32,i32>
+        |> insert<i32,i32> 3 30
+        |> insert<i32,i32> 1 10
+        |> remove<i32,i32> 1
+    set checks checks_push checks check_eq_i32 1 len<i32,i32> m1;
+
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## btreemap_update_existing
 
 neplg2:test
-ret: 1
 ```neplg2
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/btreemap" as *
-#import "core/math" as *
+#import "std/test" as *
 #import "core/option" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
-    let mut m <BTreeMap<i32>> btreemap_new<i32>;
-    set m btreemap_insert<i32> m 7 70;
-    set m btreemap_insert<i32> m 7 71;
-    let ok1 <bool> match btreemap_get<i32> m 7:
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
+    let m0 <BTreeMap<i32,i32>>:
+        new<i32,i32>
+        |> insert<i32,i32> 7 70
+        |> insert<i32,i32> 7 71
+    match get<i32,i32> m0 7:
         Option::Some v:
-            eq v 71
+            set checks checks_push checks check_eq_i32 71 v
         Option::None:
-            false
-    if ok1 1 0
+            set checks checks_push checks Result<(),str>::Err "btreemap update did not overwrite value";
+
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

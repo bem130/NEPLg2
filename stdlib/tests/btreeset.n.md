@@ -3,73 +3,98 @@
 ## btreeset_insert_and_len
 
 neplg2:test
-ret: 1
 ```neplg2
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/btreeset" as *
-#import "core/math" as *
+#import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
+#import "core/result" as *
+
+fn new_set <()*>BTreeSet<i32>> ():
+    new<i32>
 
 fn main <()*>i32> ():
-    let mut s <BTreeSet> btreeset_new;
-    set s btreeset_insert s 5;
-    set s btreeset_insert s 1;
-    set s btreeset_insert s 3;
-    if eq btreeset_len s 3 1 0
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
+    let s0 <BTreeSet<i32>>:
+        new_set
+        |> insert<i32> 5
+        |> insert<i32> 1
+        |> insert<i32> 3
+    set checks checks_push checks check_eq_i32 3 len<i32> s0;
+
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## btreeset_contains_and_remove
 
 neplg2:test
-ret: 1
 ```neplg2
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/btreeset" as *
-#import "core/math" as *
+#import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
+#import "core/result" as *
+
+fn new_set <()*>BTreeSet<i32>> ():
+    new<i32>
 
 fn main <()*>i32> ():
-    let s0 <BTreeSet>:
-        btreeset_new
-        |> btreeset_insert 5
-        |> btreeset_insert 1
-    let ok0 <bool> btreeset_contains s0 1;
-    let s1 <BTreeSet>:
-        btreeset_new
-        |> btreeset_insert 5
-        |> btreeset_insert 1
-        |> btreeset_remove 1
-    let ok1a <bool> if btreeset_contains s1 1 false true;
-    let s2 <BTreeSet>:
-        btreeset_new
-        |> btreeset_insert 5
-        |> btreeset_insert 1
-        |> btreeset_remove 1
-    let ok1b <bool> eq btreeset_len s2 1;
-    let ok1 <bool> and ok1a ok1b;
-    if and ok0 ok1 1 0
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
+    let s0 <BTreeSet<i32>>:
+        new_set
+        |> insert<i32> 5
+        |> insert<i32> 1
+    set checks checks_push checks check contains<i32> s0 1;
+
+    let s1 <BTreeSet<i32>>:
+        new_set
+        |> insert<i32> 5
+        |> insert<i32> 1
+        |> remove<i32> 1
+    set checks checks_push checks check not contains<i32> s1 1;
+
+    let s2 <BTreeSet<i32>>:
+        new_set
+        |> insert<i32> 5
+        |> insert<i32> 1
+        |> remove<i32> 1
+    set checks checks_push checks check_eq_i32 1 len<i32> s2;
+
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## btreeset_duplicate_insert
 
 neplg2:test
-ret: 1
 ```neplg2
 #entry main
 #indent 4
 #target std
 
 #import "alloc/collections/btreeset" as *
-#import "core/math" as *
+#import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32 }
+#import "core/result" as *
+
+fn new_set <()*>BTreeSet<i32>> ():
+    new<i32>
 
 fn main <()*>i32> ():
-    let mut s <BTreeSet> btreeset_new;
-    set s btreeset_insert s 3;
-    set s btreeset_insert s 3;
-    let ok2 <bool> eq btreeset_len s 1;
-    if ok2 1 0
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
+    let s0 <BTreeSet<i32>>:
+        new_set
+        |> insert<i32> 3
+        |> insert<i32> 3
+    set checks checks_push checks check_eq_i32 1 len<i32> s0;
+
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

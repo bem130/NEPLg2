@@ -10909,3 +10909,36 @@
   - `node nodesrc/tests.js -i tests/compiler/trait_capability_copy.n.md -i tests/stdlib/traits_hash.n.md -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md --no-stdlib --no-tree -o /tmp/tests-hash-capability-focus.json -j 4`
     - [結果/けっか]: `8/8 pass`
     - output JSON: `/tmp/tests-hash-capability-focus.json`
+
+# 2026-03-11 作業メモ (`BTreeMap` / `BTreeSet` の reboot 追従)
+
+- [目的/もくてき]:
+  - `BTreeMap` / `BTreeSet` を reboot [方針/ほうしん]どおり bare API + trait [委譲/いじょう]へ[揃/そろ]え、old `btreemap_*` / `btreeset_*` alias [前提/ぜんてい]を[除去/じょきょ]する。
+  - stdlib fixture と `pipe_collections` を current ownership model / explicit report [流儀/りゅうぎ]へ[追従/ついじゅう]させる。
+- [根本原因/こんぽんげんいん]:
+  - `btreemap` / `btreeset` は collection reboot の[途中/とちゅう]で[止/と]まっており、`btreemap_*` / `btreeset_*` [命名/めいめい]、`i32` 固定 set、old comment format、old `ret: 1` fixture が[残/のこ]っていた。
+  - `btreemap` / `btreeset` の `insert` は capacity [判定/はんてい]で collection [本体/ほんたい]を[複数回/ふくすうかい][読/よ]んでおり、current move model では `D3063` / `D3053` になっていた。
+  - `BTreeSet<i32>` の bare `new<i32>` は `std/test` import [下/か]で overload [曖昧化/あいまいか]した。これは collection 側ではなく、current compiler が no-arg generic constructor を expected return type だけでは[十分/じゅうぶん]に[絞/しぼ]れていないことが[原因/げんいん]だった。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/btreemap.nepl`
+    - bare `new` / `insert` / `get` / `contains` / `remove` / `len` / `clear` / `free` [構成/こうせい]を[維持/いじ]しつつ、`insert` の capacity [判定/はんてい]を `hdr0` / `len_init` / `cap_init` [先読/さきよ]みへ[変更/へんこう]して move error を[除去/じょきょ]した。
+  - `stdlib/alloc/collections/btreeset.nepl`
+    - file 全体を new policy / format で[書/か]き[直/なお]した。
+    - `struct BTreeSet<.T>` と `Ord` trait [前提/ぜんてい]の generic set に[再設計/さいせっけい]した。
+    - public API を bare `new` / `insert` / `contains` / `remove` / `len` / `clear` / `free` へ[統一/とういつ]した。
+    - internal helper は `btreeset_*` に[閉/と]じ込め、public API と star import [衝突/しょうとつ]しないようにした。
+    - `insert` の grow [判定/はんてい]も `hdr0` / `len_init` / `cap_init` [先読/さきよ]みへ[変更/へんこう]して move error を[除去/じょきょ]した。
+  - `stdlib/tests/btreemap.n.md`, `stdlib/tests/btreeset.n.md`
+    - old alias API と `ret: 1` [前提/ぜんてい]を[除去/じょきょ]し、`Vec<Result<(),str>>` + `checks_print_report` + `checks_exit_code` の explicit report [流儀/りゅうぎ]へ[統一/とういつ]した。
+    - `btreeset` fixture では current compiler 制約のため `fn new_set ...: new<i32>` wrapper を[置/お]き、public bare name を expected type [付/つ]き helper [経由/けいゆ]で[呼/よ]ぶ[形/かたち]にした。
+  - `tests/stdlib/pipe_collections.n.md`
+    - `btreemap` / `btreeset` の pipe section を current bare API へ[書/か]き[換/か]えた。
+    - [併/あわ]せて old `hashmap_*` / `hashset_*` alias section も current bare API へ[追従/ついじゅう]した。
+- [設計/せっけい][判断/はんだん]:
+  - public API は `btree*_*` alias を[残/のこ]さず bare name を[正/せい]とした。old fixture 側だけを書き換えて互換層を[作/つく]ることはしていない。
+  - `BTreeSet` は `HashSet` と[同様/どうよう]に generic `.T: Ord` へ[寄/よ]せ、collection [名/めい]でなく trait [境界/きょうかい]が[意味論/いみろん]を[決/き]める[構造/こうぞう]にした。
+  - `new<i32>` の wrapper は collection 設計の[妥協/だきょう]ではなく current compiler limitation の[切/き]り[分/わ]けとして[扱/あつか]う。public API 自体は bare `new` のまま[維持/いじ]し、この limitation は[後続/こうぞく]の compiler overload [改善/かいぜん]で[解消/かいしょう]すべきものとして[記録/きろく]する。
+- [検証/けんしょう]:
+  - `node nodesrc/tests.js -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/stdlib/pipe_collections.n.md --no-stdlib --no-tree -o /tmp/tests-btree-focus.json -j 4`
+    - [結果/けっか]: `14/14 pass`
+    - output JSON: `/tmp/tests-btree-focus.json`
