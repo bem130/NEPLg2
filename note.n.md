@@ -10466,3 +10466,30 @@
   - `node nodesrc/run_doctest.js -i tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md -n 2` -> pass
   - `node nodesrc/tests.js -i stdlib/tests/cast.n.md -i stdlib/tests/math.n.md -i tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md -i tutorials/getting_started/16_debug_and_ansi.n.md --no-stdlib --no-tree -o /tmp/tests-explicit-report-batch3.json -j 4`
     - [結果/けっか]: `9/9 pass`
+
+# 2026-03-10 作業メモ (`error.n.md` を explicit report 流儀へ追従し、`todo.md` の人側整理を取り込んだ)
+
+- [目的/もくてき]:
+  - `stdlib/tests/error.n.md` を、`Diag` / `Diags` / `Outcome` の[値/あたい]モデルを[保/たも]ったまま explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - [人/ひと]が[整理/せいり]した `todo.md` を、現状の reboot [方針/ほうしん]に[沿/そ]う[形/かたち]で履歴に[反映/はんえい]する。
+- [根本原因/こんぽんげんいん]:
+  - `stdlib/tests/error.n.md` は `Outcome` / `Diag` [回帰/かいき]の[中心/ちゅうしん] fixture なのに、各分岐が `test_fail` / `assert` の[逐次/ちくじ][実行/じっこう]に[留/とど]まっていた。
+  - これでは reboot [後/ご]の「[失敗/しっぱい]を[値/あたい]として[持/も]ち[運/はこ]び、test [末尾/まつび]で[明示的/めいじてき]に report する」という[方針/ほうしん]と[不整合/ふせいごう]だった。
+  - `todo.md` は[人/ひと]の[編集/へんしゅう]が[完了/かんりょう]し、編集禁止[領域/りょういき]の[見出/みだ]しや今後の[指示/しじ]が[現状/げんじょう]と[合/あ]う[形/かたち]に[更新/こうしん]されていた。
+- [変更/へんこう]:
+  - `stdlib/tests/error.n.md`
+    - 3 [件/けん]の doctest すべてを `Vec<Result<(),str>>` [集約/しゅうやく]へ[変更/へんこう]した。
+    - `StdErrorKind` の[多分岐/たぶんき]や `Option::None` / `Result::Err` [分岐/ぶんき]も、[途中/とちゅう]で trap せず `Result::Ok/Err` として[保持/ほじ]し、[最後/さいご]に `checks_print_report` + `checks_exit_code` へ[畳/たた]む[形/かたち]へ[揃/そろ]えた。
+    - `Outcome` / `Diag` の move model や[内部/ないぶ][表現/ひょうげん]は[変/か]えず、fixture [実行/じっこう]モデルだけを[更新/こうしん]した。
+  - `todo.md`
+    - [人/ひと]が[整理/せいり]した[内容/ないよう]をそのまま[取/と]り[込/こ]んだ。
+    - LLM [編集/へんしゅう][禁止/きんし][領域/りょういき]の[見出/みだ]し、`nm` 再開発、LSP / target / tuple / pattern / [型/かた][前置/ぜんち]記法などの[残課題/ざんかだい]が、[現在/げんざい]の reboot [後/ご][地図/ちず]として[読/よ]みやすい[形/かたち]になった。
+- [設計/せっけい][判断/はんだん]:
+  - `error.n.md` は[複雑/ふくざつ]分岐だが、「[途中/とちゅう]で[落/お]とす」のではなく「[最後/さいご]まで[値/あたい]として[運/はこ]ぶ」こと[自体/じたい]が reboot [後/ご] test [設計/せっけい]の[一部/いちぶ]なので、その[方針/ほうしん]を優先した。
+  - `todo.md` は[人/ひと]の[意図/いと]が[反映/はんえい]された[最新版/さいしんばん]を履歴へ[固定/こてい]しておくほうが、以後の自律実装の[前提/ぜんてい]を[共有/きょうゆう]しやすいと[判断/はんだん]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/tests/error.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/error.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/error.n.md -n 3` -> pass
+  - `node nodesrc/tests.js -i stdlib/tests/error.n.md --no-stdlib --no-tree -o /tmp/tests-error-explicit.json -j 4`
+    - [結果/けっか]: `3/3 pass`

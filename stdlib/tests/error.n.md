@@ -32,11 +32,13 @@ neplg2:test
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/option" as *
+#import "core/result" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
-    assert_str_eq "Failure" std_error_kind_str StdErrorKind::Failure;
-    assert_str_eq "OutOfMemory" std_error_kind_str StdErrorKind::OutOfMemory;
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
+    set checks checks_push checks check_str_eq "Failure" std_error_kind_str StdErrorKind::Failure;
+    set checks checks_push checks check_str_eq "OutOfMemory" std_error_kind_str StdErrorKind::OutOfMemory;
 
     let sp <Span> Span 4 5 6;
     let d0 <Diag> diag_error StdErrorKind::Failure "with source";
@@ -47,29 +49,31 @@ fn main <()*>()> ():
     let d4_mem <i32> alloc_raw size_of<Diag>;
     store<Diag> d4_mem d4;
 
-    assert_str_eq "with source" get load<Diag> d4_mem "message";
-    assert_str_eq "Failure" diag_std_error_kind_str load<Diag> d4_mem;
+    set checks checks_push checks check_str_eq "with source" get load<Diag> d4_mem "message";
+    set checks checks_push checks check_str_eq "Failure" diag_std_error_kind_str load<Diag> d4_mem;
 
     match get load<Diag> d4_mem "span":
         Option::Some got:
-            assert_eq_i32 4 get got "file_id";
+            set checks checks_push checks check_eq_i32 4 get got "file_id";
         Option::None:
-            test_fail "expected span";
+            set checks checks_push checks Result<(),str>::Err "expected span";
 
     match get load<Diag> d4_mem "source":
         Option::Some src:
-            assert_str_eq "parser" src;
+            set checks checks_push checks check_str_eq "parser" src;
         Option::None:
-            test_fail "expected source";
+            set checks checks_push checks Result<(),str>::Err "expected source";
 
     let ds0 <Diags> diags_one load<Diag> d4_mem;
     let ds1 <Diags> diags_push ds0 diag_warn "careful";
     let ds1_mem <i32> alloc_raw size_of<Diags>;
     store<Diags> ds1_mem ds1;
-    assert_eq_i32 2 diags_len load<Diags> ds1_mem;
-    assert diags_has_errors load<Diags> ds1_mem;
+    set checks checks_push checks check_eq_i32 2 diags_len load<Diags> ds1_mem;
+    set checks checks_push checks check diags_has_errors load<Diags> ds1_mem;
     dealloc_raw ds1_mem size_of<Diags>;
     dealloc_raw d4_mem size_of<Diag>;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## outcome_helpers_keep_result_and_diags_separate
@@ -101,43 +105,44 @@ neplg2:test
 #import "core/result" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
     let ok0 <Outcome<i32, StdErrorKind>> outcome_ok<i32, StdErrorKind> 42;
     let ok0_mem <i32> alloc_raw size_of<Outcome<i32, StdErrorKind>>;
     store<Outcome<i32, StdErrorKind>> ok0_mem ok0;
     match get load<Outcome<i32, StdErrorKind>> ok0_mem "result":
         Result::Ok v:
-            assert_eq_i32 42 v;
+            set checks checks_push checks check_eq_i32 42 v;
         Result::Err kind:
             match kind:
                 StdErrorKind::Failure:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
                 StdErrorKind::OutOfMemory:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
                 StdErrorKind::EmptyCollection:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
                 StdErrorKind::IndexOutOfBounds:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
                 StdErrorKind::KeyNotFound:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
                 StdErrorKind::CapacityExceeded:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
                 StdErrorKind::InvalidOperation:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
                 StdErrorKind::InvalidUtf8:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
                 StdErrorKind::ParseError:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
                 StdErrorKind::IoError:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
                 StdErrorKind::Other:
-                    test_fail "expected ok";
+                    set checks checks_push checks Result<(),str>::Err "expected ok";
 
     match get load<Outcome<i32, StdErrorKind>> ok0_mem "diags":
         Option::Some _ds:
-            test_fail "expected no diags";
+            set checks checks_push checks Result<(),str>::Err "expected no diags";
         Option::None:
-            assert true;
+            set checks checks_push checks Result<(),str>::Ok ();
 
     let ds <Diags> diags_one diag_warn "careful";
     let ok1 <Outcome<i32, StdErrorKind>> outcome_with_diags load<Outcome<i32, StdErrorKind>> ok0_mem ds;
@@ -145,18 +150,18 @@ fn main <()*>()> ():
     store<Outcome<i32, StdErrorKind>> ok1_mem ok1;
     match outcome_result load<Outcome<i32, StdErrorKind>> ok1_mem:
         Result::Ok v:
-            assert_eq_i32 42 v;
+            set checks checks_push checks check_eq_i32 42 v;
         Result::Err _kind:
-            test_fail "expected ok result";
-    assert outcome_is_ok load<Outcome<i32, StdErrorKind>> ok1_mem;
-    assert not outcome_is_err load<Outcome<i32, StdErrorKind>> ok1_mem;
+            set checks checks_push checks Result<(),str>::Err "expected ok result";
+    set checks checks_push checks check outcome_is_ok load<Outcome<i32, StdErrorKind>> ok1_mem;
+    set checks checks_push checks check not outcome_is_err load<Outcome<i32, StdErrorKind>> ok1_mem;
     match get load<Outcome<i32, StdErrorKind>> ok1_mem "diags":
         Option::Some got:
-            assert_eq_i32 1 diags_len got;
+            set checks checks_push checks check_eq_i32 1 diags_len got;
         Option::None:
-            test_fail "expected diags";
-    assert_eq_i32 1 diags_len outcome_diags_or_empty load<Outcome<i32, StdErrorKind>> ok1_mem;
-    assert not outcome_has_errors load<Outcome<i32, StdErrorKind>> ok1_mem;
+            set checks checks_push checks Result<(),str>::Err "expected diags";
+    set checks checks_push checks check_eq_i32 1 diags_len outcome_diags_or_empty load<Outcome<i32, StdErrorKind>> ok1_mem;
+    set checks checks_push checks check not outcome_has_errors load<Outcome<i32, StdErrorKind>> ok1_mem;
     dealloc_raw ok1_mem size_of<Outcome<i32, StdErrorKind>>;
 
     let err0 <Outcome<i32, StdErrorKind>> outcome_err<i32, StdErrorKind> StdErrorKind::IoError;
@@ -164,67 +169,69 @@ fn main <()*>()> ():
     store<Outcome<i32, StdErrorKind>> err0_mem err0;
     match get load<Outcome<i32, StdErrorKind>> err0_mem "result":
         Result::Ok _v:
-            test_fail "expected err";
+            set checks checks_push checks Result<(),str>::Err "expected err";
         Result::Err kind:
             match kind:
                 StdErrorKind::IoError:
-                    assert true;
+                    set checks checks_push checks Result<(),str>::Ok ();
                 StdErrorKind::Failure:
-                    test_fail "expected IoError";
+                    set checks checks_push checks Result<(),str>::Err "expected IoError";
                 StdErrorKind::OutOfMemory:
-                    test_fail "expected IoError";
+                    set checks checks_push checks Result<(),str>::Err "expected IoError";
                 StdErrorKind::EmptyCollection:
-                    test_fail "expected IoError";
+                    set checks checks_push checks Result<(),str>::Err "expected IoError";
                 StdErrorKind::IndexOutOfBounds:
-                    test_fail "expected IoError";
+                    set checks checks_push checks Result<(),str>::Err "expected IoError";
                 StdErrorKind::KeyNotFound:
-                    test_fail "expected IoError";
+                    set checks checks_push checks Result<(),str>::Err "expected IoError";
                 StdErrorKind::CapacityExceeded:
-                    test_fail "expected IoError";
+                    set checks checks_push checks Result<(),str>::Err "expected IoError";
                 StdErrorKind::InvalidOperation:
-                    test_fail "expected IoError";
+                    set checks checks_push checks Result<(),str>::Err "expected IoError";
                 StdErrorKind::InvalidUtf8:
-                    test_fail "expected IoError";
+                    set checks checks_push checks Result<(),str>::Err "expected IoError";
                 StdErrorKind::ParseError:
-                    test_fail "expected IoError";
+                    set checks checks_push checks Result<(),str>::Err "expected IoError";
                 StdErrorKind::Other:
-                    test_fail "expected IoError";
-    assert not outcome_is_ok load<Outcome<i32, StdErrorKind>> err0_mem;
-    assert outcome_is_err load<Outcome<i32, StdErrorKind>> err0_mem;
-    assert_eq_i32 0 diags_len outcome_diags_or_empty load<Outcome<i32, StdErrorKind>> err0_mem;
-    assert not outcome_has_errors load<Outcome<i32, StdErrorKind>> err0_mem;
+                    set checks checks_push checks Result<(),str>::Err "expected IoError";
+    set checks checks_push checks check not outcome_is_ok load<Outcome<i32, StdErrorKind>> err0_mem;
+    set checks checks_push checks check outcome_is_err load<Outcome<i32, StdErrorKind>> err0_mem;
+    set checks checks_push checks check_eq_i32 0 diags_len outcome_diags_or_empty load<Outcome<i32, StdErrorKind>> err0_mem;
+    set checks checks_push checks check not outcome_has_errors load<Outcome<i32, StdErrorKind>> err0_mem;
     dealloc_raw err0_mem size_of<Outcome<i32, StdErrorKind>>;
 
     let err1 <Outcome<i32, StdErrorKind>>:
         result_to_outcome<i32, StdErrorKind> Result::Err StdErrorKind::ParseError
     match get err1 "result":
         Result::Ok _v:
-            test_fail "expected err";
+            set checks checks_push checks Result<(),str>::Err "expected err";
         Result::Err kind:
             match kind:
                 StdErrorKind::ParseError:
-                    assert true;
+                    set checks checks_push checks Result<(),str>::Ok ();
                 StdErrorKind::Failure:
-                    test_fail "expected ParseError";
+                    set checks checks_push checks Result<(),str>::Err "expected ParseError";
                 StdErrorKind::OutOfMemory:
-                    test_fail "expected ParseError";
+                    set checks checks_push checks Result<(),str>::Err "expected ParseError";
                 StdErrorKind::EmptyCollection:
-                    test_fail "expected ParseError";
+                    set checks checks_push checks Result<(),str>::Err "expected ParseError";
                 StdErrorKind::IndexOutOfBounds:
-                    test_fail "expected ParseError";
+                    set checks checks_push checks Result<(),str>::Err "expected ParseError";
                 StdErrorKind::KeyNotFound:
-                    test_fail "expected ParseError";
+                    set checks checks_push checks Result<(),str>::Err "expected ParseError";
                 StdErrorKind::CapacityExceeded:
-                    test_fail "expected ParseError";
+                    set checks checks_push checks Result<(),str>::Err "expected ParseError";
                 StdErrorKind::InvalidOperation:
-                    test_fail "expected ParseError";
+                    set checks checks_push checks Result<(),str>::Err "expected ParseError";
                 StdErrorKind::InvalidUtf8:
-                    test_fail "expected ParseError";
+                    set checks checks_push checks Result<(),str>::Err "expected ParseError";
                 StdErrorKind::IoError:
-                    test_fail "expected ParseError";
+                    set checks checks_push checks Result<(),str>::Err "expected ParseError";
                 StdErrorKind::Other:
-                    test_fail "expected ParseError";
+                    set checks checks_push checks Result<(),str>::Err "expected ParseError";
     dealloc_raw ok0_mem size_of<Outcome<i32, StdErrorKind>>;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 
@@ -251,38 +258,41 @@ neplg2:test
 #import "core/result" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
     let r0 <Result<i32, StdErrorKind>> Result::Ok 9;
     let r0_mem <i32> alloc_raw size_of<Result<i32, StdErrorKind>>;
     store<Result<i32, StdErrorKind>> r0_mem r0;
     let o0 <Outcome<i32, StdErrorKind>> into_outcome load<Result<i32, StdErrorKind>> r0_mem;
     let o0_mem <i32> alloc_raw size_of<Outcome<i32, StdErrorKind>>;
     store<Outcome<i32, StdErrorKind>> o0_mem o0;
-    assert result_like_is_ok load<Result<i32, StdErrorKind>> r0_mem;
-    assert result_like_is_ok load<Outcome<i32, StdErrorKind>> o0_mem;
-    assert not result_like_is_err load<Result<i32, StdErrorKind>> r0_mem;
-    assert not result_like_is_err load<Outcome<i32, StdErrorKind>> o0_mem;
+    set checks checks_push checks check result_like_is_ok load<Result<i32, StdErrorKind>> r0_mem;
+    set checks checks_push checks check result_like_is_ok load<Outcome<i32, StdErrorKind>> o0_mem;
+    set checks checks_push checks check not result_like_is_err load<Result<i32, StdErrorKind>> r0_mem;
+    set checks checks_push checks check not result_like_is_err load<Outcome<i32, StdErrorKind>> o0_mem;
 
     match result_like_result load<Result<i32, StdErrorKind>> r0_mem:
         Result::Ok v:
-            assert_eq_i32 9 v;
+            set checks checks_push checks check_eq_i32 9 v;
         Result::Err _e:
-            test_fail "expected result ok";
+            set checks checks_push checks Result<(),str>::Err "expected result ok";
 
     match result_like_result load<Outcome<i32, StdErrorKind>> o0_mem:
         Result::Ok v:
-            assert_eq_i32 9 v;
+            set checks checks_push checks check_eq_i32 9 v;
         Result::Err _e:
-            test_fail "expected outcome ok";
+            set checks checks_push checks Result<(),str>::Err "expected outcome ok";
 
     let ds <Diags> diags_one diag_warn "careful";
     let o1 <Outcome<i32, StdErrorKind>> outcome_with_diags outcome_ok<i32, StdErrorKind> 3 ds;
     let o2 <Outcome<i32, StdErrorKind>> into_outcome o1;
     let o2_mem <i32> alloc_raw size_of<Outcome<i32, StdErrorKind>>;
     store<Outcome<i32, StdErrorKind>> o2_mem o2;
-    assert result_like_is_ok load<Outcome<i32, StdErrorKind>> o2_mem;
-    assert_eq_i32 1 diags_len outcome_diags_or_empty load<Outcome<i32, StdErrorKind>> o2_mem;
+    set checks checks_push checks check result_like_is_ok load<Outcome<i32, StdErrorKind>> o2_mem;
+    set checks checks_push checks check_eq_i32 1 diags_len outcome_diags_or_empty load<Outcome<i32, StdErrorKind>> o2_mem;
     dealloc_raw o2_mem size_of<Outcome<i32, StdErrorKind>>;
     dealloc_raw o0_mem size_of<Outcome<i32, StdErrorKind>>;
     dealloc_raw r0_mem size_of<Result<i32, StdErrorKind>>;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

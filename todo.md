@@ -105,30 +105,17 @@ stdlib 再構築と直接は関係しない別件
 - Node.js 実行結果との同値性回帰を追加する。
 
 ---
-### 以下編集禁止
-
-cast関連の実装中 fnのalias用法
+### 以下LLM編集禁止 (人の指示領域)
 
 <...> の中(型注釈や型引数として読む場所)で`::` PathSep を許可
+それに従って型の名前空間,importの挙動を適切に修正
 
-複数行文字列リテラルの実装
-plan.mdの文字列の項を参照
-
-examples/nm.nepl, stdlib/nmの実装
-ドキュメントコメントのパーサーとしても使えるよう、行頭の`//: `や`//:|`を扱うかのフラグを用意しておいて
-parserでは、Resultを用い、エラーメッセージを適切に提供すること
+examples/nm.nepl, stdlib/nmの実装 再開発
+現状簡易実装であり、nodesrc/のものを用いている (nodesrcのものもより進んではいるが簡易実装)
 stdlib/nm/README.n.mdを確認し、stdlib/nm/README.n.mdがhtmlに変換できるようにする
-
-ドキュメントコメントの整備
-`//: `によるドキュメントコメントを追加
-ドキュメントコメントあるとき、次の行には何らかの定義が来る
-ドキュメントコメントはその定義に紐づけられる
-`neplg2:test`によってテストを記述し、doctestコマンドでテストを実行できるようにする
-`//:|`の行はドキュメントではデフォルト非表示にする testコードのimportなどの重要度が低い部分を隠すために使う
-/AGENTS.mdや/examples/stdio.neplを参照
-
-neplg2のドキュメントコメントは、stdlib/nmを使ってパースやAST構築、html変換などを行う
-Wasmiを使ってRustのコンパイラと統合する
+nodesrc/のhtml_gen.jsやhtml_gen_playground.jsの機能を参考に、glossとnestの扱いを改良し、
+README.n.mdやその他の.n.mdや.neplを実際に変換し、先ずはnodesrc/のhtml_genの出力と比較しながら、
+nodesrc/と一致してからはnodesrc/の実体をjsからstdlib/nmに乗り換え(現在のjs仮実装は反故)たあと、さらに実際の.n.md入力とhtml出力を吟味しながら未実装md構文などnmを改良する
 
 ## LSP関連
 テキストエディタなどで使用するための情報を、NEPLコンパイラが出力できるようにする
@@ -149,6 +136,9 @@ Semantic Highlightingを提供する
 Testing APIやCodeLensを利用(ドキュメントコメント内のテストの実行ボタン)
 Hoverでドキュメントコメントや型を表示
 Inlay Hints を提供 (式の型や括弧を表示する)
+
+### Zed拡張機能
+VSCodeと同じような機能を提供する
 
 #### 行単位
 単行ifや単行block式などに対して括弧を表示
@@ -171,58 +161,38 @@ add add 1 2 add 2 3
 ```
 こんな風に表示 Inlay Hint, a,bにInlayHintLabelPart, offUnlessPressed
 
-# targetの追加,再設計
-現状: wasm か wasi
-変更後: nasmを追加, wasip1 wasip2 wasix に変更
-包含関係を上手く処理できるように注意すること
-定義する側と、使用する側で、包含関係の判定処理が異なることなどに注意すること (定義する側(ライブラリ側)は依存を減らす「これさえあれば動く」、使用する側は依存できる先を増やす「これらのどこでも動く」)
-```
-if[target=wasm]
-if[target=wasm&wasip1]
-if[target=wasm&wasip1&wasip2]
-if[target=wasm&wasip1&wasix]
-if[target=nasm]
-if[target=nasm|wasm]
-if[target=nasm|(wasm&wasip1)]
-if[target=nasm|(wasm&wasip1&wasip2)]
-if[target=nasm|(wasm&wasip1&wasix)]
-```
-こんな感じ
+# targetの再設計
+現状targetでruntimesとfeaturesがぐちゃぐちゃに扱われている
+FFI,APIの仕組みも整理しながら、適切にtargetを再設計する
 
-NASM target, LLVM IR target, C targetの追加
-stdlib/coreとstdlib/allocはNASMとLLVMとCとWASMの全部に対応させる
-stdlib/stdはNASMとLLVMとCとWASM&WASIP1の全部に対応させる
-WASIp2やWASIXが必要な機能はstdlib/platformsで扱う
-また、今後のtarget追加があった時に柔軟に対応できるような設計とする
-
-targetのエイリアスの追加
-
-coreはnasm|llvm|c|wasm
-stdはnasm|llvm|c|(wasm&wasip1)
-```
-if[target=core]
-if[target=std]
-```
-
-tupleの書き方の変更
-現行の`(a,b)`の記法は廃止して、他の書き方になじむよう
+# tupleの書き方の変更
+現状、
 ```
 Tuple:
     a
     b
 ```
-のような構文に変更
-テストケースにある旧記法は新記法に置き換える
-フィールドアクセスは廃止 (a.0, a.1 など)
-field.neplのget,putによってアクセス
+2要素と3要素のTupleにPairとTripleの標準名を与え、そのように書き直す
+```
+Pair a b
+Triple a b c
+```
 
-単行ブロック式の追加
-plan.mdの単行ブロックの項を確認すること
+# 型の前置記法化
+現状、型は前置記法となっていない
+適切に再設計し、他の記法と同様に前置記法化を進める
 
-パイプ演算子の改良,活用
-パイプ演算子を改行して書けるようにする
-標準ライブラリなどで、パイプ演算子を活用して書けるようにする
-plan.mdのパイプ演算子の項を確認すること
+# patternの設計
+letやmatch caseでpatternが使えるようにする
+structやtupleの分解などが行えるようにする
+型の記法と構文にを持たせる
+コード例
+```
+let p Pair 1 2
+let Pair a b p // pを(a,b)に分解
+```
+
+# 言語処理系
 
 stdlib/alloc/encoding/json.nepl
 数値はf64として扱うように変更
