@@ -10,7 +10,7 @@ stdout: "6 -> Fizz\n10 -> Buzz\n30 -> FizzBuzz\n7 -> 7\n"
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "core/math" as *
 #import "std/stdio" as *
@@ -46,7 +46,7 @@ stdout: "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "core/math" as *
 #import "std/stdio" as *

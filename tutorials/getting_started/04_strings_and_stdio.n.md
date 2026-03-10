@@ -10,7 +10,7 @@ stdout: "Hello, World\n"
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "core/mem" as *
 #import "alloc/string" as *
@@ -31,7 +31,7 @@ stdout: "A=10\n"
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "std/stdio" as *
 
@@ -50,7 +50,7 @@ stdout: "abc\n"
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "std/stdio" as *
 

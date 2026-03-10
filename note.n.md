@@ -9836,3 +9836,48 @@
   - `node nodesrc/cli.js -i doc/testing.md -o html=/tmp/doc-testing-html`
     - [結果/けっか]: `generated 0 html file(s)`
     - [確認/かくにん]: `.md` は HTML 生成対象外であり、異常ではない。
+
+# 2026-03-10 作業メモ (`tutorials/getting_started` の std entrypoint へ移行)
+
+- [目的/もくてき]:
+  - getting started tutorial が古い `#target wasi` を教えていたため、reboot 後の公開入口である `#target std` に揃える。
+  - 初学者向け文書が内部 runtime 名ではなく std facade を起点に説明するようにする。
+- [根本原因/こんぽんげんいん]:
+  - `std/stdio` などの利用例がすでに std facade 前提に整理されている一方、tutorial の doctest だけ旧 `wasi` target のまま残っていた。
+  - そのため、現在の設計哲学である「利用者は raw platform ではなく std/features を入口にする」と文書がずれていた。
+- [変更/へんこう]:
+  - `tutorials/getting_started/01_hello_world.n.md`
+    - 冒頭説明を `#target std` 前提へ更新した。
+    - 最初につまずきやすい点の bullet も `#target std` に同期した。
+  - `tutorials/getting_started/02_numbers_and_variables.n.md`
+  - `tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md`
+  - `tutorials/getting_started/03_functions.n.md`
+  - `tutorials/getting_started/04_strings_and_stdio.n.md`
+  - `tutorials/getting_started/05_option.n.md`
+  - `tutorials/getting_started/06_result.n.md`
+  - `tutorials/getting_started/07_while_and_block.n.md`
+  - `tutorials/getting_started/08_if_layouts.n.md`
+  - `tutorials/getting_started/09_import_and_structure.n.md`
+  - `tutorials/getting_started/10_project_fizzbuzz.n.md`
+  - `tutorials/getting_started/11_testing_workflow.n.md`
+  - `tutorials/getting_started/12_pure_function_pipeline.n.md`
+  - `tutorials/getting_started/13_type_driven_error_modeling.n.md`
+  - `tutorials/getting_started/14_refactor_with_properties.n.md`
+  - `tutorials/getting_started/15_match_patterns.n.md`
+  - `tutorials/getting_started/16_debug_and_ansi.n.md`
+  - `tutorials/getting_started/17_namespace_and_alias.n.md`
+  - `tutorials/getting_started/18_recursion_and_termination.n.md`
+  - `tutorials/getting_started/19_pipe_operator.n.md`
+  - `tutorials/getting_started/20_generics_basics.n.md`
+  - `tutorials/getting_started/21_trait_bounds_basics.n.md`
+    - doctest 内の `#target wasi` を `#target std` に更新した。
+- [設計/せっけい][判断/はんだん]:
+  - tutorial は内部 target 名を教える場所ではなく、利用者が最初に触れる public entrypoint を示すべきなので、`std` へ揃えるのが適切と判断した。
+  - 変更は tutorial 内の target 指定と説明文だけに限定し、サンプル本体の構造や import は不要に触らなかった。
+- [検証/けんしょう]:
+  - `rg -n "#target wasi|WASI ターゲット|target wasi" tutorials/getting_started --glob '*.n.md'`
+    - [結果/けっか]: 該当なし
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/01_hello_world.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/04_strings_and_stdio.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/09_import_and_structure.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/11_testing_workflow.n.md -n 1` -> pass

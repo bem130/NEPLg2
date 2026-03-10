@@ -9,7 +9,7 @@ neplg2:test
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "core/option" as *
 #import "std/test" as *
@@ -33,7 +33,7 @@ neplg2:test
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "core/result" as *
 #import "std/test" as *

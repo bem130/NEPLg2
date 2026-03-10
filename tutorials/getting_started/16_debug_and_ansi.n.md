@@ -10,7 +10,7 @@ stdout: "\u001b[31mERR\u001b[0m \u001b[32mOK\u001b[0m\n"
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "std/stdio" as *
 
@@ -27,7 +27,7 @@ stdout: "Checked color-ready\n"
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "std/test" as *
 

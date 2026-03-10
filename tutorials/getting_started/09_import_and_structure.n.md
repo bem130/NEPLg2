@@ -10,7 +10,7 @@ neplg2:test
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "core/math" as *
 #import "std/test" as *
@@ -36,7 +36,7 @@ stdout: "42\n"
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "core/math" as *
 #import "std/stdio" as *

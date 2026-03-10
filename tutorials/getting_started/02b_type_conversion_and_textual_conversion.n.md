@@ -18,7 +18,7 @@ neplg2:test
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "core/cast" as *
 #import "std/test" as *
@@ -39,7 +39,7 @@ neplg2:test
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "alloc/string" as *
 #import "core/cast" as *
@@ -60,7 +60,7 @@ neplg2:test
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "alloc/string" as *
 #import "core/result" as *
@@ -91,7 +91,7 @@ neplg2:test
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "alloc/string" as *
 #import "core/result" as *
@@ -123,7 +123,7 @@ neplg2:test
 ```neplg2
 | #entry main
 | #indent 4
-| #target wasi
+| #target std
 |
 #import "alloc/string" as *
 #import "core/math" as *

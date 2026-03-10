@@ -1,7 +1,7 @@
 # Hello World
 
 NEPLg2 で実行可能な最小プログラムです。
-WASI ターゲットでは `#target wasi` と `#entry main` を指定し、`fn main <()*> ()> ():` を定義します。
+標準ライブラリを使う最小プログラムでは `#target std` と `#entry main` を指定し、`fn main <()*> ()> ():` を定義します。
 
 ここでは `std/stdio` の `println` で 1 行出力します。
 
@@ -11,7 +11,7 @@ stdout: "Hello, NEPL!\n"
 // 諸々を設定します
 #entry main
 #indent 4
-#target wasi
+#target std
 
 // stdioをインポートします。
 #import "std/stdio" as *
@@ -29,7 +29,7 @@ fn main <()*> ()> ():
 
 ## 最初につまずきやすい点
 
-- `#target wasi` がないと、`std/stdio` の入出力が使えません。
+- `#target std` がないと、`std/stdio` の入出力が使えません。
 - `#entry main` がないと、どの関数を実行するか決まりません。
 - `#indent` の幅と実際のインデントがずれると、パースエラーになります。
 
