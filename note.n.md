@@ -9609,3 +9609,37 @@
 - [状況/じょうきょう]:
   - `std/stdio` / `std/streamio` / `std/fs` の binary path がすべて `ByteBuf` を共有する形になった。
   - todo 7 の `std` facade 整理は、`env/cliarg` や残りの target 依存 API の確認を残して継続中である。
+
+# 2026-03-10 作業メモ (`std/env/cliarg` の一時領域管理を `alloc_ptr` へ統一)
+
+- [目的/もくてき]:
+  - todo 7 の `std/env` 整理として、`cliarg` を reboot 後の move/effect 規則と矛盾しない facade に直す。
+  - `std/fs` と同様に、一時作業領域の所有モデルを `RegionToken` 依存から外し、target 依存実装の内部複雑さを利用者から隠す形へ寄せる。
+- [根本原因/こんぽんげんいん]:
+  - `cliarg_count` / `cliarg_get` / `cstr_to_str` は 2026-03-06 時点で `RegionToken<u8>` ベースへ寄せていたが、move check 強化後は `meta` や `argv` を helper に渡した時点で所有権が移り、その後の再参照で `D3053` が出る状態になっていた。
+  - つまり `cliarg` だけが「一時バッファを線形 token で持ち回す旧設計」に留まっており、直近で `std/fs` に適用した解き方と揃っていなかった。
+  - その結果、`stdlib/tests/cliarg.n.md` は compile fail し、`cliarg_argv_stdout_count` も空出力になっていた。
+- [変更/へんこう]:
+  - `stdlib/std/env/cliarg.nepl`
+    - `cli_i32_ptr` を `MemPtr<u8> + size + off` から `i32*` を切り出す helper に変更した。
+    - `cli_alloc_u8_region` / `cli_free_region` / `cli_u8_ptr` を削除し、一時バッファは `alloc_ptr<u8>` / `dealloc_ptr<u8>` で管理する形へ統一した。
+    - LLVM 側の `__cli_copy_to_cstr`、`args_sizes_get`、`args_get` を `MemPtr<u8>` ベースへ更新した。
+    - `cstr_to_str` は `RegionToken` を介さず `[len][bytes]` 領域を直接確保して組み立てる形に変更した。
+    - `cliarg_count` / `cliarg_get` の meta, argv, argv_buf の寿命管理をすべて `alloc_ptr` ベースへ置き換えた。
+- [設計/せっけい][判断/はんだん]:
+  - `cliarg` のメタ情報バッファは関数内ローカルの一時領域であり、公開の安全 API 面ではないため、`RegionToken` を無理に表へ通すより `alloc_ptr` で閉じた方が責務に合うと判断した。
+  - `cstr_len` / `cstr_to_str` の公開境界は従来通り `MemPtr<u8>` のまま維持し、型安全化済みの API 形状は崩さなかった。
+  - `std/fs` と `std/env/cliarg` の両方で同じ一時領域パターンに揃えたことで、`std` facade 内の target 依存実装方針も一致した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/tests/cliarg.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/cliarg.n.md -n 2` -> pass (`stdout: "3"`)
+  - `node nodesrc/tests.js -i stdlib/tests/cliarg.n.md -i stdlib/std/env/cliarg.nepl --no-stdlib --no-tree -o /tmp/tests-cliarg-current.json -j 15`
+    - [結果/けっか]: `9/9 pass`
+  - `/tmp/tests-cliarg-current.json`
+    - [確認/かくにん]: `summary.total = 9`, `summary.passed = 9`, `summary.failed = 0`
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/cli.js -i stdlib/std/env/cliarg.nepl -i stdlib/tests/cliarg.n.md -o html=/tmp/cliarg-doc-html`
+    - [結果/けっか]: `generated 2 html file(s)`
+- [状況/じょうきょう]:
+  - `std/env/cliarg` の focused regression は復旧し、`std` facade のうち `stdio` / `fs` / `env/cliarg` の主要入口は現行 move/effect 規則に追従した。
+  - todo 7 は facade 全体の整合確認と、必要なら残る target 依存 API の整理を続ける段階に入った。
