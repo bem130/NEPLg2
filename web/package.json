@@ -2,6 +2,7 @@
   "name": "neplg2-playground",
   "version": "0.1.0",
   "description": "Web playground for NEPLg2 programming language",
+  "type": "module",
   "scripts": {
     "start": "trunk serve",
     "build:ts": "tsc",

@@ -9789,3 +9789,26 @@
 - [状況/じょうきょう]:
   - `features/tui` は facade と examples だけでなく、focused doctest harness からも検証できる状態になった。
   - nodesrc 側は `#target wasix` を扱えるようになり、今後の `features` 系回帰追加でも同じ経路を再利用できる。
+
+# 2026-03-10 作業メモ (`web/package.json` を ESM 化して nodesrc の module type warning を除去)
+
+- [目的/もくてき]:
+  - `nodesrc` 実行時に毎回出ていた `[MODULE_TYPELESS_PACKAGE_JSON]` warning を除去し、test の signal を見やすくする。
+  - `compiler_loader.js` が `web/dist/nepl-web-*.js` を ESM として dynamic import している前提を package scope 側でも明示する。
+- [根本原因/こんぽんげんいん]:
+  - `nodesrc/compiler_loader.js` は wasm-bindgen 生成物の `nepl-web-*.js` を dynamic import しているが、親ディレクトリである `web/` の `package.json` に `"type": "module"` がなかった。
+  - そのため Node.js は一旦 CommonJS として解釈しようとしてから ESM として再解釈し、`run_doctest.js` / `tests.js` / `cli.js` 実行時に毎回 warning を出していた。
+  - warning 自体は失敗ではないが、focused test の stderr を汚し、harness 改修時の本当の異常と見分けにくくなっていた。
+- [変更/へんこう]:
+  - `web/package.json`
+    - `"type": "module"` を追加した。
+- [設計/せっけい][判断/はんだん]:
+  - 問題は loader 側ではなく package scope の宣言不足なので、warning を suppress するのではなく package metadata を実態に合わせるのが根本修正と判断した。
+  - `web/` 配下の Node tool は主に `tsc` / `trunk` 経由で使っており、ESM 指定を追加しても現行運用と矛盾しないことを build で確認した。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/run_doctest.js -i tests/stdlib/features_tui.n.md -n 1` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/features_tui.n.md -i stdlib/features/tui.nepl -i stdlib/platforms/wasix/tui.nepl --no-stdlib --no-tree -o /tmp/tests-features-tui.json -j 15`
+    - [結果/けっか]: `3/3 pass`
+  - [確認/かくにん]:
+    - 上記実行から `[MODULE_TYPELESS_PACKAGE_JSON]` warning が消えた。
