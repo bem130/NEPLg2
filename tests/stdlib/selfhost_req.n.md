@@ -22,7 +22,7 @@ ret: 0
 
 fn main <()*>i32> ():
     // 要件: ソースコードファイルを読み込めること
-    let path "stdlib/tests/fs.nepl";
+    let path "stdlib/tests/fs.n.md";
     let res <Result<str,i32>> fs_read_to_string path;
     
     match res:

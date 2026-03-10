@@ -9643,3 +9643,35 @@
 - [状況/じょうきょう]:
   - `std/env/cliarg` の focused regression は復旧し、`std` facade のうち `stdio` / `fs` / `env/cliarg` の主要入口は現行 move/effect 規則に追従した。
   - todo 7 は facade 全体の整合確認と、必要なら残る target 依存 API の整理を続ける段階に入った。
+
+# 2026-03-10 作業メモ (`std` facade 周辺の説明・参照先を現行構成へ同期)
+
+- [目的/もくてき]:
+  - 直近で揃えた `std/stdio` / `std/fs` / `std/env/cliarg` の実装に対し、comment / test 文面 / docs 側の古い前提を除去する。
+  - 実装は通っていても、説明が旧構成のままだと次の reboot 作業で誤った想定を再導入しやすいため、ここで同期する。
+- [根本原因/こんぽんげんいん]:
+  - `std/env/cliarg` の module comment には、以前の実装を引きずった「取得ごとにメモリを確保し、解放しません」が残っていた。
+  - `tests/stdlib/selfhost_req.n.md` は存在しない `stdlib/tests/fs.nepl` を要件確認の参照先にしており、現行 repo 構成とずれていた。
+  - `doc/testing.md` も旧名 `std/cliarg` と旧 `stdio` 説明を残しており、現在の `std/env/cliarg` / `stdio_read_all_bytes` 構成と一致していなかった。
+- [変更/へんこう]:
+  - `stdlib/std/env/cliarg.nepl`
+    - module comment の注意事項を、返り値 `str` は新規確保される一方で内部一時バッファは関数内で解放される、という現行実装に合わせて更新した。
+  - `tests/stdlib/selfhost_req.n.md`
+    - file I/O 要件確認の対象パスを、実在する `stdlib/tests/fs.n.md` へ変更した。
+  - `doc/testing.md`
+    - `std/cliarg` を `std/env/cliarg` へ更新した。
+    - `std/stdio` の要約を、古い `read_all` / `read_line` 中心説明から、現在の `stdio_read_all_bytes` を含む構成へ更新した。
+- [設計/せっけい][判断/はんだん]:
+  - この種の差分は機能追加ではないが、reboot 中は「古い説明が残ること自体が不具合の入口」になるため、実装変更と同じ優先度で揃えるべきと判断した。
+  - `selfhost_req` は「たまたま通る古い前提」を残さず、現在の repo に存在する file を明示的に読む形へ寄せた。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/selfhost_req.n.md -n 1` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/selfhost_req.n.md -i stdlib/tests/cliarg.n.md -i stdlib/std/env/cliarg.nepl -i stdlib/std/fs.nepl -i stdlib/std/stdio.nepl --no-stdlib --no-tree -o /tmp/tests-doc-followup.json -j 15`
+    - [結果/けっか]: `47/47 pass`
+  - `node nodesrc/tests.js -i tests/stdlib/streamio.n.md -i tests/stdlib/fs.n.md -i stdlib/tests/fs.n.md -i stdlib/tests/cliarg.n.md -i tests/stdlib/stdin.n.md -i tests/stdlib/stdout.n.md -i stdlib/std/streamio.nepl -i stdlib/std/stdio.nepl -i stdlib/std/fs.nepl -i stdlib/std/env/cliarg.nepl --no-stdlib --no-tree -o /tmp/tests-std-facade-sweep.json -j 15`
+    - [結果/けっか]: `64/64 pass`
+  - `node nodesrc/cli.js -i stdlib/std/env/cliarg.nepl -i tests/stdlib/selfhost_req.n.md -o html=/tmp/std-followup-doc-html`
+    - [結果/けっか]: `generated 2 html file(s)`
+- [状況/じょうきょう]:
+  - `std` facade 周辺の実装・comment・focused test・利用者向け補助 doc の前提が一致した。
+  - 次段では `std` 本体の残り target 依存 API と、`features` / tutorials 側の追従状況を見ていく。

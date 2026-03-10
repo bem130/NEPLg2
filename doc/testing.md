@@ -87,9 +87,8 @@ The current stdlib is intentionally minimal and i32-focused:
 - `std/result`: `ResultI32` and helpers
 - `std/option`: `OptionI32` and helpers
 - `std/list`: fixed-capacity list of i32 with bounds-checked get
-- `std/stdio`: WASI `print`, `println`, `print_i32`, `println_i32`, `read_all`,
-  `read_line`
-- `std/cliarg`: WASI `args_sizes_get/args_get` argument access (`cliarg_count`,
+- `std/stdio`: standard output helpers plus `stdio_read_all_bytes`
+- `std/env/cliarg`: WASI `args_sizes_get/args_get` argument access (`cliarg_count`,
   `cliarg_get`, `cliarg_program`)
 - `std/hashmap`: i32 キーの簡易ハッシュマップ（オープンアドレス法）
 - `std/hashset`: i32 要素の簡易ハッシュ集合（オープンアドレス法）
