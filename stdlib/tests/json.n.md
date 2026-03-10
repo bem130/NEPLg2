@@ -11,63 +11,63 @@ neplg2:test
 
 #import "alloc/encoding/json" as *
 #import "core/option" as *
+#import "core/result" as *
 #import "alloc/string" as *
 #import "std/test" as *
 
-fn main <()*> ()> ():
+fn main <()*> i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
     let jn1 <JsonValue> json_null
-    assert json_is_null jn1
+    set checks checks_push checks check json_is_null jn1
     let jn2 <JsonValue> json_null
-    assert is_none<bool> json_as_bool jn2
+    set checks checks_push checks check is_none<bool> json_as_bool jn2
     let jn3 <JsonValue> json_null
-    assert is_none<i32> json_as_number jn3
-    test_checked "null"
+    set checks checks_push checks check is_none<i32> json_as_number jn3
 
     let jt1 <JsonValue> json_bool true
     match json_as_bool jt1:
         Option::Some v:
-            assert v
+            set checks checks_push checks check v
         Option::None:
-            test_fail "json_as_bool true returned None"
+            set checks checks_push checks Result<(),str>::Err "json_as_bool true returned None"
 
     let jf1 <JsonValue> json_bool false
     match json_as_bool jf1:
         Option::Some v:
-            assert_ne true v
+            set checks checks_push checks check_ne true v
         Option::None:
-            test_fail "json_as_bool false returned None"
+            set checks checks_push checks Result<(),str>::Err "json_as_bool false returned None"
     let jt2 <JsonValue> json_bool true
-    assert is_none<i32> json_as_number jt2
-    test_checked "bool"
+    set checks checks_push checks check is_none<i32> json_as_number jt2
 
     let jnum1 <JsonValue> json_number 123
     match json_as_number jnum1:
         Option::Some v:
-            assert_eq_i32 123 v
+            set checks checks_push checks check_eq_i32 123 v
         Option::None:
-            test_fail "json_as_number returned None"
+            set checks checks_push checks Result<(),str>::Err "json_as_number returned None"
     let jnum2 <JsonValue> json_number 123
-    assert is_none<bool> json_as_bool jnum2
-    test_checked "number"
+    set checks checks_push checks check is_none<bool> json_as_bool jnum2
 
     let s <str> "hello"
     let js1 <JsonValue> json_string s
     match json_as_string js1:
         Option::Some p:
-            assert_str_eq "hello" p
+            set checks checks_push checks check_str_eq "hello" p
         Option::None:
-            test_fail "json_as_string returned None"
+            set checks checks_push checks Result<(),str>::Err "json_as_string returned None"
     let js2 <JsonValue> json_string s
-    assert is_none<i32> json_as_number js2
-    test_checked "string"
+    set checks checks_push checks check is_none<i32> json_as_number js2
 
     let ja1 <JsonValue> json_array 0
-    assert_ne true json_is_null ja1
+    set checks checks_push checks check_ne true json_is_null ja1
     let ja2 <JsonValue> json_array 0
-    assert is_none<i32> json_as_string ja2
+    set checks checks_push checks check is_none<i32> json_as_string ja2
 
     let jo1 <JsonValue> json_object 0
-    assert is_none<i32> json_as_string jo1
-    test_checked "other"
-    ()
+    set checks checks_push checks check is_none<i32> json_as_string jo1
+
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```

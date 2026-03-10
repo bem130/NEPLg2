@@ -10347,3 +10347,32 @@
   - `node nodesrc/run_doctest.js -i stdlib/tests/hashset_str.n.md -n 1` -> pass
   - `node nodesrc/tests.js -i stdlib/tests/list.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/hashset_str.n.md --no-stdlib --no-tree -o /tmp/tests-collections-batch1.json -j 4`
     - [結果/けっか]: `3/3 pass`
+
+# 2026-03-10 作業メモ (`hashmap` / `hashmap_str` / `rand` / `json` fixture を explicit report 流儀へ追従)
+
+- [目的/もくてき]:
+  - `stdlib/tests/hashmap.n.md`, `stdlib/tests/hashmap_str.n.md`, `stdlib/tests/rand.n.md`, `stdlib/tests/json.n.md` を、[現行/げんこう]の `Vec<Result<(),str>>` + explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - [途中/とちゅう]で `test_checked` や `test_fail` を[呼/よ]ぶ[旧来/きゅうらい]の[実行/じっこう]モデルを[除去/じょきょ]し、test [終了時/しゅうりょうじ]に 1 [回/かい]だけ[明示的/めいじてき]に[表示/ひょうじ]する。
+- [根本原因/こんぽんげんいん]:
+  - 4 fixture とも `fn main <()*>()> ():` ないし同等の unit-return main と、`assert_*` / `test_fail` / `test_checked` を[逐次/ちくじ][実行/じっこう]する[古/ふる]い[書/か]き[方/かた]が[残/のこ]っていた。
+  - reboot [後/ご]の `std/test` は `finish_checks` を pure にし、`checks_exit_code` は stdout を[汚/よご]さず、test case [側/がわ]が `checks_print_report` を[明示的/めいじてき]に[呼/よ]ぶ[方針/ほうしん]へ[移/うつ]っているため、fixture [群/ぐん]が[旧流儀/きゅうりゅうぎ]のままだと test [作法/さほう]が[混在/こんざい]していた。
+- [変更/へんこう]:
+  - `stdlib/tests/hashmap.n.md`
+    - [全/すべ]ての[検査/けんさ]を `checks_push` に[集約/しゅうやく]し、`Option::None` [分岐/ぶんき]も `Result::Err` として[保持/ほじ]する[形/かたち]へ[変更/へんこう]した。
+    - [末尾/まつび]に `checks_print_report` と `checks_exit_code` を[追加/ついか]した。
+  - `stdlib/tests/hashmap_str.n.md`
+    - [文字列/もじれつ] key 版も[同様/どうよう]に、content [同値/どうち] / update / remove / alias [確認/かくにん]を `Vec<Result<(),str>>` に[集約/しゅうやく]した。
+  - `stdlib/tests/rand.n.md`
+    - [確率的/かくりつてき]な[検査/けんさ]を `check_ne` [列/れつ]に[揃/そろ]え、[終了時/しゅうりょうじ] report のみ[表示/ひょうじ]する[形/かたち]へ[変更/へんこう]した。
+  - `stdlib/tests/json.n.md`
+    - `Option::Some` / `Option::None` [分岐/ぶんき]と `json_is_null` / `json_as_*` [確認/かくにん]を `checks_push` へ[集約/しゅうやく]した。
+- [設計/せっけい][判断/はんだん]:
+  - 4 fixture とも stdout [出力/しゅつりょく][内容/ないよう]に[観測価値/かんそくかち]があるため、tutorial [側/がわ]のような silent `checks_exit_code` [単独/たんどく]ではなく、`checks_print_report` を[明示的/めいじてき]に[残/のこ]した。
+  - `test_fail` を[途中/とちゅう]で[呼/よ]ばず、`Result::Err` を[積/つ]んで[最後/さいご]に[表示/ひょうじ]することで、「[途中/とちゅう]では print しない」「return [直前/ちょくぜん]に[明示 print/めいじ print] する」という reboot [後/ご] test [哲学/てつがく]へ[揃/そろ]えた。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/tests/hashmap.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/hashmap_str.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/rand.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/json.n.md -n 1` -> pass
+  - `node nodesrc/tests.js -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/rand.n.md -i stdlib/tests/json.n.md --no-stdlib --no-tree -o /tmp/tests-stdlib-safe-result-batch2.json -j 4`
+    - [結果/けっか]: `4/4 pass`
