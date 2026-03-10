@@ -10517,3 +10517,28 @@
 - [検証/けんしょう]:
   - `node nodesrc/tests.js -i tutorials/getting_started/05_option.n.md -i tutorials/getting_started/06_result.n.md -i tutorials/getting_started/07_while_and_block.n.md --no-stdlib --no-tree -o /tmp/tests-tutorial-option-result-while.json -j 4`
     - [結果/けっか]: `6/6 pass`
+
+# 2026-03-10 作業メモ (`if` / `import` / `testing workflow` tutorial を explicit report 流儀へ追従)
+
+- [目的/もくてき]:
+  - `tutorials/getting_started/08_if_layouts.n.md`, `tutorials/getting_started/09_import_and_structure.n.md`, `tutorials/getting_started/11_testing_workflow.n.md` を、[現行/げんこう]の explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - [旧/きゅう] `test_checked` success log と、その[前提/ぜんてい]で[書/か]かれていた `11_testing_workflow` の[説明/せつめい]を、current の `checks_print_report` [中心/ちゅうしん] API へ[更新/こうしん]する。
+- [根本原因/こんぽんげんいん]:
+  - `08_if_layouts` と `09_import_and_structure` は、`Vec<Result<(),str>>` を[使/つか]っているにもかかわらず、[最後/さいご]だけ `test_checked` に[戻/もど]る[過渡期/かとき]の[書/か]き[方/かた]が[残/のこ]っていた。
+  - `11_testing_workflow` は chapter [自体/じたい]が[旧流儀/きゅうりゅうぎ]の[説明/せつめい]を[含/ふく]んでおり、`test_checked` を[直接/ちょくせつ][呼/よ]ぶ example と[旧 stdout 期待値/きゅう stdout きたいち]が[残/のこ]っていた。
+- [変更/へんこう]:
+  - `tutorials/getting_started/08_if_layouts.n.md`
+    - 4 [件/けん]の doctest を `check_eq_i32` + `checks_print_report` へ[変更/へんこう]した。
+  - `tutorials/getting_started/09_import_and_structure.n.md`
+    - `pipeline_like` の[確認/かくにん]を explicit report [形/けい]へ[移行/いこう]した。
+  - `tutorials/getting_started/11_testing_workflow.n.md`
+    - [本文/ほんぶん]の[説明/せつめい]を `check_*` / `finish_checks` / `checks_print_report` [中心/ちゅうしん]へ[書/か]き[換/か]えた。
+    - `std/test` と[組/く]み[合/あ]わせる example は `Vec<Result<(),str>>` を 2 [件/けん][積/つ]み、[最後/さいご]に `checks_print_report` を[明示/めいじ]する[形/かたち]へ[変更/へんこう]した。
+    - stdout [期待値/きたいち]も `Checked [ok,ok]` / `[0] ok` / `[1] ok` [形式/けいしき]へ[更新/こうしん]した。
+- [設計/せっけい][判断/はんだん]:
+  - `11_testing_workflow` は test [方針/ほうしん]そのものを[教/おし]える chapter なので、ここが[現行/げんこう] API と[食/く]い[違/ちが]うと repo [全体/ぜんたい]の[方向/ほうこう]を[誤誘導/ごゆうどう]する。そのため、実装変更だけでなく[説明/せつめい]も[同時/どうじ]に[更新/こうしん]した。
+  - tutorial [側/がわ]でも success [表示/ひょうじ]を test case [末尾/まつび]の[明示 print/めいじ print]へ[揃/そろ]えることで、runner [依存/いぞん]ではなく code [自体/じたい]の[意図/いと]として[読/よ]めるようにした。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/11_testing_workflow.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i tutorials/getting_started/08_if_layouts.n.md -i tutorials/getting_started/09_import_and_structure.n.md -i tutorials/getting_started/11_testing_workflow.n.md --no-stdlib --no-tree -o /tmp/tests-tutorial-if-import-testing.json -j 4`
+    - [結果/けっか]: `8/8 pass`

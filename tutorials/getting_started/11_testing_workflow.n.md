@@ -32,21 +32,26 @@ fn main <()*>i32> ():
 
 ## 失敗時の読みやすい出力
 
-`test_checked` や `finish_checks` は `Result<(),str>` を返すので、`checks_exit_code` や `result_exit_code` で `main` の戻り値へ落とします。`Vec<Result<(),str>>` の[表示/ひょうじ]は[自動/じどう]ではなく、test [末尾/まつび]で `checks_print_report` を[明示的/めいじてき]に[呼/よ]びます。
+`check_*` や `finish_checks` は `Result<(),str>` を返すので、`checks_exit_code` や `result_exit_code` で `main` の戻り値へ落とします。`Vec<Result<(),str>>` の[表示/ひょうじ]は[自動/じどう]ではなく、test [末尾/まつび]で `checks_print_report` を[明示的/めいじてき]に[呼/よ]びます。
 
 neplg2:test[stdio, normalize_newlines, strip_ansi]
 ret: 0
-stdout: "Checked section-a\nChecked section-b\n"
+stdout: "Checked [ok,ok]\n[0] ok\n[1] ok\n"
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "std/test" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
-    let _a <Result<(),str>> test_checked "section-a";
-    result_exit_code test_checked "section-b"
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push Result<(),str>::Ok ()
+        |> checks_push Result<(),str>::Ok ()
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## テスト追加の実務手順

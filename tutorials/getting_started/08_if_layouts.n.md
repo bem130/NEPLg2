@@ -22,10 +22,10 @@ fn clamp_non_negative <(i32)->i32> (x):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 0 clamp_non_negative -9
-        |> checks_push assert_eq_i32 6 clamp_non_negative 6
-    let _done <Result<(),str>> test_checked "if inline";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 0 clamp_non_negative -9
+        |> checks_push check_eq_i32 6 clamp_non_negative 6
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## `if:` で複数行に分ける
@@ -50,10 +50,10 @@ fn pick <(bool,i32,i32)->i32> (c, a, b):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 11 pick true 11 22
-        |> checks_push assert_eq_i32 22 pick false 11 22
-    let _done <Result<(),str>> test_checked "if colon arguments";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 11 pick true 11 22
+        |> checks_push check_eq_i32 22 pick false 11 22
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## `then:` / `else:` を block として使う
@@ -80,10 +80,10 @@ fn score <(i32)->i32> (n):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 0 score -1
-        |> checks_push assert_eq_i32 107 score 7
-    let _done <Result<(),str>> test_checked "if with block then else";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 0 score -1
+        |> checks_push check_eq_i32 107 score 7
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## `cond` / `then` / `else` の順序を固定する
@@ -112,8 +112,8 @@ fn adjust <(i32)->i32> (x):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 95 adjust -5
-        |> checks_push assert_eq_i32 -95 adjust 5
-    let _done <Result<(),str>> test_checked "if order and mixed layout";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 95 adjust -5
+        |> checks_push check_eq_i32 -95 adjust 5
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

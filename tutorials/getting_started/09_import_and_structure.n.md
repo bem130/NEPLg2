@@ -29,9 +29,9 @@ fn pipeline_like <(i32)->i32> (x):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 9 pipeline_like 4
-    let _done <Result<(),str>> test_checked "import and split functions";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 9 pipeline_like 4
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 標準I/Oと組み合わせる
