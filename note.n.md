@@ -9981,3 +9981,40 @@
   - `node nodesrc/run_doctest.js -i stdlib/tests/error.n.md -n 3` -> pass
   - `node nodesrc/tests.js -i stdlib/tests/diag.n.md -i stdlib/tests/error.n.md -i stdlib/alloc/diag/diag.nepl -i stdlib/alloc/diag/error.nepl --no-stdlib --no-tree -o /tmp/tests-diag-error-focus.json -j 15`
     - [結果/けっか]: `7/7 pass`
+
+# 2026-03-10 作業メモ (`std/test` collect API と `run_doctest` の比較規則を同期)
+
+- [目的/もくてき]:
+  - old failure list にあった `test.nepl` / `std_test_collect.n.md` 系を current move model と current nodesrc expectation に揃える。
+- [根本原因/こんぽんげんいん]:
+  - `stdlib/std/test.nepl`
+    - collect API が `Vec<Result<(),str>>` を再帰でそのまま持ち回しており、現行 move model では `checks` の再利用が `D3053` になっていた。
+    - `checks_has_err_*` / `checks_summary_*` / `checks_print_failures_*` / `finish_checks` は、non-Copy `Vec` を何度も読み直す旧実装のままだった。
+  - `nodesrc/run_doctest.js`
+    - `tests.js` と違って `strip_ansi` / `normalize_newlines` を反映しておらず、さらに `should_panic` case の stdout 比較もスキップしていなかった。
+    - そのため `tests.js` では pass する `std_test_collect` が `run_doctest.js` では ANSI 色コードつき stdout mismatch で fail していた。
+- [変更/へんこう]:
+  - `stdlib/std/test.nepl`
+    - collect API の内部走査を `Vec` owner の再帰持ち回しから、temporary memory + raw data 走査へ変更した。
+    - `checks_has_err`
+    - `checks_summary`
+    - `checks_print_failures_loop`
+    - `checks_report_failures`
+    - `finish_checks`
+      - いずれも backing store を 1 回だけ取り出して使う形に揃えた。
+    - 関連 doc comment も raw data 走査ベースの実装説明へ更新した。
+  - `nodesrc/run_doctest.js`
+    - `normalize_newlines` と `strip_ansi` を `tests.js` と同じ規則で適用するようにした。
+    - `should_panic` case の I/O expectation を `tests.js` と同様にスキップするようにした。
+- [設計/せっけい][判断/はんだん]:
+  - `std/test` は tutorial / stdlib doctest の基盤なので、test data を ANSI なしへ書き換えるのではなく collect API と runner の両方を current 仕様へ揃えるのが根本修正と判断した。
+  - focused debugging 用の `run_doctest.js` が本体 runner と違う expectation 規則を持つのは危険なので、`tests.js` と同じ比較セマンティクスに寄せた。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/std/test.nepl -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/std_test_collect.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/std_test_collect.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/std_test_collect.n.md -i stdlib/std/test.nepl --no-stdlib --no-tree -o /tmp/tests-std-test-collect-focus.json -j 15`
+    - [結果/けっか]: `14/14 pass`
+- [追記/ついき]:
+  - `doc/stdlib_doc_comment_policy.md` を[再確認/さいかくにん]し、`stdlib/std/test.nepl` の今回[変更/へんこう]した helper comment を `##` / `###` [形式/けいしき]へ[揃/そろ]えた。
+  - [実装/じっそう]が raw data [走査/そうさ]へ[変/か]わったこと、move model に[合/あ]わせて temporary memory を[使/つか]うことが comment に[反映/はんえい]されていることを[確認/かくにん]した。

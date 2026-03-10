@@ -456,175 +456,194 @@ fn check_status_str <(Result<(),str>)->str> (r):
         Result::Err e:
             "err"
 
-//: checks_has_err_loop: `Err` を含むかを順に調べる内部 helper
+//: ## checks_has_err_loop
+//: `Err` を[含/ふく]むかを[順/じゅん]に[調/しら]べる[内部/ないぶ] helper
 //:
-//: [目的/もくてき]:
-//: - 集約済み検査列に失敗があるかを線形走査で判定します。
+//: ### [目的/もくてき]
+//: - [集約/しゅうやく][済/ず]み[検査列/けんされつ]に[失敗/しっぱい]があるかを[線形/せんけい][走査/そうさ]で[判定/はんてい]します。
 //:
-//: [実装/じっそう]:
-//: - `vec_get` で各要素を取り出し、最初の `Err` が見つかった時点で true を返します。
+//: ### [実装/じっそう]
+//: - `Vec` の backing store を 1 [回/かい]だけ[取/と]り[出/だ]し、raw data を[添字/そえじ]で[走査/そうさ]します。
+//: - [最初/さいしょ]の `Err` が[見/み]つかった[時点/じてん]で true を[返/かえ]します。
 //:
-//: [注意/ちゅうい]:
-//: - 内部 helper です。
+//: ### [注意/ちゅうい]
+//: - [内部/ないぶ] helper です。
+//: - `checks_data` は `Vec<Result<(),str>>` の data pointer、`n` は[長/なが]さです。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
-//: - [空間/くうかん]: O(n)（再帰）
-fn checks_has_err_loop <(Vec<Result<(),str>>,i32,i32)->bool> (checks, n, i):
+//: - [空間/くうかん]: O(n)（[再帰/さいき]）
+fn checks_has_err_loop <(i32,i32,i32)->bool> (checks_data, n, i):
     if:
         eq i n
         then:
             false
         else:
-            match vec_get<Result<(),str>> checks i:
-                Option::Some r:
-                    match r:
-                        Result::Ok v:
-                            checks_has_err_loop checks n add i 1
-                        Result::Err e:
-                            true
-                Option::None:
-                    false
+            let r <Result<(),str>> load<Result<(),str>> add checks_data mul i size_of<Result<(),str>>;
+            match r:
+                Result::Ok v:
+                    checks_has_err_loop checks_data n add i 1
+                Result::Err e:
+                    true
 
-//: checks_has_err: 集約済み検査列に `Err` が含まれるか判定する
+//: ## checks_has_err
+//: [集約/しゅうやく][済/ず]み[検査列/けんされつ]に `Err` が[含/ふく]まれるか[判定/はんてい]する
 //:
-//: [目的/もくてき]:
-//: - 最終失敗判定の前に、少なくとも 1 件の失敗があるかを調べます。
+//: ### [目的/もくてき]
+//: - [最終/さいしゅう][失敗/しっぱい][判定/はんてい]の[前/まえ]に、[少/すく]なくとも 1 [件/けん]の[失敗/しっぱい]があるかを[調/しら]べます。
 //:
-//: [実装/じっそう]:
-//: - `checks_has_err_loop` で先頭から順に調べます。
+//: ### [実装/じっそう]
+//: - `Vec<Result<(),str>>` を temporary memory に[保存/ほぞん]し、長さと data pointer を 1 [回/かい]だけ[取/と]り[出/だ]して `checks_has_err_loop` へ[渡/わた]します。
 //:
-//: [注意/ちゅうい]:
-//: - 失敗の詳細は返しません。詳細表示には `finish_checks` を使ってください。
+//: ### [注意/ちゅうい]
+//: - [失敗/しっぱい]の[詳細/しょうさい]は[返/かえ]しません。[詳細/しょうさい][表示/ひょうじ]には `finish_checks` を[使/つか]ってください。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
-//: - [空間/くうかん]: O(n)（再帰）
+//: - [空間/くうかん]: O(n)（[再帰/さいき]）
 fn checks_has_err <(Vec<Result<(),str>>)->bool> (checks):
-    checks_has_err_loop checks vec_len<Result<(),str>> checks 0
+    let checks_mem <i32> alloc_raw size_of<Vec<Result<(),str>>>;
+    store<Vec<Result<(),str>>> checks_mem checks;
+    let checks_len <i32> get load<Vec<Result<(),str>>> checks_mem "len";
+    let checks_data <i32> mem_ptr_addr get load<Vec<Result<(),str>>> checks_mem "data";
+    let out <bool> checks_has_err_loop checks_data checks_len 0;
+    dealloc_raw checks_mem size_of<Vec<Result<(),str>>>;
+    out
 
-//: checks_summary_loop: `[ok,err,...]` 形式の要約を作る内部 helper
+//: ## checks_summary_loop
+//: `[ok,err,...]` [形式/けいしき]の[要約/ようやく]を[作/つく]る[内部/ないぶ] helper
 //:
-//: [目的/もくてき]:
-//: - 集約済み検査列を短い進捗表示文字列へ変換します。
+//: ### [目的/もくてき]
+//: - [集約/しゅうやく][済/ず]み[検査列/けんされつ]を[短/みじか]い[進捗/しんちょく][表示/ひょうじ][文字列/もじれつ]へ[変換/へんかん]します。
 //:
-//: [実装/じっそう]:
-//: - 先頭から順に `ok` / `err` を連結し、必要な区切りだけを追加します。
+//: ### [実装/じっそう]
+//: - `Vec` の raw data を[先頭/せんとう]から[順/じゅん]に[走査/そうさ]し、`ok` / `err` を[連結/れんけつ]して[必要/ひつよう]な[区切/くぎ]りだけを[追加/ついか]します。
 //:
-//: [注意/ちゅうい]:
-//: - 失敗件数だけでなく並び順も見たい場面を想定した helper です。
+//: ### [注意/ちゅうい]
+//: - [失敗/しっぱい][件数/けんすう]だけでなく[並/なら]び[順/じゅん]も[見/み]たい[場面/ばめん]を[想定/そうてい]した helper です。
 //:
-//: [計算量/けいさんりょう]:
-//: - [時間/じかん]: O(n^2)（文字列連結を繰り返すため）
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(n^2)（[文字列/もじれつ][連結/れんけつ]を[繰/く]り[返/かえ]すため）
 //: - [空間/くうかん]: O(n)
-fn checks_summary_loop <(Vec<Result<(),str>>,i32,i32,str)->str> (checks, n, i, acc):
+fn checks_summary_loop <(i32,i32,i32,str)->str> (checks_data, n, i, acc):
     if:
         eq i n
         then:
             concat acc "]"
         else:
             let sep <str> if eq i 0 "" ",";
-            match vec_get<Result<(),str>> checks i:
-                Option::Some r:
-                    let a0 <str> concat acc sep;
-                    let a1 <str> concat a0 check_status_str r;
-                    checks_summary_loop checks n add i 1 a1
-                Option::None:
-                    checks_summary_loop checks n add i 1 acc
+            let r <Result<(),str>> load<Result<(),str>> add checks_data mul i size_of<Result<(),str>>;
+            let a0 <str> concat acc sep;
+            let a1 <str> concat a0 check_status_str r;
+            checks_summary_loop checks_data n add i 1 a1
 
-//: checks_summary: 集約済み検査列を `[ok,err,...]` 形式へ整形する
+//: ## checks_summary
+//: [集約/しゅうやく][済/ず]み[検査列/けんされつ]を `[ok,err,...]` [形式/けいしき]へ[整形/せいけい]する
 //:
-//: [目的/もくてき]:
-//: - 複数の検査結果を一目で把握できる短い要約文字列を返します。
+//: ### [目的/もくてき]
+//: - [複数/ふくすう]の[検査/けんさ][結果/けっか]を[一目/ひとめ]で[把握/はあく]できる[短/みじか]い[要約/ようやく][文字列/もじれつ]を[返/かえ]します。
 //:
-//: [実装/じっそう]:
-//: - `[` から始め、各要素の状態を `checks_summary_loop` で連結します。
+//: ### [実装/じっそう]
+//: - `Vec<Result<(),str>>` を temporary memory に[保存/ほぞん]し、`[` から[始/はじ]めて `checks_summary_loop` で[連結/れんけつ]します。
 //:
-//: [注意/ちゅうい]:
-//: - これは概要専用です。どの検査が失敗したかは `finish_checks` の詳細出力を見てください。
+//: ### [注意/ちゅうい]
+//: - これは[概要/がいよう][専用/せんよう]です。どの[検査/けんさ]が[失敗/しっぱい]したかは `finish_checks` の[詳細/しょうさい][出力/しゅつりょく]を[見/み]てください。
 //:
-//: [計算量/けいさんりょう]:
-//: - [時間/じかん]: O(n^2)（文字列連結を繰り返すため）
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(n^2)（[文字列/もじれつ][連結/れんけつ]を[繰/く]り[返/かえ]すため）
 //: - [空間/くうかん]: O(n)
 fn checks_summary <(Vec<Result<(),str>>)->str> (checks):
-    checks_summary_loop checks vec_len<Result<(),str>> checks 0 "["
+    let checks_mem <i32> alloc_raw size_of<Vec<Result<(),str>>>;
+    store<Vec<Result<(),str>>> checks_mem checks;
+    let checks_len <i32> get load<Vec<Result<(),str>>> checks_mem "len";
+    let checks_data <i32> mem_ptr_addr get load<Vec<Result<(),str>>> checks_mem "data";
+    let out <str> checks_summary_loop checks_data checks_len 0 "[";
+    dealloc_raw checks_mem size_of<Vec<Result<(),str>>>;
+    out
 
-//: checks_print_failures_loop: 失敗詳細を順に表示する内部 helper
+//: ## checks_print_failures_loop
+//: [失敗/しっぱい][詳細/しょうさい]を[順/じゅん]に[表示/ひょうじ]する[内部/ないぶ] helper
 //:
-//: [目的/もくてき]:
-//: - `Err` になった検査だけを抽出し、添字付きで表示します。
+//: ### [目的/もくてき]
+//: - `Err` になった[検査/けんさ]だけを[抽出/ちゅうしゅつ]し、[添字/そえじ][付/つ]きで[表示/ひょうじ]します。
 //:
-//: [実装/じっそう]:
-//: - `Err` のときだけ `check[i] ...` の形に整形して `test_print_fail` に渡します。
+//: ### [実装/じっそう]
+//: - `Vec` の raw data を[順/じゅん]に[走査/そうさ]し、`Err` のときだけ `check[i] ...` の[形/かたち]に[整形/せいけい]して `test_print_fail` に[渡/わた]します。
 //:
-//: [注意/ちゅうい]:
-//: - 標準出力への表示は `#target std` のときだけ行います。
+//: ### [注意/ちゅうい]
+//: - [標準/ひょうじゅん][出力/しゅつりょく]への[表示/ひょうじ]は `#target std` のときだけ[行/おこな]います。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
-//: - [空間/くうかん]: O(n)（再帰）
+//: - [空間/くうかん]: O(n)（[再帰/さいき]）
 #if[target=std]
-fn checks_print_failures_loop <(Vec<Result<(),str>>,i32,i32)*>()> (checks, n, i):
+fn checks_print_failures_loop <(i32,i32,i32)*>()> (checks_data, n, i):
     if:
         eq i n
         then:
             ()
         else:
-            match vec_get<Result<(),str>> checks i:
-                Option::Some r:
-                    match r:
-                        Result::Ok v:
-                            checks_print_failures_loop checks n add i 1
-                        Result::Err msg:
-                            let si <str> from_i32 i
-                            let m0 <str> concat "check[" si
-                            let m1 <str> concat m0 "] "
-                            let m2 <str> concat m1 msg
-                            test_print_fail m2
-                            checks_print_failures_loop checks n add i 1
-                Option::None:
-                    checks_print_failures_loop checks n add i 1
+            let r <Result<(),str>> load<Result<(),str>> add checks_data mul i size_of<Result<(),str>>;
+            match r:
+                Result::Ok v:
+                    checks_print_failures_loop checks_data n add i 1
+                Result::Err msg:
+                    let si <str> from_i32 i
+                    let m0 <str> concat "check[" si
+                    let m1 <str> concat m0 "] "
+                    let m2 <str> concat m1 msg
+                    test_print_fail m2
+                    checks_print_failures_loop checks_data n add i 1
 
-//: checks_report_failures: 失敗時の概要と詳細をまとめて表示する
+//: ## checks_report_failures
+//: [失敗時/しっぱいじ]の[概要/がいよう]と[詳細/しょうさい]をまとめて[表示/ひょうじ]する
 //:
-//: [目的/もくてき]:
-//: - 集約済み検査の summary と失敗詳細を標準出力へ出します。
+//: ### [目的/もくてき]
+//: - [集約/しゅうやく][済/ず]み[検査/けんさ]の summary と[失敗/しっぱい][詳細/しょうさい]を[標準/ひょうじゅん][出力/しゅつりょく]へ[出/だ]します。
 //:
-//: [実装/じっそう]:
-//: - summary を 1 行表示し、その後 `Err` 要素だけを添字付きで列挙します。
+//: ### [実装/じっそう]
+//: - summary を 1 [行/ぎょう][表示/ひょうじ]し、その[後/あと]で `Err` [要素/ようそ]だけを[添字/そえじ][付/つ]きで[列挙/れっきょ]します。
+//: - `checks` は temporary memory に[保存/ほぞん]し、raw data を `checks_print_failures_loop` へ[渡/わた]します。
 //:
-//: [注意/ちゅうい]:
-//: - `#target std` 専用です。
+//: ### [注意/ちゅうい]
+//: - `#target std` [専用/せんよう]です。
 //:
-//: [計算量/けいさんりょう]:
+//: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n)
-//: - [空間/くうかん]: O(n)（再帰）
+//: - [空間/くうかん]: O(n)（[再帰/さいき]）
 #if[target=std]
 fn checks_report_failures <(Vec<Result<(),str>>,str)*>()> (checks, summary):
     test_print_fail summary
-    checks_print_failures_loop checks vec_len<Result<(),str>> checks 0
+    let checks_mem <i32> alloc_raw size_of<Vec<Result<(),str>>>;
+    store<Vec<Result<(),str>>> checks_mem checks;
+    let checks_len <i32> get load<Vec<Result<(),str>>> checks_mem "len";
+    let checks_data <i32> mem_ptr_addr get load<Vec<Result<(),str>>> checks_mem "data";
+    checks_print_failures_loop checks_data checks_len 0
+    dealloc_raw checks_mem size_of<Vec<Result<(),str>>>;
 
-//: finish_checks: 複数検査をまとめて報告し、失敗があれば最後に落とす
+//: ## finish_checks
+//: [複数/ふくすう][検査/けんさ]をまとめて[報告/ほうこく]し、[失敗/しっぱい]があれば[最後/さいご]に[落/お]とす
 //:
-//: [目的/もくてき]:
-//: - `Vec<Result<(),str>>` として集約した検査を最後にまとめて評価します。
-//: - 途中の検査は継続しつつ、最後に要約と各失敗内容を表示して一括失敗できます。
+//: ### [目的/もくてき]
+//: - `Vec<Result<(),str>>` として[集約/しゅうやく]した[検査/けんさ]を[最後/さいご]にまとめて[評価/ひょうか]します。
+//: - [途中/とちゅう]の[検査/けんさ]は[継続/けいぞく]しつつ、[最後/さいご]に[要約/ようやく]と[各/かく][失敗/しっぱい][内容/ないよう]を[表示/ひょうじ]して[一括/いっかつ][失敗/しっぱい]できます。
 //:
-//: [実装/じっそう]:
-//: - まず `checks_summary` で `[ok,err,...]` 形式の要約を作ります。
-//: - 失敗が 1 件でもあれば summary と各 `Err` の詳細を表示して `trap` します。
-//: - 失敗がなければ summary を `Checked ...` として表示します。
+//: ### [実装/じっそう]
+//: - まず `checks_summary` で `[ok,err,...]` [形式/けいしき]の[要約/ようやく]を[作/つく]ります。
+//: - [失敗/しっぱい]が 1 [件/けん]でもあれば summary と[各/かく] `Err` の[詳細/しょうさい]を[表示/ひょうじ]して `trap` します。
+//: - [失敗/しっぱい]がなければ summary を `Checked ...` として[表示/ひょうじ]します。
+//: - move model に[合/あ]わせ、[入力/にゅうりょく]の `Vec<Result<(),str>>` は 1 [回/かい]だけ memory に[保存/ほぞん]してから helper へ[渡/わた]します。
 //:
-//: [注意/ちゅうい]:
-//: - 想定用途は `<Vec<Result<(),str>>> new |> push check_* ...` のような段階的収集です。
-//: - 失敗の添字は 0 始まりです。summary の `err` と同じ並びで対応します。
-//: - 標準出力への表示は `#target std` のときのみ行いますが、失敗時の最終 `trap` 自体はどの target でも行います。
+//: ### [注意/ちゅうい]
+//: - [想定/そうてい][用途/ようと]は `<Vec<Result<(),str>>> new |> push check_* ...` のような[段階的/だんかいてき][収集/しゅうしゅう]です。
+//: - [失敗/しっぱい]の[添字/そえじ]は 0 [始/はじ]まりです。summary の `err` と[同/おな]じ[並/なら]びで[対応/たいおう]します。
+//: - [標準/ひょうじゅん][出力/しゅつりょく]への[表示/ひょうじ]は `#target std` のときのみ[行/おこな]いますが、[失敗時/しっぱいじ]の[最終/さいしゅう] `trap` [自体/じたい]はどの target でも[行/おこな]います。
 //:
-//: [計算量/けいさんりょう]:
-//: - [時間/じかん]: O(n^2)（summary 文字列構築を含む）
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(n^2)（summary [文字列/もじれつ][構築/こうちく]を[含/ふく]む）
 //: - [空間/くうかん]: O(n)
 //:
-//: [使い方/つかいかた]:
+//: ### [使い方/つかいかた]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -641,16 +660,20 @@ fn checks_report_failures <(Vec<Result<(),str>>,str)*>()> (checks, summary):
 //:     finish_checks checks;
 //: ```
 fn finish_checks <(Vec<Result<(),str>>)*>()> (checks):
-    let summary <str> checks_summary checks
+    let checks_mem <i32> alloc_raw size_of<Vec<Result<(),str>>>;
+    store<Vec<Result<(),str>>> checks_mem checks;
+    let summary <str> checks_summary load<Vec<Result<(),str>>> checks_mem;
     if:
-        checks_has_err checks
+        checks_has_err load<Vec<Result<(),str>>> checks_mem
         then:
             #if[target=std]
-            checks_report_failures checks summary
+            checks_report_failures load<Vec<Result<(),str>>> checks_mem summary
+            dealloc_raw checks_mem size_of<Vec<Result<(),str>>>
             trap
         else:
             #if[target=std]
             test_checked summary
+            dealloc_raw checks_mem size_of<Vec<Result<(),str>>>
 
 //: assert: 条件が false のとき失敗する
 //:

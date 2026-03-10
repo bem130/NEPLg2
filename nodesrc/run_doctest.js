@@ -65,7 +65,13 @@ function buildCase(inputPath, index) {
 }
 
 function normalizeOutputByTags(s, tags) {
-    let out = String(s ?? '').replace(/\r\n/g, '\n');
+    let out = String(s ?? '');
+    if (Array.isArray(tags) && tags.includes('normalize_newlines')) {
+        out = out.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    }
+    if (Array.isArray(tags) && tags.includes('strip_ansi')) {
+        out = out.replace(/\x1b\[[0-9;]*m/g, '');
+    }
     if (Array.isArray(tags) && tags.includes('trim_stdout')) {
         out = out.trim();
     }
@@ -139,6 +145,10 @@ function applyExpectations(result, testCase) {
                 }
             }
         }
+        return r;
+    }
+
+    if (tags.includes('should_panic')) {
         return r;
     }
 
