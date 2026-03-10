@@ -1198,6 +1198,8 @@ impl Parser {
             TraitCapability::Copy
         } else if trimmed.eq_ignore_ascii_case("clone") {
             TraitCapability::Clone
+        } else if trimmed.eq_ignore_ascii_case("drop") {
+            TraitCapability::Drop
         } else {
             TraitCapability::Unknown(trimmed.to_string())
         }

@@ -81,6 +81,7 @@ pub struct TypeCtx {
     named: alloc::collections::BTreeMap<alloc::string::String, TypeId>,
     copy_impl_targets: Vec<TypeId>,
     copy_trait_enabled: bool,
+    drop_impl_targets: Vec<TypeId>,
 }
 
 static GLOBAL_UNIFY_DEPTH: AtomicUsize = AtomicUsize::new(0);
@@ -122,6 +123,7 @@ impl TypeCtx {
             named: alloc::collections::BTreeMap::new(),
             copy_impl_targets: Vec::new(),
             copy_trait_enabled: false,
+            drop_impl_targets: Vec::new(),
         }
     }
 
@@ -342,6 +344,25 @@ impl TypeCtx {
             .any(|t| self.type_pattern_matches(*t, resolved))
     }
 
+    pub fn register_drop_impl_target(&mut self, id: TypeId) {
+        let resolved = self.resolve_id(id);
+        if self
+            .drop_impl_targets
+            .iter()
+            .any(|t| self.same_type(*t, resolved))
+        {
+            return;
+        }
+        self.drop_impl_targets.push(resolved);
+    }
+
+    pub fn has_drop_impl_target(&self, id: TypeId) -> bool {
+        let resolved = self.resolve_id(id);
+        self.drop_impl_targets
+            .iter()
+            .any(|t| self.type_pattern_matches(*t, resolved))
+    }
+
     pub fn type_pattern_matches(&self, pattern: TypeId, actual: TypeId) -> bool {
         let mut seen = BTreeSet::new();
         let mut mapping = BTreeMap::new();
@@ -547,6 +568,28 @@ impl TypeCtx {
             },
             TypeKind::Var(v) => v.binding.map(|b| self.is_copy(b)).unwrap_or(false),
             TypeKind::Function { .. } | TypeKind::Box(_) => false,
+        }
+    }
+
+    pub fn has_drop(&self, id: TypeId) -> bool {
+        let resolved = self.resolve_id(id);
+        match self.get_ref(resolved) {
+            TypeKind::Never => false,
+            TypeKind::Reference(_, _) => false,
+            TypeKind::Unit
+            | TypeKind::I32
+            | TypeKind::U8
+            | TypeKind::F32
+            | TypeKind::Bool
+            | TypeKind::Str => self.has_drop_impl_target(resolved),
+            TypeKind::Named(_) => self.has_drop_impl_target(resolved),
+            TypeKind::Tuple { items } => {
+                items.iter().any(|t| self.has_drop(*t)) || self.has_drop_impl_target(resolved)
+            }
+            TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_drop_impl_target(resolved),
+            TypeKind::Apply { .. } | TypeKind::Box(_) => self.has_drop_impl_target(resolved),
+            TypeKind::Function { .. } => false,
+            TypeKind::Var(v) => v.binding.map(|b| self.has_drop(b)).unwrap_or(false),
         }
     }
 

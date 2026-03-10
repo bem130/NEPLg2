@@ -10825,3 +10825,47 @@
     - [結果/けっか]: pass
   - `node nodesrc/run_doctest.js -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -n 1`
     - [結果/けっか]: pass
+
+# 2026-03-11 作業メモ (`Drop` capability の source 宣言と auto drop 挿入の compiler 固定)
+
+- [目的/もくてき]:
+  - [所有権/しょゆうけん]が[終/お]わった[値/あたい]を compiler が[自動/じどう]で[後始末/あとしまつ]できる[土台/どだい]を、hardcode ではなく `.nepl` [側/がわ]の trait [宣言/せんげん]として[固定/こてい]する。
+  - `reboot` / `memory_safety_compiler_design` の[方針/ほうしん]に[従/したが]い、move check と[矛盾/むじゅん]しない auto drop 挿入と[詳細/しょうさい] test を[整備/せいび]する。
+- [根本原因/こんぽんげんいん]:
+  - [既存/きそん]の `drop_insertion` は lexical に `HirExprKind::Drop { name }` を[差/さ]すだけで、codegen 側では no-op のままだった。そのため source [上/じょう]で `Drop` を[宣言/せんげん]しても destructor 実行に[結/むす]び[付/つ]かなかった。
+  - [当初/とうしょ]は destructor を `Self` [値渡/あたいわた]しにしていたが、raw wasm ABI では[複合値/ふくごうち]をそのまま[渡/わた]す[経路/けいろ]で `unsupported function signature for wasm` が[発生/はっせい]していた。
+  - Rust test fixture も old 前提を[引/ひ]きずっており、`#entry main` [欠落/けつらく]や branch [末尾/まつび]の不要 `;` で validator failure / loader failure を[誘発/ゆうはつ]していた。
+- [変更/へんこう]:
+  - `nepl-core/src/ast.rs`, `parser.rs`, `hir.rs`, `typecheck.rs`, `types.rs`
+    - trait capability に `Drop` を[追加/ついか]した。
+    - typecheck で `#capability drop` trait を[検出/けんしゅつ]し、drop impl target を `TypeCtx` へ[登録/とうろく]できるようにした。
+    - `TypeCtx::has_drop` を[追加/ついか]し、tuple / named / struct / enum / apply の[再帰的/さいきてき][判定/はんてい]を[持/も]たせた。
+  - `stdlib/core/traits/drop.nepl`
+    - new policy / format で file header と trait comment を[整備/せいび]した。
+    - destructor [署名/しょめい]を `fn drop <(&Self)*>()> (self)` に[変更/へんこう]し、raw wasm ABI と[整合/せいごう]するようにした。
+  - `nepl-core/src/passes/drop_insertion.rs`
+    - auto drop を `HirExprKind::Drop` ではなく trait call [挿入/そうにゅう]へ[作/つく]り[直/なお]した。
+    - monomorphize [前/まえ]に `Drop::drop` 呼び[出/だ]しを[入/い]れる[形/かたち]へ[変更/へんこう]し、既存の trait 解決・monomorphize [経路/けいろ]に[乗/の]せた。
+    - [変数/へんすう][状態/じょうたい]は `Valid` / `Moved` / `PossiblyMoved` を[追跡/ついせき]し、branch merge は[保守的/ほしゅてき]に `PossiblyMoved` へ[倒/たお]す[形/かたち]にした。
+    - auto drop call は local [番地/ばんち]を[渡/わた]すため `AddrOf(Var(name))` を[使/つか]う[形/かたち]へ[変更/へんこう]した。
+  - `nepl-core/src/compiler.rs`
+    - `insert_drops` を monomorphize [前/まえ]へ[移動/いどう]し、trait call として[解決/かいけつ]できるようにした。
+  - `nepl-core/tests/drop.rs`
+    - scope end / nested scope LIFO / branch local / shadowing / conditional move / loader-visible stdlib の 7 [件/けん]を[詳細/しょうさい]に[固定/こてい]した。
+    - fixture は field [読/よ]みや zero-field struct に[頼/たよ]らず、distinct guard [型/がた]と `#entry main` [付/つ]き minimal program へ[整理/せいり]した。
+  - `tests/compiler/drop.n.md`
+    - Rust integration test と[同系統/どうけいとう]の compiler doctest を skip から実 testcase へ[置換/ちかん]し、nodesrc [経路/けいろ]でも `Drop` を[含/ふく]む入力が compile / run できることを[固定/こてい]した。
+- [設計/せっけい][判断/はんだん]:
+  - auto drop は codegen special case にせず、trait call [挿入/そうにゅう]として HIR [上/じょう]で[表現/ひょうげん]したほうが、source [宣言/せんげん]された capability と compiler [実装/じっそう]が[一致/いっち]する。
+  - destructor を `&Self` にしたのは temporary / stack slot の[番地/ばんち]を[渡/わた]せるようにするためで、Rust の drop glue にも[近/ちか]い[方向/ほうこう]である。
+  - runtime [順序/じゅんじょ] test は Rust integration test、nodesrc 側は compile / run regression という[責務分担/せきむぶんたん]にした。
+- [検証/けんしょう]:
+  - `cargo test -p nepl-core --test drop -- --nocapture`
+    - [結果/けっか]: `7/7 pass`
+  - `node nodesrc/tests.js -i tests/compiler/drop.n.md --no-stdlib --no-tree -o /tmp/tests-compiler-drop.json -j 4`
+    - [結果/けっか]: `4/4 pass`
+    - output JSON: `/tmp/tests-compiler-drop.json`
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `cargo build -p nepl-cli`
+    - [結果/けっか]: success

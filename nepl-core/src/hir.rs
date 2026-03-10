@@ -7,6 +7,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::ast::{Effect, LlvmIrBlock, WasmBlock};
+use crate::ast::TraitCapability;
 use crate::span::Span;
 use crate::types::TypeId;
 
@@ -168,6 +169,7 @@ pub struct HirTrait {
     pub doc: Option<String>,
     pub name: String,
     pub type_params: Vec<TypeId>,
+    pub capabilities: Vec<TraitCapability>,
     pub methods: alloc::collections::BTreeMap<String, TypeId>,
     pub span: Span,
 }

@@ -97,12 +97,14 @@ struct TraitInfo {
 struct TraitSemantics {
     copy_trait: Option<(String, TypeId)>,
     clone_trait: Option<(String, TypeId)>,
+    drop_trait: Option<(String, TypeId)>,
 }
 
 impl TraitSemantics {
     fn detect(traits: &BTreeMap<String, TraitInfo>) -> Self {
         let mut copy_trait: Option<(String, TypeId)> = None;
         let mut clone_trait: Option<(String, TypeId)> = None;
+        let mut drop_trait: Option<(String, TypeId)> = None;
 
         for (name, info) in traits {
             for cap in info.capabilities.iter().copied() {
@@ -117,6 +119,11 @@ impl TraitSemantics {
                             clone_trait = Some((name.clone(), info.self_ty));
                         }
                     }
+                    TraitCapability::Drop => {
+                        if drop_trait.is_none() {
+                            drop_trait = Some((name.clone(), info.self_ty));
+                        }
+                    }
                 }
             }
         }
@@ -124,6 +131,7 @@ impl TraitSemantics {
         Self {
             copy_trait,
             clone_trait,
+            drop_trait,
         }
     }
 
@@ -140,6 +148,17 @@ impl TraitSemantics {
 
     fn is_clone_trait(&self, trait_id: Option<TypeId>) -> bool {
         match (self.clone_trait.as_ref().map(|(_, id)| *id), trait_id) {
+            (Some(expected), Some(actual)) => expected == actual,
+            _ => false,
+        }
+    }
+
+    fn drop_trait_name(&self) -> Option<&str> {
+        self.drop_trait.as_ref().map(|(name, _)| name.as_str())
+    }
+
+    fn is_drop_trait(&self, trait_id: Option<TypeId>) -> bool {
+        match (self.drop_trait.as_ref().map(|(_, id)| *id), trait_id) {
             (Some(expected), Some(actual)) => expected == actual,
             _ => false,
         }
@@ -171,6 +190,7 @@ enum FieldIdx {
 enum TraitCapability {
     Copy,
     Clone,
+    Drop,
 }
 
 fn collect_type_params(
@@ -762,6 +782,11 @@ pub fn typecheck(
                                 capabilities.push(TraitCapability::Clone);
                             }
                         }
+                        crate::ast::TraitCapability::Drop => {
+                            if !capabilities.contains(&TraitCapability::Drop) {
+                                capabilities.push(TraitCapability::Drop);
+                            }
+                        }
                         crate::ast::TraitCapability::Unknown(name) => {
                             diagnostics.push(
                                 Diagnostic::error(
@@ -892,6 +917,7 @@ pub fn typecheck(
             if !i.type_params.is_empty()
                 && !trait_semantics.is_copy_trait(trait_self_ty)
                 && !trait_semantics.is_clone_trait(trait_self_ty)
+                && !trait_semantics.is_drop_trait(trait_self_ty)
             {
                 diagnostics.push(
                     Diagnostic::error("impl type parameters are not supported yet", i.span)
@@ -908,6 +934,7 @@ pub fn typecheck(
             if generic_impl_target
                 && !trait_semantics.is_copy_trait(trait_self_ty)
                 && !trait_semantics.is_clone_trait(trait_self_ty)
+                && !trait_semantics.is_drop_trait(trait_self_ty)
             {
                 diagnostics.push(
                     Diagnostic::error("impl target type must be concrete", i.target_ty.span())
@@ -985,6 +1012,9 @@ pub fn typecheck(
     for imp in impls.iter() {
         if trait_semantics.is_copy_trait(imp.trait_self_ty) {
             ctx.register_copy_impl_target(imp.target_ty);
+        }
+        if trait_semantics.is_drop_trait(imp.trait_self_ty) {
+            ctx.register_drop_impl_target(imp.target_ty);
         }
     }
     for (name, info) in structs.iter() {
@@ -1462,6 +1492,11 @@ pub fn typecheck(
             doc: info.doc.clone(),
             name: name.clone(),
             type_params: info.type_params.clone(),
+            capabilities: info.capabilities.iter().map(|cap| match cap {
+                TraitCapability::Copy => crate::ast::TraitCapability::Copy,
+                TraitCapability::Clone => crate::ast::TraitCapability::Clone,
+                TraitCapability::Drop => crate::ast::TraitCapability::Drop,
+            }).collect(),
             methods: info.methods.clone(),
             span: info.span,
         });
@@ -1509,6 +1544,7 @@ pub fn typecheck(
             if !i.type_params.is_empty()
                 && !trait_semantics.is_copy_trait(Some(trait_info.self_ty))
                 && !trait_semantics.is_clone_trait(Some(trait_info.self_ty))
+                && !trait_semantics.is_drop_trait(Some(trait_info.self_ty))
             {
                 diagnostics.push(
                     Diagnostic::error("impl type parameters are not supported yet", i.span)
@@ -1525,6 +1561,7 @@ pub fn typecheck(
             if type_contains_unbound_var(&ctx, target_ty)
                 && !trait_semantics.is_copy_trait(Some(trait_info.self_ty))
                 && !trait_semantics.is_clone_trait(Some(trait_info.self_ty))
+                && !trait_semantics.is_drop_trait(Some(trait_info.self_ty))
             {
                 diagnostics.push(
                     Diagnostic::error("impl target type must be concrete", i.target_ty.span())

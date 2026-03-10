@@ -354,12 +354,12 @@ pub fn prepare_module_for_codegen(
     {
         return Err(CoreError::from_diagnostics(precheck_diags));
     }
-    let tc = run_typecheck(module, target, profile)?;
+    let mut tc = run_typecheck(module, target, profile)?;
+    passes::insert_drops(&mut tc.module, &mut tc.types);
     let mut types = tc.types;
     let mut hir_module = monomorphize::monomorphize(&mut types, tc.module);
     let mut diagnostics = tc.diagnostics;
     run_move_check(&hir_module, &types, &mut diagnostics)?;
-    passes::insert_drops(&mut hir_module, types.unit());
     Ok(PreparedProgram {
         types,
         hir_module,

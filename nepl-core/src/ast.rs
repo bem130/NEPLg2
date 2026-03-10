@@ -151,6 +151,7 @@ pub struct TraitDef {
 pub enum TraitCapability {
     Copy,
     Clone,
+    Drop,
     Unknown(String),
 }
 
