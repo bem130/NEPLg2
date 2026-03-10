@@ -34,12 +34,12 @@ fn sum_to_formula <(i32)->i32> (n):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 sum_to_loop 0 sum_to_formula 0
-        |> checks_push assert_eq_i32 sum_to_loop 1 sum_to_formula 1
-        |> checks_push assert_eq_i32 sum_to_loop 10 sum_to_formula 10
-        |> checks_push assert_eq_i32 sum_to_loop 100 sum_to_formula 100
-    let _done <Result<(),str>> test_checked "refactor preserves behavior";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 sum_to_loop 0 sum_to_formula 0
+        |> checks_push check_eq_i32 sum_to_loop 1 sum_to_formula 1
+        |> checks_push check_eq_i32 sum_to_loop 10 sum_to_formula 10
+        |> checks_push check_eq_i32 sum_to_loop 100 sum_to_formula 100
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 失敗ケースも同時に固定する
@@ -69,13 +69,13 @@ fn assert_same <(i32,i32)*>Result<(),str>> (a, b):
         Result::Ok ov:
             match safe_div_new a b:
                 Result::Ok nv:
-                    assert_eq_i32 ov nv
+                    check_eq_i32 ov nv
                 Result::Err ne:
-                    test_fail "old=Ok new=Err"
+                    Result<(),str>::Err "old=Ok new=Err"
         Result::Err oe:
             match safe_div_new a b:
                 Result::Ok nv:
-                    test_fail "old=Err new=Ok"
+                    Result<(),str>::Err "old=Err new=Ok"
                 Result::Err ne:
                     Result<(),str>::Ok ()
 
@@ -85,6 +85,6 @@ fn main <()*>i32> ():
         |> checks_push assert_same 10 2
         |> checks_push assert_same 11 3
         |> checks_push assert_same 10 0
-    let _done <Result<(),str>> test_checked "refactor keeps error behavior";
-    checks_exit_code checks
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

@@ -35,11 +35,11 @@ fn normalize_score <(i32)->i32> (raw):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 0 normalize_score -20
-        |> checks_push assert_eq_i32 55 normalize_score 50
-        |> checks_push assert_eq_i32 100 normalize_score 99
-    let _done <Result<(),str>> test_checked "pure function pipeline";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 0 normalize_score -20
+        |> checks_push check_eq_i32 55 normalize_score 50
+        |> checks_push check_eq_i32 100 normalize_score 99
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## `mut` を使う版と同値かをテストで固定する
@@ -78,9 +78,9 @@ fn normalize_mut <(i32)*>i32> (raw):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 normalize_mut -20 normalize_pure -20
-        |> checks_push assert_eq_i32 normalize_mut 40 normalize_pure 40
-        |> checks_push assert_eq_i32 normalize_mut 120 normalize_pure 120
-    let _done <Result<(),str>> test_checked "pure vs mut equivalence";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 normalize_mut -20 normalize_pure -20
+        |> checks_push check_eq_i32 normalize_mut 40 normalize_pure 40
+        |> checks_push check_eq_i32 normalize_mut 120 normalize_pure 120
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

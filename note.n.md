@@ -10562,3 +10562,27 @@
 - [検証/けんしょう]:
   - `node nodesrc/tests.js -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/03_functions.n.md --no-stdlib --no-tree -o /tmp/tests-tutorial-numbers-functions.json -j 4`
     - [結果/けっか]: `8/8 pass`
+
+# 2026-03-10 作業メモ (`12` / `13` / `14` tutorial を explicit report 流儀へ追従)
+
+- [目的/もくてき]:
+  - `tutorials/getting_started/12_pure_function_pipeline.n.md`, `tutorials/getting_started/13_type_driven_error_modeling.n.md`, `tutorials/getting_started/14_refactor_with_properties.n.md` を、[現行/げんこう]の explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - [純粋/じゅんすい][関数/かんすう]、`Result` / `Option` による[失敗/しっぱい][表現/ひょうげん]、[回帰/かいき][比較/ひかく] helper でも、old style success log を[残/のこ]さない。
+- [根本原因/こんぽんげんいん]:
+  - 3 chapter とも `Vec<Result<(),str>>` を[使/つか]っていても、[末尾/まつび]の `test_checked` や `test_fail` へ[戻/もど]る[過渡期/かとき]の[書/か]き[方/かた]が[残/のこ]っていた。
+  - とくに `14_refactor_with_properties.n.md` の `assert_same` は、[差分/さぶん] helper [自体/じたい]が `assert_eq_i32` / `test_fail` に[依存/いぞん]しており、「[失敗/しっぱい]も[値/あたい]として[持/も]つ」という reboot [後/ご]方針が helper [内部/ないぶ]で[途切/とぎ]れていた。
+- [変更/へんこう]:
+  - `tutorials/getting_started/12_pure_function_pipeline.n.md`
+    - 2 [件/けん]の doctest を `check_eq_i32` + `checks_print_report` へ[変更/へんこう]した。
+  - `tutorials/getting_started/13_type_driven_error_modeling.n.md`
+    - `checked_half` / `choose_positive` の[確認/かくにん]を `check_eq_i32` / `check_str_eq` / `Result::Err` [直接/ちょくせつ][積/つ]みへ[揃/そろ]えた。
+  - `tutorials/getting_started/14_refactor_with_properties.n.md`
+    - `sum_to_loop` / `sum_to_formula` の[比較/ひかく]を `check_eq_i32` [中心/ちゅうしん]へ[変更/へんこう]した。
+    - `assert_same` は `check_eq_i32` を[返/かえ]し、mismatch は `Result::Err` を[返/かえ]す helper へ[整理/せいり]した。
+    - これにより helper [自体/じたい]も reboot [後/ご]の `Result<(),str>` [中心/ちゅうしん] test [哲学/てつがく]に[沿/そ]う[形/かたち]になった。
+- [設計/せっけい][判断/はんだん]:
+  - `14_refactor` の helper は[一見/いっけん]小さいが、[将来/しょうらい]の property-like [比較/ひかく] helper の[雛形/ひながた]でもあるため、「assert helper が[即座/そくざ]に print/trap する」のではなく「helper [自体/じたい]が `Result` を[返/かえ]す」[方向/ほうこう]へ[寄/よ]せた。
+  - `13_type_driven_error_modeling` は chapter [名/めい]どおり「[型/かた]が[失敗/しっぱい]を[表/あらわ]す」ことを[教/おし]えるので、test [本体/ほんたい]も `Result::Err` を[直接/ちょくせつ][積/つ]む[書/か]き[方/かた]に[統一/とういつ]するのが[自然/しぜん]と[判断/はんだん]した。
+- [検証/けんしょう]:
+  - `node nodesrc/tests.js -i tutorials/getting_started/12_pure_function_pipeline.n.md -i tutorials/getting_started/13_type_driven_error_modeling.n.md -i tutorials/getting_started/14_refactor_with_properties.n.md --no-stdlib --no-tree -o /tmp/tests-tutorial-pipeline-modeling-refactor.json -j 4`
+    - [結果/けっか]: `6/6 pass`

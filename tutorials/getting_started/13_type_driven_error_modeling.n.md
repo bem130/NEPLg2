@@ -26,18 +26,18 @@ fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
     match checked_half 10:
         Result::Ok v:
-            set checks checks_push checks assert_eq_i32 5 v
+            set checks checks_push checks check_eq_i32 5 v
         Result::Err e:
-            set checks checks_push checks test_fail "expected Ok"
+            set checks checks_push checks Result<(),str>::Err "expected Ok"
 
     match checked_half 7:
         Result::Ok v:
-            set checks checks_push checks test_fail "expected Err"
+            set checks checks_push checks Result<(),str>::Err "expected Err"
         Result::Err e:
-            set checks checks_push checks assert_str_eq "not even" e
+            set checks checks_push checks check_str_eq "not even" e
 
-    let _done <Result<(),str>> test_checked "result as contract";
-    checks_exit_code checks
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## `Option` で「値がない」を表現する
@@ -62,8 +62,8 @@ fn main <()*>i32> ():
 
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 8 option_unwrap_or<i32> a 0
-        |> checks_push assert_eq_i32 0 option_unwrap_or<i32> b 0
-    let _done <Result<(),str>> test_checked "option as explicit absence";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 8 option_unwrap_or<i32> a 0
+        |> checks_push check_eq_i32 0 option_unwrap_or<i32> b 0
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
