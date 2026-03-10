@@ -9324,3 +9324,25 @@
 - [状況/じょうきょう]:
   - `kpwrite` / `kpread` の[修正/しゅうせい]は doctest を[通/とお]すための[場当/ばあ]たり[対応/たいおう]ではなく、header pointer と[所有権/しょゆうけん] token の[責務/せきむ][分離/ぶんり]を[回復/かいふく]するもの。
   - `kpread.nepl` には[実行対象/じっこうたいしょう]の doctest はまだなく `skip` のみだが、`scanner_read_i32` を[使/つか]う最小 source test と `kpgraph` の doctest で[現行/げんこう]設計が[成立/せいりつ]することを[確認/かくにん]した。
+
+# 2026-03-10 作業メモ (`queue` の doc comment 整備と `uwok` への寄せ)
+
+- [目的/もくてき]:
+  - `Queue` の公開 API コメントを現行の doc comment policy に合わせ、`RingBuffer` ベースの queue であること、更新後の値を返す API であること、`Option` / `Result` の扱いをコメントだけで追えるようにする。
+  - collection 系の focused test を `uwok` 前提の短い pipe 記法へ寄せ、stdlib reboot 後の典型的な使い方をテスト側でも固定する。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/queue.nepl`
+    - file header, `Queue` struct, `queue_new`, `queue_with_capacity`, `queue_len`, `queue_is_empty`, `queue_push`, `queue_pop`, `queue_peek`, `queue_clear`, `queue_free` の doc comment を現行 policy に沿って書き直した。
+    - `queue_push` が更新後の queue を返す API であり、pipe 記法では `|> queue_push ... |> uwok` の形で束縛し直す必要があることを明記した。
+  - `tests/stdlib/ringbuffer_collections.n.md`
+    - `unwrap_ok<...>` を `uwok` に置き換えた。
+    - `ringbuffer_push_back` / `ringbuffer_pop_front` の型引数を省き、現行の型推論で通る書き方へ寄せた。
+  - `tests/stdlib/pipe_collections.n.md`
+    - `RingBuffer` / `Queue` の pipe 使用例を `uwok` ベースの短い書き方に寄せた。
+    - `queue_push<i32>` / `ringbuffer_push_back<i32>` など、不要な型引数を外した。
+- [検証/けんしょう]:
+  - `node nodesrc/tests.js -i tests/stdlib/ringbuffer_collections.n.md -i tests/stdlib/pipe_collections.n.md --no-stdlib --no-tree -o /tmp/tests-queue-ringbuffer-uwok.json -j 15`
+    - [結果/けっか]: `9/9 pass`
+- [状況/じょうきょう]:
+  - `Queue` / `RingBuffer` の利用例は `uwok` を使った短い pipe 形で安定して書ける状態になった。
+  - `queue.nepl` は内容だけでなく、見出し階層と節構成も現行の doc comment policy に沿う形へ更新した。

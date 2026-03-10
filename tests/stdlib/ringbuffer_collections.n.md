@@ -29,19 +29,19 @@ fn main <()*>i32> ():
     let rb <RingBuffer<i32>>:
         ringbuffer_new<i32>
         |> uwok
-        |> ringbuffer_push_back<i32> 4
+        |> ringbuffer_push_back 4
         |> uwok
-        |> ringbuffer_push_back<i32> 9
+        |> ringbuffer_push_back 9
         |> uwok
     let ok0 <bool> eq ringbuffer_len<i32> rb 2;
     let rb2 <RingBuffer<i32>>:
         ringbuffer_new<i32>
         |> uwok
-        |> ringbuffer_push_back<i32> 4
+        |> ringbuffer_push_back 4
         |> uwok
-        |> ringbuffer_push_back<i32> 9
+        |> ringbuffer_push_back 9
         |> uwok
-    let ok1 <bool> match rb2 |> ringbuffer_pop_front<i32>:
+    let ok1 <bool> match rb2 |> ringbuffer_pop_front:
         Option::Some v:
             eq v 4
         Option::None:

@@ -255,20 +255,20 @@ ret: 1
 fn main <()*>i32> ():
     let rb <RingBuffer<i32>>:
         ringbuffer_new<i32>
-        |> unwrap_ok<RingBuffer<i32>, Diag>
-        |> ringbuffer_push_back<i32> 11
-        |> unwrap_ok<RingBuffer<i32>, Diag>
-        |> ringbuffer_push_back<i32> 22
-        |> unwrap_ok<RingBuffer<i32>, Diag>
+        |> uwok
+        |> ringbuffer_push_back 11
+        |> uwok
+        |> ringbuffer_push_back 22
+        |> uwok
     let ok0 <bool> eq ringbuffer_len<i32> rb 2;
     let rb2 <RingBuffer<i32>>:
         ringbuffer_new<i32>
-        |> unwrap_ok<RingBuffer<i32>, Diag>
-        |> ringbuffer_push_back<i32> 11
-        |> unwrap_ok<RingBuffer<i32>, Diag>
-        |> ringbuffer_push_back<i32> 22
-        |> unwrap_ok<RingBuffer<i32>, Diag>
-    let ok1 <bool> match rb2 |> ringbuffer_peek_front<i32>:
+        |> uwok
+        |> ringbuffer_push_back 11
+        |> uwok
+        |> ringbuffer_push_back 22
+        |> uwok
+    let ok1 <bool> match rb2 |> ringbuffer_peek_front:
         Option::Some v:
             eq v 11
         Option::None:
@@ -294,20 +294,20 @@ ret: 1
 fn main <()*>i32> ():
     let q <Queue<i32>>:
         queue_new<i32>
-        |> unwrap_ok<Queue<i32>, Diag>
-        |> queue_push<i32> 3
-        |> unwrap_ok<Queue<i32>, Diag>
-        |> queue_push<i32> 4
-        |> unwrap_ok<Queue<i32>, Diag>
+        |> uwok
+        |> queue_push 3
+        |> uwok
+        |> queue_push 4
+        |> uwok
     let ok0 <bool> eq queue_len<i32> q 2;
     let q2 <Queue<i32>>:
         queue_new<i32>
-        |> unwrap_ok<Queue<i32>, Diag>
-        |> queue_push<i32> 3
-        |> unwrap_ok<Queue<i32>, Diag>
-        |> queue_push<i32> 4
-        |> unwrap_ok<Queue<i32>, Diag>
-    let ok1 <bool> match q2 |> queue_peek<i32>:
+        |> uwok
+        |> queue_push 3
+        |> uwok
+        |> queue_push 4
+        |> uwok
+    let ok1 <bool> match q2 |> queue_peek:
         Option::Some v:
             eq v 3
         Option::None:
