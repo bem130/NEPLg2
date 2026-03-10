@@ -345,6 +345,18 @@ fn visit_expr(expr: &HirExpr, ctx: &mut MoveCheckContext, tctx: &crate::types::T
         }
         HirExprKind::FnValue(_) => {}
         HirExprKind::Call { callee, args } => match callee {
+            FuncRef::Builtin(name) | FuncRef::User(name, _) if name == "get" => {
+                if let Some(base) = args.get(0) {
+                    if tctx.is_copy(expr.ty) {
+                        visit_temporary_borrow(base, ctx, tctx, BorrowKind::Shared);
+                    } else if !visit_field_move_source(base, ctx, tctx) {
+                        visit_expr(base, ctx, tctx);
+                    }
+                }
+                for arg in args.iter().skip(1) {
+                    visit_expr(arg, ctx, tctx);
+                }
+            }
             FuncRef::Builtin(name) | FuncRef::User(name, _) if name == "if" => {
                 if args.len() == 3 {
                     visit_expr(&args[0], ctx, tctx);

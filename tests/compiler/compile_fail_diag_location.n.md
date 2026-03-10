@@ -32,3 +32,22 @@ diag_spans: [{"line": 3, "col": 5}, {"file": "/virtual/entry.nepl", "line": 3, "
 fn main <()->i32> ():
     missing_name
 ```
+
+## entry_missing_uses_entry_directive_span
+
+[目的/もくてき]:
+- `#entry` が[存在/そんざい]しない[関数/かんすう]を[指/さ]すとき、dummy span ではなく `#entry` の[名前/なまえ][位置/いち]に[診断/しんだん]が[付/つ]くことを[確認/かくにん]します。
+
+[確/たし]かめること:
+- `TypeEntryFunctionMissingOrAmbiguous` が `diag_id: 3092` で[返/かえ]ること。
+- [位置/いち]が `main` の[識別子/しきべつし]を[指/さ]すこと。
+
+neplg2:test[compile_fail]
+diag_id: 3092
+diag_span: 2:8
+```neplg2
+#target llvm
+#entry main
+fn boot <()->i32> ():
+    0
+```

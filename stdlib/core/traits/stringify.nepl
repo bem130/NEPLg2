@@ -38,8 +38,10 @@ trait Stringify:
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "core/traits/stringify" as *
-//: assert_str_eq "42" stringify 42;
-//: assert_str_eq "true" stringify true;
+//:| fn main <()*>i32> ():
+//:     assert_str_eq "42" stringify 42;
+//:     assert_str_eq "true" stringify true;
+//:     0
 //: ```
 //:
 //: [実装/じっそう]:

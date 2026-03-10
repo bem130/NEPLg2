@@ -11,7 +11,9 @@
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//: ()
+//:| fn main <()*>i32> ():
+//:     ()
+//:     0
 //: ```
 
 #indent 4
@@ -124,9 +126,11 @@ fn string_data_ptr <(str)->MemPtr<u8>> (s):
 //: [計算量/けいさんりょう]:
 //: - O(1)
 fn string_finish <(RegionToken<u8>,i32)->str> (region, byte_len):
-    match store_i32 string_region_len_ptr region byte_len:
+    let base <MemPtr<u8>> get region "ptr"
+    let len_ptr <MemPtr<i32>> mem_ptr_wrap mem_ptr_addr base
+    match store_i32 len_ptr byte_len:
         Result::Ok _:
-            mem_ptr_addr region_ptr region
+            mem_ptr_addr base
         Result::Err _e:
             #intrinsic "unreachable" <> ()
 
@@ -190,7 +194,7 @@ fn concat <(str,str)->str> (a,b):
     let lb <i32> load_i32 b;
     let total <i32> add la lb;
     let out_region <RegionToken<u8>> unwrap_ok string_alloc_region total;
-    let out_data <MemPtr<u8>> string_region_data_ptr out_region;
+    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr get out_region "ptr" 4;
     let a_data <MemPtr<u8>> string_data_ptr a;
     let b_data <MemPtr<u8>> string_data_ptr b;
     let mut i <i32> 0;
@@ -405,7 +409,7 @@ fn sb_build <(StringBuilder)->str> (sb):
             set total add total load_i32 part;
             set idx0 add idx0 1;
     let out_region <RegionToken<u8>> unwrap_ok string_alloc_region total;
-    let out_data <MemPtr<u8>> string_region_data_ptr out_region;
+    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr get out_region "ptr" 4;
     let mut idx <i32> 0;
     let mut dst <i32> 0;
     while lt idx n:
@@ -700,7 +704,7 @@ fn str_slice <(str,i32,i32)->str> (s, start, end):
         else ()
     let out_len <i32> sub e0 s0;
     let out_region <RegionToken<u8>> unwrap_ok string_alloc_region out_len;
-    let out_data <MemPtr<u8>> string_region_data_ptr out_region;
+    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr get out_region "ptr" 4;
     let s_data <MemPtr<u8>> string_data_ptr s;
     let mut i <i32> 0;
     while lt i out_len:
@@ -1563,7 +1567,7 @@ fn from_u128_radix <(u128,i32)->Result<str,i32>> (v, radix):
                     Result::Ok<str,i32> "0"
                 else:
                     let scratch_region <RegionToken<u8>> unwrap_ok alloc_region_bytes<u8> 132;
-                    let scratch <MemPtr<u8>> region_ptr scratch_region;
+                    let scratch <MemPtr<u8>> get scratch_region "ptr";
                     let mut idx <i32> 0;
                     let mut n <u128> v;
                     while not u128_is_zero n:
@@ -1577,7 +1581,7 @@ fn from_u128_radix <(u128,i32)->Result<str,i32>> (v, radix):
                             set idx add idx 1;
                             set n get qr "quotient";
                     let out_region <RegionToken<u8>> unwrap_ok string_alloc_region idx;
-                    let out_data <MemPtr<u8>> string_region_data_ptr out_region;
+                    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr get out_region "ptr" 4;
                     let mut i <i32> 0;
                     while lt i idx:
                         do:

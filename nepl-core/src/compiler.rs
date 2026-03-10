@@ -377,7 +377,7 @@ pub fn prepare_module_for_llvm_codegen(
     let mut reachable_set = BTreeSet::new();
     let mut resolved_entries = BTreeMap::new();
     for entry in entry_names {
-        let resolved = resolve_hir_entry_name(&program.hir_module, entry.as_str())?;
+        let resolved = resolve_hir_entry_name(module, &program.hir_module, entry.as_str())?;
         resolved_entries.insert(entry.clone(), resolved.clone());
         for name in collect_reachable_functions(&program.hir_module, resolved.as_str()) {
             reachable_set.insert(name.clone());
@@ -405,6 +405,7 @@ pub fn prepare_module_for_llvm_codegen(
 }
 
 fn resolve_hir_entry_name(
+    module: &ast::Module,
     hir_module: &crate::hir::HirModule,
     entry: &str,
 ) -> Result<String, CoreError> {
@@ -436,8 +437,16 @@ fn resolve_hir_entry_name(
             entry,
             sample.join(", ")
         ),
-        Span::dummy(),
-    )]))
+        find_entry_directive_span(module, entry).unwrap_or_else(Span::dummy),
+    )
+    .with_id(DiagnosticId::TypeEntryFunctionMissingOrAmbiguous)]))
+}
+
+fn find_entry_directive_span(module: &ast::Module, entry: &str) -> Option<Span> {
+    module.root.items.iter().find_map(|stmt| match stmt {
+        ast::Stmt::Directive(ast::Directive::Entry { name }) if name.name == entry => Some(name.span),
+        _ => None,
+    })
 }
 
 fn find_mangled_signature_separator(name: &str) -> Option<usize> {

@@ -9088,3 +9088,202 @@
   - [実装/じっそう]本体は変更していない。
 - 検証:
   - `printf '{...}' | node nodesrc/run_test.js` により、`new<i32> |> push 10 |> push 20` と `vec_len` を[使/つか]う focused 実行が pass。
+
+# 2026-03-09 作業メモ (compiler 前提固定: `#entry` 診断の span を dummy から実位置へ修正)
+
+- [目的/もくてき]:
+  - `TypeEntryFunctionMissingOrAmbiguous` が `Span::dummy()` を[返/かえ]していた compiler [側/がわ]の[不具合/ふぐあい]を[修正/しゅうせい]し、`#entry` の[識別子/しきべつし][位置/いち]へ[診断/しんだん]を[結/むす]び[付/つ]ける。
+  - LLVM [経路/けいろ]で[後段/こうだん]に[残/のこ]っていた `entry function ... was not found in lowered module` も、同じ `diag id` と span に[寄/よ]せる。
+- [根本原因/こんぽんげんいん]:
+  - `typecheck` は `Directive::Entry` の span を[見/み]えていたが、`resolved_entry` の[曖昧/あいまい]・[欠落/けつらく]を[報告/ほうこく]するときに `Span::dummy()` を[使/つか]っていた。
+  - `compiler::resolve_hir_entry_name` も、lowering [後/ご]に entry が[見/み]つからないと `diag id` なし・dummy span [前提/ぜんてい]の[診断/しんだん]へ[落/お]ちていた。
+- [変更/へんこう]:
+  - `nepl-core/src/typecheck.rs`
+    - `entry` を `Option<(String, Span)>` で[保持/ほじ]するように変更。
+    - `TypeEntryFunctionMissingOrAmbiguous` を `#entry` の[名前/なまえ] span へ[付/つ]けるよう修正。
+    - `check_function` の entry [判定/はんてい]も tuple [前提/ぜんてい]へ[追従/ついじゅう]。
+  - `nepl-core/src/compiler.rs`
+    - `resolve_hir_entry_name` に `module` を[渡/わた]し、`#entry` [探索/たんさく] helper を追加。
+    - lowering [後/ご]に entry が[見/み]つからない[場合/ばあい]も `DiagnosticId::TypeEntryFunctionMissingOrAmbiguous` と `#entry` の span を[返/かえ]すように修正。
+  - `tests/compiler/compile_fail_diag_location.n.md`
+    - `entry_missing_uses_entry_directive_span` を追加。
+    - `diag_id: 3092` と `diag_span: 2:8` を[確認/かくにん]する compile_fail を追加。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/tests.js -i tests/compiler/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-entry-diag-location.json -j 15`
+    - [結果/けっか]: `4/4 pass`
+- [状況/じょうきょう]:
+  - `#entry` に[関/かん]する compiler 診断は、`diag id` だけでなく[位置/いち]も[前段/ぜんだん]で[安定/あんてい]して[取/と]れるようになった。
+  - codegen [到達後/とうたつご]の entry [欠落/けつらく]は、front-end lowering の[不整合/ふせいごう]として[扱/あつか]える[範囲/はんい]まで[縮小/しゅくしょう]された。
+
+# 2026-03-09 作業メモ (`RegionToken` / `RingBuffer` の move 消費を field 単位へ切り替え)
+
+- [目的/もくてき]:
+  - `todo.md` の `core/mem` / `alloc` [安全化/あんぜんか]を[進/すす]めるうえで、`RegionToken<.T>` や `RingBuffer<.T>` の[所有者/しょゆうしゃ]を[繰/く]り[返/かえ]し move してしまう[箇所/かしょ]を[除去/じょきょ]する。
+  - `tests/compiler/prelude_copy.n.md`、`tests/stdlib/ringbuffer_collections.n.md`、`tests/stdlib/queue_collections.n.md` が[安定/あんてい]して[通/とお]る[状態/じょうたい]まで[持/も]っていく。
+- [根本原因/こんぽんげんいん]:
+  - `MemPtr<.T>` は `Copy` として[扱/あつか]いたいが、[所有者/しょゆうしゃ]である `RegionToken<.T>` や `RingBuffer<.T>` は `Copy` ではない。
+  - そのため `region_ptr token` や `ringbuffer_len rb` のように[所有者/しょゆうしゃ]を[丸/まる]ごと[補助/ほじょ][関数/かんすう]へ[渡/わた]す[実装/じっそう]だと、`get ... "ptr"` や `get ... "hdr"` が[複数回/ふくすうかい]の move に[見/み]えて[失敗/しっぱい]していた。
+  - compiler [側/がわ]でも、generic `Copy` / `Clone` impl を[具体型/ぐたいてきがた]へ[当/あ]てる[際/さい]に[単純/たんじゅん]な `same_type` [比較/ひかく]しかしておらず、`MemPtr<i32>` が `impl Copy<MemPtr<.T>>` に[一致/いっち]しない[不具合/ふぐあい]があった。
+- [変更/へんこう]:
+  - `nepl-core/src/types.rs`
+    - `type_pattern_matches` を追加し、`impl Copy<MemPtr<.T>>` のような[型変数/かたへんすう][入/い]り impl が[具体型/ぐたいてきがた]へ[一致/いっち]するかを[判定/はんてい]できるようにした。
+  - `nepl-core/src/typecheck.rs`
+    - `Copy` / `Clone` と trait impl [探索/たんさく]で `same_type` ではなく `type_pattern_matches` を[使/つか]うように変更。
+    - generic impl は[当面/とうめん] `Copy` / `Clone` trait のみ[許可/きょか]するようにし、それ[以外/いがい]は[従来通/じゅうらいどお]り[拒否/きょひ]する。
+  - `nepl-core/src/passes/move_check.rs`
+    - builtin/user `get` の[評価/ひょうか]で、[取得/しゅとく][結果/けっか]が `Copy` なら base を shared borrow [相当/そうとう]で[訪問/ほうもん]するようにした。
+  - `stdlib/core/traits/copy.nepl`
+    - `MemPtr<.T>` の `Copy` / `Clone` impl を追加。
+  - `stdlib/core/mem.nepl`
+    - `region_ptr_at` / `dealloc_region` などを、`token` そのものではなく `get token "ptr"` / `get token "size"` を[先/さき]に[束縛/そくばく]して[使/つか]う[形/かたち]へ変更。
+  - `stdlib/alloc/string.nepl`
+    - `RegionToken<u8>` を[複数回/ふくすうかい] helper に[渡/わた]していた[箇所/かしょ]を、`base` / `scratch` / `out_data` などの `MemPtr<u8>` へ[先/さき]に[分解/ぶんかい]して[扱/あつか]う[形/かたち]へ変更。
+  - `stdlib/alloc/collections/ringbuffer.nepl`
+    - `RingBuffer<.T>.hdr` を `MemPtr<u8>` として[一度/いちど][取/と]り[出/だ]し、`*_from_hdr` helper へ[渡/わた]す[実装/じっそう]へ整理。
+    - `ringbuffer_with_capacity` / `ringbuffer_push_back` / `ringbuffer_pop_front` / `ringbuffer_peek_front` / `ringbuffer_clear` / `ringbuffer_free` を[所有者/しょゆうしゃ]の[再消費/さいしょうひ]がない[形/かたち]へ書き直した。
+  - `tests/compiler/prelude_copy.n.md`
+    - `MemPtr<i32>` を[繰/く]り[返/かえ]し[読/よ]めること、`Copy` を[未知/みち] trait として[扱/あつか]わないことを[確認/かくにん]する focused test を追加。
+  - `tests/stdlib/ringbuffer_collections.n.md` / `tests/stdlib/queue_collections.n.md`
+    - `[目的/もくてき]` と[確認内容/かくにんないよう]を[明記/めいき]しつつ、`uwok` を[使/つか]った[現在/げんざい]の[利用形/りようけい]に合わせて更新。
+  - `todo.md`
+    - `nodesrc/tests.js` と `nodesrc/run_test.js` の[使/つか]い[分/わ]けを[方針/ほうしん]へ追加。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/tests.js -i tests/compiler/prelude_copy.n.md -i tests/stdlib/ringbuffer_collections.n.md -i tests/stdlib/queue_collections.n.md --no-stdlib --no-tree -o /tmp/tests-copy-ringbuffer-queue.json -j 15`
+    - [結果/けっか]: `6/6 pass`
+- [状況/じょうきょう]:
+  - `RegionToken<.T>` や `RingBuffer<.T>` を `Copy` にせず、[内部/ないぶ]の `MemPtr` / `i32` [欄/らん]だけを[先/さき]に[取/と]り[出/だ]して[使/つか]う[方針/ほうしん]へ[寄/よ]せた。
+  - これにより `core/mem` と `alloc/collections` の[所有権/しょゆうけん][境界/きょうかい]が[現状/げんじょう]の[言語機能/げんごきのう]に[収/おさ]まる[形/かたち]で[安定/あんてい]した。
+
+# 2026-03-09 作業メモ (stdlib doctest: `fn main` 明示と copy 判定の前提修正)
+
+- [目的/もくてき]:
+  - stdlib `.nepl` [内/ない]の doctest が `#entry main` だけを[持/も]ち、`fn main` を[持/も]たないために `D3092` で[落/お]ちる[問題/もんだい]を[解消/かいしょう]する。
+  - doctest [修正/しゅうせい]を[進/すす]める[途中/とちゅう]で[露出/ろしゅつ]した compiler [側/がわ]の `Copy` [判定/はんてい]の[不整合/ふせいごう]も[併/あわ]せて[修正/しゅうせい]する。
+- [根本原因/こんぽんげんいん]:
+  - stdlib の[既存/きそん] doctest は `#entry main` を[書/か]いても `fn main` [本体/ほんたい]を[持/も]たない[例/れい]が[多/おお]く、Node [側/がわ]の doctest [実行/じっこう][経路/けいろ]では entry [欠落/けつらく]として `D3092` に[落/お]ちていた。
+  - さらに doctest [本体/ほんたい]で `assert_*` のような impure API を[呼/よ]ぶ[場合/ばあい]、pure `fn main <()->i32>` を[自動/じどう][挿入/そうにゅう]すると `D3025` が[出/で]る。
+  - `Copy` trait model の[実装/じっそう]では `i64` / `i128` / `u128` / `f64` を enum variant [前提/ぜんてい]で[扱/あつか]っており、[実際/じっさい]には `TypeKind::Named(...)` で[表現/ひょうげん]される[型/かた]との[不一致/ふいっち]があった。
+- [変更/へんこう]:
+  - stdlib の doctest [全体/ぜんたい]で、`fn main` がない[例/れい]には `fn main <()*>i32> ():` を[明示/めいじ]する[方向/ほうこう]へ[寄/よ]せた。
+  - `nepl-core/src/types.rs`
+    - trait model の `is_copy_with_trait_model` で `TypeKind::Named(name)` を[用/もち]い、`i64` / `i128` / `u64` / `u128` / `f64` を[正/ただ]しく `Copy` impl [探索/たんさく]へ[流/なが]すように[修正/しゅうせい]した。
+  - `stdlib/alloc/collections/stack.nepl`
+    - doctest [冒頭/ぼうとう]を `fn main <()*>i32>` [前提/ぜんてい]へ[揃/そろ]えた。
+    - [後入先出/あといれさきだし] の ruby を[正/ただ]しい[読/よ]みへ[修正/しゅうせい]した。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+- [状況/じょうきょう]:
+  - doctest [全体/ぜんたい]の[一括/いっかつ][再実行/さいじっこう]はまだ[途中/とちゅう]で、`stack.nepl` など collections [側/がわ]を[優先/ゆうせん]して[順次/じゅんじ] focused に[確認/かくにん]する[段階/だんかい]。
+  - [簡潔/かんけつ]な doctest [専用/せんよう][枠組/わくぐ]みの[新設/しんせつ]は[保留/ほりゅう]し、[当面/とうめん]は `fn main` を[明示/めいじ]する[方針/ほうしん]で[進/すす]める。
+
+# 2026-03-09 作業メモ (stdlib ドキュメント生成ツールの汎用化と目次構造の整備)
+
+- [目的/もくてき]:
+  - tutorials と stdlib で共通のドキュメント生成ツール (`nodesrc/cli.js`) を使用できるようにし、stdlib でもインタラクティブなプレイグラウンド付き HTML を生成可能にする。
+  - stdlib ドキュメントの目次を `index.n.md` で管理し、`00_` などのプリフィックスに依存しない階層構造をサポートする。
+- [変更/へんこう]:
+  - `nodesrc/cli.js`
+    - `--site-name` と `--description-prefix` 引数を追加し、サイト名や説明文を外部から指定可能にした。
+    - `index.n.md` を優先的に検出し、出力時に `index.html` へマッピングするロジックを追加。
+  - `stdlib/index.n.md`
+    - 標準ライブラリの新しい目次ファイルとして作成。
+  - `.github/workflows/gh-pages.yml`
+    - `stdlib` のビルドを `html_play` に変更し、"NEPLg2 Standard Library" というサイト名で生成するように更新。
+  - `stdlib/nm/README.n.md` -> `stdlib/nm/README.nepl`
+    - ユーザーの要望に基づき、インデックス以外の `.n.md` を `.nepl` 形式（ドキュメントコメント付き）に変換。
+- [検証/けんしょう]:
+  - `nodesrc/cli.js` の引数パースと `index.n.md` 処理のロジックが正常に動作し、`index.html` が期待通りに生成されることを確認。
+
+# 2026-03-09 作業メモ (stdlib ドキュメントの目次階層化とタイトルの適正化)
+
+- [目的/もくてき]:
+  - `stdlib` ドキュメントの目次 (TOC) が平坦なリストになっていたのを、ディレクトリ構造に基づいた階層的な表示に改善する。
+  - サイト名に応じて目次のタイトル ("Getting Started" または "Contents") を自動的に切り替えられるようにし、ドキュメントの種類に適した表示にする。
+- [根本原因/こんぽんげんいん]:
+  - `nodesrc/cli.js` の `buildTocEntries` において、明示的なインデックスに含まれない「残り」のファイルが一律 "Other" グループにフラットに入れられていた。
+  - `nodesrc/html_gen_playground.js` の目次タイトルが "Getting Started" にハードコードされていた。
+- [変更/へんこう]:
+  - `nodesrc/cli.js`
+    - `buildTocEntries` を修正し、残りのファイルを共通のディレクトリ接頭辞でグループ化する階層化ロジックを実装。
+    - `siteName` に "tutorial" が含まれない場合は目次タイトルを "Contents" と判定し、生成処理に渡すように変更。
+  - `nodesrc/html_gen_playground.js`
+    - `renderToc` と `renderHtmlPlayground` を更新し、`tocTitle` オプションを受け取り、"Getting Started" 以外のタイトルも表示できるように変更。
+- [検証/けんしょう]:
+  - `dist/doc/stdlib/alloc/diag/diag.html` などを確認し、目次タイトルが "Contents" になり、`alloc/collections` や `core/traits` などのディレクトリ単位で階層化されていることを確認。
+- [状況/じょうきょう]:
+  - 標準ライブラリのドキュメントが、チュートリアルと同等の整理された構造で閲覧可能になった。
+
+# 2026-03-10 作業メモ (doctest main 追従後の collections / nm / fs 整合性修正)
+
+- [目的/もくてき]:
+  - stdlib doctest に `fn main <()*>i32>` を[明示/めいじ]したあとに[露出/ろしゅつ]した、collections / kp / nm / fs [側/がわ]の[整合性/せいごうせい][崩/くず]れを[根本/こんぽん]から[直/なお]す。
+  - とくに `Vec.data` の `MemPtr` 化に[追従/ついじゅう]していない[箇所/かしょ]と、`stack_free` の impure / pure [不一致/ふいっち]を[先/さき]に[解消/かいしょう]する。
+- [根本原因/こんぽんげんいん]:
+  - `Vec<.T>.data` を `MemPtr<.T>` に[移行/いこう]したあとも、doctest や一部の nm / fs [実装/じっそう]が raw `i32` [前提/ぜんてい]の `get ... "data"` を[残/のこ]していた。
+  - `stack_free` は `dealloc_ptr` を[呼/よ]ぶのに pure [署名/しょめい]のままだったため、doctest を[通/とお]す[過程/かてい]で impure API [整合性/せいごうせい]の[破綻/はたん]が[表面化/ひょうめんか]した。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/stack.nepl`
+    - `stack_free` を `fn stack_free <.T> <(Stack<.T>)*>()>` に[修正/しゅうせい]し、`dealloc_ptr` を[呼/よ]ぶ[実体/じったい]と[署名/しょめい]を[一致/いっち]させた。
+    - `uwok dealloc_ptr ...` の[行末/ぎょうまつ] `;` を[外/はず]し、[式/しき]として[素直/すなお]に[消費/しょうひ]する[形/かたち]へ[揃/そろ]えた。
+  - `stdlib/kp/kpgraph.nepl`
+    - doctest の `dist.data` [参照/さんしょう]を `mem_ptr_addr get dist "data"` へ[修正/しゅうせい]した。
+  - `stdlib/std/fs.nepl`
+    - `Vec<u8>` の[内部/ないぶ][領域/りょういき]を raw `i32` として[読/よ]んでいた[箇所/かしょ]を `mem_ptr_addr buf.data` へ[修正/しゅうせい]した。
+  - `stdlib/nm/parser.nepl` / `stdlib/nm/html_gen.nepl`
+    - `Vec<...>.data` を raw `i32` [前提/ぜんてい]で[読/よ]んでいた[箇所/かしょ]を、`mem_ptr_addr get ... "data"` へ[機械的/きかいてき]に[追従/ついじゅう]させた。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/stack.nepl --no-tree -o /tmp/tests-stack-doctest-v3.json -j 15`
+    - [状況/じょうきょう]: この[環境/かんきょう]では JSON [出力/しゅつりょく]まで[時間/じかん]がかかるため、focused [実行/じっこう]の[完了/かんりょう][確認/かくにん]を[継続中/けいぞくちゅう]。
+- [状況/じょうきょう]:
+  - ここでの[修正/しゅうせい]は、doctest を[通/とお]すための[場当/ばあ]たり[対応/たいおう]ではなく、`Vec.data` の `MemPtr` 化と impure [署名/しょめい]の[整合性/せいごうせい]を[回復/かいふく]するもの。
+  - 次は `nodesrc` [側/がわ]の doctest focused [実行/じっこう][経路/けいろ]を[安定化/あんていか]し、既存 stdlib doctest を[順次/じゅんじ][通過/つうか]させる。
+
+# 2026-03-10 作業メモ (nodesrc: doctest 1 件 focused 実行の追加)
+
+- [目的/もくてき]:
+  - `nodesrc/tests.js` の[集約/しゅうやく][実行/じっこう]を[待/ま]たずに、stdlib reboot [中/ちゅう]の doctest 1 件を[直接/ちょくせつ][再現/さいげん]できる[入口/いりぐち]を[追加/ついか]する。
+  - `stack.nepl` のように[特定/とくてい] file の doctest を[順番/じゅんばん]に[潰/つぶ]したい[場面/ばめん]で、`run_test.js` 向け JSON を[手書/てが]きせずに[確認/かくにん]できるようにする。
+- [根本原因/こんぽんげんいん]:
+  - `nodesrc/tests.js` は doctest [全体/ぜんたい]の[集約/しゅうやく]には[向/む]くが、stdlib reboot [中/ちゅう]の[局所的/きょくしょてき]な[原因/げんいん][切/き]り[分/わ]けには[重/おも]い。
+  - `nodesrc/run_test.js` は 1 件[実行/じっこう]の[核/かく]を[持/も]つが、file / doctest index から[直接/ちょくせつ][呼/よ]ぶ[薄/うす]い CLI がなかった。
+- [変更/へんこう]:
+  - `nodesrc/run_doctest.js`
+    - `parseFile` で file [中/ちゅう]の doctest を[読/よ]み、`-n` で[指定/してい]した 1 件だけを `runSingle` に[流/なが]す CLI を[追加/ついか]した。
+    - `compile_fail` の `diag_id` / `diag_span` [確認/かくにん]も `tests.js` と[同/おな]じ[基準/きじゅん]で[適用/てきよう]する。
+  - `todo.md`
+    - stdlib reboot [中/ちゅう]の focused doctest [実行/じっこう]では `node nodesrc/run_doctest.js -i <file> -n <index>` を[使/つか]う[方針/ほうしん]を[追記/ついき]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/stack.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/core/traits/deserialize.nepl -n 1`
+    - [結果/けっか]: pass
+- [状況/じょうきょう]:
+  - 既存 stdlib doctest を[順次/じゅんじ][通/とお]す[際/さい]の[入口/いりぐち]が[揃/そろ]い、`tests.js` の[重/おも]い[集約/しゅうやく][実行/じっこう]に[頼/たよ]らずに[局所/きょくしょ][確認/かくにん]できるようになった。
+
+# 2026-03-10 作業メモ (`nodesrc/README.md` の追加と doctest 実行経路の整理)
+
+- [目的/もくてき]:
+  - `nodesrc/` [配下/はいか]の[道具/どうぐ]が[増/ふ]えてきたため、stdlib reboot [中/ちゅう]に「どの[目的/もくてき]でどの script を[使/つか]うか」を 1 [枚/まい]で[確認/かくにん]できるようにする。
+  - doctest / 通常 tests / 解析 / HTML [生成/せいせい]の[入口/いりぐち]を[明確/めいかく]にし、`todo.md` の[運用/うんよう][方針/ほうしん]と[一致/いっち]させる。
+- [変更/へんこう]:
+  - `nodesrc/README.md`
+    - `tests.js` / `run_doctest.js` / `run_test.js` / `analyze_source.js` / `analyze_tests_json.js` / `cli.js` の[使/つか]い[分/わ]けを、[目的別/もくてきべつ]に[整理/せいり]した。
+    - stdlib reboot [中/ちゅう]によく[使/つか]う[手順/てじゅん]として、doctest 1 件の[修正/しゅうせい]、compiler [不具合/ふぐあい]の[切/き]り[分/わ]け、通常 tests と doctest の[分離/ぶんり][確認/かくにん]を[記述/きじゅつ]した。
+  - `todo.md`
+    - `run_doctest.js` を[使/つか]った focused doctest [実行/じっこう]を[標準/ひょうじゅん]の[運用/うんよう]として[追記/ついき]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/stack.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/core/traits/deserialize.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/cliarg.n.md -n 3`
+    - [結果/けっか]: `compile_fail` + `diag_id: D3006` [確認/かくにん] pass
+- [状況/じょうきょう]:
+  - stdlib reboot [中/ちゅう]の doctest [修正/しゅうせい]は、まず `run_doctest.js` で 1 件を[固/かた]め、そのあと `tests.js` で[小/ちい]さい[範囲/はんい]を[集約/しゅうやく][確認/かくにん]する[流/なが]れで[進/すす]められるようになった。

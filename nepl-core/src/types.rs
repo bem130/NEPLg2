@@ -339,7 +339,158 @@ impl TypeCtx {
         let resolved = self.resolve_id(id);
         self.copy_impl_targets
             .iter()
-            .any(|t| self.same_type(*t, resolved))
+            .any(|t| self.type_pattern_matches(*t, resolved))
+    }
+
+    pub fn type_pattern_matches(&self, pattern: TypeId, actual: TypeId) -> bool {
+        let mut seen = BTreeSet::new();
+        let mut mapping = BTreeMap::new();
+        self.type_pattern_matches_inner(
+            self.resolve_id(pattern),
+            self.resolve_id(actual),
+            &mut mapping,
+            &mut seen,
+        )
+    }
+
+    fn type_pattern_matches_inner(
+        &self,
+        pattern: TypeId,
+        actual: TypeId,
+        mapping: &mut BTreeMap<TypeId, TypeId>,
+        seen: &mut BTreeSet<(TypeId, TypeId)>,
+    ) -> bool {
+        let pattern = self.resolve_id(pattern);
+        let actual = self.resolve_id(actual);
+        if !seen.insert((pattern, actual)) {
+            return true;
+        }
+        match (self.get_ref(pattern), self.get_ref(actual)) {
+            (TypeKind::Var(v), _) => {
+                if let Some(bound) = v.binding {
+                    return self.type_pattern_matches_inner(bound, actual, mapping, seen);
+                }
+                match mapping.get(&pattern).copied() {
+                    Some(prev) => self.same_type(prev, actual),
+                    None => {
+                        mapping.insert(pattern, actual);
+                        true
+                    }
+                }
+            }
+            (TypeKind::Unit, TypeKind::Unit)
+            | (TypeKind::I32, TypeKind::I32)
+            | (TypeKind::U8, TypeKind::U8)
+            | (TypeKind::F32, TypeKind::F32)
+            | (TypeKind::Bool, TypeKind::Bool)
+            | (TypeKind::Str, TypeKind::Str)
+            | (TypeKind::Never, TypeKind::Never) => true,
+            (TypeKind::Named(a), TypeKind::Named(b)) => a == b,
+            (TypeKind::Reference(ai, am), TypeKind::Reference(bi, bm)) => {
+                am == bm && self.type_pattern_matches_inner(*ai, *bi, mapping, seen)
+            }
+            (TypeKind::Box(ai), TypeKind::Box(bi)) => {
+                self.type_pattern_matches_inner(*ai, *bi, mapping, seen)
+            }
+            (TypeKind::Tuple { items: a }, TypeKind::Tuple { items: b }) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .zip(b.iter())
+                        .all(|(x, y)| self.type_pattern_matches_inner(*x, *y, mapping, seen))
+            }
+            (
+                TypeKind::Function {
+                    type_params: a_tps,
+                    params: a_ps,
+                    result: a_r,
+                    ..
+                },
+                TypeKind::Function {
+                    type_params: b_tps,
+                    params: b_ps,
+                    result: b_r,
+                    ..
+                },
+            ) => {
+                a_tps.len() == b_tps.len()
+                    && a_ps.len() == b_ps.len()
+                    && a_ps
+                        .iter()
+                        .zip(b_ps.iter())
+                        .all(|(x, y)| self.type_pattern_matches_inner(*x, *y, mapping, seen))
+                    && self.type_pattern_matches_inner(*a_r, *b_r, mapping, seen)
+            }
+            (
+                TypeKind::Apply { base: a_base, args: a_args },
+                TypeKind::Apply { base: b_base, args: b_args },
+            ) => {
+                self.type_pattern_matches_inner(*a_base, *b_base, mapping, seen)
+                    && a_args.len() == b_args.len()
+                    && a_args
+                        .iter()
+                        .zip(b_args.iter())
+                        .all(|(x, y)| self.type_pattern_matches_inner(*x, *y, mapping, seen))
+            }
+            (
+                TypeKind::Struct {
+                    name: a_name,
+                    type_params: a_tps,
+                    fields: a_fields,
+                    ..
+                },
+                TypeKind::Struct {
+                    name: b_name,
+                    type_params: b_tps,
+                    fields: b_fields,
+                    ..
+                },
+            ) => {
+                a_name == b_name
+                    && a_tps.len() == b_tps.len()
+                    && a_fields.len() == b_fields.len()
+                    && a_tps
+                        .iter()
+                        .zip(b_tps.iter())
+                        .all(|(x, y)| self.type_pattern_matches_inner(*x, *y, mapping, seen))
+                    && a_fields
+                        .iter()
+                        .zip(b_fields.iter())
+                        .all(|(x, y)| self.type_pattern_matches_inner(*x, *y, mapping, seen))
+            }
+            (
+                TypeKind::Enum {
+                    name: a_name,
+                    type_params: a_tps,
+                    variants: a_vs,
+                    ..
+                },
+                TypeKind::Enum {
+                    name: b_name,
+                    type_params: b_tps,
+                    variants: b_vs,
+                    ..
+                },
+            ) => {
+                a_name == b_name
+                    && a_tps.len() == b_tps.len()
+                    && a_vs.len() == b_vs.len()
+                    && a_tps
+                        .iter()
+                        .zip(b_tps.iter())
+                        .all(|(x, y)| self.type_pattern_matches_inner(*x, *y, mapping, seen))
+                    && a_vs.iter().zip(b_vs.iter()).all(|(x, y)| {
+                        x.name == y.name
+                            && match (x.payload, y.payload) {
+                                (Some(px), Some(py)) => {
+                                    self.type_pattern_matches_inner(px, py, mapping, seen)
+                                }
+                                (None, None) => true,
+                                _ => false,
+                            }
+                    })
+            }
+            _ => false,
+        }
     }
 
     pub fn set_copy_trait_enabled(&mut self, enabled: bool) {
@@ -381,8 +532,13 @@ impl TypeCtx {
             | TypeKind::U8
             | TypeKind::F32
             | TypeKind::Bool
-            | TypeKind::Str
-            | TypeKind::Named(_) => self.has_copy_impl_target(resolved),
+            | TypeKind::Str => self.has_copy_impl_target(resolved),
+            TypeKind::Named(name)
+                if matches!(name.as_str(), "i64" | "i128" | "u64" | "u128" | "f64") =>
+            {
+                self.has_copy_impl_target(resolved)
+            }
+            TypeKind::Named(_) => self.has_copy_impl_target(resolved),
             TypeKind::Tuple { items } => items.iter().all(|t| self.is_copy(*t)),
             TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_copy_impl_target(resolved),
             TypeKind::Apply { base, .. } => match self.get_ref(self.resolve_id(*base)) {

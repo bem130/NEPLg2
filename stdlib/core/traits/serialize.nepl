@@ -43,8 +43,10 @@ trait Serialize:
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "core/traits/serialize" as *
-//: assert_str_eq "42" serialize 42;
-//: assert_str_eq "false" serialize false;
+//:| fn main <()*>i32> ():
+//:     assert_str_eq "42" serialize 42;
+//:     assert_str_eq "false" serialize false;
+//:     0
 //: ```
 //:
 //: ### [実装/じっそう]

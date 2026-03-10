@@ -11,7 +11,9 @@
 //: ```neplg2
 //:| #entry main
 //:| #target core
-//: ()
+//:| fn main <()*>i32> ():
+//:     ()
+//:     0
 //: ```
 
 #indent 4

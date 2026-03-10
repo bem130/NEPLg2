@@ -76,7 +76,7 @@ fn region_new <.T> <(MemPtr<.T>,i32)->RegionToken<.T>> (ptr, size):
     RegionToken ptr size
 
 fn region_in_bounds <.T> <(RegionToken<.T>,i32,i32)->bool> (token, off, bytes):
-    let total <i32> region_size token
+    let total <i32> get token "size"
     if:
         or lt off 0 lt bytes 0
         then:
@@ -87,10 +87,17 @@ fn region_in_bounds <.T> <(RegionToken<.T>,i32,i32)->bool> (token, off, bytes):
 
 fn region_ptr_at <.T, .U> <(RegionToken<.T>,i32)->Result<MemPtr<.U>,str>> (token, off):
     let bytes <i32> size_of<.U>
+    let total <i32> get token "size"
     if:
-        region_in_bounds token off bytes
+        if:
+            or lt off 0 lt bytes 0
+            then:
+                false
+            else:
+                let end <i32> add off bytes
+                and le end total ge end off
         then:
-            let base_raw <i32> mem_ptr_addr region_ptr token
+            let base_raw <i32> mem_ptr_addr get token "ptr"
             Result<MemPtr<.U>,str>::Ok mem_ptr_wrap add base_raw off
         else:
             Result<MemPtr<.U>,str>::Err "mem.region_ptr_at out of bounds"
@@ -117,7 +124,9 @@ fn alloc_region <.T> <(i32)->Result<RegionToken<.T>,str>> (count):
             alloc_region_bytes<.T> bytes
 
 fn dealloc_region <.T> <(RegionToken<.T>)->Result<(),str>> (token):
-    dealloc_ptr<.T> region_ptr token region_size token
+    let ptr <MemPtr<.T>> get token "ptr"
+    let size <i32> get token "size"
+    dealloc_ptr<.T> ptr size
 
 #if[target=llvm]
 #llvmir:

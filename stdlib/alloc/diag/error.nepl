@@ -326,8 +326,10 @@ fn result_to_outcome <.T, .E> <(Result<.T, .E>)->Outcome<.T, .E>> (r):
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "alloc/diag/error" as *
-//: let o <Outcome<i32, StdErrorKind>> into_outcome Result::Ok<i32, StdErrorKind> 7;
-//: assert outcome_is_ok o;
+//:| fn main <()*>i32> ():
+//:     let o <Outcome<i32, StdErrorKind>> into_outcome Result::Ok<i32, StdErrorKind> 7;
+//:     assert outcome_is_ok o;
+//:     0
 //: ```
 //:
 //: ### [実装/じっそう]
@@ -416,12 +418,14 @@ fn result_like_is_err <.T, .E> <(Outcome<.T, .E>)->bool> (o):
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "alloc/diag/error" as *
-//: let o <Outcome<i32, StdErrorKind>> outcome_ok<i32, StdErrorKind> 42;
-//: match outcome_result o:
-//:     Result::Ok v:
-//:         assert_eq_i32 42 v;
-//:     Result::Err _e:
-//:         test_fail "expected ok";
+//:| fn main <()*>i32> ():
+//:     let o <Outcome<i32, StdErrorKind>> outcome_ok<i32, StdErrorKind> 42;
+//:     match outcome_result o:
+//:         Result::Ok v:
+//:             assert_eq_i32 42 v;
+//:         Result::Err _e:
+//:             test_fail "expected ok";
+//:     0
 //: ```
 //:
 //: [実装/じっそう]:

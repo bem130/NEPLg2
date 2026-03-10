@@ -39,8 +39,10 @@ trait Eq:
 //:| #target core
 //:| #import "core/test" as *
 //:| #import "core/traits/eq" as *
-//: assert eq_by_trait 10 10;
-//: assert not eq_by_trait 10 11;
+//:| fn main <()*>i32> ():
+//:     assert eq_by_trait 10 10;
+//:     assert not eq_by_trait 10 11;
+//:     0
 //: ```
 //:
 //: [実装/じっそう]:
