@@ -9572,3 +9572,40 @@
 - [状況/じょうきょう]:
   - `kpwrite` に続いて `kpread` の primitive scanner core も `std/streamio` へ移り、todo 7 の「`kpread` / `kpwrite` の中核を `std/streamio` へ昇格」が一段進んだ。
   - `kp` 側には `Vec`/行列/競技入力パックのような競技向け sugar が残っている。
+
+# 2026-03-10 作業メモ (`std/fs` の binary path を `ByteBuf` へ統一)
+
+- [目的/もくてき]:
+  - todo 7 の `std/fs` を、すでに `alloc/io` と `std/streamio` で採用した binary 表現 `ByteBuf` に揃える。
+  - `std` 配下の binary I/O が module ごとに `Vec<u8>` と `ByteBuf` へ分裂している状態を解消する。
+- [根本原因/こんぽんげんいん]:
+  - `std/streamio` と `std/stdio` は reboot 後に `ByteBuf` を binary 媒体として使う設計へ寄っていたが、`std/fs` だけが旧来の `Vec<u8>` 前提を維持していた。
+  - そのため file read の返り値だけが別表現となり、`streamio` / `stdio` と binary path を共有できず、`std` facade 全体で媒体が一致していなかった。
+  - あわせて `std/fs` 内の小さな作業領域は `RegionToken<u8>` を使っており、helper を複数回参照する箇所で move error を起こしやすい構造になっていた。
+- [変更/へんこう]:
+  - `stdlib/std/fs.nepl`
+    - `alloc/collections/vec` 依存を外し、`alloc/io` を import する構成へ変更した。
+    - `fs_read_fd_bytes` / `fs_read_to_bytes` の返り値を `Result<ByteBuf, i32>` へ変更した。
+    - `fs_bytes_to_string` は `io_bytebuf_to_str` を使う薄い変換 helper に整理した。
+    - fd/iovec/nread の一時領域は `RegionToken` ではなく `alloc_ptr<u8>` / `dealloc_ptr<u8>` で管理し、`MemPtr<u8>` から `region_new` で `i32*` を切り出す形へ統一した。
+    - file 全体の説明と関数 comment を、新しい `ByteBuf` ベース実装に合わせて更新した。
+  - `tests/stdlib/fs.n.md`
+    - `fs_read_to_string` の missing file case に加え、既知の test file を `ByteBuf` として読み、そのまま `str` へ戻せることを確認する focused case を追加した。
+    - `ByteBuf` は move-only なので、長さ確認後に再利用する形は取らず、text 化まで一気に消費する構成にした。
+- [設計/せっけい][判断/はんだん]:
+  - `ByteBuf` は fd read/write に直接渡せる所有バッファとして `alloc/io` にすでに定義済みであり、`std/fs` だけを `Vec<u8>` のまま残す合理性はないと判断した。
+  - `RegionToken` の使い回しで move error を避けるための場当たり的な複製 helper は入れず、`std/stdio` と同じポインタベースの一時領域管理へ寄せた。
+  - 既存の `stdlib/tests/fs.n.md` は missing file の最小確認として残し、新しい `tests/stdlib/fs.n.md` では binary path の回帰を分離して固定した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/fs.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/fs.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/fs.n.md -i stdlib/tests/fs.n.md -i stdlib/std/fs.nepl --no-stdlib --no-tree -o /tmp/tests-fs-all.json -j 15`
+    - [結果/けっか]: `8/8 pass`
+  - `/tmp/tests-fs-all.json`
+    - [確認/かくにん]: `summary.total = 8`, `summary.passed = 8`, `summary.failed = 0`
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/cli.js -i stdlib/std/fs.nepl -i tests/stdlib/fs.n.md -o html=/tmp/fs-doc-html`
+    - [結果/けっか]: `generated 2 html file(s)`
+- [状況/じょうきょう]:
+  - `std/stdio` / `std/streamio` / `std/fs` の binary path がすべて `ByteBuf` を共有する形になった。
+  - todo 7 の `std` facade 整理は、`env/cliarg` や残りの target 依存 API の確認を残して継続中である。

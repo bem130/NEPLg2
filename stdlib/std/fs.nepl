@@ -14,25 +14,11 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/result" as *
-#import "alloc/collections/vec" as *
+#import "alloc/io" as *
 #import "alloc/string" as *
 
-fn fs_i32_ptr <(RegionToken<u8>,i32)->Result<MemPtr<i32>,str>> (region, off):
-    region_ptr_at<u8,i32> region off
-
-fn fs_alloc_u8_region <(i32)->Result<RegionToken<u8>,i32>> (size):
-    match alloc_region<u8> size:
-        Result::Ok region:
-            Result<RegionToken<u8>,i32>::Ok region
-        Result::Err _e:
-            Result<RegionToken<u8>,i32>::Err 12
-
-fn fs_free_region <.T> <(RegionToken<.T>)->()> (region):
-    match dealloc_region region:
-        Result::Ok _:
-            ()
-        Result::Err _e:
-            ()
+fn fs_i32_ptr <(MemPtr<u8>,i32,i32)->Result<MemPtr<i32>,str>> (base, size, off):
+    region_ptr_at<u8,i32> region_new base size off
 
 //: fs: ファイル読み込み（WASI / LLVM）
 //:
@@ -42,7 +28,7 @@ fn fs_free_region <.T> <(RegionToken<.T>)->()> (region):
 //: 実装(アルゴリズム):
 //: - wasm では WASI `path_open/fd_read/fd_close` を呼びます。
 //: - llvm では libc `open/read/close` を使って同名 API を互換実装します。
-//: - 読み込み結果を Vec<u8> または str に変換します。
+//: - 読み込み結果は `ByteBuf` または str に変換します。
 //:
 //: 注意(重要):
 //: - 権限/パス解決はホスト環境に依存します。
@@ -53,11 +39,11 @@ fn fs_free_region <.T> <(RegionToken<.T>)->()> (region):
 
 #if[target=llvm]
 fn __fs_copy_to_cstr <(i32,i32)*>Result<MemPtr<u8>,i32>> (src_ptr, src_len):
-    match fs_alloc_u8_region add src_len 1:
+    let size <i32> add src_len 1;
+    match alloc_ptr<u8> size:
         Result::Err e:
             Result<MemPtr<u8>,i32>::Err e
-        Result::Ok dst_region:
-            let dst <MemPtr<u8>> region_ptr dst_region
+        Result::Ok dst:
             let mut i <i32> 0;
             while lt i src_len:
                 do:
@@ -182,12 +168,17 @@ fn wasi_fd_close <(i32)*>i32> (fd):
 //:     fs_open_read "sample";
 //: ```
 fn fs_open_read <(str)*>Result<i32,i32>> (path):
-    match fs_alloc_u8_region 4:
+    match alloc_ptr<u8> 4:
         Result::Err e:
             Result::Err e
-        Result::Ok fd_out_region:
-            match fs_i32_ptr fd_out_region 0:
+        Result::Ok fd_out_buf:
+            match fs_i32_ptr fd_out_buf 4 0:
                 Result::Err _:
+                    match dealloc_ptr<u8> fd_out_buf 4:
+                        Result::Ok _:
+                            ()
+                        Result::Err _:
+                            ()
                     Result::Err 12
                 Result::Ok fd_out:
                     match store_i32 fd_out 0:
@@ -208,16 +199,20 @@ fn fs_open_read <(str)*>Result<i32,i32>> (path):
                                 Option::None:
                                     Result<i32,i32>::Err 12
                         else Result<i32,i32>::Err errno
-                    fs_free_region fd_out_region;
+                    match dealloc_ptr<u8> fd_out_buf 4:
+                        Result::Ok _:
+                            ()
+                        Result::Err _:
+                            ()
                     res
 
-//: fs_read_fd_bytes: fd から全て読み込んで Vec<u8> を返す
+//: fs_read_fd_bytes: fd から全て読み込んで `ByteBuf` を返す
 //:
 //: 目的:
 //: - fd の内容をすべて読み込み、バイト列として返します。
 //:
 //: 実装(アルゴリズム):
-//: - 固定長バッファで fd_read を繰り返し、Vec<u8> に push します。
+//: - 64KiB から開始する連続 buffer を必要に応じて再確保し、EOF まで `fd_read` を繰り返します。
 //:
 //: 注意(重要):
 //: - 途中でエラーが出た場合は Err(errno) を返します。
@@ -242,65 +237,119 @@ fn fs_open_read <(str)*>Result<i32,i32>> (path):
 //: fn main <()*>()> ():
 //:     fs_read_fd_bytes 0;
 //: ```
-fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
-    let mut buf <Vec<u8>> vec_new<u8>;
-    let cap <i32> 256;
-    match fs_alloc_u8_region cap:
+fn fs_read_fd_bytes <(i32)*>Result<ByteBuf,i32>> (fd):
+    let mut cap <i32> 65536;
+    match alloc_ptr<u8> cap:
         Result::Err e:
             Result::Err e
-        Result::Ok tmp_region:
-            let tmp <MemPtr<u8>> region_ptr tmp_region
-            match fs_alloc_u8_region 8:
+        Result::Ok buf0:
+            let mut buf <MemPtr<u8>> buf0;
+            match alloc_ptr<u8> 8:
                 Result::Err e:
-                    fs_free_region tmp_region;
+                    match dealloc_ptr<u8> buf cap:
+                        Result::Ok _:
+                            ()
+                        Result::Err _e:
+                            ();
                     Result::Err e
-                Result::Ok iov_region:
-                    match fs_i32_ptr iov_region 0:
+                Result::Ok iov_buf:
+                    match fs_i32_ptr iov_buf 8 0:
                         Result::Err e:
-                            fs_free_region iov_region;
-                            fs_free_region tmp_region;
+                            match dealloc_ptr<u8> iov_buf 8:
+                                Result::Ok _:
+                                    ()
+                                Result::Err _e:
+                                    ();
+                            match dealloc_ptr<u8> buf cap:
+                                Result::Ok _:
+                                    ()
+                                Result::Err _e:
+                                    ();
                             Result::Err e
                         Result::Ok iov_base:
-                            match fs_i32_ptr iov_region 4:
+                            match fs_i32_ptr iov_buf 8 4:
                                 Result::Err e:
-                                    fs_free_region iov_region;
-                                    fs_free_region tmp_region;
+                                    match dealloc_ptr<u8> iov_buf 8:
+                                        Result::Ok _:
+                                            ()
+                                        Result::Err _e:
+                                            ();
+                                    match dealloc_ptr<u8> buf cap:
+                                        Result::Ok _:
+                                            ()
+                                        Result::Err _e:
+                                            ();
                                     Result::Err e
                                 Result::Ok iov_len:
-                                    match store_i32 iov_base mem_ptr_addr tmp:
-                                        Result::Ok _:
-                                            ()
-                                        Result::Err _:
-                                            ()
-                                    match store_i32 iov_len cap:
-                                        Result::Ok _:
-                                            ()
-                                        Result::Err _:
-                                            ()
-                                    match fs_alloc_u8_region 4:
+                                    match alloc_ptr<u8> 4:
                                         Result::Err e:
-                                            fs_free_region iov_region;
-                                            fs_free_region tmp_region;
+                                            match dealloc_ptr<u8> iov_buf 8:
+                                                Result::Ok _:
+                                                    ()
+                                                Result::Err _e:
+                                                    ();
+                                            match dealloc_ptr<u8> buf cap:
+                                                Result::Ok _:
+                                                    ()
+                                                Result::Err _e:
+                                                    ();
                                             Result::Err e
-                                        Result::Ok nread_region:
-                                            match fs_i32_ptr nread_region 0:
+                                        Result::Ok nread_buf:
+                                            match fs_i32_ptr nread_buf 4 0:
                                                 Result::Err e:
-                                                    fs_free_region nread_region;
-                                                    fs_free_region iov_region;
-                                                    fs_free_region tmp_region;
+                                                    match dealloc_ptr<u8> nread_buf 4:
+                                                        Result::Ok _:
+                                                            ()
+                                                        Result::Err _e:
+                                                            ();
+                                                    match dealloc_ptr<u8> iov_buf 8:
+                                                        Result::Ok _:
+                                                            ()
+                                                        Result::Err _e:
+                                                            ();
+                                                    match dealloc_ptr<u8> buf cap:
+                                                        Result::Ok _:
+                                                            ()
+                                                        Result::Err _e:
+                                                            ();
                                                     Result::Err e
                                                 Result::Ok nread:
+                                                    let mut read_len <i32> 0;
                                                     let mut done <i32> 0;
                                                     let mut err <i32> 0;
+                                                    let mut alloc_failed <i32> 0;
 
                                                     while eq done 0:
                                                         do:
+                                                            if:
+                                                                eq read_len cap
+                                                                then:
+                                                                    let new_cap <i32> mul cap 2;
+                                                                    match realloc_ptr<u8> buf cap new_cap:
+                                                                        Result::Ok new_buf:
+                                                                            set buf new_buf;
+                                                                            set cap new_cap;
+                                                                        Result::Err _e:
+                                                                            set alloc_failed 1;
+                                                                            set done 1;
+                                                                else:
+                                                                    ();
                                                             match store_i32 nread 0:
                                                                 Result::Ok _:
                                                                     ()
                                                                 Result::Err _:
                                                                     ()
-                                                            let errno <i32> wasi_fd_read fd mem_ptr_addr region_ptr iov_region 1 mem_ptr_addr nread;
+                                                            match store_i32 iov_base add mem_ptr_addr buf read_len:
+                                                                Result::Ok _:
+                                                                    ()
+                                                                Result::Err _:
+                                                                    ();
+                                                            match store_i32 iov_len sub cap read_len:
+                                                                Result::Ok _:
+                                                                    ()
+                                                                Result::Err _:
+                                                                    ();
+                                                            let errno <i32> wasi_fd_read fd mem_ptr_addr iov_buf 1 mem_ptr_addr nread;
                                                             if:
                                                                 eq errno 0
                                                                 then:
@@ -313,32 +362,48 @@ fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
                                                                                 eq n 0
                                                                                 then set done 1
                                                                                 else:
-                                                                                    let mut i <i32> 0;
-                                                                                    while lt i n:
-                                                                                        do:
-                                                                                            let b <i32> unwrap<i32> load_u8 mem_ptr_add tmp i;
-                                                                                            set buf vec_push<u8> buf <u8> cast b;
-                                                                                            set i add i 1;
+                                                                                    set read_len add read_len n;
                                                                 else:
                                                                     set err errno;
                                                                     set done 1;
 
-                                                    let res <Result<Vec<u8>,i32>> if:
-                                                        eq err 0
-                                                        then Result<Vec<u8>,i32>::Ok buf
-                                                        else Result<Vec<u8>,i32>::Err err
-                                                    fs_free_region nread_region;
-                                                    fs_free_region iov_region;
-                                                    fs_free_region tmp_region;
+                                                    let res <Result<ByteBuf,i32>> if:
+                                                        eq alloc_failed 1
+                                                        then Result<ByteBuf,i32>::Err 12
+                                                        else:
+                                                            if:
+                                                                eq err 0
+                                                                then Result<ByteBuf,i32>::Ok ByteBuf buf read_len
+                                                                else Result<ByteBuf,i32>::Err err
+                                                    match dealloc_ptr<u8> nread_buf 4:
+                                                        Result::Ok _:
+                                                            ()
+                                                        Result::Err _e:
+                                                            ();
+                                                    match dealloc_ptr<u8> iov_buf 8:
+                                                        Result::Ok _:
+                                                            ()
+                                                        Result::Err _e:
+                                                            ();
+                                                    if:
+                                                        or eq alloc_failed 1 ne err 0
+                                                        then:
+                                                            match dealloc_ptr<u8> buf cap:
+                                                                Result::Ok _:
+                                                                    ()
+                                                                Result::Err _e:
+                                                                    ()
+                                                        else:
+                                                            ();
                                                     res
 
-//: fs_bytes_to_string: Vec<u8> を str に変換する
+//: fs_bytes_to_string: `ByteBuf` を str に変換する
 //:
 //: 目的:
 //: - バイト列をそのまま str 形式に詰め直します。
 //:
 //: 実装(アルゴリズム):
-//: - [len][bytes] 形式の領域を確保し、1 バイトずつコピーします。
+//: - `io_bytebuf_to_str` を使い、所有 buffer をそのまま str 形式へ詰め替えます。
 //:
 //: 注意(重要):
 //: - UTF-8 の検証は行いません。
@@ -361,38 +426,12 @@ fn fs_read_fd_bytes <(i32)*>Result<Vec<u8>,i32>> (fd):
 //:| #target std
 //:| #import "std/fs" as *
 //: fn main <()*>()> ():
-//:     fs_bytes_to_string vec_push<u8> vec_new<u8> 65;
+//:     fs_bytes_to_string io_bytebuf_from_str "A";
 //: ```
-fn fs_bytes_to_string <(Vec<u8>)*>str> (buf):
-    let len <i32> buf.len;
-    match fs_alloc_u8_region add 4 len:
-        Result::Err _:
-            ""
-        Result::Ok out_region:
-            let out <MemPtr<u8>> region_ptr out_region
-            match fs_i32_ptr out_region 0:
-                Result::Err _:
-                    ""
-                Result::Ok out_len:
-                    match store_i32 out_len len:
-                        Result::Ok _:
-                            ()
-                        Result::Err _:
-                            ()
-                    let data <i32> mem_ptr_addr buf.data;
-                    let mut i <i32> 0;
-                    while lt i len:
-                        do:
-                            let b <i32> load_u8 add data i;
-                            match store_u8 mem_ptr_add out add 4 i b:
-                                Result::Ok _:
-                                    ()
-                                Result::Err _:
-                                    ()
-                            set i add i 1;
-                    mem_ptr_addr out
+fn fs_bytes_to_string <(ByteBuf)*>str> (buf):
+    io_bytebuf_to_str buf
 
-//: fs_read_to_bytes: ファイルを読み込んで Vec<u8> を返す
+//: fs_read_to_bytes: ファイルを読み込んで `ByteBuf` を返す
 //:
 //: 目的:
 //: - path を開き、内容をバイト列として返します。
@@ -423,10 +462,10 @@ fn fs_bytes_to_string <(Vec<u8>)*>str> (buf):
 //: fn main <()*>()> ():
 //:     fs_read_to_bytes "sample";
 //: ```
-fn fs_read_to_bytes <(str)*>Result<Vec<u8>,i32>> (path):
+fn fs_read_to_bytes <(str)*>Result<ByteBuf,i32>> (path):
     match fs_open_read path:
         Result::Ok fd:
-            let res <Result<Vec<u8>,i32>> fs_read_fd_bytes fd;
+            let res <Result<ByteBuf,i32>> fs_read_fd_bytes fd;
             let _ <i32> wasi_fd_close fd;
             res
         Result::Err e:
