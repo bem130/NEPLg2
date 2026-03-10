@@ -1,11 +1,18 @@
-//: kpwrite: kp/kpwrite.nepl に関する機能を提供するライブラリ
+//: # kpwrite
+//: [競技/きょうぎ]プログラミング[向/む]けの[高速/こうそく][出力/しゅつりょく] helper [群/ぐん]
 //:
-//: [目的/もくてき]:
-//: - このモジュールの公開 API を提供します。
-//: - 実装の変更時に最小限の doctest 実行経路を維持します。
+//: ### [目的/もくてき]
+//: - `Writer` を[通/とお]して `std/stdio` への[書/か]き[込/こ]みを[一時/いちじ]バッファに[集約/しゅうやく]し、`print` / `println` を[多用/たよう]するより[少/すく]ない syscall で[出力/しゅつりょく]できるようにします。
+//: - `kp` の helper ですが、[将来/しょうらい] `std/streamio` に[昇格/しょうかく]することを[想定/そうてい]して、`Writer` の[所有権/しょゆうけん]と[解放責任/かいほうせきにん]が[分/わ]かる[形/かたち]で[保守/ほしゅ]します。
 //:
-//: [注意/ちゅうい]:
-//: - 利用時は各関数の「目的」「注意」「計算量」を確認してください。
+//: ### [注意/ちゅうい]
+//: - `Writer` は[内部/ないぶ]で[確保/かくほ]した[出力/しゅつりょく]バッファと header [領域/りょういき]を[所有/しょゆう]するため、`Copy` / `Clone` は[実装/じっそう]しません。
+//: - [使/つか]い[終/お]わったら `writer_free` で[解放/かいほう]してください。`writer_flush` は[出力/しゅつりょく]だけを[行/おこな]い、[所有権/しょゆうけん]は[解放/かいほう]しません。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `writer_put_u8` は[通常/つうじょう] O(1) です。
+//: - `writer_write_str` と[数値/すうち][書/か]き[込/こ]みは O(len) / O(桁数) です。
+//: - `writer_flush` は[現在/げんざい]の[書/か]き[込/こ]み[長/なが]さを n として O(n) です。
 //:
 //: neplg2:test[skip]
 //: ```neplg2
@@ -16,8 +23,6 @@
 //:     0
 //: ```
 
-//: == kpwrite.nepl ==
-
 #indent 4
 #target std
 
@@ -27,8 +32,17 @@
 #import "core/result" as *
 #import "std/stdio" as *
 
+//: ## Writer
+//: [後入先出/あといれさきだし]ではなく[追記型/ついきがた]で[出力/しゅつりょく]を[蓄積/ちくせき]する writer
+//:
+//: ### [目的/もくてき]
+//: - [呼/よ]び[出/だ]し[側/がわ]からは[軽量/けいりょう]な handle として[見/み]せつつ、[内部/ないぶ]では header と[可変/かへん]バッファを[保持/ほじ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `header` は writer [内部状態/ないぶじょうたい]の[先頭/せんとう]を[指/さ]す `MemPtr<u8>` です。
+//: - この型は[所有権/しょゆうけん]を[持/も]つため `Copy` / `Clone` にしてはいけません。
 struct Writer:
-    region <RegionToken<u8>>
+    header <MemPtr<u8>>
     marker <(i32)->i32>
 
 struct WriterBuf:
@@ -46,7 +60,7 @@ fn writer_noncopy_marker <(i32)->i32> (x):
     x
 
 fn writer_wrap <(MemPtr<u8>)->Writer> (raw):
-    Writer region_new raw 20 @writer_noncopy_marker
+    Writer raw @writer_noncopy_marker
 
 fn writer_header_region <(MemPtr<u8>)->RegionToken<u8>> (w_mem):
     region_new w_mem 20
@@ -216,7 +230,7 @@ fn writer_new <()*>Result<Writer,str>> ():
 //: 計算量:
 //: - O(1)
 fn writer_free_handle <(Writer)*>()> (w):
-    let w_mem <MemPtr<u8>> region_ptr get w "region";
+    let w_mem <MemPtr<u8>> get w "header";
     let mut can_free_parts <bool> true;
     let mut buf <MemPtr<u8>> mem_ptr_wrap 0;
     let mut cap <i32> 0;
@@ -276,7 +290,7 @@ fn writer_free_handle <(Writer)*>()> (w):
 //: 計算量:
 //: - O(len)
 fn writer_flush_handle <(Writer)*>Writer> (w):
-    let w_mem <MemPtr<u8>> region_ptr get w "region";
+    let w_mem <MemPtr<u8>> get w "header";
     match writer_load_header w_mem WriterHeaderField::BufPtr:
         Result::Err _e:
             w
@@ -346,7 +360,7 @@ fn writer_flush_handle <(Writer)*>Writer> (w):
 //: 注意:
 //: - need が cap を超えるケースは呼び出し側で避けてください（この版は最小実装）。
 fn writer_ensure_handle <(Writer,i32)*>Writer> (w, need):
-    let w_mem <MemPtr<u8>> region_ptr get w "region";
+    let w_mem <MemPtr<u8>> get w "header";
     match writer_load_header w_mem WriterHeaderField::Cap:
         Result::Err _e:
             w
@@ -368,7 +382,7 @@ fn writer_ensure_handle <(Writer,i32)*>Writer> (w, need):
 //: 計算量:
 //: - O(1)（flush が入ると O(len)）
 fn writer_put_u8_handle <(Writer,i32)*>Writer> (w, b):
-    let w_mem <MemPtr<u8>> region_ptr get w "region";
+    let w_mem <MemPtr<u8>> get w "header";
     match writer_load_header w_mem WriterHeaderField::Cap:
         Result::Err _e:
             w
@@ -404,7 +418,7 @@ fn writer_writeln_handle <(Writer)*>Writer> (w):
 //: 注意:
 //: - str は [len][bytes] 形式なので、bytes 先頭は add s 4 です。
 fn writer_write_str_handle <(Writer,str)*>Writer> (w, s):
-    let w_mem <MemPtr<u8>> region_ptr get w "region";
+    let w_mem <MemPtr<u8>> get w "header";
     let n <i32> load_i32 s;
     match writer_load_header w_mem WriterHeaderField::Cap:
         Result::Err _e:
@@ -454,7 +468,7 @@ fn writer_write_str_handle <(Writer,str)*>Writer> (w, s):
 //: 計算量:
 //: - O(桁数)
 fn writer_write_i32_handle <(Writer,i32)*>Writer> (w, v):
-    let w_mem <MemPtr<u8>> region_ptr get w "region";
+    let w_mem <MemPtr<u8>> get w "header";
     if:
         eq v -2147483648
         then:
@@ -533,7 +547,7 @@ fn writer_write_i32_handle <(Writer,i32)*>Writer> (w, v):
 //: 計算量:
 //: - O(桁数)
 fn writer_write_u64_handle <(Writer,i64)*>Writer> (w, v):
-    let w_mem <MemPtr<u8>> region_ptr get w "region";
+    let w_mem <MemPtr<u8>> get w "header";
     let zero <i64> cast 0;
     let ten <i64> cast 10;
     if:

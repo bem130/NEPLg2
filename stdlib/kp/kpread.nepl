@@ -1,11 +1,17 @@
-//: kpread: kp/kpread.nepl に関する機能を提供するライブラリ
+//: # kpread
+//: [競技/きょうぎ]プログラミング[向/む]けの[高速/こうそく][入力/にゅうりょく] helper [群/ぐん]
 //:
-//: [目的/もくてき]:
-//: - このモジュールの公開 API を提供します。
-//: - 実装の変更時に最小限の doctest 実行経路を維持します。
+//: ### [目的/もくてき]
+//: - `Scanner` を[使/つか]って[標準入力/ひょうじゅんにゅうりょく]を[一括/いっかつ]で[読/よ]み[込/こ]み、`i32` や[配列/はいれつ]・[行列/ぎょうれつ]を[高速/こうそく]に[読/よ]めるようにします。
+//: - `kpread_core` が[担当/たんとう]する[低水準/ていすいじゅん]の[確保/かくほ]・`fd_read` まわりを[包/つつ]み、[利用者/りようしゃ]には `Scanner` と helper [群/ぐん]だけを[見/み]せます。
 //:
-//: [注意/ちゅうい]:
-//: - 利用時は各関数の「目的」「注意」「計算量」を確認してください。
+//: ### [注意/ちゅうい]
+//: - `Scanner` は[入力/にゅうりょく][状態/じょうたい]を[共有/きょうゆう]する[軽量/けいりょう]ハンドルです。`Copy` / `Clone` は[同/おな]じ[読み取り位置/よみとりいち]を[共有/きょうゆう]するだけで、[入力/にゅうりょく]バッファを[複製/ふくせい]しません。
+//: - [入力全体/にゅうりょくぜんたい]を[保持/ほじ]するため、[空間/くうかん][計算量/けいさんりょう]は O(bytes) です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [入力全体/にゅうりょくぜんたい]の[読/よ]み[込/こ]みは O(bytes) です。
+//: - [各/かく] helper の[走査/そうさ]は[消費/しょうひ]した[文字数/もじすう]または[桁数/けたすう]に[比例/ひれい]します。
 //:
 //: neplg2:test[skip]
 //: ```neplg2
@@ -23,12 +29,30 @@
 #import "core/cast" as *
 #import "core/option" as *
 #import "core/result" as *
+#import "core/traits/copy" as *
 #import "kp/kpread_core" as *
 #import "alloc/collections/vec" as *
 #import "core/field" as *
 
+//: ## Scanner
+//: [読/よ]み[込/こ]み[済/ず]み[入力/にゅうりょく]と[現在位置/げんざいいち]を[共有/きょうゆう]する[軽量/けいりょう]ハンドル
+//:
+//: ### [目的/もくてき]
+//: - [複数/ふくすう]の helper [関数/かんすう]に[同/おな]じ scanner を[渡/わた]しながら、1 [箇所/かしょ]で[読み取り位置/よみとりいち]を[進/すす]められるようにします。
+//:
+//: ### [注意/ちゅうい]
+//: - `header` は scanner [内部状態/ないぶじょうたい]の header を[指/さ]すだけで、[入力/にゅうりょく]データそのものを[所有/しょゆう]しません。
+//: - `Copy` / `Clone` は[軽量/けいりょう]に[使/つか]えますが、[独立/どくりつ]した[読み取り位置/よみとりいち]にはなりません。
 struct Scanner:
-    region <RegionToken<u8>>
+    header <MemPtr<u8>>
+
+impl Copy for Scanner:
+    fn copy_mark <(Scanner)->Scanner> (sc):
+        sc
+
+impl Clone for Scanner:
+    fn clone <(Scanner)->Scanner> (sc):
+        sc
 
 enum ScannerHeaderField:
     BufPtr
@@ -36,7 +60,7 @@ enum ScannerHeaderField:
     Pos
 
 fn scanner_wrap <(MemPtr<u8>)->Scanner> (raw):
-    Scanner region_new raw 12
+    Scanner raw
 
 fn scanner_new_header <()*>Result<MemPtr<u8>,str>> ():
     scanner_new_impl
@@ -58,11 +82,11 @@ fn scanner_header_off <(ScannerHeaderField)->i32> (field):
         ScannerHeaderField::Pos:
             8
 
-fn scanner_header_ptr <(Scanner,ScannerHeaderField)->Result<MemPtr<i32>,str>> (sc, field):
-    region_ptr_at<u8,i32> get sc "region" scanner_header_off field
+fn scanner_header_ptr <(MemPtr<u8>,ScannerHeaderField)->Result<MemPtr<i32>,str>> (header, field):
+    region_ptr_at<u8,i32> region_new header 12 scanner_header_off field
 
-fn scanner_load_header <(Scanner,ScannerHeaderField)->i32> (sc, field):
-    match scanner_header_ptr sc field:
+fn scanner_load_header <(MemPtr<u8>,ScannerHeaderField)->i32> (header, field):
+    match scanner_header_ptr header field:
         Result::Err _e:
             #intrinsic "unreachable" <> ()
         Result::Ok p:
@@ -72,8 +96,8 @@ fn scanner_load_header <(Scanner,ScannerHeaderField)->i32> (sc, field):
                 Option::None:
                     #intrinsic "unreachable" <> ()
 
-fn scanner_store_header <(Scanner,ScannerHeaderField,i32)->()> (sc, field, v):
-    match scanner_header_ptr sc field:
+fn scanner_store_header <(MemPtr<u8>,ScannerHeaderField,i32)->()> (header, field, v):
+    match scanner_header_ptr header field:
         Result::Err _e:
             #intrinsic "unreachable" <> ()
         Result::Ok p:
@@ -133,14 +157,14 @@ fn scanner_store_header <(Scanner,ScannerHeaderField,i32)->()> (sc, field, v):
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
-fn scanner_skip_ws_handle <(Scanner)*>()> (sc):
-    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
+fn scanner_skip_ws_header <(MemPtr<u8>)*>()> (header):
+    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header header ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
 
     if:
         eq p 0
@@ -212,8 +236,12 @@ fn scanner_skip_ws_handle <(Scanner)*>()> (sc):
             else:
                 set done 1;
 
-    scanner_store_header sc ScannerHeaderField::Pos p;
+    scanner_store_header header ScannerHeaderField::Pos p;
     ()
+
+fn scanner_skip_ws_handle <(Scanner)*>()> (sc):
+    let header <MemPtr<u8>> get sc "header";
+    scanner_skip_ws_header header
 
 //: scanner_is_eof: トークンが残っていないか確認する
 //: 
@@ -234,14 +262,15 @@ fn scanner_skip_ws_handle <(Scanner)*>()> (sc):
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn scanner_is_eof_handle <(Scanner)*>bool> (sc):
-    scanner_skip_ws_handle sc;
-    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
-    let p <i32> scanner_load_header sc ScannerHeaderField::Pos;
+    let header <MemPtr<u8>> get sc "header";
+    scanner_skip_ws_header header;
+    let len <i32> scanner_load_header header ScannerHeaderField::Len;
+    let p <i32> scanner_load_header header ScannerHeaderField::Pos;
     ge p len
 
 //: scanner_skip_token: アロケーションなしで 1 トークン消費する
@@ -264,15 +293,16 @@ fn scanner_is_eof_handle <(Scanner)*>bool> (sc):
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn scanner_skip_token_handle <(Scanner)*>()> (sc):
-    scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
+    let header <MemPtr<u8>> get sc "header";
+    scanner_skip_ws_header header;
+    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header header ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
 
     let mut done <i32> 0;
     while eq done 0:
@@ -304,7 +334,7 @@ fn scanner_skip_token_handle <(Scanner)*>()> (sc):
             else:
                 set done 1;
 
-    scanner_store_header sc ScannerHeaderField::Pos p;
+    scanner_store_header header ScannerHeaderField::Pos p;
     ()
 
 //: scanner_read_token: 次のトークンを文字列として読み込む
@@ -330,15 +360,16 @@ fn scanner_skip_token_handle <(Scanner)*>()> (sc):
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn scanner_read_token_handle <(Scanner)*>str> (sc):
-    scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
-    let start <i32> scanner_load_header sc ScannerHeaderField::Pos;
+    let header <MemPtr<u8>> get sc "header";
+    scanner_skip_ws_header header;
+    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header header ScannerHeaderField::Len;
+    let start <i32> scanner_load_header header ScannerHeaderField::Pos;
     let mut p <i32> start;
 
     let mut done <i32> 0;
@@ -379,7 +410,7 @@ fn scanner_read_token_handle <(Scanner)*>str> (sc):
         else:
             match alloc add 4 tlen:
                 Result::Err _e:
-                    scanner_store_header sc ScannerHeaderField::Pos p;
+                    scanner_store_header header ScannerHeaderField::Pos p;
                     ""
                 Result::Ok s:
                     store_i32 s tlen;
@@ -393,7 +424,7 @@ fn scanner_read_token_handle <(Scanner)*>str> (sc):
                             let bv <i32> load_u8 bp;
                             store_u8 sp bv;
                             set i add i 1;
-                    scanner_store_header sc ScannerHeaderField::Pos p;
+                    scanner_store_header header ScannerHeaderField::Pos p;
                     s
 
 //: scanner_read_i32: 次のトークンを i32 として読み込む（符号付き 10 進数）
@@ -419,15 +450,16 @@ fn scanner_read_token_handle <(Scanner)*>str> (sc):
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn scanner_read_i32_handle <(Scanner)*>i32> (sc):
-    scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
+    let header <MemPtr<u8>> get sc "header";
+    scanner_skip_ws_header header;
+    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header header ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
     if:
         ge p len
         then:
@@ -472,7 +504,7 @@ fn scanner_read_i32_handle <(Scanner)*>i32> (sc):
                     else:
                         set done 1;
 
-            scanner_store_header sc ScannerHeaderField::Pos p;
+            scanner_store_header header ScannerHeaderField::Pos p;
             let signed <i32> mul val sign;
             signed
 
@@ -492,10 +524,11 @@ fn scanner_read_i32_handle <(Scanner)*>i32> (sc):
 //: 計算量:
 //: - O(桁数)
 fn scanner_read_u64_handle <(Scanner)*>i64> (sc):
-    scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
+    let header <MemPtr<u8>> get sc "header";
+    scanner_skip_ws_header header;
+    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header header ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
     if:
         ge p len
         then:
@@ -539,7 +572,7 @@ fn scanner_read_u64_handle <(Scanner)*>i64> (sc):
                     else:
                         set done 1;
 
-            scanner_store_header sc ScannerHeaderField::Pos p;
+            scanner_store_header header ScannerHeaderField::Pos p;
             val
 
 //: scanner_read_i64: 次のトークンを i64 として読み込む
@@ -554,10 +587,11 @@ fn scanner_read_u64_handle <(Scanner)*>i64> (sc):
 //: 計算量:
 //: - O(桁数)
 fn scanner_read_i64_handle <(Scanner)*>i64> (sc):
-    scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header sc ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
+    let header <MemPtr<u8>> get sc "header";
+    scanner_skip_ws_header header;
+    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
+    let len <i32> scanner_load_header header ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
     if:
         ge p len
         then:
@@ -608,7 +642,7 @@ fn scanner_read_i64_handle <(Scanner)*>i64> (sc):
                     else:
                         set done 1;
 
-            scanner_store_header sc ScannerHeaderField::Pos p;
+            scanner_store_header header ScannerHeaderField::Pos p;
             if:
                 eq is_neg 1
                 then:
@@ -632,10 +666,11 @@ fn scanner_read_i64_handle <(Scanner)*>i64> (sc):
 //: 計算量:
 //: - O(桁数)
 fn scanner_read_f64_handle <(Scanner)*>f64> (sc):
-    scanner_skip_ws_handle sc;
-    let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
-    let buf_len <i32> scanner_load_header sc ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header sc ScannerHeaderField::Pos;
+    let header <MemPtr<u8>> get sc "header";
+    scanner_skip_ws_header header;
+    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
+    let buf_len <i32> scanner_load_header header ScannerHeaderField::Len;
+    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
     if:
         ge p buf_len
         then:
@@ -791,7 +826,7 @@ fn scanner_read_f64_handle <(Scanner)*>f64> (sc):
                 else:
                     ();
 
-            scanner_store_header sc ScannerHeaderField::Pos p;
+            scanner_store_header header ScannerHeaderField::Pos p;
             if:
                 eq any_digit 0
                 then:
@@ -852,7 +887,7 @@ fn scanner_read_vec_i64_handle <(Scanner, i32)*>Vec<i64>> (sc, n):
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
@@ -882,7 +917,7 @@ fn scanner_read_vec_i32_handle <(Scanner, i32)*>Vec<i32>> (sc, n):
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
@@ -920,7 +955,7 @@ fn scanner_read_matrix_i32_handle <(Scanner, i32, i32)*>Vec<Vec<i32>>> (sc, h, w
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
@@ -930,10 +965,11 @@ fn scanner_read_all_i32_handle <(Scanner)*>Vec<i32>> (sc):
 
     while eq done 0:
         do:
-            scanner_skip_ws_handle sc;
-            let buf <i32> scanner_load_header sc ScannerHeaderField::BufPtr;
-            let len <i32> scanner_load_header sc ScannerHeaderField::Len;
-            let p <i32> scanner_load_header sc ScannerHeaderField::Pos;
+            let header <MemPtr<u8>> get sc "header";
+            scanner_skip_ws_header header;
+            let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
+            let len <i32> scanner_load_header header ScannerHeaderField::Len;
+            let p <i32> scanner_load_header header ScannerHeaderField::Pos;
 
             if:
                 ge p len
@@ -966,7 +1002,7 @@ fn scanner_read_all_i32_handle <(Scanner)*>Vec<i32>> (sc):
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 定義そのものは O(1) です。
@@ -992,7 +1028,7 @@ struct NAInput:
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 定義そのものは O(1) です。
@@ -1021,7 +1057,7 @@ struct IntervalQueriesInput:
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 定義そのものは O(1) です。
@@ -1043,7 +1079,7 @@ struct QueryTuplesInput:
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 定義そのものは O(1) です。
@@ -1071,7 +1107,7 @@ struct NDRHInput:
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
@@ -1096,7 +1132,7 @@ fn scanner_read_na_i32_handle <(Scanner)*>NAInput> (sc):
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
@@ -1140,7 +1176,7 @@ fn scanner_read_interval_queries_i32_handle <(Scanner)*>IntervalQueriesInput> (s
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
@@ -1189,7 +1225,7 @@ fn scanner_read_query_tuples_i32_handle <(Scanner, i32)*>QueryTuplesInput> (sc, 
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
@@ -1212,7 +1248,7 @@ fn query_tuples_col_i32 <(QueryTuplesInput, i32)->Vec<i32>> (t, c):
 //: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
 //:
 //: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
+//: - `Scanner` は入力状態を共有する軽量ハンドルであり、同じ値を続けて渡しても同じ読み取り位置を進めます。
 //:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
