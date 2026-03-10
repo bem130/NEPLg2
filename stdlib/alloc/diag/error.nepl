@@ -21,6 +21,7 @@
 #indent 4
 
 #import "core/math" as *
+#import "core/mem" as *
 #import "core/option" as *
 #import "core/result" as *
 #import "alloc/string" as *
@@ -195,21 +196,37 @@ fn diag_error <(StdErrorKind,str)*>Diag> (kind, message):
 
 //: diag_with_span: [位置/いち][情報/じょうほう]を[付与/ふよ]する
 fn diag_with_span <(Diag,Span)->Diag> (d, sp):
-    Diag get d "kind" get d "message" some<Span> sp get d "notes" get d "help" get d "source"
+    let d_mem <i32> alloc_raw size_of<Diag>;
+    store<Diag> d_mem d;
+    let out <Diag> Diag get load<Diag> d_mem "kind" get load<Diag> d_mem "message" some<Span> sp get load<Diag> d_mem "notes" get load<Diag> d_mem "help" get load<Diag> d_mem "source";
+    dealloc_raw d_mem size_of<Diag>;
+    out
 
 //: diag_with_source: [由来/ゆらい][情報/じょうほう]を[付与/ふよ]する
 fn diag_with_source <(Diag,str)->Diag> (d, src):
-    Diag get d "kind" get d "message" get d "span" get d "notes" get d "help" some<str> src
+    let d_mem <i32> alloc_raw size_of<Diag>;
+    store<Diag> d_mem d;
+    let out <Diag> Diag get load<Diag> d_mem "kind" get load<Diag> d_mem "message" get load<Diag> d_mem "span" get load<Diag> d_mem "notes" get load<Diag> d_mem "help" some<str> src;
+    dealloc_raw d_mem size_of<Diag>;
+    out
 
 //: diag_add_note: note を 1 [件/けん][追加/ついか]する
 fn diag_add_note <(Diag,str)*>Diag> (d, note):
-    let notes1 <Vec<str>> vec_push<str> get d "notes" note
-    Diag get d "kind" get d "message" get d "span" notes1 get d "help" get d "source"
+    let d_mem <i32> alloc_raw size_of<Diag>;
+    store<Diag> d_mem d;
+    let notes1 <Vec<str>> vec_push<str> get load<Diag> d_mem "notes" note;
+    let out <Diag> Diag get load<Diag> d_mem "kind" get load<Diag> d_mem "message" get load<Diag> d_mem "span" notes1 get load<Diag> d_mem "help" get load<Diag> d_mem "source";
+    dealloc_raw d_mem size_of<Diag>;
+    out
 
 //: diag_add_help: help を 1 [件/けん][追加/ついか]する
 fn diag_add_help <(Diag,str)*>Diag> (d, help_item):
-    let help1 <Vec<str>> vec_push<str> get d "help" help_item
-    Diag get d "kind" get d "message" get d "span" get d "notes" help1 get d "source"
+    let d_mem <i32> alloc_raw size_of<Diag>;
+    store<Diag> d_mem d;
+    let help1 <Vec<str>> vec_push<str> get load<Diag> d_mem "help" help_item;
+    let out <Diag> Diag get load<Diag> d_mem "kind" get load<Diag> d_mem "message" get load<Diag> d_mem "span" get load<Diag> d_mem "notes" help1 get load<Diag> d_mem "source";
+    dealloc_raw d_mem size_of<Diag>;
+    out
 
 //: diag_level: [重大度/じゅうだいど]を[取/と]り[出/だ]す
 fn diag_level <(Diag)->DiagLevel> (d):
@@ -273,28 +290,30 @@ fn diags_len <(Diags)->i32> (ds):
 //: diags_has_errors: error level の[診断/しんだん]を 1 [件/けん]でも[含/ふく]むか[判定/はんてい]する
 fn diags_has_errors <(Diags)->bool> (ds):
     let items <Vec<Diag>> get ds "items";
-    diags_has_errors_loop items 0
+    let items_mem <i32> alloc_raw size_of<Vec<Diag>>;
+    store<Vec<Diag>> items_mem items;
+    let items_len <i32> get load<Vec<Diag>> items_mem "len";
+    let items_data <i32> mem_ptr_addr get load<Vec<Diag>> items_mem "data";
+    let out <bool> diags_has_errors_loop items_data items_len 0;
+    dealloc_raw items_mem size_of<Vec<Diag>>;
+    out
 
-fn diags_has_errors_loop <(Vec<Diag>,i32)->bool> (items, i):
-    let n <i32> vec_len<Diag> items;
+fn diags_has_errors_loop <(i32,i32,i32)->bool> (items_data, n, i):
     if:
         ge i n
         then false
         else:
-            match vec_get<Diag> items i:
-                Option::Some d:
-                    let level <DiagLevel> diag_level d;
-                    match level:
-                        DiagLevel::Error:
-                            true
-                        DiagLevel::Log:
-                            diags_has_errors_loop items add i 1
-                        DiagLevel::Info:
-                            diags_has_errors_loop items add i 1
-                        DiagLevel::Warn:
-                            diags_has_errors_loop items add i 1
-                Option::None:
-                    diags_has_errors_loop items add i 1
+            let d <Diag> load<Diag> add items_data mul i size_of<Diag>;
+            let level <DiagLevel> diag_level d;
+            match level:
+                DiagLevel::Error:
+                    true
+                DiagLevel::Log:
+                    diags_has_errors_loop items_data n add i 1
+                DiagLevel::Info:
+                    diags_has_errors_loop items_data n add i 1
+                DiagLevel::Warn:
+                    diags_has_errors_loop items_data n add i 1
 
 //: outcome_ok: [診断/しんだん]なしの[成功/せいこう][結果/けっか]を[作/つく]る
 fn outcome_ok <.T, .E> <(.T)->Outcome<.T, .E>> (v):

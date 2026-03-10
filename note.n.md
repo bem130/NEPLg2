@@ -9943,3 +9943,41 @@
   - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec/sort.nepl -n 3` -> pass
   - `node nodesrc/tests.js -i tests/compiler/move_check.n.md -i stdlib/alloc/collections/vec/sort.nepl --no-stdlib --no-tree -o /tmp/tests-move-sort-focus.json -j 15`
     - [結果/けっか]: `16/16 pass`
+
+# 2026-03-10 作業メモ (`alloc/diag` を move model へ追従)
+
+- [目的/もくてき]:
+  - old failure list にあった `diag.n.md` / `error.n.md` 系の failure を現行 move model で再現し、`alloc/diag` の値モデル実装と test を整理する。
+- [根本原因/こんぽんげんいん]:
+  - `stdlib/alloc/diag/diag.nepl`
+    - `Diag` / `DiagKind` / `Vec<str>` を `get` や `vec_get` で何度も参照する旧実装が残っており、現行の所有権解析では moved value と判定されていた。
+    - 特に `diag_to_string` / `kind_str` / `diags_to_string_loop` は「同じ owner を何度も読む」前提で書かれていた。
+  - `stdlib/alloc/diag/error.nepl`
+    - `diag_with_span` / `diag_with_source` / `diag_add_note` / `diag_add_help` が `Diag` を再構築するときに、同じ `Diag` から複数 field を直接取り直していた。
+    - `diags_has_errors_loop` も `Vec<Diag>` を再帰で再利用しており、同じ問題を抱えていた。
+  - `stdlib/tests/error.n.md`
+    - `Diag` / `Diags` / `Outcome` を一度 `get` / helper に渡したあとも同じ値を再利用する、旧 move model 前提の test が残っていた。
+- [変更/へんこう]:
+  - `stdlib/alloc/diag/diag.nepl`
+    - `core/mem` を導入した。
+    - `kind_str` と `diag_to_string` を temporary memory 経由で field を読み出す形に変更した。
+    - `diag_lines_loop` / `diag_help_loop` / `diags_to_string_loop` は `Vec` 全体を再帰で持ち回すのをやめ、`data_ptr + len + index` で走査する形に変更した。
+  - `stdlib/alloc/diag/error.nepl`
+    - `core/mem` を導入した。
+    - `diag_with_span` / `diag_with_source` / `diag_add_note` / `diag_add_help` を temporary memory 経由の再構築に変更した。
+    - `diags_has_errors` / `diags_has_errors_loop` も `Vec<Diag>` を raw data 走査へ変更した。
+  - `stdlib/tests/error.n.md`
+    - `core/mem` を追加した。
+    - `Diag` / `Diags` / `Outcome` / `Result` を複数回観察する箇所は temporary memory に保存し、`load` し直して確認する形へ更新した。
+- [設計/せっけい][判断/はんだん]:
+  - `alloc/diag` は richer な診断値モデルを持つが、`Diag` 自体を `Copy` にはできない。したがって根本修正は「同じ owner を複数回読む」実装をやめることだと判断した。
+  - `Vec` を再帰にそのまま渡す設計も non-Copy collection では脆いため、文字列化・集約系 helper は raw backing store を一度取り出してから走査する形へ寄せた。
+  - test 側も現在の ownership model に合わせ、観察対象を memory に退避して再読する形へ揃えた。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/tests/diag.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/diag.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/error.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/error.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/error.n.md -n 3` -> pass
+  - `node nodesrc/tests.js -i stdlib/tests/diag.n.md -i stdlib/tests/error.n.md -i stdlib/alloc/diag/diag.nepl -i stdlib/alloc/diag/error.nepl --no-stdlib --no-tree -o /tmp/tests-diag-error-focus.json -j 15`
+    - [結果/けっか]: `7/7 pass`
