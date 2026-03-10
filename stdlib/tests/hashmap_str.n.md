@@ -10,6 +10,7 @@ neplg2:test
 #target std
 
 #import "alloc/collections/hashmap" as *
+#import "alloc/hash/hash32" as *
 #import "alloc/diag/error" as *
 #import "alloc/string" as *
 #import "core/math" as *
@@ -17,7 +18,7 @@ neplg2:test
 #import "core/result" as *
 #import "std/test" as *
 
-fn must_hms <(Result<HashMapStr<i32>, Diag>)*>HashMapStr<i32>> (r):
+fn must_hms <(Result<HashMap<str,i32>, Diag>)*>HashMap<str,i32>> (r):
     match r:
         Result::Ok hm:
             hm
@@ -26,86 +27,68 @@ fn must_hms <(Result<HashMapStr<i32>, Diag>)*>HashMapStr<i32>> (r):
 
 fn main <()*> i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
+    let hm0 <HashMap<str,i32>> must_hms new;
+    set checks checks_push checks check_eq_i32 0 len hm0;
 
-    let hm0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    set checks checks_push checks check_eq_i32 0 hashmap_str_len<i32> hm0;
+    let hm1 <HashMap<str,i32>> must_hms new;
+    set checks checks_push checks check not contains hm1 "foo";
 
-    let hm1 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    set checks checks_push checks check not hashmap_str_contains<i32> hm1 "foo";
+    let hm2 <HashMap<str,i32>> must_hms new;
+    set checks checks_push checks check is_none<i32> get hm2 "foo";
 
-    let hm2 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    set checks checks_push checks check is_none<i32> hashmap_str_get<i32> hm2 "foo";
+    let hm3 <HashMap<str,i32>> must_hms new;
+    let hm3 <HashMap<str,i32>> must_hms insert hm3 "foo" 10;
+    let hm3 <HashMap<str,i32>> must_hms insert hm3 "bar" 20;
+    let hm3_len <i32> len hm3;
+    set checks checks_push checks check_eq_i32 2 hm3_len;
 
-    let hm3 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let hm3 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm3 "foo" 10;
-    let hm3 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm3 "bar" 20;
-    set checks checks_push checks check_eq_i32 2 hashmap_str_len<i32> hm3;
-    let hm30 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let hm31 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm30 "foo" 10;
-    let hm32 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm31 "bar" 20;
-    set checks checks_push checks check hashmap_str_contains<i32> hm32 "foo";
-    let hm40 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let hm41 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm40 "foo" 10;
-    let hm42 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm41 "bar" 20;
-    set checks checks_push checks check hashmap_str_contains<i32> hm42 "bar";
-    let hm50 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let hm51 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm50 "foo" 10;
-    let hm52 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm51 "bar" 20;
-    set checks checks_push checks check not hashmap_str_contains<i32> hm52 "baz";
+    let hm3a <HashMap<str,i32>> must_hms new;
+    let hm3a <HashMap<str,i32>> must_hms insert hm3a "foo" 10;
+    let hm3a <HashMap<str,i32>> must_hms insert hm3a "bar" 20;
+    set checks checks_push checks check contains hm3a "foo";
+
+    let hm3b <HashMap<str,i32>> must_hms new;
+    let hm3b <HashMap<str,i32>> must_hms insert hm3b "foo" 10;
+    let hm3b <HashMap<str,i32>> must_hms insert hm3b "bar" 20;
+    set checks checks_push checks check contains hm3b "bar";
+
+    let hm3c <HashMap<str,i32>> must_hms new;
+    let hm3c <HashMap<str,i32>> must_hms insert hm3c "foo" 10;
+    let hm3c <HashMap<str,i32>> must_hms insert hm3c "bar" 20;
+    set checks checks_push checks check not contains hm3c "baz";
 
     let s1 <str> concat "a" "b";
     let s2 <str> concat "a" "b";
-    let hm4 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let hm4 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm4 s1 30;
-    match hashmap_str_get<i32> hm4 s2:
+    let hm4 <HashMap<str,i32>> must_hms new;
+    let hm4 <HashMap<str,i32>> must_hms insert hm4 s1 30;
+    match get hm4 s2:
         Option::Some v:
             set checks checks_push checks check_eq_i32 30 v
         Option::None:
-            set checks checks_push checks Result<(),str>::Err "hashmap_str_get with same content returned None";
+            set checks checks_push checks Result<(),str>::Err "get with same content returned None";
 
-    let hm5 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let hm5 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm5 "foo" 10;
-    let hm5 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm5 "foo" 11;
-    match hashmap_str_get<i32> hm5 "foo":
+    let hm5 <HashMap<str,i32>> must_hms new;
+    let hm5 <HashMap<str,i32>> must_hms insert hm5 "foo" 10;
+    let hm5 <HashMap<str,i32>> must_hms insert hm5 "foo" 11;
+    match get hm5 "foo":
         Option::Some v:
             set checks checks_push checks check_eq_i32 11 v
         Option::None:
-            set checks checks_push checks Result<(),str>::Err "hashmap_str_get foo after update returned None";
+            set checks checks_push checks Result<(),str>::Err "get foo after update returned None";
 
-    let hm6 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let hm6 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm6 "foo" 10;
-    let hm6 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm6 "bar" 20;
-    let hm6 <HashMapStr<i32>> must_hms hashmap_str_remove<i32> hm6 "bar";
-    set checks checks_push checks check not hashmap_str_contains<i32> hm6 "bar";
+    let hm6 <HashMap<str,i32>> must_hms new;
+    let hm6 <HashMap<str,i32>> must_hms insert hm6 "foo" 10;
+    let hm6 <HashMap<str,i32>> must_hms insert hm6 "bar" 20;
+    let hm6 <HashMap<str,i32>> must_hms remove hm6 "bar";
+    set checks checks_push checks check not contains hm6 "bar";
 
-    let hm7 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let hm7 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hm7 "foo" 10;
-    set checks checks_push checks check is_err<HashMapStr<i32>, Diag> hashmap_str_remove<i32> hm7 "zzz";
+    let hm7 <HashMap<str,i32>> must_hms new;
+    let hm7 <HashMap<str,i32>> must_hms insert hm7 "foo" 10;
+    set checks checks_push checks check is_err<HashMap<str,i32>, Diag> remove hm7 "zzz";
 
-    let a0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let a1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> a0 "k" 9;
-    set checks checks_push checks check hashmap_str_contains<i32> a1 "k";
-    let b0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let b1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> b0 "k" 9;
-    match get<i32> b1 "k":
-        Option::Some v:
-            set checks checks_push checks check_eq_i32 9 v
-        Option::None:
-            set checks checks_push checks Result<(),str>::Err "alias get failed";
-    let c0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let c1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> c0 "k" 9;
-    set checks checks_push checks check_eq_i32 1 hashmap_str_len<i32> c1;
-    let d0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let d1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> d0 "k" 9;
-    let a2 <HashMapStr<i32>> must_hms hashmap_str_remove<i32> d1 "k";
-    set checks checks_push checks check_eq_i32 0 hashmap_str_len<i32> a2;
-
-    let hmf <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let hmf <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hmf "x" 1;
-    hashmap_str_free<i32> hmf;
-    let af0 <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let af1 <HashMapStr<i32>> must_hms hashmap_str_insert<i32> af0 "x" 1;
-    hashmap_str_free<i32> af1;
+    let hmf <HashMap<str,i32>> must_hms new;
+    let hmf <HashMap<str,i32>> must_hms insert hmf "x" 1;
+    free hmf;
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
 ```

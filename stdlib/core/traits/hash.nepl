@@ -5,7 +5,7 @@
 //: - `i32` や `str` のような[既存/きそん]キー型を、[共通/きょうつう] helper から[同一/どういつ]の[流儀/りゅうぎ]で[扱/あつか]えるようにします。
 //:
 //: [実装/じっそう]:
-//: - [返/かえ]り[値/あたい]は 32-bit の[整数/せいすう]で、[現在/げんざい]の stdlib が[採用/さいよう]している `alloc/hash/hash32` の[分布/ぶんぷ]を[再利用/さいりよう]します。
+//: - [返/かえ]り[値/あたい]は 32-bit の[整数/せいすう]で、[現在/げんざい]の stdlib が[採用/さいよう]している `alloc/hash/hash32::hash32` overload の[分布/ぶんぷ]を[再利用/さいりよう]します。
 //: - trait `Hash` が `hash32 <(Self)->i32>` を[要求/ようきゅう]し、helper `hash32_by_trait` が[呼/よ]び[出/だ]しを[集約/しゅうやく]します。
 //:
 //: [注意/ちゅうい]:
@@ -33,6 +33,18 @@
 
 #import "core/cast" as *
 #import "alloc/hash/hash32" as *
+#import "alloc/hash/fnv1a32" as *
+#import "alloc/string" as string
+
+fn hash_bytes_loop <(str,i32,i32,Fnv1a32)->Fnv1a32> (s, n, idx, h):
+    if:
+        ge idx n
+        then h
+        else:
+            let s_data <i32> add s 4
+            let p <i32> add s_data idx
+            let b <i32> load_u8 p
+            hash_bytes_loop s n add idx 1 fnv1a32_update h b
 
 //: Hash: map / set [向/む]け 32-bit ハッシュ[能力/のうりょく]
 //:
@@ -67,13 +79,13 @@ fn hash32_by_trait <.T: Hash> <(.T)->i32> (x):
 //: - `i32` を[連想配列/れんそうはいれつ]や[集合/しゅうごう]のキーに[使/つか]えるようにします。
 //:
 //: [実装/じっそう]:
-//: - `alloc/hash/hash32::hash32_i32` を[利用/りよう]します。
+//: - `alloc/hash/hash32::hash32` overload を[利用/りよう]します。
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
 impl Hash for i32:
     fn hash32 <(i32)->i32> (self):
-        hash32_i32 self
+        mix xor self -1640531527
 
 //: Hash<bool>: `bool` を 0/1 として[混合/こんごう]する
 //:
@@ -81,13 +93,14 @@ impl Hash for i32:
 //: - `bool` を[小/ちい]さな[離散/りさん]キーとして[扱/あつか]えるようにします。
 //:
 //: [実装/じっそう]:
-//: - `bool` を `i32` へ cast してから `hash32_i32` に[委譲/いじょう]します。
+//: - `bool` を `i32` へ cast してから `hash32` に[委譲/いじょう]します。
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
 impl Hash for bool:
     fn hash32 <(bool)->i32> (self):
-        hash32_i32 cast self
+        let k <i32> cast self;
+        mix xor k -1640531527
 
 //: Hash<u8>: `u8` を 0..255 の[小/ちい]さな[整数/せいすう]キーとして[扱/あつか]う
 //:
@@ -95,13 +108,14 @@ impl Hash for bool:
 //: - [文字/もじ]や[小/ちい]さな[分類値/ぶんるいち]を[集合/しゅうごう]や[表/ひょう]のキーへ[使/つか]えるようにします。
 //:
 //: [実装/じっそう]:
-//: - `u8` を `i32` に[拡張/かくちょう]して `hash32_i32` に[渡/わた]します。
+//: - `u8` を `i32` に[拡張/かくちょう]して `hash32` に[渡/わた]します。
 //:
 //: [計算量/けいさんりょう]:
 //: - O(1)
 impl Hash for u8:
     fn hash32 <(u8)->i32> (self):
-        hash32_i32 cast self
+        let k <i32> cast self;
+        mix xor k -1640531527
 
 //: Hash<i64>: `i64` を 32-bit に[折/お]りたたんで[混合/こんごう]する
 //:
@@ -109,7 +123,7 @@ impl Hash for u8:
 //: - `i64` を[広/ひろ]い[整数/せいすう]キーとして[使/つか]うときの[基本/きほん]ハッシュを[提供/ていきょう]します。
 //:
 //: [実装/じっそう]:
-//: - [上位/じょうい] 32-bit と[下位/かい] 32-bit を XOR で[折/お]りたたみ、その[結果/けっか]を `hash32_i32` に[通/とお]します。
+//: - [上位/じょうい] 32-bit と[下位/かい] 32-bit を XOR で[折/お]りたたみ、その[結果/けっか]を `hash32` に[通/とお]します。
 //:
 //: [注意/ちゅうい]:
 //: - [衝突/しょうとつ]は[理論上/りろんじょう]ありえますが、[内部/ないぶ]のハッシュテーブル[用途/ようと]としては[十分/じゅうぶん]です。
@@ -121,7 +135,8 @@ impl Hash for i64:
         let lo <i32> cast self;
         let hi64 <i64> shr_u self <i64> cast 32;
         let hi <i32> cast hi64;
-        hash32_i32 xor lo hi
+        let folded <i32> xor lo hi;
+        mix xor folded -1640531527
 
 //: Hash<str>: `str` の UTF-8 [列/れつ]を[順/じゅん]に[混合/こんごう]する
 //:
@@ -129,7 +144,7 @@ impl Hash for i64:
 //: - `str` を[文字列/もじれつ]キーとして[連想配列/れんそうはいれつ]や[集合/しゅうごう]に[使/つか]えるようにします。
 //:
 //: [実装/じっそう]:
-//: - `alloc/hash/hash32::hash32_str` を[利用/りよう]します。
+//: - `alloc/hash/hash32::hash32` overload を[利用/りよう]します。
 //:
 //: [注意/ちゅうい]:
 //: - UTF-8 の[文字数/もじすう]ではなく[バイト列/れつ]に[対/たい]して[計算/けいさん]します。
@@ -138,4 +153,7 @@ impl Hash for i64:
 //: - [文字列長/もじれつちょう]を n として O(n)
 impl Hash for str:
     fn hash32 <(str)->i32> (self):
-        hash32_str self
+        let n <i32> string::len self;
+        let h0 <Fnv1a32> new_fnv1a32;
+        let h1 <Fnv1a32> hash_bytes_loop self n 0 h0;
+        mix fnv1a32_finalize h1

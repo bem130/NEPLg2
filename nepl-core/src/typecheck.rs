@@ -95,33 +95,33 @@ struct TraitInfo {
 
 #[derive(Debug, Clone, Default)]
 struct TraitSemantics {
-    copy_trait: Option<(String, TypeId)>,
-    clone_trait: Option<(String, TypeId)>,
-    drop_trait: Option<(String, TypeId)>,
+    copy_traits: Vec<(String, TypeId)>,
+    clone_traits: Vec<(String, TypeId)>,
+    drop_traits: Vec<(String, TypeId)>,
 }
 
 impl TraitSemantics {
     fn detect(traits: &BTreeMap<String, TraitInfo>) -> Self {
-        let mut copy_trait: Option<(String, TypeId)> = None;
-        let mut clone_trait: Option<(String, TypeId)> = None;
-        let mut drop_trait: Option<(String, TypeId)> = None;
+        let mut copy_traits: Vec<(String, TypeId)> = Vec::new();
+        let mut clone_traits: Vec<(String, TypeId)> = Vec::new();
+        let mut drop_traits: Vec<(String, TypeId)> = Vec::new();
 
         for (name, info) in traits {
             for cap in info.capabilities.iter().copied() {
                 match cap {
                     TraitCapability::Copy => {
-                        if copy_trait.is_none() {
-                            copy_trait = Some((name.clone(), info.self_ty));
+                        if !copy_traits.iter().any(|(_, id)| *id == info.self_ty) {
+                            copy_traits.push((name.clone(), info.self_ty));
                         }
                     }
                     TraitCapability::Clone => {
-                        if clone_trait.is_none() {
-                            clone_trait = Some((name.clone(), info.self_ty));
+                        if !clone_traits.iter().any(|(_, id)| *id == info.self_ty) {
+                            clone_traits.push((name.clone(), info.self_ty));
                         }
                     }
                     TraitCapability::Drop => {
-                        if drop_trait.is_none() {
-                            drop_trait = Some((name.clone(), info.self_ty));
+                        if !drop_traits.iter().any(|(_, id)| *id == info.self_ty) {
+                            drop_traits.push((name.clone(), info.self_ty));
                         }
                     }
                 }
@@ -129,38 +129,34 @@ impl TraitSemantics {
         }
 
         Self {
-            copy_trait,
-            clone_trait,
-            drop_trait,
+            copy_traits,
+            clone_traits,
+            drop_traits,
         }
     }
 
-    fn copy_trait_name(&self) -> Option<&str> {
-        self.copy_trait.as_ref().map(|(name, _)| name.as_str())
+    fn has_any_copy_capability(&self) -> bool {
+        !self.copy_traits.is_empty()
     }
 
-    fn is_copy_trait(&self, trait_id: Option<TypeId>) -> bool {
-        match (self.copy_trait.as_ref().map(|(_, id)| *id), trait_id) {
-            (Some(expected), Some(actual)) => expected == actual,
-            _ => false,
+    fn has_copy_capability(&self, trait_id: Option<TypeId>) -> bool {
+        match trait_id {
+            Some(actual) => self.copy_traits.iter().any(|(_, id)| *id == actual),
+            None => false,
         }
     }
 
-    fn is_clone_trait(&self, trait_id: Option<TypeId>) -> bool {
-        match (self.clone_trait.as_ref().map(|(_, id)| *id), trait_id) {
-            (Some(expected), Some(actual)) => expected == actual,
-            _ => false,
+    fn has_clone_capability(&self, trait_id: Option<TypeId>) -> bool {
+        match trait_id {
+            Some(actual) => self.clone_traits.iter().any(|(_, id)| *id == actual),
+            None => false,
         }
     }
 
-    fn drop_trait_name(&self) -> Option<&str> {
-        self.drop_trait.as_ref().map(|(name, _)| name.as_str())
-    }
-
-    fn is_drop_trait(&self, trait_id: Option<TypeId>) -> bool {
-        match (self.drop_trait.as_ref().map(|(_, id)| *id), trait_id) {
-            (Some(expected), Some(actual)) => expected == actual,
-            _ => false,
+    fn has_drop_capability(&self, trait_id: Option<TypeId>) -> bool {
+        match trait_id {
+            Some(actual) => self.drop_traits.iter().any(|(_, id)| *id == actual),
+            None => false,
         }
     }
 }
@@ -211,12 +207,22 @@ fn collect_type_params(
         let id = ctx.fresh_var(Some(p.name.name.clone()));
         labels.insert(p.name.name.clone(), id);
         let mut bounds = Vec::new();
+        let mut copy_cap = false;
+        let mut clone_cap = false;
+        let mut drop_cap = false;
         for b in &p.bounds {
             if let Some(info) = traits.get(b) {
                 bounds.push(TraitBoundRef {
                     name: b.clone(),
                     trait_self_ty: info.self_ty,
                 });
+                for cap in info.capabilities.iter().copied() {
+                    match cap {
+                        TraitCapability::Copy => copy_cap = true,
+                        TraitCapability::Clone => clone_cap = true,
+                        TraitCapability::Drop => drop_cap = true,
+                    }
+                }
             } else {
                 diags.push(
                     Diagnostic::error(format!("unknown trait bound '{}'", b), p.name.span)
@@ -224,6 +230,7 @@ fn collect_type_params(
                 );
             }
         }
+        ctx.set_var_capabilities(id, copy_cap, clone_cap, drop_cap);
         if !bounds.is_empty() {
             bounds_map.insert(id, bounds.clone());
         }
@@ -877,7 +884,7 @@ pub fn typecheck(
     }
 
     let trait_semantics = TraitSemantics::detect(&traits);
-    ctx.set_copy_trait_enabled(trait_semantics.copy_trait_name().is_some());
+    ctx.set_copy_trait_enabled(trait_semantics.has_any_copy_capability());
 
     // Process Impls separately or in the same loop?
     // Doing it here simplifies pending_if logic.
@@ -915,9 +922,9 @@ pub fn typecheck(
                 trait_self_ty = traits.get(tn).map(|info| info.self_ty);
             }
             if !i.type_params.is_empty()
-                && !trait_semantics.is_copy_trait(trait_self_ty)
-                && !trait_semantics.is_clone_trait(trait_self_ty)
-                && !trait_semantics.is_drop_trait(trait_self_ty)
+                && !trait_semantics.has_copy_capability(trait_self_ty)
+                && !trait_semantics.has_clone_capability(trait_self_ty)
+                && !trait_semantics.has_drop_capability(trait_self_ty)
             {
                 diagnostics.push(
                     Diagnostic::error("impl type parameters are not supported yet", i.span)
@@ -932,9 +939,9 @@ pub fn typecheck(
             f_labels.insert(String::from("Self"), target_ty);
             let generic_impl_target = type_contains_unbound_var(&ctx, target_ty);
             if generic_impl_target
-                && !trait_semantics.is_copy_trait(trait_self_ty)
-                && !trait_semantics.is_clone_trait(trait_self_ty)
-                && !trait_semantics.is_drop_trait(trait_self_ty)
+                && !trait_semantics.has_copy_capability(trait_self_ty)
+                && !trait_semantics.has_clone_capability(trait_self_ty)
+                && !trait_semantics.has_drop_capability(trait_self_ty)
             {
                 diagnostics.push(
                     Diagnostic::error("impl target type must be concrete", i.target_ty.span())
@@ -942,7 +949,7 @@ pub fn typecheck(
                 );
                 continue;
             }
-            if trait_semantics.is_copy_trait(trait_self_ty) {
+            if trait_semantics.has_copy_capability(trait_self_ty) {
                 if !ctx.is_copy_impl_eligible(target_ty) {
                     diagnostics.push(
                         Diagnostic::error(
@@ -988,7 +995,7 @@ pub fn typecheck(
     }
     for (target_ty, span) in pending_copy_clone_checks {
         let has_clone_impl = impls.iter().any(|imp| {
-            trait_semantics.is_clone_trait(imp.trait_self_ty)
+            trait_semantics.has_clone_capability(imp.trait_self_ty)
                 && (ctx.type_pattern_matches(imp.target_ty, target_ty)
                     || ctx.type_pattern_matches(target_ty, imp.target_ty))
         });
@@ -1004,16 +1011,16 @@ pub fn typecheck(
         }
     }
     impls.retain(|imp| {
-        if !trait_semantics.is_copy_trait(imp.trait_self_ty) {
+        if !trait_semantics.has_copy_capability(imp.trait_self_ty) {
             return true;
         }
         !contains_same_type(&ctx, &rejected_copy_targets, imp.target_ty)
     });
     for imp in impls.iter() {
-        if trait_semantics.is_copy_trait(imp.trait_self_ty) {
+        if trait_semantics.has_copy_capability(imp.trait_self_ty) {
             ctx.register_copy_impl_target(imp.target_ty);
         }
-        if trait_semantics.is_drop_trait(imp.trait_self_ty) {
+        if trait_semantics.has_drop_capability(imp.trait_self_ty) {
             ctx.register_drop_impl_target(imp.target_ty);
         }
     }
@@ -1542,9 +1549,9 @@ pub fn typecheck(
                 }
             };
             if !i.type_params.is_empty()
-                && !trait_semantics.is_copy_trait(Some(trait_info.self_ty))
-                && !trait_semantics.is_clone_trait(Some(trait_info.self_ty))
-                && !trait_semantics.is_drop_trait(Some(trait_info.self_ty))
+                && !trait_semantics.has_copy_capability(Some(trait_info.self_ty))
+                && !trait_semantics.has_clone_capability(Some(trait_info.self_ty))
+                && !trait_semantics.has_drop_capability(Some(trait_info.self_ty))
             {
                 diagnostics.push(
                     Diagnostic::error("impl type parameters are not supported yet", i.span)
@@ -1559,9 +1566,9 @@ pub fn typecheck(
                 collect_type_params(&mut ctx, &mut f_labels, &i.type_params, &traits, &mut diagnostics);
             let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
             if type_contains_unbound_var(&ctx, target_ty)
-                && !trait_semantics.is_copy_trait(Some(trait_info.self_ty))
-                && !trait_semantics.is_clone_trait(Some(trait_info.self_ty))
-                && !trait_semantics.is_drop_trait(Some(trait_info.self_ty))
+                && !trait_semantics.has_copy_capability(Some(trait_info.self_ty))
+                && !trait_semantics.has_clone_capability(Some(trait_info.self_ty))
+                && !trait_semantics.has_drop_capability(Some(trait_info.self_ty))
             {
                 diagnostics.push(
                     Diagnostic::error("impl target type must be concrete", i.target_ty.span())
@@ -1569,7 +1576,7 @@ pub fn typecheck(
                 );
                 continue;
             }
-            if trait_semantics.is_copy_trait(Some(trait_info.self_ty)) {
+            if trait_semantics.has_copy_capability(Some(trait_info.self_ty)) {
                 if contains_same_type(&ctx, &rejected_copy_targets, target_ty) {
                     continue;
                 }

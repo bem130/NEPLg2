@@ -5,7 +5,7 @@
 [目的/もくてき]:
 
 - `Hash` trait が `i32` / `str` の[既存/きそん]ハッシュ[実装/じっそう]を[共通/きょうつう] helper から[呼/よ]べることを[確/たし]かめます。
-- `Hash` trait の[導入/どうにゅう]で、[具体的/ぐたいてき]な `hash32_i32` / `hash32_str` に[直接/ちょくせつ][依存/いぞん]しなくても[同一/どういつ]の[結果/けっか]が[得/え]られることを[確認/かくにん]します。
+- `hash32_by_trait` が[決定的/けっていてき]で、[異/こと]なる[値/あたい]に[対/たい]して[区別/くべつ]できることを[確認/かくにん]します。
 
 neplg2:test
 ```neplg2
@@ -13,24 +13,23 @@ neplg2:test
 #target std
 #import "std/test" as *
 #import "core/traits/hash" as *
-#import "alloc/hash/hash32" as *
 #import "core/result" as *
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    set checks checks_push checks check_eq_i32 hash32_i32 123456 hash32_by_trait 123456;
-    set checks checks_push checks check_eq_i32 hash32_str "abc" hash32_by_trait "abc";
+    set checks checks_push checks check_eq_i32 hash32_by_trait 123456 hash32_by_trait 123456;
+    set checks checks_push checks check_eq_i32 hash32_by_trait "abc" hash32_by_trait "abc";
     set checks checks_push checks check ne hash32_by_trait 123456 hash32_by_trait 123457;
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
 ```
 
-## hashmap_and_hashset_use_hash_trait
+## hashmap_accepts_hashkey_impl
 
 [目的/もくてき]:
 
-- `hashmap` / `hashset` の[内部/ないぶ]が `hash32_i32` / `hash32_str` の[直呼/じかよ]びではなく、`Hash` trait helper [経由/けいゆ]に[移行/いこう]しても[通常/つうじょう]の[利用/りよう]が[壊/こわ]れないことを[確/たし]かめます。
-- `i32` [版/ばん]と `str` [版/ばん]の[両方/りょうほう]で[基本/きほん]的な insert/get/contains が[成立/せいりつ]することを[確認/かくにん]します。
+- `hashmap` が specialized helper ではなく `HashKey` trait に[基/もと]づく API に[移行/いこう]したことを[確/たし]かめます。
+- custom key [型/かた]に `HashKey` を impl すれば、その[意味論/いみろん]で insert/get が[成立/せいりつ]することを[確認/かくにん]します。
 
 neplg2:test
 ```neplg2
@@ -38,33 +37,117 @@ neplg2:test
 #target std
 #import "std/test" as *
 #import "alloc/collections/hashmap" as *
-#import "alloc/collections/hashset" as *
+#import "alloc/hash/hash32" as *
 #import "alloc/diag/error" as *
 #import "core/option" as *
 #import "core/result" as *
+#import "core/field" as field
+#import "core/math" as *
+#import "core/traits/hash_key" as *
 
-fn must_hm <(Result<HashMap<i32>, Diag>)*>HashMap<i32>> (r):
+fn must_hm <(Result<HashMap<i32,i32>, Diag>)*>HashMap<i32,i32>> (r):
     match r:
         Result::Ok hm:
             hm
         Result::Err _d:
             #intrinsic "unreachable" <> ()
 
-fn must_hms <(Result<HashMapStr<i32>, Diag>)*>HashMapStr<i32>> (r):
+fn must_hms <(Result<HashMap<str,i32>, Diag>)*>HashMap<str,i32>> (r):
     match r:
         Result::Ok hm:
             hm
         Result::Err _d:
             #intrinsic "unreachable" <> ()
 
-fn must_hs <(Result<HashSet, Diag>)*>HashSet> (r):
+struct ModKey:
+    raw <i32>
+
+impl HashKey for ModKey:
+    fn clone <(ModKey)->ModKey> (self):
+        self
+
+    fn eq <(ModKey,ModKey)->bool> (a, b):
+        eq field::get a "raw" field::get b "raw"
+
+    fn hash32 <(ModKey)->i32> (self):
+        rem_s field::get self "raw" 7
+
+fn must_hmk <(Result<HashMap<ModKey,i32>, Diag>)*>HashMap<ModKey,i32>> (r):
+    match r:
+        Result::Ok hm:
+            hm
+        Result::Err _d:
+            #intrinsic "unreachable" <> ()
+
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
+    let hm <HashMap<i32,i32>> must_hm new;
+    let hm <HashMap<i32,i32>> must_hm insert hm 10 99;
+    match get hm 10:
+        Option::Some v:
+            set checks checks_push checks check_eq_i32 99 v
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "hashmap get did not return inserted value";
+
+    let hms <HashMap<str,i32>> must_hms new;
+    let hms <HashMap<str,i32>> must_hms insert hms "key" 7;
+    match get hms "key":
+        Option::Some v:
+            set checks checks_push checks check_eq_i32 7 v
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "string hashmap get did not return inserted value";
+
+    let hmk <HashMap<ModKey,i32>> must_hmk new;
+    let hmk <HashMap<ModKey,i32>> must_hmk insert hmk (ModKey 10) 3;
+    match get hmk (ModKey 10):
+        Option::Some v:
+            set checks checks_push checks check_eq_i32 3 v
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "custom key hashmap get did not return inserted value";
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
+```
+
+## hashset_accepts_hashkey_impl
+
+[目的/もくてき]:
+
+- `hashset` が specialized helper ではなく `HashKey` trait に[基/もと]づく API に[移行/いこう]したことを[確/たし]かめます。
+- custom key [型/かた]に `HashKey` を impl すれば、その[意味論/いみろん]で insert/contains が[成立/せいりつ]することを[確認/かくにん]します。
+
+neplg2:test
+```neplg2
+#entry main
+#target std
+#import "std/test" as *
+#import "alloc/collections/hashset" as *
+#import "alloc/diag/error" as *
+#import "core/result" as *
+#import "core/field" as field
+#import "core/math" as *
+#import "core/traits/hash_key" as *
+
+fn must_hs <(Result<HashSet<i32>, Diag>)*>HashSet<i32>> (r):
     match r:
         Result::Ok hs:
             hs
         Result::Err _d:
             #intrinsic "unreachable" <> ()
 
-fn must_hss <(Result<HashSetStr, Diag>)*>HashSetStr> (r):
+struct ModKey:
+    raw <i32>
+
+impl HashKey for ModKey:
+    fn clone <(ModKey)->ModKey> (self):
+        self
+
+    fn eq <(ModKey,ModKey)->bool> (a, b):
+        eq field::get a "raw" field::get b "raw"
+
+    fn hash32 <(ModKey)->i32> (self):
+        rem_s field::get self "raw" 7
+
+fn must_hsk <(Result<HashSet<ModKey>, Diag>)*>HashSet<ModKey>> (r):
     match r:
         Result::Ok hs:
             hs
@@ -74,29 +157,14 @@ fn must_hss <(Result<HashSetStr, Diag>)*>HashSetStr> (r):
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
 
-    let hm <HashMap<i32>> must_hm hashmap_new<i32>;
-    let hm <HashMap<i32>> must_hm hashmap_insert<i32> hm 10 99;
-    match hashmap_get<i32> hm 10:
-        Option::Some v:
-            set checks checks_push checks check_eq_i32 99 v
-        Option::None:
-            set checks checks_push checks Result<(),str>::Err "hashmap_get did not return inserted value";
+    let hs <HashSet<i32>> must_hs new;
+    let hs <HashSet<i32>> must_hs insert hs 42;
+    set checks checks_push checks check contains hs 42;
 
-    let hs <HashSet> must_hs hashset_new;
-    let hs <HashSet> must_hs hashset_insert hs 42;
-    set checks checks_push checks check hashset_contains hs 42;
+    let hsk <HashSet<ModKey>> must_hsk new;
+    let hsk <HashSet<ModKey>> must_hsk insert hsk (ModKey 21);
+    set checks checks_push checks check contains hsk (ModKey 21);
 
-    let hms <HashMapStr<i32>> must_hms hashmap_str_new<i32>;
-    let hms <HashMapStr<i32>> must_hms hashmap_str_insert<i32> hms "key" 7;
-    match hashmap_str_get<i32> hms "key":
-        Option::Some v:
-            set checks checks_push checks check_eq_i32 7 v
-        Option::None:
-            set checks checks_push checks Result<(),str>::Err "hashmap_str_get did not return inserted value";
-
-    let hss <HashSetStr> must_hss hashset_str_new;
-    let hss <HashSetStr> must_hss hashset_str_insert hss "abc";
-    set checks checks_push checks check hashset_str_contains hss "abc";
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
 ```

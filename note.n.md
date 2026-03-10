@@ -10869,3 +10869,43 @@
     - [結果/けっか]: success
   - `cargo build -p nepl-cli`
     - [結果/けっか]: success
+
+# 2026-03-11 作業メモ (`HashKey` と hash collection の reboot 収束)
+
+- [目的/もくてき]:
+  - `HashMap` / `HashSet` を reboot [方針/ほうしん]どおり bare API + trait [委譲/いじょう]へ[寄/よ]せ、specialized key helper [名/めい]に[依存/いぞん]しない collection にする。
+  - custom trait の `#capability copy` が generic bound と concrete impl の[両方/りょうほう]で[効/き]くように compiler [側/がわ]を[修正/しゅうせい]し、`HashKey` の custom key が move check で[壊/こわ]れないようにする。
+- [根本原因/こんぽんげんいん]:
+  - `HashMap` / `HashSet` の custom key failure は collection [実装/じっそう]ではなく compiler [側/がわ]だった。`TypeCtx::is_copy` は generic type var の trait bound capability と、`Copy` 以外の copy-capability trait impl target を[見/み]ていなかった。
+  - そのため `.K: HashKey` でも move check は `key` を non-copy と[判定/はんてい]し、probing 中の[再利用/さいりよう]で `D3053` を[出/だ]していた。
+  - `Hash` / `hash32` test も old star import [前提/ぜんてい]が[残/のこ]っており、helper shadowing と bare overload [曖昧化/あいまいか]で `D3005` を[起/お]こしていた。
+- [変更/へんこう]:
+  - `nepl-core/src/types.rs`, `nepl-core/src/typecheck.rs`
+    - type var に `copy_cap` / `clone_cap` / `drop_cap` を[保持/ほじ]させ、type parameter bound の capability を move check / drop 判定へ[伝播/でんぱ]するようにした。
+    - function instantiate 時にも fresh type var へ capability flag を[引/ひ]き[継/つ]ぐようにした。
+    - compiler が `Copy` trait 1 [個/こ]だけを special case [扱/あつか]いしていた[箇所/かしょ]を[改/あらた]め、`#capability copy` / `clone` / `drop` を[持/も]つ trait を capability [単位/たんい]で[認識/にんしき]するようにした。
+  - `stdlib/core/traits/hash_key.nepl`
+    - `HashMap` / `HashSet` [向/む]けに key capability `HashKey` を[追加/ついか]した。
+    - `clone` / `eq` / `hash32` を 1 [個/こ]の trait へ[集約/しゅうやく]し、builtin key (`bool` / `i32` / `u8` / `i64` / `str`) の impl を[整備/せいび]した。
+  - `stdlib/alloc/collections/hashmap.nepl`, `stdlib/alloc/collections/hashset.nepl`
+    - `.K: HashKey` / `.T: HashKey` [前提/ぜんてい]で open addressing 実装を[整理/せいり]した。
+    - internal helper [名/めい]は `hashmap_*` / `hashset_*` へ[統一/とういつ]し、star import [衝突/しょうとつ]を[避/さ]けた。
+  - `stdlib/alloc/hash/hash32.nepl`, `stdlib/core/traits/hash.nepl`
+    - bare `hash32` overload と trait `Hash::hash32` が[再帰/さいき]や[曖昧化/あいまいか]を[起/お]こさないよう、primitive hash [計算/けいさん]を[明示的/めいじてき]に[展開/てんかい]した。
+  - `stdlib/tests/hashmap.n.md`, `stdlib/tests/hashmap_str.n.md`, `stdlib/tests/hashset.n.md`, `stdlib/tests/hashset_str.n.md`, `tests/stdlib/traits_hash.n.md`
+    - current ownership model に[合/あ]わせて fixture を[整理/せいり]し、custom `HashKey` key を[含/ふく]む focused regression を[追加/ついか]した。
+    - `traits_hash` の先頭 case は old bare import 比較をやめ、current trait helper の deterministic / distinctness を[確認/かくにん]する[形/かたち]へ[変更/へんこう]した。
+  - `tests/compiler/trait_capability_copy.n.md`
+    - custom trait の `#capability copy` / `#capability clone` が generic bound に[伝播/でんぱ]し、`.T` を[複数回/ふくすうかい][使/つか]っても `D3053` にならないことを[固定/こてい]した。
+- [設計/せっけい][判断/はんだん]:
+  - [現状/げんじょう]の言語仕様では multiple trait bound が[書/か]けないため、hash collection の key [条件/じょうけん]は `HashKey` に[集約/しゅうやく]した。これは `Eq + Hash + Clone/Copy` の collection [用/よう] capability として[扱/あつか]う。
+  - ただし compiler [側/がわ]は `HashKey` 専用 special case にせず、「trait capability を type system が[一般/いっぱん]に[理解/りかい]する」[方向/ほうこう]へ[修正/しゅうせい]した。これで他の custom capability trait にも[同/おな]じ修正が[効/き]く。
+  - `btreemap.nepl` の差分はこの batch では[触/さわ]っておらず、collection reboot の[残件/ざんけん]として[別/べつ]に[続行/ぞっこう]する。
+- [検証/けんしょう]:
+  - `cargo test -p nepl-core --test drop -- --nocapture`
+    - [結果/けっか]: `7/7 pass`
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/tests.js -i tests/compiler/trait_capability_copy.n.md -i tests/stdlib/traits_hash.n.md -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md --no-stdlib --no-tree -o /tmp/tests-hash-capability-focus.json -j 4`
+    - [結果/けっか]: `8/8 pass`
+    - output JSON: `/tmp/tests-hash-capability-focus.json`

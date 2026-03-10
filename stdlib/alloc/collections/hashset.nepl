@@ -1,20 +1,20 @@
-//: hashset: alloc/collections/hashset.nepl に関する機能を提供するライブラリ
+//: # hashset
+//: `HashKey` trait に[基/もと]づく generic [集合/しゅうごう]
 //:
-//: [目的/もくてき]:
-//: - このモジュールの公開 API を提供します。
-//: - 実装の変更時に最小限の doctest 実行経路を維持します。
+//: ### [目的/もくてき]
+//: - `HashSet<.T>` を[提供/ていきょう]し、`new` / `insert` / `contains` / `remove` / `len` / `free` の bare 名で[操作/そうさ]できるようにします。
+//: - key ごとの[比較/ひかく]と hash [計算/けいさん]は `HashKey` trait に[委譲/いじょう]し、型名埋め込み API をなくします。
 //:
-//: [注意/ちゅうい]:
-//: - 利用時は各関数の「目的」「注意」「計算量」を確認してください。
+//: ### [実装/じっそう]
+//: - open addressing + linear probing を[用/もち]いる[固定長/こていちょう] hash table です。
+//: - bucket [状態/じょうたい]は `0 = empty`, `1 = full`, `2 = tombstone` で[管理/かんり]します。
 //:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| fn main <()*>i32> ():
-//:     ()
-//:     0
-//: ```
+//: ### [注意/ちゅうい]
+//: - key 型 `.T` は `HashKey` の impl を[持/も]つ[必要/ひつよう]があります。
+//: - [容量/ようりょう]は[固定/こてい]で、自動 rehash はまだ[行/おこな]いません。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [平均/へいきん] `insert` / `contains` / `remove` は O(1)、[最悪/さいあく]は O(n) です。
 
 #indent 4
 
@@ -22,548 +22,213 @@
 #import "core/math" as *
 #import "core/result" as *
 #import "core/field" as field
-#import "core/traits/hash" as *
+#import "core/traits/hash_key" as *
 #import "alloc/diag/error" as *
-#import "alloc/string" as *
 
-struct HashSet:
+//: ## HashSet
+//: hash table [本体/ほんたい]
+struct HashSet<.T>:
     hdr <i32>
 
+fn hashset_entry_size <.T> <()->i32> ():
+    add 4 size_of<.T>
 
-//: hashset_contains_loop: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_contains_loop の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_contains_loop <(i32,i32,i32,i32,i32,i32)->bool> (entries, entry_size, cap, idx, cur, key):
-    let entry_off <i32> mul cur entry_size
-    let entry <i32> add entries entry_off
-    let occupied <i32> load_i32 entry
-    if:
-        eq occupied 0
-        then:
-            false
-        else:
-            let entry_key <i32> add entry 4
-            let ekey <i32> load_i32 entry_key
+fn hashset_bucket_index <.T: HashKey> <(i32,.T)->i32> (cap, key):
+    rem_u hashkey_hash32 key cap
+
+fn hashset_status_ptr <(i32,i32,i32)->i32> (entries, size, idx):
+    add entries mul idx size
+
+fn hashset_key_ptr <.T> <(i32,i32,i32)->i32> (entries, size, idx):
+    add hashset_status_ptr entries size idx 4
+
+fn hashset_next_slot <(i32,i32)->i32> (idx, cap):
+    mod_s add idx 1 cap
+
+fn hashset_slot_matches <.T: HashKey> <(i32,i32,i32,.T)->bool> (entries, size, idx, key):
+    let ptr <i32> hashset_key_ptr<.T> entries size idx
+    let saved <.T> load<.T> ptr
+    hashkey_eq saved key
+
+fn hashset_find_present <.T: HashKey> <(i32,i32,i32,.T)->i32> (entries, size, cap, key):
+    let start <i32> hashset_bucket_index<.T> cap key
+    let mut cur <i32> start
+    let mut found <i32> -1
+    let mut done <bool> false
+    while not done:
+        do:
+            let st_ptr <i32> hashset_status_ptr entries size cur
+            let st <i32> load_i32 st_ptr
             if:
-                eq ekey key
-                then:
-                    true
+                eq st 0
+                then set done true
                 else:
-                    let next <i32> mod_s add cur 1 cap
+                    let present <bool> eq st 1
+                    let same <bool> if present then hashset_slot_matches<.T> entries size cur key else false
                     if:
-                        eq next idx
+                        same
                         then:
-                            false
+                            set found cur
+                            set done true
                         else:
-                            hashset_contains_loop entries entry_size cap idx next key
+                            let nxt <i32> hashset_next_slot cur cap
+                            if:
+                                eq nxt start
+                                then set done true
+                                else set cur nxt
+    found
 
-//: hashset_new: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_new の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_new <()*>Result<HashSet, Diag>> ():
+//: ## new
+//: [空/から]の `HashSet<.T>` を[作/つく]る
+fn new <.T> <()*>Result<HashSet<.T>, Diag>> ():
     let cap <i32> 16
-    let entry_size <i32> 8
-    let entries <i32> alloc_raw mul cap entry_size
+    let size <i32> hashset_entry_size<.T>
+    let entries <i32> alloc_raw mul cap size
     if:
         eq entries 0
-        then:
-            diag_err<HashSet> diag_out_of_memory "hashset_new(entries)"
+        then diag_err<HashSet<.T>> diag_out_of_memory "hashset_new(entries)"
         else:
             let mut i <i32> 0
             while lt i cap:
                 do:
-                    let off <i32> mul i entry_size
-                    let ptr <i32> add entries off
-                    store_i32 ptr 0
+                    let st_ptr <i32> hashset_status_ptr entries size i
+                    store_i32 st_ptr 0
                     set i add i 1
-            let header <i32> alloc_raw 12
+            let hdr <i32> alloc_raw 12
             if:
-                eq header 0
+                eq hdr 0
                 then:
-                    dealloc_raw entries mul cap entry_size
-                    diag_err<HashSet> diag_out_of_memory "hashset_new(header)"
+                    dealloc_raw entries mul cap size
+                    diag_err<HashSet<.T>> diag_out_of_memory "hashset_new(header)"
                 else:
-                    store_i32 header 0
-                    store_i32 add header 4 cap
-                    store_i32 add header 8 entries
-                    let hs2 <HashSet> HashSet header
-                    ok<HashSet, Diag> hs2
+                    store_i32 hdr 0
+                    store_i32 add hdr 4 cap
+                    store_i32 add hdr 8 entries
+                    ok<HashSet<.T>, Diag> HashSet hdr
 
-//: hashset_insert: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_insert の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_insert <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
+//: ## insert
+//: [要素/ようそ]を[追加/ついか]する
+fn insert <.T: HashKey> <(HashSet<.T>,.T)*>Result<HashSet<.T>, Diag>> (hs, key):
     let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> 8
-    let idx <i32> rem_u hash32_by_trait key cap
-    let mut cur <i32> idx
-    let mut done <i32> 0
-    let mut full <i32> 0
-    while eq done 0:
+    let size <i32> hashset_entry_size<.T>
+    let start <i32> hashset_bucket_index<.T> cap key
+    let mut cur <i32> start
+    let mut first_tomb <i32> -1
+    let mut placed <bool> false
+    let mut success <bool> false
+    while not placed:
         do:
-            let entry_off <i32> mul cur entry_size
-            let entry <i32> add entries entry_off
-            let occupied <i32> load_i32 entry
+            let st_ptr <i32> hashset_status_ptr entries size cur
+            let st <i32> load_i32 st_ptr
             if:
-                eq occupied 0
+                eq st 0
                 then:
-                    let entry_key <i32> add entry 4
-                    store_i32 entry 1
-                    store_i32 entry_key key
-                    store_i32 hdr add load_i32 hdr 1
-                    set done 1
-                else:
-                    let entry_key <i32> add entry 4
-                    let ekey <i32> load_i32 entry_key
+                    let slot <i32> if lt first_tomb 0 then cur else first_tomb
+                    let slot_status <i32> hashset_status_ptr entries size slot
+                    let old_status <i32> load_i32 slot_status
+                    let was_new <bool> not eq old_status 1
+                    store_i32 slot_status 1
+                    let kp <i32> hashset_key_ptr<.T> entries size slot
+                    store<.T> kp key
                     if:
-                        eq ekey key
-                        then set done 1
-                        else:
-                            set cur mod_s add cur 1 cap
-                            if:
-                                eq cur idx
-                                then:
-                                    set full 1
-                                    set done 1
-                                else ()
-    if:
-        eq full 1
-        then:
-            diag_err<HashSet> diag_capacity_exceeded "hashset_insert"
-        else:
-            ok<HashSet, Diag> hs
-
-//: hashset_contains: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_contains の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_contains <(HashSet,i32)->bool> (hs, key):
-    let hdr <i32> field::get hs "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> 8
-    let idx <i32> rem_u hash32_by_trait key cap
-    hashset_contains_loop entries entry_size cap idx idx key
-
-//: hashset_remove: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_remove の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_remove <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
-    let hdr <i32> field::get hs "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> 8
-    let idx <i32> rem_u hash32_by_trait key cap
-    let mut cur <i32> idx
-    let mut done <i32> 0
-    let mut removed <i32> 0
-    while eq done 0:
-        do:
-            let entry_off <i32> mul cur entry_size
-            let entry <i32> add entries entry_off
-            let occupied <i32> load_i32 entry
-            if:
-                eq occupied 0
-                then set done 1
+                        was_new
+                        then store_i32 hdr add load_i32 hdr 1
+                        else ()
+                    set placed true
+                    set success true
                 else:
-                    let entry_key <i32> add entry 4
-                    let ekey <i32> load_i32 entry_key
                     if:
-                        eq ekey key
+                        eq st 2
                         then:
-                            store_i32 entry 0
-                            store_i32 hdr sub load_i32 hdr 1
-                            set removed 1
-                            set done 1
-                        else:
-                            set cur mod_s add cur 1 cap
                             if:
-                                eq cur idx
-                                then set done 1
+                                lt first_tomb 0
+                                then set first_tomb cur
                                 else ()
+                            let nxt <i32> hashset_next_slot cur cap
+                            if:
+                                eq nxt start
+                                then:
+                                    if:
+                                        lt first_tomb 0
+                                        then set placed true
+                                        else:
+                                            let slot_status <i32> hashset_status_ptr entries size first_tomb
+                                            let kp <i32> hashset_key_ptr<.T> entries size first_tomb
+                                            store_i32 slot_status 1
+                                            store<.T> kp key
+                                            store_i32 hdr add load_i32 hdr 1
+                                            set placed true
+                                            set success true
+                                else set cur nxt
+                        else:
+                            let same <bool> hashset_slot_matches<.T> entries size cur key
+                            if:
+                                same
+                                then:
+                                    set placed true
+                                    set success true
+                                else:
+                                    let nxt <i32> hashset_next_slot cur cap
+                                    if:
+                                        eq nxt start
+                                        then:
+                                            if:
+                                                lt first_tomb 0
+                                                then set placed true
+                                                else:
+                                                    let slot_status <i32> hashset_status_ptr entries size first_tomb
+                                                    let kp <i32> hashset_key_ptr<.T> entries size first_tomb
+                                                    store_i32 slot_status 1
+                                                    store<.T> kp key
+                                                    store_i32 hdr add load_i32 hdr 1
+                                                    set placed true
+                                                    set success true
+                                        else set cur nxt
     if:
-        eq removed 1
-        then:
-            ok<HashSet, Diag> hs
-        else:
-            diag_err<HashSet> diag_key_not_found "hashset_remove"
+        success
+        then ok<HashSet<.T>, Diag> hs
+        else diag_err<HashSet<.T>> diag_capacity_exceeded "hashset_insert"
 
-//: hashset_len: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_len の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_len <(HashSet)->i32> (hs):
+//: ## contains
+//: [要素/ようそ]の[存在/そんざい]を[確/たし]かめる
+fn contains <.T: HashKey> <(HashSet<.T>,.T)->bool> (hs, key):
+    let hdr <i32> field::get hs "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
+    let size <i32> hashset_entry_size<.T>
+    let idx <i32> hashset_find_present<.T> entries size cap key
+    not lt idx 0
+
+//: ## remove
+//: [要素/ようそ]を[削除/さくじょ]する
+fn remove <.T: HashKey> <(HashSet<.T>,.T)*>Result<HashSet<.T>, Diag>> (hs, key):
+    let hdr <i32> field::get hs "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
+    let size <i32> hashset_entry_size<.T>
+    let idx <i32> hashset_find_present<.T> entries size cap key
+    if:
+        lt idx 0
+        then diag_err<HashSet<.T>> diag_key_not_found "hashset_remove"
+        else:
+            let st_ptr <i32> hashset_status_ptr entries size idx
+            store_i32 st_ptr 2
+            store_i32 hdr sub load_i32 hdr 1
+            ok<HashSet<.T>, Diag> hs
+
+//: ## len
+//: [要素数/ようそすう]を[返/かえ]す
+fn len <.T> <(HashSet<.T>)->i32> (hs):
     let hdr <i32> field::get hs "hdr"
     load_i32 hdr
 
-//: hashset_free: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_free の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_free <(HashSet)*>()> (hs):
+//: ## free
+//: [内部/ないぶ]メモリを[解放/かいほう]する
+fn free <.T> <(HashSet<.T>)*>()> (hs):
     let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
-    dealloc_raw entries mul cap 8
-    dealloc_raw hdr 12
-
-//: new: `hashset_new` の短縮名
-//:
-//: 目的:
-//: - `HashSet` を短い名前で生成できるようにします。
-fn new <()*>Result<HashSet, Diag>> ():
-    hashset_new
-
-//: insert: `hashset_insert` の短縮名
-//:
-//: 目的:
-//: - 要素追加を短い名前で呼び出せるようにします。
-fn insert <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
-    hashset_insert hs key
-
-//: contains: `hashset_contains` の短縮名
-//:
-//: 目的:
-//: - 存在確認を短い名前で呼び出せるようにします。
-fn contains <(HashSet,i32)->bool> (hs, key):
-    hashset_contains hs key
-
-//: remove: `hashset_remove` の短縮名
-//:
-//: 目的:
-//: - 要素削除を短い名前で呼び出せるようにします。
-fn remove <(HashSet,i32)*>Result<HashSet, Diag>> (hs, key):
-    hashset_remove hs key
-
-//: len: `hashset_len` の短縮名
-//:
-//: 目的:
-//: - 要素数取得を短い名前で呼び出せるようにします。
-fn len <(HashSet)->i32> (hs):
-    hashset_len hs
-
-//: free: `hashset_free` の短縮名
-//:
-//: 目的:
-//: - 解放処理を短い名前で呼び出せるようにします。
-fn free <(HashSet)*>()> (hs):
-    hashset_free hs
-
-struct HashSetStr:
-    hdr <i32>
-
-
-//: hashset_str_contains_loop: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_str_contains_loop の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_str_contains_loop <(i32,i32,i32,i32,i32,str)->bool> (entries, entry_size, cap, idx, cur, key):
-    let entry_off <i32> mul cur entry_size
-    let entry <i32> add entries entry_off
-    let occupied <i32> load_i32 entry
-    if:
-        eq occupied 0
-        then:
-            false
-        else:
-            let entry_key <i32> add entry 4
-            let ekey <str> load<str> entry_key
-            if:
-                str_eq ekey key
-                then:
-                    true
-                else:
-                    let next <i32> mod_s add cur 1 cap
-                    if:
-                        eq next idx
-                        then:
-                            false
-                        else:
-                            hashset_str_contains_loop entries entry_size cap idx next key
-
-//: hashset_str_new: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_str_new の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_str_new <()*>Result<HashSetStr, Diag>> ():
-    let cap <i32> 16
-    let entry_size <i32> 8
-    let entries <i32> alloc_raw mul cap entry_size
-    if:
-        eq entries 0
-        then:
-            diag_err<HashSetStr> diag_out_of_memory "hashset_str_new(entries)"
-        else:
-            let mut i <i32> 0
-            while lt i cap:
-                do:
-                    let entry_off <i32> mul i entry_size
-                    let entry <i32> add entries entry_off
-                    store_i32 entry 0
-                    set i add i 1
-            let header <i32> alloc_raw 12
-            if:
-                eq header 0
-                then:
-                    dealloc_raw entries mul cap entry_size
-                    diag_err<HashSetStr> diag_out_of_memory "hashset_str_new(header)"
-                else:
-                    store_i32 header 0
-                    store_i32 add header 4 cap
-                    store_i32 add header 8 entries
-                    let hs2 <HashSetStr> HashSetStr header
-                    ok<HashSetStr, Diag> hs2
-
-//: hashset_str_insert: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_str_insert の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_str_insert <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
-    let hdr <i32> field::get hs "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> 8
-    let idx <i32> rem_u hash32_by_trait key cap
-    let mut cur <i32> idx
-    let mut done <i32> 0
-    let mut full <i32> 0
-    while eq done 0:
-        do:
-            let entry_off <i32> mul cur entry_size
-            let entry <i32> add entries entry_off
-            let occupied <i32> load_i32 entry
-            if:
-                eq occupied 0
-                then:
-                    let entry_key <i32> add entry 4
-                    store_i32 entry 1
-                    store<str> entry_key key
-                    store_i32 hdr add load_i32 hdr 1
-                    set done 1
-                else:
-                    let entry_key <i32> add entry 4
-                    let ekey <str> load<str> entry_key
-                    if:
-                        str_eq ekey key
-                        then set done 1
-                        else:
-                            set cur mod_s add cur 1 cap
-                            if:
-                                eq cur idx
-                                then:
-                                    set full 1
-                                    set done 1
-                                else ()
-    if:
-        eq full 1
-        then:
-            diag_err<HashSetStr> diag_capacity_exceeded "hashset_str_insert"
-        else:
-            ok<HashSetStr, Diag> hs
-
-//: hashset_str_contains: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_str_contains の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_str_contains <(HashSetStr,str)->bool> (hs, key):
-    let hdr <i32> field::get hs "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> 8
-    let idx <i32> rem_u hash32_by_trait key cap
-    hashset_str_contains_loop entries entry_size cap idx idx key
-
-//: hashset_str_remove: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_str_remove の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_str_remove <(HashSetStr,str)*>Result<HashSetStr, Diag>> (hs, key):
-    let hdr <i32> field::get hs "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> 8
-    let idx <i32> rem_u hash32_by_trait key cap
-    let mut cur <i32> idx
-    let mut done <i32> 0
-    let mut removed <i32> 0
-    while eq done 0:
-        do:
-            let entry_off <i32> mul cur entry_size
-            let entry <i32> add entries entry_off
-            let occupied <i32> load_i32 entry
-            if:
-                eq occupied 0
-                then set done 1
-                else:
-                    let entry_key <i32> add entry 4
-                    let ekey <str> load<str> entry_key
-                    if:
-                        str_eq ekey key
-                        then:
-                            store_i32 entry 0
-                            store_i32 hdr sub load_i32 hdr 1
-                            set removed 1
-                            set done 1
-                        else:
-                            set cur mod_s add cur 1 cap
-                            if:
-                                eq cur idx
-                                then set done 1
-                                else ()
-    if:
-        eq removed 1
-        then:
-            ok<HashSetStr, Diag> hs
-        else:
-            diag_err<HashSetStr> diag_key_not_found "hashset_str_remove"
-
-//: hashset_str_len: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_str_len の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_str_len <(HashSetStr)->i32> (hs):
-    let hdr <i32> field::get hs "hdr"
-    load_i32 hdr
-
-//: hashset_str_free: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashset_str_free の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashset_str_free <(HashSetStr)*>()> (hs):
-    let hdr <i32> field::get hs "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    dealloc_raw entries mul cap 8
+    dealloc_raw entries mul cap hashset_entry_size<.T>
     dealloc_raw hdr 12

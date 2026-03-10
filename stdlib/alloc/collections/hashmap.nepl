@@ -1,20 +1,21 @@
-//: hashmap: alloc/collections/hashmap.nepl に関する機能を提供するライブラリ
+//: # hashmap
+//: `HashKey` trait に[基/もと]づく generic [連想配列/れんそうはいれつ]
 //:
-//: [目的/もくてき]:
-//: - このモジュールの公開 API を提供します。
-//: - 実装の変更時に最小限の doctest 実行経路を維持します。
+//: ### [目的/もくてき]
+//: - `HashMap<.K, .V>` を[提供/ていきょう]し、`new` / `insert` / `get` / `contains` / `remove` / `len` / `free` の bare 名で[操作/そうさ]できるようにします。
+//: - key ごとの[比較/ひかく]と hash [計算/けいさん]は `HashKey` trait に[委譲/いじょう]し、specialized helper 名に[依存/いぞん]しない collection にします。
 //:
-//: [注意/ちゅうい]:
-//: - 利用時は各関数の「目的」「注意」「計算量」を確認してください。
+//: ### [実装/じっそう]
+//: - open addressing + linear probing の[固定長/こていちょう] hash table です。
+//: - bucket [状態/じょうたい]は `0 = empty`, `1 = full`, `2 = tombstone` で[管理/かんり]し、[削除/さくじょ]で probe chain が[壊/こわ]れないようにします。
 //:
-//: neplg2:test[skip]
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| fn main <()*>i32> ():
-//:     ()
-//:     0
-//: ```
+//: ### [注意/ちゅうい]
+//: - key 型 `.K` は `HashKey` の impl を[持/も]つ[必要/ひつよう]があります。
+//: - [容量/ようりょう]は[固定/こてい]で、自動 rehash はまだ[行/おこな]いません。[満杯/まんぱい]では `Diag::CapacityExceeded` を[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [平均/へいきん] `insert` / `get` / `contains` / `remove` は O(1) です。
+//: - [最悪/さいあく]は probe が[全体/ぜんたい]を[走査/そうさ]して O(n) です。
 
 #indent 4
 
@@ -23,608 +24,237 @@
 #import "core/option" as *
 #import "core/result" as *
 #import "core/field" as field
-#import "core/traits/hash" as *
+#import "core/traits/hash_key" as *
 #import "alloc/diag/error" as *
-#import "alloc/string" as *
 
-struct HashMap<.V>:
+//: ## HashMap
+//: key/value を[保持/ほじ]する hash table の[本体/ほんたい]
+struct HashMap<.K,.V>:
     hdr <i32>
 
+fn hashmap_entry_size <.K,.V> <()->i32> ():
+    add 4 add size_of<.K> size_of<.V>
 
-//: hashmap_new: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_new の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_new <.V> <()*>Result<HashMap<.V>, Diag>> ():
+fn hashmap_bucket_index <.K: HashKey> <(i32,.K)->i32> (cap, key):
+    rem_u hashkey_hash32 key cap
+
+fn hashmap_status_ptr <(i32,i32,i32)->i32> (entries, size, idx):
+    add entries mul idx size
+
+fn hashmap_key_ptr <.K,.V> <(i32,i32,i32)->i32> (entries, size, idx):
+    add hashmap_status_ptr entries size idx 4
+
+fn hashmap_value_ptr <.K,.V> <(i32,i32,i32)->i32> (entries, size, idx):
+    add hashmap_key_ptr<.K,.V> entries size idx size_of<.K>
+
+fn hashmap_next_slot <(i32,i32)->i32> (idx, cap):
+    mod_s add idx 1 cap
+
+fn hashmap_slot_matches <.K: HashKey,.V> <(i32,i32,i32,.K)->bool> (entries, size, idx, key):
+    let ptr <i32> hashmap_key_ptr<.K,.V> entries size idx
+    let saved <.K> load<.K> ptr
+    hashkey_eq saved key
+
+fn hashmap_find_present <.K: HashKey,.V> <(i32,i32,i32,.K)->i32> (entries, size, cap, key):
+    let start <i32> hashmap_bucket_index<.K> cap key
+    let mut cur <i32> start
+    let mut found <i32> -1
+    let mut done <bool> false
+    while not done:
+        do:
+            let st_ptr <i32> hashmap_status_ptr entries size cur
+            let st <i32> load_i32 st_ptr
+            if:
+                eq st 0
+                then:
+                    set done true
+                else:
+                    let present <bool> eq st 1
+                    let same <bool> if present then hashmap_slot_matches<.K,.V> entries size cur key else false
+                    if:
+                        same
+                        then:
+                            set found cur
+                            set done true
+                        else:
+                            let nxt <i32> hashmap_next_slot cur cap
+                            if:
+                                eq nxt start
+                                then set done true
+                                else set cur nxt
+    found
+
+//: ## new
+//: [空/から]の `HashMap<.K, .V>` を[作/つく]る
+fn new <.K,.V> <()*>Result<HashMap<.K,.V>, Diag>> ():
     let cap <i32> 16
-    let entry_size <i32> add 8 size_of<.V>
-    let entries <i32> alloc_raw mul cap entry_size
+    let size <i32> hashmap_entry_size<.K,.V>
+    let entries <i32> alloc_raw mul cap size
     if:
         eq entries 0
         then:
-            diag_err<HashMap<.V>> diag_out_of_memory "hashmap_new(entries)"
+            diag_err<HashMap<.K,.V>> diag_out_of_memory "hashmap_new(entries)"
         else:
             let mut i <i32> 0
             while lt i cap:
                 do:
-                    let off <i32> mul i entry_size
-                    let ptr <i32> add entries off
-                    store_i32 ptr 0
+                    let st_ptr <i32> hashmap_status_ptr entries size i
+                    store_i32 st_ptr 0
                     set i add i 1
-            let header <i32> alloc_raw 12
+            let hdr <i32> alloc_raw 12
             if:
-                eq header 0
+                eq hdr 0
                 then:
-                    dealloc_raw entries mul cap entry_size
-                    diag_err<HashMap<.V>> diag_out_of_memory "hashmap_new(header)"
+                    dealloc_raw entries mul cap size
+                    diag_err<HashMap<.K,.V>> diag_out_of_memory "hashmap_new(header)"
                 else:
-                    store_i32 header 0
-                    store_i32 add header 4 cap
-                    store_i32 add header 8 entries
-                    let hm <HashMap<.V>> HashMap header
-                    ok<HashMap<.V>, Diag> hm
+                    store_i32 hdr 0
+                    store_i32 add hdr 4 cap
+                    store_i32 add hdr 8 entries
+                    ok<HashMap<.K,.V>, Diag> HashMap hdr
 
-//: hashmap_insert: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_insert の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_insert <.V> <(HashMap<.V>,i32,.V)*>Result<HashMap<.V>, Diag>> (hm, key, val):
+//: ## insert
+//: key に value を[挿入/そうにゅう]または[更新/こうしん]する
+fn insert <.K: HashKey,.V> <(HashMap<.K,.V>,.K,.V)*>Result<HashMap<.K,.V>, Diag>> (hm, key, value):
     let hdr <i32> field::get hm "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_by_trait key cap
-    let mut cur <i32> idx
-    let mut found <i32> 0
-    let mut full <i32> 0
-    while eq found 0:
+    let size <i32> hashmap_entry_size<.K,.V>
+    let start <i32> hashmap_bucket_index<.K> cap key
+    let mut cur <i32> start
+    let mut first_tomb <i32> -1
+    let mut placed <bool> false
+    let mut success <bool> false
+    while not placed:
         do:
-            let entry_off <i32> mul cur entry_size
-            let entry <i32> add entries entry_off
-            let occupied <i32> load_i32 entry
+            let st_ptr <i32> hashmap_status_ptr entries size cur
+            let st <i32> load_i32 st_ptr
             if:
-                eq occupied 0
+                eq st 0
                 then:
-                    let entry_key <i32> add entry 4
-                    let entry_val <i32> add entry 8
-                    store_i32 entry 1
-                    store_i32 entry_key key
-                    store<.V> entry_val val
-                    store_i32 hdr add load_i32 hdr 1
-                    set found 1
-                else:
-                    let entry_key <i32> add entry 4
-                    let ekey <i32> load_i32 entry_key
+                    let slot <i32> if lt first_tomb 0 then cur else first_tomb
+                    let slot_status <i32> hashmap_status_ptr entries size slot
+                    let old_status <i32> load_i32 slot_status
+                    let was_new <bool> not eq old_status 1
+                    store_i32 slot_status 1
+                    let kp <i32> hashmap_key_ptr<.K,.V> entries size slot
+                    let vp <i32> hashmap_value_ptr<.K,.V> entries size slot
+                    store<.K> kp key
+                    store<.V> vp value
                     if:
-                        eq ekey key
+                        was_new
+                        then store_i32 hdr add load_i32 hdr 1
+                        else ()
+                    set placed true
+                    set success true
+                else:
+                    if:
+                        eq st 2
                         then:
-                            let entry_val <i32> add entry 8
-                            store<.V> entry_val val
-                            set found 1
-                        else:
-                            set cur mod_s add cur 1 cap
                             if:
-                                eq cur idx
-                                then:
-                                    set found 1
-                                    set full 1
+                                lt first_tomb 0
+                                then set first_tomb cur
                                 else ()
-    if:
-        eq full 1
-        then:
-            diag_err<HashMap<.V>> diag_capacity_exceeded "hashmap_insert"
-        else:
-            ok<HashMap<.V>, Diag> hm
-
-//: hashmap_get_loop: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_get_loop の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_get_loop <.V> <(i32,i32,i32,i32,i32,i32)->Option<.V>> (entries, entry_size, cap, idx, cur, key):
-    let entry_off <i32> mul cur entry_size
-    let entry <i32> add entries entry_off
-    let occupied <i32> load_i32 entry
-    if:
-        eq occupied 0
-        then:
-            none<.V>
-        else:
-            let entry_key <i32> add entry 4
-            let ekey <i32> load_i32 entry_key
-            if:
-                eq ekey key
-                then:
-                    let entry_val <i32> add entry 8
-                    some<.V> load<.V> entry_val
-                else:
-                    let next <i32> mod_s add cur 1 cap
-                    if:
-                        eq next idx
-                        then:
-                            none<.V>
-                        else:
-                            hashmap_get_loop<.V> entries entry_size cap idx next key
-
-//: hashmap_get: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_get の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_get <.V> <(HashMap<.V>,i32)->Option<.V>> (hm, key):
-    let hdr <i32> field::get hm "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_by_trait key cap
-    hashmap_get_loop<.V> entries entry_size cap idx idx key
-
-//: hashmap_contains: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_contains の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_contains <.V> <(HashMap<.V>,i32)->bool> (hm, key):
-    is_some<.V> hashmap_get<.V> hm key
-
-//: hashmap_remove: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_remove の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_remove <.V> <(HashMap<.V>,i32)*>Result<HashMap<.V>, Diag>> (hm, key):
-    let hdr <i32> field::get hm "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_by_trait key cap
-    let mut cur <i32> idx
-    let mut done <i32> 0
-    let mut removed <i32> 0
-    while eq done 0:
-        do:
-            let entry_off <i32> mul cur entry_size
-            let entry <i32> add entries entry_off
-            let occupied <i32> load_i32 entry
-            if:
-                eq occupied 0
-                then set done 1
-                else:
-                    let entry_key <i32> add entry 4
-                    let ekey <i32> load_i32 entry_key
-                    if:
-                        eq ekey key
-                        then:
-                            store_i32 entry 0
-                            store_i32 hdr sub load_i32 hdr 1
-                            set removed 1
-                            set done 1
-                        else:
-                            set cur mod_s add cur 1 cap
+                            let nxt <i32> hashmap_next_slot cur cap
                             if:
-                                eq cur idx
-                                set done 1
-                                ()
+                                eq nxt start
+                                then:
+                                    if:
+                                        lt first_tomb 0
+                                        then set placed true
+                                        else:
+                                            let slot_status <i32> hashmap_status_ptr entries size first_tomb
+                                            let kp <i32> hashmap_key_ptr<.K,.V> entries size first_tomb
+                                            let vp <i32> hashmap_value_ptr<.K,.V> entries size first_tomb
+                                            store_i32 slot_status 1
+                                            store<.K> kp key
+                                            store<.V> vp value
+                                            store_i32 hdr add load_i32 hdr 1
+                                            set placed true
+                                            set success true
+                                else set cur nxt
+                        else:
+                            let same <bool> hashmap_slot_matches<.K,.V> entries size cur key
+                            if:
+                                same
+                                then:
+                                    let vp <i32> hashmap_value_ptr<.K,.V> entries size cur
+                                    store<.V> vp value
+                                    set placed true
+                                    set success true
+                                else:
+                                    let nxt <i32> hashmap_next_slot cur cap
+                                    if:
+                                        eq nxt start
+                                        then:
+                                            if:
+                                                lt first_tomb 0
+                                                then set placed true
+                                                else:
+                                                    let slot_status <i32> hashmap_status_ptr entries size first_tomb
+                                                    let kp <i32> hashmap_key_ptr<.K,.V> entries size first_tomb
+                                                    let vp <i32> hashmap_value_ptr<.K,.V> entries size first_tomb
+                                                    store_i32 slot_status 1
+                                                    store<.K> kp key
+                                                    store<.V> vp value
+                                                    store_i32 hdr add load_i32 hdr 1
+                                                    set placed true
+                                                    set success true
+                                        else set cur nxt
     if:
-        eq removed 1
-        then:
-            ok<HashMap<.V>, Diag> hm
-        else:
-            diag_err<HashMap<.V>> diag_key_not_found "hashmap_remove"
+        success
+        then ok<HashMap<.K,.V>, Diag> hm
+        else diag_err<HashMap<.K,.V>> diag_capacity_exceeded "hashmap_insert"
 
-//: hashmap_len: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_len の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_len <.V> <(HashMap<.V>)->i32> (hm):
+//: ## get
+//: key に[対応/たいおう]する value を[探/さが]す
+fn get <.K: HashKey,.V> <(HashMap<.K,.V>,.K)->Option<.V>> (hm, key):
+    let hdr <i32> field::get hm "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
+    let size <i32> hashmap_entry_size<.K,.V>
+    let idx <i32> hashmap_find_present<.K,.V> entries size cap key
+    if:
+        lt idx 0
+        then none<.V>
+        else:
+            let vp <i32> hashmap_value_ptr<.K,.V> entries size idx
+            some<.V> load<.V> vp
+
+//: ## contains
+//: key の[存在/そんざい]を[確/たし]かめる
+fn contains <.K: HashKey,.V> <(HashMap<.K,.V>,.K)->bool> (hm, key):
+    let got <Option<.V>> get<.K,.V> hm key
+    is_some<.V> got
+
+//: ## remove
+//: key を[削除/さくじょ]する
+fn remove <.K: HashKey,.V> <(HashMap<.K,.V>,.K)*>Result<HashMap<.K,.V>, Diag>> (hm, key):
+    let hdr <i32> field::get hm "hdr"
+    let cap <i32> load_i32 add hdr 4
+    let entries <i32> load_i32 add hdr 8
+    let size <i32> hashmap_entry_size<.K,.V>
+    let idx <i32> hashmap_find_present<.K,.V> entries size cap key
+    if:
+        lt idx 0
+        then diag_err<HashMap<.K,.V>> diag_key_not_found "hashmap_remove"
+        else:
+            let st_ptr <i32> hashmap_status_ptr entries size idx
+            store_i32 st_ptr 2
+            store_i32 hdr sub load_i32 hdr 1
+            ok<HashMap<.K,.V>, Diag> hm
+
+//: ## len
+//: [要素数/ようそすう]を[返/かえ]す
+fn len <.K,.V> <(HashMap<.K,.V>)->i32> (hm):
     let hdr <i32> field::get hm "hdr"
     load_i32 hdr
 
-//: hashmap_free: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_free の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_free <.V> <(HashMap<.V>)*>()> (hm):
+//: ## free
+//: [内部/ないぶ]メモリを[解放/かいほう]する
+fn free <.K,.V> <(HashMap<.K,.V>)*>()> (hm):
     let hdr <i32> field::get hm "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> add 8 size_of<.V>
-    dealloc_raw entries mul cap entry_size
+    dealloc_raw entries mul cap hashmap_entry_size<.K,.V>
     dealloc_raw hdr 12
-
-//: new: `hashmap_new` の短縮名
-//:
-//: 目的:
-//: - `HashMap<.V>` を短い名前で生成できるようにします。
-fn new <.V> <()*>Result<HashMap<.V>, Diag>> ():
-    hashmap_new<.V>
-
-//: insert: `hashmap_insert` の短縮名
-//:
-//: 目的:
-//: - 要素追加/更新を短い名前で呼び出せるようにします。
-fn insert <.V> <(HashMap<.V>,i32,.V)*>Result<HashMap<.V>, Diag>> (hm, key, val):
-    hashmap_insert<.V> hm key val
-
-//: contains: `hashmap_contains` の短縮名
-//:
-//: 目的:
-//: - 存在確認を短い名前で呼び出せるようにします。
-fn contains <.V> <(HashMap<.V>,i32)->bool> (hm, key):
-    hashmap_contains<.V> hm key
-
-//: get: `hashmap_get` の短縮名
-//:
-//: 目的:
-//: - 値取得を短い名前で呼び出せるようにします。
-fn get <.V> <(HashMap<.V>,i32)->Option<.V>> (hm, key):
-    hashmap_get<.V> hm key
-
-//: remove: `hashmap_remove` の短縮名
-//:
-//: 目的:
-//: - 要素削除を短い名前で呼び出せるようにします。
-fn remove <.V> <(HashMap<.V>,i32)*>Result<HashMap<.V>, Diag>> (hm, key):
-    hashmap_remove<.V> hm key
-
-//: len: `hashmap_len` の短縮名
-//:
-//: 目的:
-//: - 要素数取得を短い名前で呼び出せるようにします。
-fn len <.V> <(HashMap<.V>)->i32> (hm):
-    hashmap_len<.V> hm
-
-//: free: `hashmap_free` の短縮名
-//:
-//: 目的:
-//: - 解放処理を短い名前で呼び出せるようにします。
-fn free <.V> <(HashMap<.V>)*>()> (hm):
-    hashmap_free<.V> hm
-
-struct HashMapStr<.V>:
-    hdr <i32>
-
-
-//: hashmap_str_new: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_str_new の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_str_new <.V> <()*>Result<HashMapStr<.V>, Diag>> ():
-    let cap <i32> 16
-    let entry_size <i32> add 8 size_of<.V>
-    let entries <i32> alloc_raw mul cap entry_size
-    if:
-        eq entries 0
-        then:
-            diag_err<HashMapStr<.V>> diag_out_of_memory "hashmap_str_new(entries)"
-        else:
-            let mut i <i32> 0
-            while lt i cap:
-                do:
-                    let entry_off <i32> mul i entry_size
-                    let entry <i32> add entries entry_off
-                    store_i32 entry 0
-                    set i add i 1
-            let header <i32> alloc_raw 12
-            if:
-                eq header 0
-                then:
-                    dealloc_raw entries mul cap entry_size
-                    diag_err<HashMapStr<.V>> diag_out_of_memory "hashmap_str_new(header)"
-                else:
-                    store_i32 header 0
-                    store_i32 add header 4 cap
-                    store_i32 add header 8 entries
-                    let hm <HashMapStr<.V>> HashMapStr header
-                    ok<HashMapStr<.V>, Diag> hm
-
-//: hashmap_str_insert: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_str_insert の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_str_insert <.V> <(HashMapStr<.V>,str,.V)*>Result<HashMapStr<.V>, Diag>> (hm, key, val):
-    let hdr <i32> field::get hm "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_by_trait key cap
-    let mut cur <i32> idx
-    let mut found <i32> 0
-    let mut full <i32> 0
-    while eq found 0:
-        do:
-            let entry_off <i32> mul cur entry_size
-            let entry <i32> add entries entry_off
-            let occupied <i32> load_i32 entry
-            if:
-                eq occupied 0
-                then:
-                    let entry_key <i32> add entry 4
-                    let entry_val <i32> add entry 8
-                    store_i32 entry 1
-                    store<str> entry_key key
-                    store<.V> entry_val val
-                    store_i32 hdr add load_i32 hdr 1
-                    set found 1
-                else:
-                    let entry_key <i32> add entry 4
-                    let ekey <str> load<str> entry_key
-                    if:
-                        str_eq ekey key
-                        then:
-                            let entry_val <i32> add entry 8
-                            store<.V> entry_val val
-                            set found 1
-                        else:
-                            set cur mod_s add cur 1 cap
-                            if:
-                                eq cur idx
-                                then:
-                                    set found 1
-                                    set full 1
-                                else ()
-    if:
-        eq full 1
-        then:
-            diag_err<HashMapStr<.V>> diag_capacity_exceeded "hashmap_str_insert"
-        else:
-            ok<HashMapStr<.V>, Diag> hm
-
-//: hashmap_str_get_loop: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_str_get_loop の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_str_get_loop <.V> <(i32,i32,i32,i32,i32,str)->Option<.V>> (entries, entry_size, cap, idx, cur, key):
-    let entry_off <i32> mul cur entry_size
-    let entry <i32> add entries entry_off
-    let occupied <i32> load_i32 entry
-    if:
-        eq occupied 0
-        then:
-            none<.V>
-        else:
-            let entry_key <i32> add entry 4
-            let ekey <str> load<str> entry_key
-            if:
-                str_eq ekey key
-                then:
-                    let entry_val <i32> add entry 8
-                    some<.V> load<.V> entry_val
-                else:
-                    let next <i32> mod_s add cur 1 cap
-                    if:
-                        eq next idx
-                        then:
-                            none<.V>
-                        else:
-                            hashmap_str_get_loop<.V> entries entry_size cap idx next key
-
-//: hashmap_str_get: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_str_get の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_str_get <.V> <(HashMapStr<.V>,str)->Option<.V>> (hm, key):
-    let hdr <i32> field::get hm "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_by_trait key cap
-    hashmap_str_get_loop<.V> entries entry_size cap idx idx key
-
-//: hashmap_str_contains: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_str_contains の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_str_contains <.V> <(HashMapStr<.V>,str)->bool> (hm, key):
-    is_some<.V> hashmap_str_get<.V> hm key
-
-//: hashmap_str_remove: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_str_remove の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_str_remove <.V> <(HashMapStr<.V>,str)*>Result<HashMapStr<.V>, Diag>> (hm, key):
-    let hdr <i32> field::get hm "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> add 8 size_of<.V>
-    let idx <i32> rem_u hash32_by_trait key cap
-    let mut cur <i32> idx
-    let mut done <i32> 0
-    let mut removed <i32> 0
-    while eq done 0:
-        do:
-            let entry_off <i32> mul cur entry_size
-            let entry <i32> add entries entry_off
-            let occupied <i32> load_i32 entry
-            if:
-                eq occupied 0
-                then set done 1
-                else:
-                    let entry_key <i32> add entry 4
-                    let ekey <str> load<str> entry_key
-                    if:
-                        str_eq ekey key
-                        then:
-                            store_i32 entry 0
-                            store_i32 hdr sub load_i32 hdr 1
-                            set removed 1
-                            set done 1
-                        else:
-                            set cur mod_s add cur 1 cap
-                            if:
-                                eq cur idx
-                                set done 1
-                                ()
-    if:
-        eq removed 1
-        then:
-            ok<HashMapStr<.V>, Diag> hm
-        else:
-            diag_err<HashMapStr<.V>> diag_key_not_found "hashmap_str_remove"
-
-//: hashmap_str_len: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_str_len の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_str_len <.V> <(HashMapStr<.V>)->i32> (hm):
-    let hdr <i32> field::get hm "hdr"
-    load_i32 hdr
-
-//: hashmap_str_free: 主な用途
-//:
-//: [目的/もくてき]:
-//: - hashmap_str_free の主な用途と呼び出し方を示します。
-//:
-//: [実装/じっそう]:
-//: - 定義済み処理をそのまま呼び出す薄いラッパで構成されています。
-//:
-//: [注意/ちゅうい]:
-//: - 引数の値は関数呼び出しで移動するため、再利用時は束縛し直してください。
-//:
-//: [計算量/けいさんりょう]:
-//: - 本体処理に準じます。
-fn hashmap_str_free <.V> <(HashMapStr<.V>)*>()> (hm):
-    let hdr <i32> field::get hm "hdr"
-    let cap <i32> load_i32 add hdr 4
-    let entries <i32> load_i32 add hdr 8
-    let entry_size <i32> add 8 size_of<.V>
-    dealloc_raw entries mul cap entry_size
-    dealloc_raw hdr 12
-
-//: get: `hashmap_str_get` の短縮名
-//:
-//: 目的:
-//: - 文字列キー版の値取得を短い名前で呼び出せるようにします。
-fn get <.V> <(HashMapStr<.V>,str)->Option<.V>> (hm, key):
-    hashmap_str_get<.V> hm key

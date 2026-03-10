@@ -59,6 +59,9 @@ pub enum TypeKind {
 pub struct TypeVar {
     pub label: Option<alloc::string::String>,
     pub binding: Option<TypeId>,
+    pub copy_cap: bool,
+    pub clone_cap: bool,
+    pub drop_cap: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,8 +157,25 @@ impl TypeCtx {
         self.arena.push(TypeKind::Var(TypeVar {
             label,
             binding: None,
+            copy_cap: false,
+            clone_cap: false,
+            drop_cap: false,
         }));
         id
+    }
+
+    pub fn set_var_capabilities(
+        &mut self,
+        var: TypeId,
+        copy_cap: bool,
+        clone_cap: bool,
+        drop_cap: bool,
+    ) {
+        if let TypeKind::Var(tv) = &mut self.arena[var.0] {
+            tv.copy_cap = copy_cap;
+            tv.clone_cap = clone_cap;
+            tv.drop_cap = drop_cap;
+        }
     }
 
     pub fn snapshot_type_var_bindings(
@@ -538,7 +558,7 @@ impl TypeCtx {
         match self.get_ref(resolved) {
             TypeKind::Never => true,
             TypeKind::Reference(_, _) => true,
-            TypeKind::Var(v) => v.binding.map(|b| self.is_copy(b)).unwrap_or(false),
+            TypeKind::Var(v) => v.binding.map(|b| self.is_copy(b)).unwrap_or(v.copy_cap),
             _ => false,
         }
     }
@@ -566,7 +586,7 @@ impl TypeCtx {
                 TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_copy_impl_target(resolved),
                 _ => self.has_copy_impl_target(resolved),
             },
-            TypeKind::Var(v) => v.binding.map(|b| self.is_copy(b)).unwrap_or(false),
+            TypeKind::Var(v) => v.binding.map(|b| self.is_copy(b)).unwrap_or(v.copy_cap),
             TypeKind::Function { .. } | TypeKind::Box(_) => false,
         }
     }
@@ -589,7 +609,7 @@ impl TypeCtx {
             TypeKind::Struct { .. } | TypeKind::Enum { .. } => self.has_drop_impl_target(resolved),
             TypeKind::Apply { .. } | TypeKind::Box(_) => self.has_drop_impl_target(resolved),
             TypeKind::Function { .. } => false,
-            TypeKind::Var(v) => v.binding.map(|b| self.has_drop(b)).unwrap_or(false),
+            TypeKind::Var(v) => v.binding.map(|b| self.has_drop(b)).unwrap_or(v.drop_cap),
         }
     }
 
@@ -1224,6 +1244,18 @@ impl TypeCtx {
                 _ => None,
             },
             binding: Some(self.store(value.clone())),
+            copy_cap: match value {
+                TypeKind::Var(tv) => tv.copy_cap,
+                _ => false,
+            },
+            clone_cap: match value {
+                TypeKind::Var(tv) => tv.clone_cap,
+                _ => false,
+            },
+            drop_cap: match value {
+                TypeKind::Var(tv) => tv.drop_cap,
+                _ => false,
+            },
         });
     }
 
@@ -1462,6 +1494,9 @@ impl TypeCtx {
             let mut fresh_args = Vec::new();
             for tp in &type_params {
                 let fresh = self.fresh_var(None);
+                if let TypeKind::Var(tv) = self.get(self.resolve_id(*tp)) {
+                    self.set_var_capabilities(fresh, tv.copy_cap, tv.clone_cap, tv.drop_cap);
+                }
                 mapping.insert(*tp, fresh);
                 fresh_args.push(fresh);
             }
