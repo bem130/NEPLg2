@@ -10207,3 +10207,29 @@
   - `node nodesrc/run_doctest.js -i tests/stdlib/std_test_collect.n.md -n 2` -> pass
   - `node nodesrc/tests.js -i tests/stdlib/std_test_collect.n.md -i tutorials/getting_started/11_testing_workflow.n.md -i stdlib/tests/vec.n.md -i tutorials/getting_started/07_while_and_block.n.md -i tutorials/getting_started/08_if_layouts.n.md -i tutorials/getting_started/09_import_and_structure.n.md -i stdlib/std/test.nepl --no-stdlib --no-tree -o /tmp/tests-std-test-human-machine.json -j 4`
     - [結果/けっか]: `25/25 pass`
+
+# 2026-03-10 作業メモ (middle tutorial の safe `Result` 化を継続)
+
+- [目的/もくてき]:
+  - `12_pure_function_pipeline`, `13_type_driven_error_modeling`, `14_refactor_with_properties` を、`std/test` の[現行/げんこう] safe `Result` [流儀/りゅうぎ]へ[揃/そろ]える。
+  - [純粋/じゅんすい][関数/かんすう]・`Option` / `Result`・[回帰/かいき] test の chapter でも、「test helper は[値/あたい]を[返/かえ]す」という reboot [後/ご]の[一貫性/いっかんせい]を[保/たも]つ。
+- [根本原因/こんぽんげんいん]:
+  - 3 [章/しょう]とも `assert_*` の unit-return [前提/ぜんてい]と `test_checked` の[副作用/ふくさよう] helper [前提/ぜんてい]が[残/のこ]っていた。
+  - `14_refactor_with_properties.n.md` の `assert_same` は unit-return helper だったため、`checks_push` に[直接/ちょくせつ][積/つ]めず、safe `Result` [流儀/りゅうぎ]へ[自然/しぜん]に[接続/せつぞく]できなかった。
+- [変更/へんこう]:
+  - `tutorials/getting_started/12_pure_function_pipeline.n.md`
+    - 2 [件/けん]の doctest に `ret: 0` を[追加/ついか]した。
+    - `core/result` を import し、`checks_new` / `checks_push` / `checks_exit_code` [前提/ぜんてい]へ[変更/へんこう]した。
+  - `tutorials/getting_started/13_type_driven_error_modeling.n.md`
+    - `Result` [例/れい]は `let mut checks` を[導入/どうにゅう]し、`match` [分岐/ぶんき]ごとの[成否/せいひ]を `checks_push` で[収集/しゅうしゅう]する[形/かたち]へ[変更/へんこう]した。
+    - `Option` [例/れい]も `ret: 0` + `checks_exit_code` [前提/ぜんてい]へ[揃/そろ]えた。
+  - `tutorials/getting_started/14_refactor_with_properties.n.md`
+    - [前半/ぜんはん]の[等価性/とうかせい] doctest を `checks_exit_code` [前提/ぜんてい]へ[変更/へんこう]した。
+    - `assert_same` を `fn assert_same <(i32,i32)*>Result<(),str>>` へ[変更/へんこう]し、safe `Result` [流儀/りゅうぎ]にそのまま[接続/せつぞく]できる helper に[再設計/さいせっけい]した。
+- [設計/せっけい][判断/はんだん]:
+  - `assert_same` のような chapter [内/ない] helper こそ、reboot [後/ご]は unit-return ではなく `Result<(),str>` を[返/かえ]すほうが、test [合成/ごうせい]と[責務/せきむ]が[明確/めいかく]になる。
+  - `13` [章/しょう]は「[型/かた]で[失敗/しっぱい]を[表/あらわ]す」が[主題/しゅだい]なので、doctest [自体/じたい]も `Result` を[値/あたい]として[収集/しゅうしゅう]する[構造/こうぞう]へ[寄/よ]せるのが[自然/しぜん]だと[判断/はんだん]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/14_refactor_with_properties.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i tutorials/getting_started/12_pure_function_pipeline.n.md -i tutorials/getting_started/13_type_driven_error_modeling.n.md -i tutorials/getting_started/14_refactor_with_properties.n.md --no-stdlib --no-tree -o /tmp/tests-safe-result-batch3.json -j 4`
+    - [結果/けっか]: `6/6 pass`

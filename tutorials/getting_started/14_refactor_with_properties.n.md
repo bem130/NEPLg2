@@ -6,12 +6,14 @@
 ## 実装を差し替えても挙動を維持する
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "std/test" as *
 
 fn sum_to_loop <(i32)*>i32> (n):
@@ -29,17 +31,21 @@ fn sum_to_formula <(i32)->i32> (n):
     let num <i32> mul n n1
     div_s num 2
 
-fn main <()*> ()> ():
-    assert_eq_i32 sum_to_loop 0 sum_to_formula 0
-    assert_eq_i32 sum_to_loop 1 sum_to_formula 1
-    assert_eq_i32 sum_to_loop 10 sum_to_formula 10
-    assert_eq_i32 sum_to_loop 100 sum_to_formula 100
-    test_checked "refactor preserves behavior"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 sum_to_loop 0 sum_to_formula 0
+        |> checks_push assert_eq_i32 sum_to_loop 1 sum_to_formula 1
+        |> checks_push assert_eq_i32 sum_to_loop 10 sum_to_formula 10
+        |> checks_push assert_eq_i32 sum_to_loop 100 sum_to_formula 100
+    let _done <Result<(),str>> test_checked "refactor preserves behavior";
+    checks_exit_code checks
 ```
 
 ## 失敗ケースも同時に固定する
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
@@ -58,7 +64,7 @@ fn safe_div_new <(i32,i32)->Result<i32,str>> (a, b):
         then Result::Err "division by zero"
         else Result::Ok div_s a b
 
-fn assert_same <(i32,i32)*>()> (a, b):
+fn assert_same <(i32,i32)*>Result<(),str>> (a, b):
     match safe_div_old a b:
         Result::Ok ov:
             match safe_div_new a b:
@@ -71,11 +77,14 @@ fn assert_same <(i32,i32)*>()> (a, b):
                 Result::Ok nv:
                     test_fail "old=Err new=Ok"
                 Result::Err ne:
-                    ()
+                    Result<(),str>::Ok ()
 
-fn main <()*> ()> ():
-    assert_same 10 2;
-    assert_same 11 3;
-    assert_same 10 0;
-    test_checked "refactor keeps error behavior"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_same 10 2
+        |> checks_push assert_same 11 3
+        |> checks_push assert_same 10 0
+    let _done <Result<(),str>> test_checked "refactor keeps error behavior";
+    checks_exit_code checks
 ```
