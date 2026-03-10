@@ -9432,3 +9432,38 @@
 - [状況/じょうきょう]:
   - `std/streamio` はまだ stdin/stdout の最小 facade に留めているが、binary/text の trait 面は先に固定できた。
   - `kpwrite` / `kpread` をこの層へ段階移行する足場はできた。
+
+# 2026-03-10 作業メモ (`streamio` の binary buffer を `ByteBuf` へ再設計)
+
+- [目的/もくてき]:
+  - `streamio` を本当に binary-capable にし、`Vec<u8>` の内部表現へ依存した擬似的な byte write をやめる。
+  - `nodesrc/tests.js` でも stdout/stderr 検証を確実に有効化し、I/O mismatch を見逃さない focused 検証手順を固定する。
+- [根本原因/こんぽんげんいん]:
+  - 先行実装では `ByteReader` / `ByteWriter` の媒体を `Vec<u8>` にしていたが、NEPLg2 の `Vec<u8>` は `fd_write` にそのまま渡せる連続 byte buffer ではなかった。
+  - そのため `stream_write_bytes` は `A\0\0` のような padded 出力になり、binary stream として壊れていた。
+  - あわせて `nodesrc/tests.js` は既定で `assert_io: false` なので、stdout mismatch が JSON 上では pass 扱いになるケースがあり、`--assert-io` を付けないと binary 回帰を見逃していた。
+- [変更/へんこう]:
+  - `stdlib/alloc/io.nepl`
+    - `ByteBuf` を追加し、`ptr: MemPtr<u8>` と `len: i32` を持つ所有 buffer として定義した。
+    - `io_bytebuf_empty` / `io_bytebuf_len` / `io_bytebuf_free` / `io_bytebuf_from_str` / `io_bytebuf_to_str` を追加した。
+    - `ByteReader` / `ByteWriter` と `io_read_all_bytes` / `io_write_bytes` の媒体を `Vec<u8>` から `ByteBuf` へ変更した。
+  - `stdlib/std/stdio.nepl`
+    - `stdio_write_bytes` は `ByteBuf` を直接 iovec に載せて stdout へ書く形へ変更した。
+    - `stdio_read_all_bytes` は、現状の `read_all` 結果を `ByteBuf` に複製する形へ整理した。
+  - `stdlib/std/streamio.nepl`
+    - `stream_bytes_from_str` / `stream_bytes_to_str` を `ByteBuf` ベースへ変更した。
+    - `StdinStream` / `StdoutStream` の binary trait 実装を `ByteBuf` 前提へ差し替えた。
+    - doc comment に「stdin byte read は現状 `read_all` 由来の複製」という制約を追記した。
+  - `tests/stdlib/streamio.n.md`
+    - text write, binary write, stdin bytes -> stdout bytes に加え、NUL を含む binary/text roundtrip を `assert_str_eq` で検証する case に更新した。
+- [検証/けんしょう]:
+  - `node nodesrc/tests.js -i tests/stdlib/streamio.n.md -i stdlib/alloc/io.nepl -i stdlib/std/streamio.nepl -i stdlib/std/stdio.nepl --assert-io --no-stdlib --no-tree -o /tmp/tests-streamio-bytebuf.json -j 15`
+    - [結果/けっか]: `33/33 pass`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 4` -> pass
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/cli.js -i stdlib/alloc/io.nepl -i stdlib/std/stdio.nepl -i stdlib/std/streamio.nepl -o html=/tmp/streamio-doc-html`
+    - [結果/けっか]: `generated 3 html file(s)`
+- [状況/じょうきょう]:
+  - binary stream の媒体は `Vec<u8>` ではなく `ByteBuf` に固定した。
+  - `nodesrc/tests.js` で I/O を見る focused 検証は、今後 `--assert-io` を付ける前提で扱う。

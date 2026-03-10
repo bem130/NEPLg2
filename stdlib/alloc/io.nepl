@@ -1,16 +1,13 @@
 //: # io
-//: [target/たーげっと][非依存/ひいぞん]の stream [抽象/ちゅうしょう]を[集/あつ]めるライブラリ
+//: [target/たーげっと][非依存/ひいぞん]の stream [抽象/ちゅうしょう]と binary buffer を[集/あつ]めるライブラリ
 //:
 //: ### [目的/もくてき]
 //: - byte stream / text stream の[読/よ]み[書/か]き[能力/のうりょく]を trait として[分離/ぶんり]し、`std` や `kp` が[共通/きょうつう]の[入口/いりぐち]に[依存/いそん]できるようにします。
-//: - `std/streamio` や[将来/しょうらい]の file/socket/event stream facade が、同じ[値指向/あたいしこう] API で[合成/ごうせい]できる[土台/どだい]を[用意/ようい]します。
+//: - binary stream の[媒体/ばいたい]として、`fd_read` / `fd_write` にそのまま[渡/わた]せる[連続/れんぞく] byte buffer `ByteBuf` を[定義/ていぎ]します。
 //:
 //: ### [注意/ちゅうい]
 //: - ここでは syscall や descriptor を[扱/あつか]いません。[具体的/ぐたいてき]な[入出力/にゅうしゅつりょく]は `std/streamio` や `std/fs` が[担当/たんとう]します。
-//: - reboot [方針/ほうしん]に[合/あ]わせて、low-level は byte stream を[基準/きじゅん]にし、text stream は[拡張/かくちょう]として[切/き]り[分/わ]けます。
-//:
-//: ### [計算量/けいさんりょう]
-//: - helper [自体/じたい]は trait method を 1 [回/かい][転送/てんそう]するだけなので O(1) です。実[計算量/けいさんりょう]は各 impl に[依存/いそん]します。
+//: - `ByteBuf` は[所有権/しょゆうけん]を[持/も]つので `Copy` / `Clone` を[実装/じっそう]しません。
 //:
 //: neplg2:test
 //: ```neplg2
@@ -18,18 +15,17 @@
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "alloc/io" as *
-//:| #import "alloc/collections/vec" as *
 //: struct CountSink:
 //:     total <i32>
 //:
 //: impl ByteWriter for CountSink:
-//:     fn write_bytes <(CountSink,Vec<u8>)*>Result<CountSink, StdErrorKind>> (sink, bytes):
-//:         Result::Ok CountSink add get sink "total" vec_len<u8> bytes
+//:     fn write_bytes <(CountSink,ByteBuf)*>Result<CountSink, StdErrorKind>> (sink, bytes):
+//:         let n <i32> get bytes "len";
+//:         io_bytebuf_free bytes;
+//:         Result::Ok CountSink add get sink "total" n
 //:
 //: fn main <()*>i32> ():
-//:     let mut bytes0 <Vec<u8>> vec_new<u8>;
-//:     set bytes0 vec_push<u8> bytes0 <u8> cast 65;
-//:     set bytes0 vec_push<u8> bytes0 <u8> cast 66;
+//:     let bytes0 <ByteBuf> io_bytebuf_from_str "AB";
 //:     match io_write_bytes (CountSink 3) bytes0:
 //:         Result::Ok sink1:
 //:             if eq get sink1 "total" 5 0 1
@@ -39,56 +35,105 @@
 
 #indent 4
 
-#import "alloc/collections/vec" as *
 #import "alloc/diag/error" as *
+#import "alloc/string" as *
+#import "core/mem" as *
 #import "core/result" as *
+
+//: ## ByteBuf
+//: [連続/れんぞく]した raw byte buffer を[所有/しょゆう]する handle
+//:
+//: ### [目的/もくてき]
+//: - `Vec<u8>` の[内部表現/ないぶひょうげん]に[依存/いそん]せず、binary I/O の[媒体/ばいたい]を[明示的/めいじてき]に[表/あらわ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `ptr` は `len` byte の[所有領域/しょゆうりょういき]を[指/さ]します。
+//: - [使/つか]い[終/お]わったら `io_bytebuf_free` で[解放/かいほう]してください。
+struct ByteBuf:
+    ptr <MemPtr<u8>>
+    len <i32>
+
+fn io_bytebuf_empty <()->ByteBuf> ():
+    ByteBuf mem_ptr_wrap 0 0
+
+fn io_bytebuf_len <(ByteBuf)->i32> (buf):
+    get buf "len"
+
+fn io_bytebuf_free <(ByteBuf)->()> (buf):
+    let ptr <MemPtr<u8>> get buf "ptr"
+    let len <i32> get buf "len"
+    if:
+        gt len 0
+        then:
+            match dealloc_ptr<u8> ptr len:
+                Result::Ok _:
+                    ()
+                Result::Err _e:
+                    ()
+        else:
+            ()
+
+fn io_bytebuf_from_str <(str)->ByteBuf> (text):
+    let byte_len <i32> load_i32 text
+    let data <MemPtr<u8>> string_data_ptr text
+    match alloc_ptr<u8> byte_len:
+        Result::Err _e:
+            io_bytebuf_empty
+        Result::Ok out:
+            let mut i <i32> 0
+            while lt i byte_len:
+                do:
+                    let b <i32> unwrap<i32> load_u8 mem_ptr_add data i
+                    match store_u8 mem_ptr_add out i b:
+                        Result::Ok _:
+                            ()
+                        Result::Err _e:
+                            #intrinsic "unreachable" <> ()
+                    set i add i 1
+            ByteBuf out byte_len
+
+fn io_bytebuf_to_str <(ByteBuf)*>str> (buf):
+    let byte_len <i32> get buf "len"
+    let data <MemPtr<u8>> get buf "ptr"
+    match string_alloc_region byte_len:
+        Result::Err _e:
+            io_bytebuf_free buf
+            ""
+        Result::Ok region:
+            let out <MemPtr<u8>> get region "ptr"
+            let mut i <i32> 0
+            while lt i byte_len:
+                do:
+                    let b <i32> unwrap<i32> load_u8 mem_ptr_add data i
+                    match store_u8 mem_ptr_add out add 4 i b:
+                        Result::Ok _:
+                            ()
+                        Result::Err _e:
+                            #intrinsic "unreachable" <> ()
+                    set i add i 1
+            io_bytebuf_free buf
+            string_finish region byte_len
 
 //: ## ByteReader
 //: [生/なま]の[バイト列/ばいとれつ]を[読/よ]み[出/だ]す[能力/のうりょく]
-//:
-//: ### [目的/もくてき]
-//: - file / stdin / socket のような binary stream から、[変換前/へんかんまえ]の `Vec<u8>` を[取得/しゅとく]する[共通/きょうつう] trait を[与/あた]えます。
-//:
-//: ### [注意/ちゅうい]
-//: - [返/かえ]す byte [列/れつ]が「[残/のこ]り全部」なのか「1 [塊/かたまり]」なのかは各 impl の[責務/せきむ]です。この trait は[取得/しゅとく][形式/けいしき]だけを[揃/そろ]えます。
-//: - text として[解釈/かいしゃく]したい[場合/ばあい]は `TextReader` か[上位/じょうい] helper を[使/つか]います。
 trait ByteReader:
-    fn read_all_bytes <(Self)*>Result<Vec<u8>, StdErrorKind>> (stream):
+    fn read_all_bytes <(Self)*>Result<ByteBuf, StdErrorKind>> (stream):
         Result::Err StdErrorKind::IoError
 
 //: ## ByteWriter
 //: [生/なま]の[バイト列/ばいとれつ]を[書/か]き[込/こ]む[能力/のうりょく]
-//:
-//: ### [目的/もくてき]
-//: - byte stream へ `Vec<u8>` を[書/か]き[込/こ]み、[更新後/こうしんご]の handle を[返/かえ]す[値指向/あたいしこう] API を[標準化/ひょうじゅんか]します。
-//:
-//: ### [注意/ちゅうい]
-//: - [返/かえ]り[値/あたい]で handle を[受/う]け[取/と]るのは、NEPLg2 の move / pipe [記法/きほう]と[整合/せいごう]させるためです。
-//: - [部分/ぶぶん][書/か]き[込/こ]みや buffering の[扱/あつか]いは各 impl に[委/ゆだ]ねます。
 trait ByteWriter:
-    fn write_bytes <(Self, Vec<u8>)*>Result<Self, StdErrorKind>> (stream, bytes):
+    fn write_bytes <(Self, ByteBuf)*>Result<Self, StdErrorKind>> (stream, bytes):
         Result::Err StdErrorKind::IoError
 
 //: ## TextReader
 //: text として[全体/ぜんたい]を[読/よ]み[出/だ]す[能力/のうりょく]
-//:
-//: ### [目的/もくてき]
-//: - byte stream の[上/うえ]で、`str` として[扱/あつか]いたい[入口/いりぐち]を[分離/ぶんり]します。
-//:
-//: ### [注意/ちゅうい]
-//: - [文字/もじ][集合/しゅうごう]や[検証/けんしょう][方式/ほうしき]は各 impl に[依存/いそん]します。
 trait TextReader:
     fn read_all_text <(Self)*>Result<str, StdErrorKind>> (stream):
         Result::Err StdErrorKind::IoError
 
 //: ## TextWriter
 //: text を[書/か]き[込/こ]む[能力/のうりょく]
-//:
-//: ### [目的/もくてき]
-//: - [人間/にんげん][向/む]け・protocol [向/む]けの text [出力/しゅつりょく]を、binary write と[独立/どくりつ]した trait として[表現/ひょうげん]します。
-//:
-//: ### [注意/ちゅうい]
-//: - [改行/かいぎょう]の[付与/ふよ]や encoding は helper [側/がわ]でなく各 impl / [上位/じょうい] facade が[決/き]めます。
 trait TextWriter:
     fn write_str <(Self, str)*>Result<Self, StdErrorKind>> (stream, text):
         Result::Err StdErrorKind::IoError
@@ -101,42 +146,24 @@ trait Flush:
 
 //: ## Close
 //: stream を[閉/と]じる[能力/のうりょく]
-//:
-//: ### [注意/ちゅうい]
-//: - `close` は handle を[消費/しょうひ]し、`Result<(), StdErrorKind>` を[返/かえ]します。
 trait Close:
     fn close <(Self)*>Result<(), StdErrorKind>> (stream):
         Result::Err StdErrorKind::IoError
 
-//: ## io_read_all_bytes
-//: `ByteReader` を[通/とお]して byte [列/れつ]を[読/よ]み[出/だ]す
-//:
-//: ### [目的/もくてき]
-//: - [具体的/ぐたいてき] impl を[隠/かく]し、[共通/きょうつう] helper から binary read を[呼/よ]べるようにします。
-fn io_read_all_bytes <.T: ByteReader> <(.T)*>Result<Vec<u8>, StdErrorKind>> (stream):
+fn io_read_all_bytes <.T: ByteReader> <(.T)*>Result<ByteBuf, StdErrorKind>> (stream):
     ByteReader::read_all_bytes stream
 
-//: ## io_write_bytes
-//: `ByteWriter` を[通/とお]して byte [列/れつ]を[書/か]き[込/こ]む
-fn io_write_bytes <.T: ByteWriter> <(.T, Vec<u8>)*>Result<.T, StdErrorKind>> (stream, bytes):
+fn io_write_bytes <.T: ByteWriter> <(.T, ByteBuf)*>Result<.T, StdErrorKind>> (stream, bytes):
     ByteWriter::write_bytes stream bytes
 
-//: ## io_read_all_text
-//: `TextReader` を[通/とお]して text を[読/よ]み[出/だ]す
 fn io_read_all_text <.T: TextReader> <(.T)*>Result<str, StdErrorKind>> (stream):
     TextReader::read_all_text stream
 
-//: ## io_write_str
-//: `TextWriter` を[通/とお]して text を[書/か]き[込/こ]む
 fn io_write_str <.T: TextWriter> <(.T, str)*>Result<.T, StdErrorKind>> (stream, text):
     TextWriter::write_str stream text
 
-//: ## io_flush
-//: `Flush` を[通/とお]して flush する
 fn io_flush <.T: Flush> <(.T)*>Result<.T, StdErrorKind>> (stream):
     Flush::flush stream
 
-//: ## io_close
-//: `Close` を[通/とお]して close する
 fn io_close <.T: Close> <(.T)*>Result<(), StdErrorKind>> (stream):
     Close::close stream

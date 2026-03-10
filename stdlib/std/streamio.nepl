@@ -8,6 +8,7 @@
 //: ### [注意/ちゅうい]
 //: - [現在/げんざい]の `std/stdio` は error code を[外部/がいぶ]へ[公開/こうかい]していないため、`StdoutStream` / `StdinStream` の impl は[失敗/しっぱい]を[詳細化/しょうさいか]できません。[現状/げんじょう]は成功として[丸/まる]めます。
 //: - stdin の text read は `std/stdio.read_all` に[従/したが]い、[現状/げんじょう]では 4096 byte までの[固定長/こていちょう][読/よ]み[込/こ]みです。
+//: - stdin の byte read も[現在/げんざい]は `read_all` [由来/ゆらい]の内容を `ByteBuf` に[複製/ふくせい]する実装です。
 //:
 //: ### [計算量/けいさんりょう]
 //: - byte/text の[相互/そうご][変換/へんかん]は O(n)、flush / close の no-op impl は O(1) です。
@@ -19,8 +20,8 @@
 //:| #import "std/test" as *
 //:| #import "std/streamio" as *
 //: fn main <()*>i32> ():
-//:     let bytes0 <Vec<u8>> stream_bytes_from_str "ab";
-//:     assert_eq_i32 2 vec_len<u8> bytes0;
+//:     let bytes0 <ByteBuf> stream_bytes_from_str "ab";
+//:     assert_eq_i32 2 io_bytebuf_len bytes0;
 //:     match stream_close stdout_stream:
 //:         Result::Ok _:
 //:             ()
@@ -31,14 +32,9 @@
 
 #indent 4
 
-#import "alloc/collections/vec" as *
 #import "alloc/diag/error" as *
 #import "alloc/io" as *
-#import "alloc/string" as *
 #import "core/cast" as *
-#import "core/math" as *
-#import "core/mem" as *
-#import "core/option" as *
 #import "core/result" as *
 #import "core/traits/copy" as *
 #import "std/stdio" as *
@@ -95,27 +91,9 @@ fn stdout_stream <()->StdoutStream> ():
 //: `str` を byte [列/れつ]へ[変換/へんかん]する
 //:
 //: ### [目的/もくてき]
-//: - text helper と binary helper の[橋渡/はしわた]しとして、`str` を `Vec<u8>` に[詰/つ]め[替/か]えます。
-//:
-//: ### [実装/じっそう]
-//: - [内部/ないぶ]の string layout から byte [長/ちょう]と[本文/ほんぶん] pointer を[読/よ]み[出/だ]し、`Vec<u8>` へ 1 byte ずつ push します。
-//:
-//: ### [注意/ちゅうい]
-//: - UTF-8 [検証/けんしょう]や[変換/へんかん]は[行/おこな]わず、[保持/ほじ]している byte [列/れつ]をそのまま[複製/ふくせい]します。
-//:
-//: ### [計算量/けいさんりょう]
-//: - byte [長/ちょう]を n として O(n) です。
-fn stream_bytes_from_str <(str)->Vec<u8>> (text):
-    let byte_len <i32> load_i32 text
-    let data <MemPtr<u8>> string_data_ptr text
-    let mut out <Vec<u8>> vec_new<u8>
-    let mut i <i32> 0
-    while lt i byte_len:
-        do:
-            let b <i32> unwrap<i32> load_u8 mem_ptr_add data i
-            set out vec_push<u8> out <u8> cast b
-            set i add i 1
-    out
+//: - text helper と binary helper の[橋渡/はしわた]しとして、`str` を[連続/れんぞく] byte buffer へ[複製/ふくせい]します。
+fn stream_bytes_from_str <(str)->ByteBuf> (text):
+    io_bytebuf_from_str text
 
 //: ## stream_bytes_to_str
 //: byte [列/れつ]を `str` として[包/つつ]み[直/なお]す
@@ -124,41 +102,13 @@ fn stream_bytes_from_str <(str)->Vec<u8>> (text):
 //: - binary stream の[内容/ないよう]を text helper へ[渡/わた]したい[場合/ばあい]の[最小/さいしょう][変換/へんかん]を[提供/ていきょう]します。
 //:
 //: ### [実装/じっそう]
-//: - `string_alloc_region` で[長/なが]さ header [付/つ]きの[領域/りょういき]を[確保/かくほ]し、byte [列/れつ]を 1 byte ずつ[書/か]き[込/こ]んで `string_finish` します。
-//:
-//: ### [注意/ちゅうい]
-//: - UTF-8 [検証/けんしょう]は[行/おこな]いません。[任意/にんい] byte [列/れつ]をそのまま `str` [表現/ひょうげん]へ[載/の]せます。
-//: - [確保/かくほ][失敗/しっぱい]は[現状/げんじょう]の string helper に[合/あ]わせて[空文字列/からもじれつ]へ[丸/まる]めます。
-//:
-//: ### [計算量/けいさんりょう]
-//: - byte [長/ちょう]を n として O(n) です。
-fn stream_bytes_to_str <(Vec<u8>)*>str> (bytes):
-    let byte_len <i32> get bytes "len"
-    match string_alloc_region byte_len:
-        Result::Err _e:
-            ""
-        Result::Ok region:
-            let out <MemPtr<u8>> get region "ptr"
-            let in_data_raw <i32> mem_ptr_addr get bytes "data"
-            let mut i <i32> 0
-            while lt i byte_len:
-                do:
-                    let b <i32> load_u8 add in_data_raw i
-                    match store_u8 mem_ptr_add out add 4 i b:
-                        Result::Ok _:
-                            ()
-                        Result::Err _e:
-                            #intrinsic "unreachable" <> ()
-                    set i add i 1
-            match store_i32 mem_ptr_wrap mem_ptr_addr out byte_len:
-                Result::Ok _:
-                    mem_ptr_addr out
-                Result::Err _e:
-                    #intrinsic "unreachable" <> ()
+//: - UTF-8 [検証/けんしょう]は[行/おこな]わず、byte [列/れつ]をそのまま `str` [表現/ひょうげん]へ[移/うつ]します。
+fn stream_bytes_to_str <(ByteBuf)*>str> (bytes):
+    io_bytebuf_to_str bytes
 
 impl ByteReader for StdinStream:
-    fn read_all_bytes <(StdinStream)*>Result<Vec<u8>, StdErrorKind>> (_stream):
-        Result::Ok stream_bytes_from_str read_all
+    fn read_all_bytes <(StdinStream)*>Result<ByteBuf, StdErrorKind>> (_stream):
+        Result::Ok stdio_read_all_bytes
 
 impl TextReader for StdinStream:
     fn read_all_text <(StdinStream)*>Result<str, StdErrorKind>> (_stream):
@@ -169,8 +119,8 @@ impl Close for StdinStream:
         Result::Ok ()
 
 impl ByteWriter for StdoutStream:
-    fn write_bytes <(StdoutStream, Vec<u8>)*>Result<StdoutStream, StdErrorKind>> (stream, bytes):
-        print stream_bytes_to_str bytes
+    fn write_bytes <(StdoutStream, ByteBuf)*>Result<StdoutStream, StdErrorKind>> (stream, bytes):
+        stdio_write_bytes bytes
         Result::Ok stream
 
 impl TextWriter for StdoutStream:
@@ -188,12 +138,12 @@ impl Close for StdoutStream:
 
 //: ## stream_read_all_bytes
 //: `alloc/io` helper を `std/streamio` の[名前/なまえ]で[再公開/さいこうかい]する
-fn stream_read_all_bytes <.T: ByteReader> <(.T)*>Result<Vec<u8>, StdErrorKind>> (stream):
+fn stream_read_all_bytes <.T: ByteReader> <(.T)*>Result<ByteBuf, StdErrorKind>> (stream):
     io_read_all_bytes stream
 
 //: ## stream_write_bytes
 //: `alloc/io` helper を `std/streamio` の[名前/なまえ]で[再公開/さいこうかい]する
-fn stream_write_bytes <.T: ByteWriter> <(.T, Vec<u8>)*>Result<.T, StdErrorKind>> (stream, bytes):
+fn stream_write_bytes <.T: ByteWriter> <(.T, ByteBuf)*>Result<.T, StdErrorKind>> (stream, bytes):
     io_write_bytes stream bytes
 
 //: ## stream_read_all_text

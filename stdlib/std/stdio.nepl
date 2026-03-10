@@ -8,6 +8,8 @@
 #if[target=llvm]
 #extern "c" "syscall" fn __nepl_syscall <(i64,i64,i64,i64,i64,i64,i64)*>i64>
 
+#import "alloc/collections/vec" as *
+#import "alloc/io" as *
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/cast" as *
@@ -133,6 +135,63 @@ fn fd_read <(i32,i32,i32,i32)*>i32> (_fd,iovs,iovs_len,nread_ptr):
                     set done 1;
     store_i32 nread_ptr total;
     err
+
+//: ## stdio_write_bytes
+//: `ByteBuf` を stdout へ[書/か]き[出/だ]す
+//:
+//: ### [目的/もくてき]
+//: - `std/streamio` が binary write を `str` [変換/へんかん]なしで[実行/じっこう]できるようにします。
+//:
+//: ### [実装/じっそう]
+//: - `ByteBuf` の pointer/length をそのまま 1 [要素/ようそ]の iovec に[載/の]せ、`fd_write` を 1 [回/かい][呼/よ]びます。
+//:
+//: ### [注意/ちゅうい]
+//: - vector [自体/じたい]の[所有権/しょゆうけん]や[確保領域/かくほりょういき]は[呼/よ]び[出/だ]し[側/がわ]が[管理/かんり]します。
+//: - `std/stdio` の[既存/きそん] `print` と[同様/どうよう]に、[部分/ぶぶん][書/か]き[込/こ]みの[再試行/さいしこう]や[詳細/しょうさい] error [報告/ほうこく]はまだ[行/おこな]いません。
+//: - [失敗/しっぱい]しても unit を[返/かえ]して[打/う]ち[切/き]ります。error を[利用者/りようしゃ]へ[返/かえ]すのは `std/stdio` [自体/じたい]の Result [化/か]と[同時/どうじ]に[整理/せいり]する[予定/よてい]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [書/か]き[込/こ]み byte [数/すう]を n として O(n) です。
+fn stdio_write_bytes <(ByteBuf)*>()> (bytes):
+    let data <MemPtr<u8>> get bytes "ptr";
+    let data_len <i32> get bytes "len";
+    let data_ptr <i32> mem_ptr_addr data;
+    match std_alloc 8:
+        Result::Err _:
+            io_bytebuf_free bytes;
+            ()
+        Result::Ok iov:
+            match std_alloc 4:
+                Result::Err _:
+                    std_free iov 8;
+                    io_bytebuf_free bytes;
+                    ()
+                Result::Ok nwritten:
+                    store_i32 iov data_ptr;
+                    store_i32 add iov 4 data_len;
+                    store_i32 nwritten 0;
+                    let _errno <i32> fd_write 1 iov 1 nwritten;
+                    std_free nwritten 4;
+                    std_free iov 8;
+                    io_bytebuf_free bytes;
+                    ()
+
+//: ## stdio_read_all_bytes
+//: stdin の[残/のこ]りを `ByteBuf` として[読/よ]み[込/こ]む
+//:
+//: ### [目的/もくてき]
+//: - `std/streamio` の binary read [入口/いりぐち]として、`read_all` の[結果/けっか]を `ByteBuf` へ[詰/つ]め[替/か]えます。
+//:
+//: ### [実装/じっそう]
+//: - [現状/げんじょう]は `read_all` を[呼/よ]び、その `str` buffer を `ByteBuf` に[複製/ふくせい]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `read_all` と[同様/どうよう]に、[現状/げんじょう]では 4096 byte までの[固定長/こていちょう][読/よ]み[込/こ]みです。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [読/よ]み[込/こ]んだ byte [数/すう]を n として O(n) です。
+fn stdio_read_all_bytes <()*>ByteBuf> ():
+    io_bytebuf_from_str read_all
 
 //: print: 文字列を標準出力へ出す
 //:
