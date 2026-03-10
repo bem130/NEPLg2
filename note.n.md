@@ -10233,3 +10233,38 @@
   - `node nodesrc/run_doctest.js -i tutorials/getting_started/14_refactor_with_properties.n.md -n 2` -> pass
   - `node nodesrc/tests.js -i tutorials/getting_started/12_pure_function_pipeline.n.md -i tutorials/getting_started/13_type_driven_error_modeling.n.md -i tutorials/getting_started/14_refactor_with_properties.n.md --no-stdlib --no-tree -o /tmp/tests-safe-result-batch3.json -j 4`
     - [結果/けっか]: `6/6 pass`
+
+# 2026-03-10 作業メモ (`Vec<Result>` の print を test [末尾/まつび]の[明示呼/めいじよ]び[出/だ]しへ[統一/とういつ])
+
+- [目的/もくてき]:
+  - `checks_push` [中/ちゅう]や `checks_exit_code` [内部/ないぶ]で[勝手/かって]に stdout を[汚/よご]さず、test case [側/がわ]が[最後/さいご]に[明示的/めいじてき]に print する reboot [後/ご]の[流儀/りゅうぎ]へ[揃/そろ]える。
+  - test tool [側/がわ]ではなく test case [本体/ほんたい]の[記述/きじゅつ]から「[何/なに]を[出/だ]すか」を[読/よ]めるようにする。
+- [根本原因/こんぽんげんいん]:
+  - 直前の `std/test` [改修/かいしゅう]で human / machine [表示/ひょうじ]を[分離/ぶんり]したが、`checks_exit_code` から[暗黙/あんもく]に[表示/ひょうじ]していた[名残/なごり]を[完全/かんぜん]には[断/た]ち[切/き]れていなかった。
+  - `checks_print_machine` / `checks_print_human` を[別々/べつべつ]に[呼/よ]ぶ[書/か]き[方/かた]だと、test [末尾/まつび]に 1 [回/かい]だけ[明示/めいじ]して[出/だ]すという[意図/いと]が[弱/よわ]かった。
+  - さらに print helper が `Vec<Result>` を[消費/しょうひ]してしまうと、その[後/あと]で `checks_exit_code` に[渡/わた]せず、[合成/ごうせい]しにくかった。
+- [変更/へんこう]:
+  - `stdlib/std/test.nepl`
+    - `finish_checks`
+      - [表示/ひょうじ]を[完全/かんぜん]に[外/はず]し、`Vec<Result<(),str>> -> Result<(),str>` の[純粋/じゅんすい] helper に[戻/もど]した。
+    - `checks_exit_code`
+      - [内部/ないぶ]で print しない helper であることを doc comment に[明記/めいき]した。
+    - `checks_print_machine` / `checks_print_human`
+      - [表示/ひょうじ][後/ご]に[同/おな]じ `Vec<Result<(),str>>` を[返/かえ]す pipe [可能/かのう] API に[変更/へんこう]した。
+    - `checks_print_report`
+      - test [末尾/まつび]で 1 [回/かい]だけ[呼/よ]ぶ[用途/ようと]の helper を[追加/ついか]した。
+      - [内部/ないぶ]では machine summary の[表示/ひょうじ]と human [向/む]け[一覧/いちらん][表示/ひょうじ]を[順番/じゅんばん]に[行/おこな]い、その[後/あと]で `Vec<Result<(),str>>` を[返/かえ]す。
+  - `tests/stdlib/std_test_collect.n.md`
+    - `checks_print_machine |> checks_print_human` の[分割/ぶんかつ]呼び[出/だ]しをやめ、`let shown checks_print_report checks` に[統一/とういつ]した。
+    - [期待/きたい] stdout は[維持/いじ]しつつ、「print は test [末尾/まつび]で[明示的/めいじてき]に[呼/よ]ぶ」ことが[読/よ]める fixture に[変更/へんこう]した。
+  - `tutorials/getting_started/11_testing_workflow.n.md`
+    - [説明文/せつめいぶん]を「`Vec<Result<(),str>>` の[表示/ひょうじ]は test [末尾/まつび]で `checks_print_report` を[明示的/めいじてき]に[呼/よ]ぶ」へ[更新/こうしん]した。
+    - example も `let shown checks_print_report checks` に[変更/へんこう]した。
+- [設計/せっけい][判断/はんだん]:
+  - reboot の「[値中心/あたいちゅうしん]」「[明示的/めいじてき] API」「[責務/せきむ][分離/ぶんり]」に[照/て]らすと、`checks_exit_code` が stdout を[出/だ]すのは[責務過多/せきむかた]だった。
+  - print helper を pipe [可能/かのう]にしたのは、NEPLg2 の[合成/ごうせい][志向/しこう]と[整合/せいごう]し、`checks_print_report checks |> checks_exit_code` [系統/けいとう]の[書/か]き[方/かた]へも[拡張/かくちょう]しやすいためである。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/std_test_collect.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/std_test_collect.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/std_test_collect.n.md -i tutorials/getting_started/11_testing_workflow.n.md -i stdlib/std/test.nepl --no-stdlib --no-tree -o /tmp/tests-explicit-check-print.json -j 4`
+    - [結果/けっか]: `16/16 pass`

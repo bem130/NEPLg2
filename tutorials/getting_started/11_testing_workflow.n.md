@@ -26,12 +26,13 @@ fn main <()*>i32> ():
         |> checks_push assert_eq_i32 0 abs_i32 0
         |> checks_push assert_eq_i32 8 abs_i32 8
         |> checks_push assert_eq_i32 8 abs_i32 -8
-    checks_exit_code checks
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## 失敗時の読みやすい出力
 
-`test_checked` や `finish_checks` は `Result<(),str>` を返すので、`checks_exit_code` や `result_exit_code` で `main` の戻り値へ落とします。
+`test_checked` や `finish_checks` は `Result<(),str>` を返すので、`checks_exit_code` や `result_exit_code` で `main` の戻り値へ落とします。`Vec<Result<(),str>>` の[表示/ひょうじ]は[自動/じどう]ではなく、test [末尾/まつび]で `checks_print_report` を[明示的/めいじてき]に[呼/よ]びます。
 
 neplg2:test[stdio, normalize_newlines, strip_ansi]
 ret: 0

@@ -7,7 +7,7 @@
 
 [何/なに]を[確/たし]かめるか:
 - `|> push check_* ...` の形で複数検査を収集できること。
-- 失敗が無いとき `finish_checks` が machine [向/む]け summary を 1 [行/ぎょう]で出し、[続/つづ]けて human [向/む]けに各結果を色付きで列挙すること。
+- test case [側/がわ]で `checks_print_report` を[返/かえ]す[直前/ちょくぜん]に[明示的/めいじてき]に[呼/よ]ぶと、summary と human [向/む]け[一覧/いちらん]が stdout に[出/で]ること。
 - `checks_exit_code` が 0 を返すこと。
 
 neplg2:test[stdio, normalize_newlines, strip_ansi]
@@ -29,7 +29,8 @@ fn main <()*>i32> ():
         |> checks_push check_str_eq "ab" concat "a" "b"
         |> checks_push check_ok_i32 Result<i32,i32>::Ok 7
         |> checks_push check_err_i32 Result<i32,i32>::Err 5
-    checks_exit_code checks
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## std_test_collect_failure_summary_and_details
@@ -38,7 +39,7 @@ fn main <()*>i32> ():
 - 途中に失敗が含まれても後続の `check_*` が継続実行され、最後にまとめて失敗報告されることを確認します。
 
 [何/なに]を[確/たし]かめるか:
-- `finish_checks` が `[ok,err <msg>,...]` 形式の summary を出すこと。
+- test case [側/がわ]で `checks_print_report` を[返/かえ]す[直前/ちょくぜん]に[呼/よ]ぶと `[ok,err <msg>,...]` 形式の summary と human [向/む]け[一覧/いちらん]が stdout に[出/で]ること。
 - human [向/む]け表示で、すべての要素が `[index] ok / err <msg>` として並ぶこと。
 - 1 件でも `Err` があれば、`checks_exit_code` が 1 を返すこと。
 
@@ -61,5 +62,6 @@ fn main <()*>i32> ():
         |> checks_push check_eq_i32 2 3
         |> checks_push check_err_i32 Result<i32,i32>::Err 5
         |> checks_push check_str_eq "left" "right"
-    checks_exit_code checks
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```

@@ -17,11 +17,13 @@
 //:
 //: ### [実装/じっそう]
 //: - [単発/たんぱつ]の `assert_*` は[対応/たいおう]する `check_*` の[結果/けっか]を[受/う]け、`Err` のときだけ `FAIL:` [形式/けいしき]の[表示/ひょうじ]を[行/おこな]ったうえで `Result::Err` を[返/かえ]します。
-//: - [集約/しゅうやく][検査/けんさ]は `Vec<Result<(),str>>` を[保持/ほじ]し、`finish_checks` が summary と[失敗/しっぱい][詳細/しょうさい]を[表示/ひょうじ]して `Result<(),str>` に[畳/たた]みます。
+//: - [集約/しゅうやく][検査/けんさ]は `Vec<Result<(),str>>` を[保持/ほじ]し、`finish_checks` は[表示/ひょうじ]せずに `Result<(),str>` へ[畳/たた]みます。
+//: - [表示/ひょうじ]が[必要/ひつよう]な test case は `checks_print_machine` / `checks_print_human` を[明示的/めいじてき]に[呼/よ]びます。
 //:
 //: ### [注意/ちゅうい]
 //: - [失敗/しっぱい]の[最終/さいしゅう][判定/はんてい]は `result_exit_code` や `checks_exit_code` のような helper で i32 に[落/お]とし、runner [側/がわ]で[比較/ひかく]する[前提/ぜんてい]です。
 //: - [表示/ひょうじ]は `#target std` のときだけ[行/おこな]います。`std` 以外の target では `Result` だけが[返/かえ]ります。
+//: - reboot [後/ご]は「[明示的/めいじてき]に print する」[方針/ほうしん]とし、`checks_exit_code` は stdout を[汚/よご]しません。
 //: - doctest は[使/つか]い[方/かた]の[保証/ほしょう]が目的であり、境界条件や回帰確認は `tests/stdlib/*` 側で行います。
 //:
 //: ### [計算量/けいさんりょう]
@@ -620,9 +622,10 @@ fn checks_print_human_loop <(i32,i32,i32)*>()> (checks_data, n, i):
 //:
 //: ### [目的/もくてき]
 //: - `Vec<Result<(),str>>` を `[index] ok / err <msg>` の[形/かたち]で[全件/ぜんけん][表示/ひょうじ]し、[人間/にんげん]が[成功/せいこう]と[失敗/しっぱい]を[即座/そくざ]に[読/よ]めるようにします。
+//: - [表示/ひょうじ][後/ご]も[同/おな]じ `Vec<Result<(),str>>` を[返/かえ]し、その[後/あと]の `checks_exit_code` や[追加/ついか] helper と[合成/ごうせい]できるようにします。
 //:
 //: ### [実装/じっそう]
-//: - `checks` を temporary memory に[保存/ほぞん]し、raw data を `checks_print_human_loop` へ[渡/わた]します。
+//: - `checks` を temporary memory に[保存/ほぞん]し、raw data を `checks_print_human_loop` へ[渡/わた]したあと、[同/おな]じ `Vec<Result<(),str>>` を[読/よ]み[戻/もど]して[返/かえ]します。
 //:
 //: ### [注意/ちゅうい]
 //: - `#target std` [専用/せんよう]です。
@@ -632,31 +635,85 @@ fn checks_print_human_loop <(i32,i32,i32)*>()> (checks_data, n, i):
 //: - [時間/じかん]: O(n + s)（s は[全/すべ]ての msg [長/なが]さの[合計/ごうけい]）
 //: - [空間/くうかん]: O(n)（[再帰/さいき]）
 #if[target=std]
-fn checks_print_human <(Vec<Result<(),str>>)*>()> (checks):
+fn checks_print_human <(Vec<Result<(),str>>)*>Vec<Result<(),str>>> (checks):
     let checks_mem <i32> alloc_raw size_of<Vec<Result<(),str>>>;
     store<Vec<Result<(),str>>> checks_mem checks;
     let checks_len <i32> get load<Vec<Result<(),str>>> checks_mem "len";
     let checks_data <i32> mem_ptr_addr get load<Vec<Result<(),str>>> checks_mem "data";
-    checks_print_human_loop checks_data checks_len 0
+    checks_print_human_loop checks_data checks_len 0;
+    let out <Vec<Result<(),str>>> load<Vec<Result<(),str>>> checks_mem;
     dealloc_raw checks_mem size_of<Vec<Result<(),str>>>;
+    out
+
+//: ## checks_print_machine
+//: `Vec<Result<(),str>>` を machine [向/む]け summary として[表示/ひょうじ]する
+//:
+//: ### [目的/もくてき]
+//: - test case [側/がわ]で summary だけを stdout へ[明示的/めいじてき]に[出/だ]したいときに[使/つか]います。
+//: - [表示/ひょうじ][後/ご]も[同/おな]じ `Vec<Result<(),str>>` を[返/かえ]し、その[後/あと]の[処理/しょり]へ[繋/つな]げられるようにします。
+//:
+//: ### [実装/じっそう]
+//: - `checks` を temporary memory に[保存/ほぞん]し、`checks_summary` を[計算/けいさん]して[失敗/しっぱい]があるときは `FAIL: ` [付き/つき]、なければ `Checked ` [付き/つき]で 1 [行/ぎょう][表示/ひょうじ]します。
+//: - [最後/さいご]に[同/おな]じ `Vec<Result<(),str>>` を[読/よ]み[戻/もど]して[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `finish_checks` や `checks_exit_code` は[自動/じどう]で[表示/ひょうじ]しません。stdout が[必要/ひつよう]な test case ではこの helper を[明示的/めいじてき]に[呼/よ]んでください。
+//: - `#target std` [専用/せんよう]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(n^2)（`checks_summary` の[構築/こうちく]を[含/ふく]む）
+//: - [空間/くうかん]: O(n)
+#if[target=std]
+fn checks_print_machine <(Vec<Result<(),str>>)*>Vec<Result<(),str>>> (checks):
+    let checks_mem <i32> alloc_raw size_of<Vec<Result<(),str>>>;
+    store<Vec<Result<(),str>>> checks_mem checks;
+    let summary <str> checks_summary load<Vec<Result<(),str>>> checks_mem;
+    if:
+        checks_has_err load<Vec<Result<(),str>>> checks_mem
+        then:
+            test_print_fail summary
+        else:
+            test_checked summary;
+    let out <Vec<Result<(),str>>> load<Vec<Result<(),str>>> checks_mem;
+    dealloc_raw checks_mem size_of<Vec<Result<(),str>>>;
+    out
+
+//: ## checks_print_report
+//: test [終了時/しゅうりょうじ]に summary と human [向/む]け[一覧/いちらん]を[まとめて/まとめて][表示/ひょうじ]する
+//:
+//: ### [目的/もくてき]
+//: - `checks_push` [中/ちゅう]には[何/なに]も print せず、test [本体/ほんたい]の[末尾/まつび]で 1 [回/かい]だけ[明示的/めいじてき]に[結果/けっか]を[出/だ]したい[場合/ばあい]の[標準/ひょうじゅん] helper を[提供/ていきょう]します。
+//:
+//: ### [実装/じっそう]
+//: - `checks_print_machine` の[後/あと]に `checks_print_human` を[呼/よ]び、[同/おな]じ `Vec<Result<(),str>>` を[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `checks_exit_code` とは[別/べつ]です。stdout が[必要/ひつよう]な test case だけ、`return` [直前/ちょくぜん]でこの helper を[呼/よ]んでください。
+//: - `#target std` [専用/せんよう]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `checks_print_machine` と `checks_print_human` の[合計/ごうけい]に[準/じゅん]じます。
+#if[target=std]
+fn checks_print_report <(Vec<Result<(),str>>)*>Vec<Result<(),str>>> (checks):
+    checks
+    |> checks_print_machine
+    |> checks_print_human
 
 //: ## finish_checks
-//: [複数/ふくすう][検査/けんさ]をまとめて[報告/ほうこく]し、`Result<(),str>` に[畳/たた]む
+//: [複数/ふくすう][検査/けんさ]をまとめて `Result<(),str>` に[畳/たた]む
 //:
 //: ### [目的/もくてき]
 //: - `Vec<Result<(),str>>` として[集約/しゅうやく]した[検査/けんさ]を[最後/さいご]にまとめて[評価/ひょうか]します。
-//: - [途中/とちゅう]の[検査/けんさ]は[継続/けいぞく]しつつ、[最後/さいご]に[要約/ようやく]と[各/かく][失敗/しっぱい][内容/ないよう]を[表示/ひょうじ]して[一括/いっかつ][失敗/しっぱい]できます。
+//: - [途中/とちゅう]の[検査/けんさ]は[継続/けいぞく]しつつ、[最後/さいご]に[表示/ひょうじ]なしで[成功/せいこう] / [失敗/しっぱい]を[値/あたい]として[得/え]られます。
 //:
 //: ### [実装/じっそう]
-//: - まず `checks_summary` で machine [向/む]け summary を[作/つく]ります。
-//: - [失敗/しっぱい]が 1 [件/けん]でもあれば `FAIL: <summary>` を[表示/ひょうじ]し、その[後/あと]に `checks_print_human` で[全件/ぜんけん]を[色付/いろづ]き[表示/ひょうじ]して `Result::Err summary` を[返/かえ]します。
-//: - [失敗/しっぱい]がなければ `Checked <summary>` を[表示/ひょうじ]し、その[後/あと]に `checks_print_human` で[全件/ぜんけん]を[色付/いろづ]き[表示/ひょうじ]して `Result::Ok ()` を[返/かえ]します。
+//: - `checks_summary` で machine [向/む]け summary を[作/つく]ります。
+//: - [失敗/しっぱい]が 1 [件/けん]でもあれば `Result::Err summary`、なければ `Result::Ok ()` を[返/かえ]します。
 //: - move model に[合/あ]わせ、[入力/にゅうりょく]の `Vec<Result<(),str>>` は 1 [回/かい]だけ memory に[保存/ほぞん]してから helper へ[渡/わた]します。
 //:
 //: ### [注意/ちゅうい]
 //: - [想定/そうてい][用途/ようと]は `<Vec<Result<(),str>>> new |> push check_* ...` のような[段階的/だんかいてき][収集/しゅうしゅう]です。
-//: - [失敗/しっぱい]の[添字/そえじ]は 0 [始/はじ]まりで、`checks_print_human` の[表示/ひょうじ]と[対応/たいおう]します。
-//: - [標準/ひょうじゅん][出力/しゅつりょく]への[表示/ひょうじ]は `#target std` のときのみ[行/おこな]います。
+//: - stdout へ[出/だ]したい[場合/ばあい]は `checks_print_report` などを test case [側/がわ]で[明示的/めいじてき]に[呼/よ]んでください。
 //: - runner [連携/れんけい]で[終了/しゅうりょう] code が[必要/ひつよう]な[場合/ばあい]は `checks_exit_code` を[使/つか]います。
 //:
 //: ### [計算量/けいさんりょう]
@@ -686,15 +743,9 @@ fn finish_checks <(Vec<Result<(),str>>)*>Result<(),str>> (checks):
     if:
         checks_has_err load<Vec<Result<(),str>>> checks_mem
         then:
-            #if[target=std]
-            test_print_fail summary
-            checks_print_human load<Vec<Result<(),str>>> checks_mem
             dealloc_raw checks_mem size_of<Vec<Result<(),str>>>
             Result<(),str>::Err summary
         else:
-            #if[target=std]
-            test_checked summary
-            checks_print_human load<Vec<Result<(),str>>> checks_mem
             dealloc_raw checks_mem size_of<Vec<Result<(),str>>>
             Result<(),str>::Ok ()
 
@@ -708,7 +759,7 @@ fn finish_checks <(Vec<Result<(),str>>)*>Result<(),str>> (checks):
 //: - `Ok` なら 0、`Err` なら 1 を[返/かえ]します。
 //:
 //: ### [注意/ちゅうい]
-//: - [詳細/しょうさい]な[失敗/しっぱい][内容/ないよう]の[表示/ひょうじ]は `test_fail` や `finish_checks` が[担当/たんとう]します。
+//: - [詳細/しょうさい]な[失敗/しっぱい][内容/ないよう]の[表示/ひょうじ]は `test_fail` や `checks_print_*` helper が[担当/たんとう]します。
 //:
 //: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
@@ -730,7 +781,7 @@ fn result_exit_code <(Result<(),str>)->i32> (r):
 //: - `finish_checks` を[呼/よ]んでから `result_exit_code` へ[渡/わた]します。
 //:
 //: ### [注意/ちゅうい]
-//: - summary や `FAIL:` [表示/ひょうじ]は `finish_checks` [側/がわ]で[行/おこな]われます。
+//: - stdout を[伴/ともな]う[表示/ひょうじ]は[行/おこな]いません。必要なら test case [側/がわ]で `checks_print_machine` / `checks_print_human` を[呼/よ]んでください。
 //:
 //: ### [計算量/けいさんりょう]
 //: - `finish_checks` に[準/じゅん]じます。
