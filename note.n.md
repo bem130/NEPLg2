@@ -9346,3 +9346,27 @@
 - [状況/じょうきょう]:
   - `Queue` / `RingBuffer` の利用例は `uwok` を使った短い pipe 形で安定して書ける状態になった。
   - `queue.nepl` は内容だけでなく、見出し階層と節構成も現行の doc comment policy に沿う形へ更新した。
+# 2026-03-10 作業メモ (vec_data_len を `.Pair` から explicit struct へ移行)
+
+- [目的/もくてき]:
+  - `tests/stdlib/sort.n.md::doctest#3` の `use of moved value: s` を、`.Pair` [返却/へんきゃく]に[依存/いそん]した API [設計/せっけい]から[解消/かいしょう]する。
+  - `Vec` [系/けい]の doc comment を[現行/げんこう] policy に[合/あ]わせる。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/vec.nepl`
+    - `VecDataLen<.T>` struct を[追加/ついか]。
+    - `vec_data_len` の[返/かえ]り[値/あたい]を `.Pair` から `VecDataLen<.T>` に[変更/へんこう]。
+    - `vec_data_len` の doc comment を `##` / `###` と `[目的/もくてき]` / `[使用例/しようれい]` / `[実装/じっそう]` / `[注意/ちゅうい]` / `[計算量/けいさんりょう]` [構成/こうせい]へ[更新/こうしん]。
+  - `tests/stdlib/sort.n.md`
+    - `get s 0` / `get s 1` を `get s "data"` / `get s "len"` へ[更新/こうしん]。
+    - `data` は `MemPtr<.T>` なので `mem_ptr_addr` を[通/とお]す[形/かたち]へ[変更/へんこう]。
+  - `nodesrc/README.n.md`
+    - `tests.js` / `run_doctest.js` / `run_test.js` / `cli.js` / `compiler_loader.js` の[目的別/もくてきべつ][使/つか]い[分/わ]けを[追加/ついか]。
+- [理由/りゆう]:
+  - `.Pair` は generic [関数/かんすう][返/へん]り[値/あたい]と field `get` の[組/く]み[合/あ]わせで move-check の[揺/ゆ]れを[起/お]こしやすい。
+  - `VecDataLen<.T>` のような[明示的/めいじてき] struct に[置/お]き[換/か]えると、field [名/めい]・doc comment・tests の[意味/いみ]が[揃/そろ]う。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 3` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 4` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 12` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 13` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 9` -> pass
