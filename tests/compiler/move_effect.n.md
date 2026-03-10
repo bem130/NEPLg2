@@ -93,7 +93,7 @@ fn main <()->i32> ():
     bump_local 40
 ```
 
-## 全フィールドが Copy の struct は再利用できる
+## Copy impl がある struct は再利用できる
 
 neplg2:test
 ret: 60
@@ -103,11 +103,20 @@ ret: 60
 #target core
 
 #import "core/math" as *
+#import "core/traits/copy" as *
 #import "core/field" as *
 
 struct Point:
     x <i32>
     y <i32>
+
+impl Clone for Point:
+    fn clone <(Point)->Point> (x):
+        x
+
+impl Copy for Point:
+    fn copy_mark <(Point)->Point> (x):
+        x
 
 fn sum_point <(Point)->i32> (p):
     add get p "x" get p "y"
@@ -118,7 +127,7 @@ fn main <()->i32> ():
     add sum_point p1 sum_point p2
 ```
 
-## `Apply` された generic struct も Copy 判定される
+## Copy impl がある具体化済み generic struct は再利用できる
 
 neplg2:test
 ret: 6
@@ -128,11 +137,20 @@ ret: 6
 #target core
 
 #import "core/math" as *
+#import "core/traits/copy" as *
 #import "core/field" as *
 
 struct Pair<.T>:
     a <.T>
     b <.T>
+
+impl Clone for Pair<i32>:
+    fn clone <(Pair<i32>)->Pair<i32>> (x):
+        x
+
+impl Copy for Pair<i32>:
+    fn copy_mark <(Pair<i32>)->Pair<i32>> (x):
+        x
 
 fn sum_pair <(Pair<i32>)->i32> (p):
     add get p "a" get p "b"
@@ -143,7 +161,7 @@ fn main <()->i32> ():
     add sum_pair q1 sum_pair q2
 ```
 
-## payload が Copy の enum は再利用できる
+## Copy impl がある enum は再利用できる
 
 neplg2:test
 ret: 14
@@ -153,10 +171,19 @@ ret: 14
 #target core
 
 #import "core/math" as *
+#import "core/traits/copy" as *
 
 enum Score:
     Single <i32>
     Zero
+
+impl Clone for Score:
+    fn clone <(Score)->Score> (x):
+        x
+
+impl Copy for Score:
+    fn copy_mark <(Score)->Score> (x):
+        x
 
 fn as_i32 <(Score)->i32> (s):
     match s:
@@ -237,6 +264,7 @@ diag_id: 3049
 #entry main
 #indent 4
 #target core
+#no_prelude
 
 trait Clone:
     #capability clone
@@ -248,11 +276,11 @@ trait Copy:
     fn copy_mark <(Self)->Self> (x):
         x
 
-struct RegionToken:
+struct LocalToken:
     raw <(i32)->i32>
 
-impl Copy for RegionToken:
-    fn copy_mark <(RegionToken)->RegionToken> (x):
+impl Copy for LocalToken:
+    fn copy_mark <(LocalToken)->LocalToken> (x):
         x
 
 fn main <()->i32> ():
@@ -267,6 +295,7 @@ diag_id: 3050
 #entry main
 #indent 4
 #target core
+#no_prelude
 
 trait Clone:
     #capability clone
@@ -294,6 +323,7 @@ ret: 0
 #entry main
 #indent 4
 #target core
+#no_prelude
 
 trait Clone:
     #capability clone
@@ -317,7 +347,7 @@ fn main <()->i32> ():
     0
 ```
 
-## Copy trait 有効時は i64 も impl がなければ move 扱い
+## Copy trait 有効時は copy-eligible 型も impl がなければ move 扱い
 
 neplg2:test[compile_fail]
 diag_id: 3053
@@ -325,7 +355,7 @@ diag_id: 3053
 #entry main
 #indent 4
 #target core
-#import "core/cast" as *
+#no_prelude
 
 trait Clone:
     #capability clone
@@ -337,18 +367,17 @@ trait Copy:
     fn copy_mark <(Self)->Self> (x):
         x
 
-impl Clone for i64:
-    fn clone <(i64)->i64> (x):
-        x
+struct Size:
+    n <i32>
 
 fn main <()->i32> ():
-    let a <i64> cast 10
-    let b <i64> a
-    let c <i64> a
+    let a <Size> Size 10
+    let b <Size> a
+    let c <Size> a
     0
 ```
 
-## Copy trait 有効時でも i64 に Clone+Copy があれば再利用できる
+## Copy trait 有効時でも copy-eligible 型に Clone+Copy があれば再利用できる
 
 neplg2:test
 ret: 0
@@ -356,7 +385,7 @@ ret: 0
 #entry main
 #indent 4
 #target core
-#import "core/cast" as *
+#no_prelude
 
 trait Clone:
     #capability clone
@@ -368,18 +397,21 @@ trait Copy:
     fn copy_mark <(Self)->Self> (x):
         x
 
-impl Clone for i64:
-    fn clone <(i64)->i64> (x):
+struct Size:
+    n <i32>
+
+impl Clone for Size:
+    fn clone <(Size)->Size> (x):
         x
 
-impl Copy for i64:
-    fn copy_mark <(i64)->i64> (x):
+impl Copy for Size:
+    fn copy_mark <(Size)->Size> (x):
         x
 
 fn main <()->i32> ():
-    let a <i64> cast 10
-    let b <i64> a
-    let c <i64> a
+    let a <Size> Size 10
+    let b <Size> a
+    let c <Size> a
     0
 ```
 
@@ -418,11 +450,11 @@ trait Marker:
     fn tag <(Self)->Self> (x):
         x
 
-struct RegionToken:
+struct LocalToken:
     raw <(i32)->i32>
 
-impl Marker for RegionToken:
-    fn tag <(RegionToken)->RegionToken> (x):
+impl Marker for LocalToken:
+    fn tag <(LocalToken)->LocalToken> (x):
         x
 
 fn main <()->i32> ():
@@ -468,7 +500,7 @@ fn main <()->i32> ():
     0
 ```
 
-## RegionToken は非Copyとして move 後再利用不可
+## LocalToken は非Copyとして move 後再利用不可
 
 neplg2:test[compile_fail]
 diag_id: 3053
@@ -477,19 +509,19 @@ diag_id: 3053
 #indent 4
 #target core
 
-struct RegionToken:
+struct LocalToken:
     raw <(i32)->i32>
 
 fn token_id <(i32)->i32> (x):
     x
 
-fn consume <(RegionToken)->i32> (_t):
-    1
+fn consume <(LocalToken)->i32> (_t):
+    0
 
-fn main <()->i32> ():
-    let t <RegionToken> RegionToken @token_id
+fn main <()->()> ():
+    let t <LocalToken> LocalToken @token_id
     consume t
-    consume t
+    let u <LocalToken> t
 ```
 
 ## move 後の borrow は拒否
@@ -501,20 +533,16 @@ diag_id: 3063
 #indent 4
 #target core
 
-struct RegionToken:
+struct LocalToken:
     raw <(i32)->i32>
 
 fn token_id <(i32)->i32> (x):
     x
 
-fn consume <(RegionToken)->i32> (_t):
-    1
-
-fn main <()->i32> ():
-    let t <RegionToken> RegionToken @token_id
-    consume t
-    let r &t
-    0
+fn main <()->()> ():
+    let t <LocalToken> LocalToken @token_id
+    let u <LocalToken> t
+    let r <&LocalToken> &t
 ```
 
 ## 分岐で move された可能性のある値の使用は拒否
@@ -526,17 +554,17 @@ diag_id: 3054
 #indent 4
 #target core
 
-struct RegionToken:
+struct LocalToken:
     raw <(i32)->i32>
 
 fn token_id <(i32)->i32> (x):
     x
 
-fn consume <(RegionToken)->i32> (_t):
-    1
+fn consume <(LocalToken)->i32> (_t):
+    0
 
 fn main <()->i32> ():
-    let t <RegionToken> RegionToken @token_id
+    let t <LocalToken> LocalToken @token_id
     if true:
         then:
             consume t

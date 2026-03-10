@@ -9370,3 +9370,31 @@
   - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 12` -> pass
   - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 13` -> pass
   - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 9` -> pass
+
+# 2026-03-10 作業メモ (`move_effect` の reboot 追従と prelude 衝突の切り分け)
+
+- [目的/もくてき]:
+  - `tests/compiler/move_effect.n.md` を reboot 後の `Copy` / `Clone` 能力モデルへ合わせる。
+  - `tests/compiler/prelude_copy.n.md` と `tests/compiler/move_effect.n.md` の focused 実行を安定化し、compiler 側の不具合と test 側の前提ずれを切り分ける。
+- [根本原因/こんぽんげんいん]:
+  - `Copy` の再利用可否を structural な既定値として書いていた case が残っており、reboot 後の「明示的な trait impl が唯一の根拠」という仕様とずれていた。
+  - `#target core` の通常 prelude では `core/mem` の `RegionToken<.T>` が見えているため、test 側でローカル定義した `RegionToken` と衝突していた。
+  - その結果、`impl ... for RegionToken` が generic な prelude 側型へ解決され、`D3084` や stack/return 系の別診断に吸われていた。
+- [変更/へんこう]:
+  - `tests/compiler/move_effect.n.md`
+    - `Point` / `Pair<i32>` / `Score` の再利用ケースを、明示的な `Clone` / `Copy` impl 前提の説明と source に更新した。
+    - local capability 検証 (`Copy` / `Clone` を test 内で定義する case) は `#no_prelude` を付け、prelude から独立した最小環境で確認する形へ揃えた。
+    - `i64` の local capability case は `core/cast` 依存を避けるため、`Size` struct を使う形へ置き換えた。
+    - prelude と衝突していた local `RegionToken` は `LocalToken` へ改名し、通常 prelude 下でも期待どおりに `D3053` / `D3063` / `D3054` を観測できるようにした。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/run_doctest.js -i tests/compiler/move_effect.n.md -n 11` -> pass (`D3049`)
+  - `node nodesrc/run_doctest.js -i tests/compiler/move_effect.n.md -n 17` -> pass
+  - `node nodesrc/run_doctest.js -i tests/compiler/move_effect.n.md -n 20` -> pass (`D3053`)
+  - `node nodesrc/run_doctest.js -i tests/compiler/move_effect.n.md -n 21` -> pass (`D3063`)
+  - `node nodesrc/run_doctest.js -i tests/compiler/move_effect.n.md -n 22` -> pass (`D3054`)
+  - `node nodesrc/tests.js -i tests/compiler/prelude_copy.n.md -i tests/compiler/move_effect.n.md --no-stdlib --no-tree -o /tmp/tests-prelude-copy-move-effect.json -j 15`
+    - [結果/けっか]: `30/30 pass`
+- [状況/じょうきょう]:
+  - 今回の修正では compiler 本体は変更していない。
+  - 残っていた failure は reboot 後仕様に対する test 側の前提ずれと、prelude で露出する generic `RegionToken<.T>` との名前衝突が原因だった。
