@@ -28,9 +28,9 @@ fn main <()*>i32> ():
 
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 10 sum
-    let _done <Result<(),str>> test_checked "while basic";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 10 sum
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## block は「最後の式の値」を返す
@@ -56,7 +56,7 @@ fn main <()*>i32> ():
 
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 7 x
-    let _done <Result<(),str>> test_checked "block expression";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 7 x
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```

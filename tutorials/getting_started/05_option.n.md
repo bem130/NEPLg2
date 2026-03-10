@@ -24,17 +24,17 @@ fn main <()*>i32> ():
 
     match a:
         Option::Some v:
-            set checks checks_push checks assert_eq_i32 10 v
+            set checks checks_push checks check_eq_i32 10 v
         Option::None:
-            set checks checks_push checks test_fail "a was None"
+            set checks checks_push checks Result<(),str>::Err "a was None"
 
     match b:
         Option::Some v:
-            set checks checks_push checks test_fail "b was Some"
+            set checks checks_push checks Result<(),str>::Err "b was Some"
         Option::None:
-            ()
-    let _done <Result<(),str>> test_checked "option match";
-    checks_exit_code checks
+            set checks checks_push checks Result<(),str>::Ok ()
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## `option_unwrap_or` で既定値を使う
@@ -57,8 +57,8 @@ fn main <()*>i32> ():
     let none_v <Option<i32>> none<i32>
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 77 option_unwrap_or<i32> some_v 0
-        |> checks_push assert_eq_i32 123 option_unwrap_or<i32> none_v 123
-    let _done <Result<(),str>> test_checked "option_unwrap_or";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 77 option_unwrap_or<i32> some_v 0
+        |> checks_push check_eq_i32 123 option_unwrap_or<i32> none_v 123
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```

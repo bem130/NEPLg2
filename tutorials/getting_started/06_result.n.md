@@ -23,18 +23,18 @@ fn main <()*>i32> ():
 
     match a:
         Result::Ok v:
-            set checks checks_push checks assert_eq_i32 42 v
+            set checks checks_push checks check_eq_i32 42 v
         Result::Err e:
-            set checks checks_push checks test_fail "a was Err"
+            set checks checks_push checks Result<(),str>::Err "a was Err"
 
     match b:
         Result::Ok v:
-            set checks checks_push checks test_fail "b was Ok"
+            set checks checks_push checks Result<(),str>::Err "b was Ok"
         Result::Err e:
-            set checks checks_push checks assert_str_eq "oops" e
+            set checks checks_push checks check_str_eq "oops" e
 
-    let _done <Result<(),str>> test_checked "result match";
-    checks_exit_code checks
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## Result を返す関数の例
@@ -59,14 +59,14 @@ fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new
     match safe_div2 2:
         Result::Ok v:
-            set checks checks_push checks assert_eq_i32 5 v
+            set checks checks_push checks check_eq_i32 5 v
         Result::Err e:
-            set checks checks_push checks test_fail "expected Ok"
+            set checks checks_push checks Result<(),str>::Err "expected Ok"
     match safe_div2 0:
         Result::Ok v:
-            set checks checks_push checks test_fail "expected Err"
+            set checks checks_push checks Result<(),str>::Err "expected Err"
         Result::Err e:
-            set checks checks_push checks assert_str_eq "division by zero" e
-    let _done <Result<(),str>> test_checked "result in function";
-    checks_exit_code checks
+            set checks checks_push checks check_str_eq "division by zero" e
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```

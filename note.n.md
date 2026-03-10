@@ -10493,3 +10493,27 @@
   - `node nodesrc/run_doctest.js -i stdlib/tests/error.n.md -n 3` -> pass
   - `node nodesrc/tests.js -i stdlib/tests/error.n.md --no-stdlib --no-tree -o /tmp/tests-error-explicit.json -j 4`
     - [結果/けっか]: `3/3 pass`
+
+# 2026-03-10 作業メモ (`Option` / `Result` / `while` tutorial を explicit report 流儀へ追従)
+
+- [目的/もくてき]:
+  - `tutorials/getting_started/05_option.n.md`, `tutorials/getting_started/06_result.n.md`, `tutorials/getting_started/07_while_and_block.n.md` を、[現行/げんこう]の explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - [入門/にゅうもん] chapter に[残/のこ]っている `test_checked` / `test_fail` [中心/ちゅうしん]の[旧書法/きゅうしょほう]を[減/へ]らし、「[最後/さいご]に[明示 print/めいじ print]」する reboot [後/ご] test [方針/ほうしん]を tutorial [全体/ぜんたい]へ[浸透/しんとう]させる。
+- [根本原因/こんぽんげんいん]:
+  - 3 chapter とも `Vec<Result<(),str>>` は[導入/どうにゅう]されていたが、[途中/とちゅう]の `test_fail` と[末尾/まつび]の `test_checked` に[依存/いぞん]する[過渡期/かとき]の[形/かたち]が[残/のこ]っていた。
+  - とくに `Option` / `Result` の[入門/にゅうもん]章で old style を[残/のこ]すと、利用者に「runner が[勝手/かって]に[成功/せいこう]を[表示/ひょうじ]する」ように[見/み]えてしまい、[現行/げんこう]方針と[齟齬/そご]が[生/しょう]じる。
+- [変更/へんこう]:
+  - `tutorials/getting_started/05_option.n.md`
+    - `Some` / `None` [分岐/ぶんき]の[確認/かくにん]を `check_eq_i32` / `Result::Err` / `Result::Ok` に[揃/そろ]え、[末尾/まつび]で `checks_print_report` を[呼/よ]ぶ[形/かたち]へ[変更/へんこう]した。
+    - `option_unwrap_or` の case も `check_eq_i32` + explicit report へ[変更/へんこう]した。
+  - `tutorials/getting_started/06_result.n.md`
+    - `Ok` / `Err` [分岐/ぶんき]の[確認/かくにん]を `check_eq_i32` / `check_str_eq` / `Result::Err` に[揃/そろ]えた。
+    - `safe_div2` の example も[同様/どうよう]に、`checks_print_report` + `checks_exit_code` へ[移行/いこう]した。
+  - `tutorials/getting_started/07_while_and_block.n.md`
+    - `while` と `block` の[確認/かくにん]を `check_eq_i32` + explicit report へ[変更/へんこう]した。
+- [設計/せっけい][判断/はんだん]:
+  - これらは[言語/げんご][基本/きほん]の chapter なので、test helper の[記述量/きじゅつりょう]は[増/ふ]やしすぎず、[末尾/まつび]の report だけを[明示/めいじ]する[最小/さいしょう]変更に[留/とど]めた。
+  - `test_fail` を helper として[使/つか]い[続/つづ]けるより、`Result::Err` を[直接/ちょくせつ][積/つ]むほうが「[失敗/しっぱい]も[値/あたい]である」という reboot [後/ご]の test [哲学/てつがく]に[沿/そ]うと[判断/はんだん]した。
+- [検証/けんしょう]:
+  - `node nodesrc/tests.js -i tutorials/getting_started/05_option.n.md -i tutorials/getting_started/06_result.n.md -i tutorials/getting_started/07_while_and_block.n.md --no-stdlib --no-tree -o /tmp/tests-tutorial-option-result-while.json -j 4`
+    - [結果/けっか]: `6/6 pass`
