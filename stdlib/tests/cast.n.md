@@ -3,6 +3,7 @@
 ## cast_main
 
 neplg2:test
+ret: 0
 ```neplg2
 
 #entry main
@@ -10,26 +11,34 @@ neplg2:test
 #target std
 
 #import "core/cast" as *
+#import "core/result" as *
 #import "std/test" as *
 
-fn main <()*> ()> ():
-    // Test bool to i32 conversion
-    assert_eq_i32 1 <i32> cast true;
-    assert_eq_i32 0 <i32> cast false;
-    assert_eq_i32 1 cast true;
-    assert_eq_i32 0 cast false;
-
-    // Test i32 to bool conversion
-    assert <bool> cast 1;
-    assert <bool> cast 42;
-    assert_ne true <bool> cast 0;
-    assert cast 1;
-    assert cast 42;
-    assert_ne true cast 0;
-
-    // Test i32 <-> u8 conversion
+fn main <()*>i32> ():
+    let bti_true_i32 <i32> <i32> cast true;
+    let bti_false_i32 <i32> <i32> cast false;
+    let inferred_true_i32 <i32> cast true;
+    let inferred_false_i32 <i32> cast false;
+    let i1_as_bool <bool> <bool> cast 1;
+    let i42_as_bool <bool> <bool> cast 42;
+    let i0_as_bool <bool> <bool> cast 0;
+    let cast_1_bool <bool> cast 1;
+    let cast_42_bool <bool> cast 42;
+    let cast_0_bool <bool> cast 0;
     let b <u8> cast 222;
-    assert_eq_i32 222 cast b;
-
-    ()
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 1 bti_true_i32
+        |> checks_push assert_eq_i32 0 bti_false_i32
+        |> checks_push assert_eq_i32 1 inferred_true_i32
+        |> checks_push assert_eq_i32 0 inferred_false_i32
+        |> checks_push assert i1_as_bool
+        |> checks_push assert i42_as_bool
+        |> checks_push assert_ne true i0_as_bool
+        |> checks_push assert cast_1_bool
+        |> checks_push assert cast_42_bool
+        |> checks_push assert_ne true cast_0_bool
+        |> checks_push assert_eq_i32 222 cast b
+    let _done <Result<(),str>> test_checked "cast conversions";
+    checks_exit_code checks
 ```

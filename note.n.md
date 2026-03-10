@@ -10109,3 +10109,43 @@
   - `node nodesrc/run_doctest.js -i tutorials/getting_started/06_result.n.md -n 2` -> pass
   - `node nodesrc/tests.js -i stdlib/core/result.nepl -i stdlib/core/option.nepl -i stdlib/tests/result.n.md -i stdlib/tests/option.n.md -i tutorials/getting_started/05_option.n.md -i tutorials/getting_started/06_result.n.md --no-stdlib --no-tree -o /tmp/tests-option-result-safe.json -j 4`
     - [結果/けっか]: `12/12 pass`
+
+# 2026-03-10 作業メモ (tutorial 初期章と stdlib fixture の safe `Result` 化を継続)
+
+- [目的/もくてき]:
+  - `std/test` の trap [前提/ぜんてい]を[廃止/はいし]した reboot [後/ご]の test [流儀/りゅうぎ]に[合/あ]わせて、tutorial [初期/しょき][章/しょう]と `stdlib/tests` の[小/ちい]さい fixture [群/ぐん]を `ret:` + `checks_exit_code` [前提/ぜんてい]へ[移行/いこう]する。
+  - [部分/ぶぶん] test を[小分/こわ]けにして、[重/おも]い[全体/ぜんたい] test を[頻繁/ひんぱん]に[回/まわ]さずに stale case を[収束/しゅうそく]させる。
+- [根本原因/こんぽんげんいん]:
+  - `tutorials/getting_started/02_numbers_and_variables.n.md` と `tutorials/getting_started/03_functions.n.md` が、`assert_*` を unit-return [前提/ぜんてい]で[直列/ちょくれつ][実行/じっこう]し、`test_checked` も[副作用/ふくさよう]だけの helper として[扱/あつか]う[古/ふる]い[書/か]き[方/かた]のままだった。
+  - `stdlib/tests/cast.n.md`, `stdlib/tests/math.n.md`, `stdlib/tests/vec.n.md` も[同様/どうよう]に unit-return [前提/ぜんてい]で、`vec` の `None` [分岐/ぶんき]では `test_fail` を[即時/そくじ][実行/じっこう]する[構造/こうぞう]が[残/のこ]っていた。
+  - `cast` fixture は pipe [中/ちゅう]に `cast` を[直接/ちょくせつ][埋/う]め[込/こ]んでいたため、safe `Result` 化により `checks_push` と[組/く]み[合/あ]わさったとき overload [解決/かいけつ]が[崩/くず]れる[箇所/かしょ]が[露出/ろしゅつ]した。
+  - `let checks <Vec<Result<(),str>>>:` [形式/けいしき]では、[最終/さいしゅう][行/ぎょう]の `;` が block の[返/かえ]り[値/あたい]を unit にしてしまい、`Vec<Result<(),str>>` [期待/きたい]と[衝突/しょうとつ]する。
+- [変更/へんこう]:
+  - `tutorials/getting_started/02_numbers_and_variables.n.md`
+    - 5 [件/けん]の doctest すべてに `ret: 0` を[追加/ついか]した。
+    - `fn main <()*> ()> ():` を `fn main <()*>i32> ():` に[変更/へんこう]し、`checks_new` / `checks_push` / `checks_exit_code` [前提/ぜんてい]へ[揃/そろ]えた。
+    - `test_checked` は `Result<(),str>` を[返/かえ]す helper として `let _done <Result<(),str>> ...` で[受/う]ける[形/かたち]へ[変更/へんこう]した。
+  - `tutorials/getting_started/03_functions.n.md`
+    - 3 [件/けん]の doctest を `ret: 0` + `checks_exit_code` [前提/ぜんてい]へ[更新/こうしん]した。
+    - `if` / `if:` [例/れい]を含む[全体/ぜんたい]を safe `Result` [流儀/りゅうぎ]へ[統一/とういつ]した。
+  - `stdlib/tests/cast.n.md`
+    - `ret: 0` を[追加/ついか]し、fixture [全体/ぜんたい]を `checks_exit_code` [前提/ぜんてい]へ[変更/へんこう]した。
+    - bool/i32 cast [確認/かくにん]は `cast` [結果/けっか]を[先/さき]に[局所/きょくしょ][変数/へんすう]へ[束縛/そくばく]し、その[値/あたい]を `assert_*` で[検査/けんさ]する[形/かたち]へ[変更/へんこう]した。
+    - これにより pipe + overload [解決/かいけつ]の[曖昧/あいまい]さを[除去/じょきょ]した。
+  - `stdlib/tests/math.n.md`
+    - `ret: 0` を[追加/ついか]し、[全検査/ぜんけんさ]を 1 [本/ほん]の `checks_new |> checks_push ...` に[集約/しゅうやく]した。
+    - `let checks:` block [末尾/まつび]の `;` を[除去/じょきょ]し、[返/かえ]り[値/あたい]が unit に[潰/つぶ]れないようにした。
+  - `stdlib/tests/vec.n.md`
+    - `ret: 0` を[追加/ついか]し、`let mut checks` [方式/ほうしき]へ[変更/へんこう]した。
+    - `match vec_get ...` の `None` [分岐/ぶんき]も `test_fail` を `checks_push` で[集約/しゅうやく]する[形/かたち]に[変更/へんこう]し、[途中/とちゅう] trap しないようにした。
+- [設計/せっけい][判断/はんだん]:
+  - `std/test` の `Result<(),str>` [方針/ほうしん]へ[追従/ついじゅう]するだけでなく、tutorial [冒頭/ぼうとう]から「test helper も[値/あたい]を[返/かえ]す」という reboot [後/ご]の[価値観/かちかん]を[一貫/いっかん]して[示/しめ]すことを[優先/ゆうせん]した。
+  - `cast` fixture の[不具合/ふぐあい]は runner [側/がわ]ではなく、pipe [中/ちゅう]で overload [曖昧/あいまい]な[式/しき]を[直接/ちょくせつ][評価/ひょうか]していた[書/か]き[方/かた]に[原因/げんいん]があったため、[中間値/ちゅうかんち]を[明示/めいじ]する[形/かたち]へ[正規化/せいきか]した。
+  - `let checks:` block の[末尾/まつび] `;` は[構文上/こうぶんじょう]は[小/ちい]さいが、safe `Result` [移行/いこう]では[根本的/こんぽんてき]に[型/かた]を[壊/こわ]すため、[局所的/きょくしょてき]な回避ではなく fixture [全体/ぜんたい]の[書/か]き[方/かた]を[統一/とういつ]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/02_numbers_and_variables.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/vec.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/cast.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/math.n.md -n 1` -> pass
+  - `node nodesrc/tests.js -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/03_functions.n.md -i stdlib/tests/cast.n.md -i stdlib/tests/math.n.md -i stdlib/tests/vec.n.md --no-stdlib --no-tree -o /tmp/tests-safe-result-batch1.json -j 4`
+    - [結果/けっか]: `11/11 pass`
