@@ -9530,3 +9530,45 @@
 - [状況/じょうきょう]:
   - `kpwrite` の buffered writer core は `std/streamio` へ移り、`kp` 側は薄い wrapper 構成になった。
   - `kpread` の一般化可能部分はまだ `kp` 側に残っているため、todo 7 は継続中である。
+
+# 2026-03-10 作業メモ (`kpread` の scanner core を `std/streamio` へ移管)
+
+- [目的/もくてき]:
+  - todo 7 の残件である `kpread` の一般化可能部分を `std/streamio` へ移し、`kp` 側には競技向けの合成 helper だけを残す。
+  - stdin binary 読み込みの unbounded 経路を `kp` 専用実装のままにせず、`std` 側の正規入口へ整理する。
+- [根本原因/こんぽんげんいん]:
+  - これまでの `kpread` は、stdin 全読込、buffer/header 管理、token/i32/i64/f64 parser、競技向け `Vec`/行列 helper を 1 module 群で抱えていた。
+  - そのため `StreamWriter` を `std/streamio` へ移した後も、対になる scanner core だけが `kp` 側に残り、`std/streamio` が「一般 stream facade」として片手落ちになっていた。
+  - あわせて stdin binary read の unbounded ループが `kpread_core` に閉じており、`std/streamio` / `std/stdio` の public binary 経路と分断されていた。
+- [変更/へんこう]:
+  - `stdlib/std/stdio.nepl`
+    - `stdio_read_all_bytes` を、`read_all` の 4096 byte 複製ではなく、64KiB から拡張しつつ EOF まで `fd_read` を反復する unbounded binary read へ置き換えた。
+    - これにより `ByteBuf` の stdin 経路と scanner 経路が同じ `std` 層に揃った。
+  - `stdlib/std/streamio.nepl`
+    - `StreamScanner` を追加し、`stream_scanner_new` / `stream_scanner_skip_ws` / `stream_scanner_is_eof` / `stream_scanner_skip_token` / `stream_scanner_read_token` / `stream_scanner_read_i32` / `stream_scanner_read_u64` / `stream_scanner_read_i64` / `stream_scanner_read_f64` / `stream_scanner_read_f32` を `std` 側で提供するようにした。
+    - scanner は `ByteBuf` の pointer/len を header で共有し、`Copy` / `Clone` は cursor 共有の軽量 handle として定義した。
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_new` と primitive reader 群は `StreamScanner` へ委譲する wrapper に整理した。
+    - `Vec` / 行列 / 区間クエリ入力などの競技向け helper は `kp` 側に残した。
+    - file 冒頭 comment を、新構成に合わせて `StreamScanner` wrapper 前提へ更新した。
+  - `stdlib/kp/kpread_core.nepl`
+    - 実体が `std/streamio` / `std/stdio` へ移ったため削除した。
+  - `tests/stdlib/streamio.n.md`
+    - `StreamScanner` 直利用の focused case を追加し、数値読取と BOM + token 読取を回帰固定した。
+- [設計/せっけい][判断/はんだん]:
+  - `stdin 全読込 + token parser` は競技向け sugar ではなく汎用 scanner 機能なので、`kp` ではなく `std/streamio` に置くのが reboot 方針に合うと判断した。
+  - 一方で `Vec`/行列/問題定型入力パックは競技向け API とみなし、`kp` 側に残した。
+  - `StreamScanner` の所有モデルは既存 `Scanner` と同じく shared cursor を維持し、wrapper 置換で既存 `kp` テスト資産を崩さない形を優先した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 7` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 8` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/streamio.n.md -i stdlib/std/streamio.nepl -i stdlib/std/stdio.nepl -i stdlib/kp/kpread.nepl -i tests/stdlib/kp.n.md -i tests/stdlib/kp_i64.n.md -i tests/stdlib/stdin.n.md --no-stdlib --no-tree -o /tmp/tests-streamio-kpread-focus.json -j 15`
+    - [結果/けっか]: `52/52 pass`
+  - `/tmp/tests-streamio-kpread-focus.json`
+    - [確認/かくにん]: `summary.total = 52`, `summary.passed = 52`, `summary.failed = 0`
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/cli.js -i stdlib/std/streamio.nepl -i stdlib/kp/kpread.nepl -o html=/tmp/streamio-kpread-doc-html`
+    - [結果/けっか]: `generated 2 html file(s)`
+- [状況/じょうきょう]:
+  - `kpwrite` に続いて `kpread` の primitive scanner core も `std/streamio` へ移り、todo 7 の「`kpread` / `kpwrite` の中核を `std/streamio` へ昇格」が一段進んだ。
+  - `kp` 側には `Vec`/行列/競技入力パックのような競技向け sugar が残っている。

@@ -3,10 +3,10 @@
 //:
 //: ### [目的/もくてき]
 //: - `Scanner` を[使/つか]って[標準入力/ひょうじゅんにゅうりょく]を[一括/いっかつ]で[読/よ]み[込/こ]み、`i32` や[配列/はいれつ]・[行列/ぎょうれつ]を[高速/こうそく]に[読/よ]めるようにします。
-//: - `kpread_core` が[担当/たんとう]する[低水準/ていすいじゅん]の[確保/かくほ]・`fd_read` まわりを[包/つつ]み、[利用者/りようしゃ]には `Scanner` と helper [群/ぐん]だけを[見/み]せます。
+//: - stdin [全読込/ぜんよみこみ]と primitive token parser の[中核/ちゅうかく]は `std/streamio.StreamScanner` が[担当/たんとう]し、`kp` [側/がわ]には[競技/きょうぎ][向/む]け helper [群/ぐん]だけを[残/のこ]します。
 //:
 //: ### [注意/ちゅうい]
-//: - `Scanner` は[入力/にゅうりょく][状態/じょうたい]を[共有/きょうゆう]する[軽量/けいりょう]ハンドルです。`Copy` / `Clone` は[同/おな]じ[読み取り位置/よみとりいち]を[共有/きょうゆう]するだけで、[入力/にゅうりょく]バッファを[複製/ふくせい]しません。
+//: - `Scanner` は `StreamScanner` を[包/つつ]む[軽量/けいりょう] wrapper です。`Copy` / `Clone` は[同/おな]じ[読/よ]み[取/と]り[位置/いち]を[共有/きょうゆう]するだけで、[入力/にゅうりょく]バッファを[複製/ふくせい]しません。
 //: - [入力全体/にゅうりょくぜんたい]を[保持/ほじ]するため、[空間/くうかん][計算量/けいさんりょう]は O(bytes) です。
 //:
 //: ### [計算量/けいさんりょう]
@@ -27,12 +27,11 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/cast" as *
-#import "core/option" as *
 #import "core/result" as *
 #import "core/traits/copy" as *
-#import "kp/kpread_core" as *
 #import "alloc/collections/vec" as *
 #import "core/field" as *
+#import "std/streamio" as *
 
 //: ## Scanner
 //: [読/よ]み[込/こ]み[済/ず]み[入力/にゅうりょく]と[現在位置/げんざいいち]を[共有/きょうゆう]する[軽量/けいりょう]ハンドル
@@ -63,7 +62,11 @@ fn scanner_wrap <(MemPtr<u8>)->Scanner> (raw):
     Scanner raw
 
 fn scanner_new_header <()*>Result<MemPtr<u8>,str>> ():
-    scanner_new_impl
+    match stream_scanner_new:
+        Result::Ok inner:
+            Result<MemPtr<u8>,str>::Ok get inner "header"
+        Result::Err e:
+            Result<MemPtr<u8>,str>::Err e
 
 fn scanner_new <()*>Result<Scanner,str>> ():
     let raw_res <Result<MemPtr<u8>,str>> scanner_new_header;
@@ -72,6 +75,9 @@ fn scanner_new <()*>Result<Scanner,str>> ():
             Result<Scanner,str>::Ok scanner_wrap raw
         Result::Err e:
             Result<Scanner,str>::Err e
+
+fn scanner_as_stream <(Scanner)->StreamScanner> (sc):
+    StreamScanner get sc "header"
 
 fn scanner_header_off <(ScannerHeaderField)->i32> (field):
     match field:
@@ -240,8 +246,7 @@ fn scanner_skip_ws_header <(MemPtr<u8>)*>()> (header):
     ()
 
 fn scanner_skip_ws_handle <(Scanner)*>()> (sc):
-    let header <MemPtr<u8>> get sc "header";
-    scanner_skip_ws_header header
+    stream_scanner_skip_ws scanner_as_stream sc
 
 //: scanner_is_eof: トークンが残っていないか確認する
 //: 
@@ -267,11 +272,7 @@ fn scanner_skip_ws_handle <(Scanner)*>()> (sc):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn scanner_is_eof_handle <(Scanner)*>bool> (sc):
-    let header <MemPtr<u8>> get sc "header";
-    scanner_skip_ws_header header;
-    let len <i32> scanner_load_header header ScannerHeaderField::Len;
-    let p <i32> scanner_load_header header ScannerHeaderField::Pos;
-    ge p len
+    stream_scanner_is_eof scanner_as_stream sc
 
 //: scanner_skip_token: アロケーションなしで 1 トークン消費する
 //: 
@@ -298,44 +299,7 @@ fn scanner_is_eof_handle <(Scanner)*>bool> (sc):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn scanner_skip_token_handle <(Scanner)*>()> (sc):
-    let header <MemPtr<u8>> get sc "header";
-    scanner_skip_ws_header header;
-    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header header ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
-
-    let mut done <i32> 0;
-    while eq done 0:
-        if:
-            lt p len
-            then:
-                let byte <i32> load_u8 add buf p;
-                if:
-                    eq byte 32
-                    then:
-                        set done 1;
-                    else:
-                        if:
-                            eq byte 10
-                            then:
-                                set done 1;
-                            else:
-                                if:
-                                    eq byte 13
-                                    then:
-                                        set done 1;
-                                    else:
-                                        if:
-                                            eq byte 9
-                                            then:
-                                                set done 1;
-                                            else:
-                                                set p add p 1;
-            else:
-                set done 1;
-
-    scanner_store_header header ScannerHeaderField::Pos p;
-    ()
+    stream_scanner_skip_token scanner_as_stream sc
 
 //: scanner_read_token: 次のトークンを文字列として読み込む
 //: 
@@ -365,67 +329,7 @@ fn scanner_skip_token_handle <(Scanner)*>()> (sc):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn scanner_read_token_handle <(Scanner)*>str> (sc):
-    let header <MemPtr<u8>> get sc "header";
-    scanner_skip_ws_header header;
-    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header header ScannerHeaderField::Len;
-    let start <i32> scanner_load_header header ScannerHeaderField::Pos;
-    let mut p <i32> start;
-
-    let mut done <i32> 0;
-    while eq done 0:
-        if:
-            lt p len
-            then:
-                let byte <i32> load_u8 add buf p;
-                if:
-                    eq byte 32
-                    then:
-                        set done 1;
-                    else:
-                        if:
-                            eq byte 10
-                            then:
-                                set done 1;
-                            else:
-                                if:
-                                    eq byte 13
-                                    then:
-                                        set done 1;
-                                    else:
-                                        if:
-                                            eq byte 9
-                                            then:
-                                                set done 1;
-                                            else:
-                                                set p add p 1;
-            else:
-                set done 1;
-
-    let tlen <i32> sub p start;
-    if:
-        eq tlen 0
-        then:
-            ""
-        else:
-            match alloc add 4 tlen:
-                Result::Err _e:
-                    scanner_store_header header ScannerHeaderField::Pos p;
-                    ""
-                Result::Ok s:
-                    store_i32 s tlen;
-                    let mut i <i32> 0;
-                    while lt i tlen:
-                        do:
-                            let sb <i32> add s 4;
-                            let sp <i32> add sb i;
-                            let boff <i32> add start i;
-                            let bp <i32> add buf boff;
-                            let bv <i32> load_u8 bp;
-                            store_u8 sp bv;
-                            set i add i 1;
-                    scanner_store_header header ScannerHeaderField::Pos p;
-                    s
+    stream_scanner_read_token scanner_as_stream sc
 
 //: scanner_read_i32: 次のトークンを i32 として読み込む（符号付き 10 進数）
 //: 
@@ -455,58 +359,7 @@ fn scanner_read_token_handle <(Scanner)*>str> (sc):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn scanner_read_i32_handle <(Scanner)*>i32> (sc):
-    let header <MemPtr<u8>> get sc "header";
-    scanner_skip_ws_header header;
-    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header header ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
-    if:
-        ge p len
-        then:
-            0
-        else:
-            let mut sign <i32> 1;
-            let b0 <i32> load_u8 add buf p;
-            if:
-                eq b0 45
-                then:
-                    set sign -1;
-                    set p add p 1;
-                else:
-                    ();
-
-            let mut val <i32> 0;
-            let mut done <i32> 0;
-            while eq done 0:
-                if:
-                    lt p len
-                    then:
-                        let byte <i32> load_u8 add buf p;
-                        if:
-                            eq byte 0
-                            then:
-                                set p add p 1;
-                            else:
-                                if:
-                                    ge byte 48
-                                    then:
-                                        if:
-                                            le byte 57
-                                            then:
-                                                let digit <i32> sub byte 48;
-                                                let scaled <i32> mul val 10;
-                                                set val add scaled digit;
-                                                set p add p 1;
-                                            else:
-                                                set done 1;
-                                    else:
-                                        set done 1;
-                    else:
-                        set done 1;
-
-            scanner_store_header header ScannerHeaderField::Pos p;
-            let signed <i32> mul val sign;
-            signed
+    stream_scanner_read_i32 scanner_as_stream sc
 
 //: scanner_read_u64: 次のトークンを u64 相当として読み込む
 //:
@@ -524,56 +377,7 @@ fn scanner_read_i32_handle <(Scanner)*>i32> (sc):
 //: 計算量:
 //: - O(桁数)
 fn scanner_read_u64_handle <(Scanner)*>i64> (sc):
-    let header <MemPtr<u8>> get sc "header";
-    scanner_skip_ws_header header;
-    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header header ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
-    if:
-        ge p len
-        then:
-            <i64> cast 0
-        else:
-            let b0 <i32> load_u8 add buf p;
-            if:
-                eq b0 43
-                then:
-                    set p add p 1;
-                else:
-                    ();
-
-            let mut val <i64> cast 0;
-            let mut done <i32> 0;
-            while eq done 0:
-                if:
-                    lt p len
-                    then:
-                        let byte <i32> load_u8 add buf p;
-                        if:
-                            eq byte 0
-                            then:
-                                set p add p 1;
-                            else:
-                                if:
-                                    ge byte 48
-                                    then:
-                                        if:
-                                            le byte 57
-                                            then:
-                                                let d32 <i32> sub byte 48;
-                                                let digit <i64> cast d32;
-                                                let scaled <i64> mul val <i64> cast 10;
-                                                set val add scaled digit;
-                                                set p add p 1;
-                                            else:
-                                                set done 1;
-                                    else:
-                                        set done 1;
-                    else:
-                        set done 1;
-
-            scanner_store_header header ScannerHeaderField::Pos p;
-            val
+    stream_scanner_read_u64 scanner_as_stream sc
 
 //: scanner_read_i64: 次のトークンを i64 として読み込む
 //:
@@ -587,69 +391,7 @@ fn scanner_read_u64_handle <(Scanner)*>i64> (sc):
 //: 計算量:
 //: - O(桁数)
 fn scanner_read_i64_handle <(Scanner)*>i64> (sc):
-    let header <MemPtr<u8>> get sc "header";
-    scanner_skip_ws_header header;
-    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
-    let len <i32> scanner_load_header header ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
-    if:
-        ge p len
-        then:
-            <i64> cast 0
-        else:
-            let mut is_neg <i32> 0;
-            let b0 <i32> load_u8 add buf p;
-            if:
-                eq b0 45
-                then:
-                    set is_neg 1;
-                    set p add p 1;
-                else:
-                    if:
-                        eq b0 43
-                        then:
-                            set p add p 1;
-                        else:
-                            ();
-
-            let mut val <i64> cast 0;
-            let mut done <i32> 0;
-            while eq done 0:
-                if:
-                    lt p len
-                    then:
-                        let byte <i32> load_u8 add buf p;
-                        if:
-                            eq byte 0
-                            then:
-                                set p add p 1;
-                            else:
-                                if:
-                                    ge byte 48
-                                    then:
-                                        if:
-                                            le byte 57
-                                            then:
-                                                let d32 <i32> sub byte 48;
-                                                let digit <i64> cast d32;
-                                                let scaled <i64> mul val <i64> cast 10;
-                                                set val add scaled digit;
-                                                set p add p 1;
-                                            else:
-                                                set done 1;
-                                    else:
-                                        set done 1;
-                    else:
-                        set done 1;
-
-            scanner_store_header header ScannerHeaderField::Pos p;
-            if:
-                eq is_neg 1
-                then:
-                    let zero <i64> cast 0;
-                    sub zero val
-                else:
-                    val
+    stream_scanner_read_i64 scanner_as_stream sc
 
 //: scanner_read_f64: 次のトークンを f64 として読み込む
 //:
@@ -666,178 +408,7 @@ fn scanner_read_i64_handle <(Scanner)*>i64> (sc):
 //: 計算量:
 //: - O(桁数)
 fn scanner_read_f64_handle <(Scanner)*>f64> (sc):
-    let header <MemPtr<u8>> get sc "header";
-    scanner_skip_ws_header header;
-    let buf <i32> scanner_load_header header ScannerHeaderField::BufPtr;
-    let buf_len <i32> scanner_load_header header ScannerHeaderField::Len;
-    let mut p <i32> scanner_load_header header ScannerHeaderField::Pos;
-    if:
-        ge p buf_len
-        then:
-            <f64> cast 0
-        else:
-            let mut is_neg <i32> 0;
-            let b0 <i32> load_u8 add buf p;
-            if:
-                eq b0 45
-                then:
-                    set is_neg 1;
-                    set p add p 1;
-                else:
-                    if:
-                        eq b0 43
-                        then:
-                            set p add p 1;
-                        else:
-                            ();
-
-            let mut val <f64> cast 0;
-            let mut any_digit <i32> 0;
-            let ten <f64> cast 10;
-
-            let mut done_int <i32> 0;
-            while eq done_int 0:
-                if:
-                    lt p buf_len
-                    then:
-                        let byte <i32> load_u8 add buf p;
-                        if:
-                            and ge byte 48 le byte 57
-                            then:
-                                let d32 <i32> sub byte 48;
-                                let d <f64> cast d32;
-                                let scaled <f64> mul val ten;
-                                let next_val <f64> add scaled d;
-                                set val next_val;
-                                set p add p 1;
-                                set any_digit 1;
-                            else:
-                                set done_int 1;
-                    else:
-                        set done_int 1;
-
-            let mut has_dot <i32> 0;
-            if:
-                lt p buf_len
-                then:
-                    if:
-                        eq load_u8 add buf p 46
-                        then set has_dot 1
-                        else ()
-                else:
-                    ();
-            if:
-                eq has_dot 1
-                then:
-                    set p add p 1;
-                    let one <f64> cast 1;
-                    let mut place <f64> div one ten;
-                    let mut done_frac <i32> 0;
-                    while eq done_frac 0:
-                        if:
-                            lt p buf_len
-                            then:
-                                let byte <i32> load_u8 add buf p;
-                                if:
-                                    and ge byte 48 le byte 57
-                                    then:
-                                        let d32 <i32> sub byte 48;
-                                        let d <f64> cast d32;
-                                        let addv <f64> mul d place;
-                                        let next_val <f64> add val addv;
-                                        set val next_val;
-                                        let next_place <f64> div place ten;
-                                        set place next_place;
-                                        set p add p 1;
-                                        set any_digit 1;
-                                    else:
-                                        set done_frac 1;
-                            else:
-                                set done_frac 1;
-                else:
-                    ();
-
-            let mut has_exp <i32> 0;
-            if:
-                lt p buf_len
-                then:
-                    let ec <i32> load_u8 add buf p;
-                    if:
-                        or eq ec 101 eq ec 69
-                        then set has_exp 1
-                        else ()
-                else:
-                    ();
-            if:
-                eq has_exp 1
-                then:
-                    set p add p 1;
-                    let mut exp_neg <i32> 0;
-                    if:
-                        lt p buf_len
-                        then:
-                            let eb <i32> load_u8 add buf p;
-                            if:
-                                eq eb 45
-                                then:
-                                    set exp_neg 1;
-                                    set p add p 1;
-                                else:
-                                    if:
-                                        eq eb 43
-                                        then:
-                                            set p add p 1;
-                                        else:
-                                            ();
-                        else:
-                            ();
-
-                    let mut exp_val <i32> 0;
-                    let mut done_exp <i32> 0;
-                    while eq done_exp 0:
-                        if:
-                            lt p buf_len
-                            then:
-                                let byte <i32> load_u8 add buf p;
-                                let ge48 <bool> ge byte 48;
-                                let le57 <bool> le byte 57;
-                                if:
-                                    and ge48 le57
-                                    then:
-                                        let acc <i32> mul exp_val 10;
-                                        let d <i32> sub byte 48;
-                                        set exp_val add acc d;
-                                        set p add p 1;
-                                    else:
-                                        set done_exp 1;
-                            else:
-                                set done_exp 1;
-
-                    let mut k <i32> 0;
-                    while lt k exp_val:
-                        do:
-                            if:
-                                eq exp_neg 1
-                                then:
-                                    set val div val ten;
-                                else:
-                                    set val mul val ten;
-                            set k add k 1;
-                else:
-                    ();
-
-            scanner_store_header header ScannerHeaderField::Pos p;
-            if:
-                eq any_digit 0
-                then:
-                    <f64> cast 0
-                else:
-                    if:
-                        eq is_neg 1
-                        then:
-                            neg val
-                        else:
-                            val
+    stream_scanner_read_f64 scanner_as_stream sc
 
 //: scanner_read_f32: 次のトークンを f32 として読み込む
 //:
@@ -847,8 +418,7 @@ fn scanner_read_f64_handle <(Scanner)*>f64> (sc):
 //: 計算量:
 //: - O(桁数)
 fn scanner_read_f32_handle <(Scanner)*>f32> (sc):
-    let v64 <f64> scanner_read_f64_handle sc;
-    <f32> cast v64
+    stream_scanner_read_f32 scanner_as_stream sc
 
 //: scanner_read_vec_i64: n 個の i64 値を読み込む
 //:

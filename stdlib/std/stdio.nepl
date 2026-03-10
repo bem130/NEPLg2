@@ -24,6 +24,27 @@ fn std_free <(i32,i32)->()> (ptr, size):
         Result::Err _:
             ()
 
+fn std_store_i32_at <(MemPtr<u8>,i32,i32,i32)->Result<(),str>> (base, size, off, v):
+    match region_ptr_at<u8,i32> region_new base size off:
+        Result::Err _e:
+            Result<(),str>::Err "stdio.mem store_i32 oob"
+        Result::Ok p:
+            store_i32 p v
+
+fn std_load_i32_at <(MemPtr<u8>,i32,i32)->Result<i32,str>> (base, size, off):
+    match region_ptr_at<u8,i32> region_new base size off:
+        Result::Err _e:
+            Result<i32,str>::Err "stdio.mem load_i32 oob"
+        Result::Ok p:
+            match load_i32 p:
+                Option::Some v:
+                    Result<i32,str>::Ok v
+                Option::None:
+                    Result<i32,str>::Err "stdio.mem load_i32 failed"
+
+fn stdio_fd_read_mem <(i32,MemPtr<u8>,i32,MemPtr<u8>)*>i32> (fd, iov, iovcnt, nread):
+    fd_read fd mem_ptr_addr iov iovcnt mem_ptr_addr nread
+
 //: stdio: 標準入出力（WASI / LLVM）
 //:
 //: 目的:
@@ -215,18 +236,128 @@ fn stdio_write_bytes <(ByteBuf)*>()> (bytes):
 //: stdin の[残/のこ]りを `ByteBuf` として[読/よ]み[込/こ]む
 //:
 //: ### [目的/もくてき]
-//: - `std/streamio` の binary read [入口/いりぐち]として、`read_all` の[結果/けっか]を `ByteBuf` へ[詰/つ]め[替/か]えます。
+//: - `std/streamio` や `StreamScanner` の binary read [入口/いりぐち]として、stdin [全体/ぜんたい]を `ByteBuf` として[保持/ほじ]します。
 //:
 //: ### [実装/じっそう]
-//: - [現状/げんじょう]は `read_all` を[呼/よ]び、その `str` buffer を `ByteBuf` に[複製/ふくせい]します。
+//: - 64KiB から[開始/かいし]して buffer を[必要/ひつよう]に[応/おう]じて[拡張/かくちょう]し、EOF まで `fd_read` を[反復/はんぷく]します。
+//: - [返/かえ]り[値/あたい]の `ByteBuf` は[呼/よ]び[出/だ]し[側/がわ]が[所有/しょゆう]します。
 //:
 //: ### [注意/ちゅうい]
-//: - `read_all` と[同様/どうよう]に、[現状/げんじょう]では 4096 byte までの[固定長/こていちょう][読/よ]み[込/こ]みです。
+//: - text helper `read_all` とは[別経路/べつけいろ]です。text [変換/へんかん]を[伴/ともな]わないため、NUL を[含/ふく]む入力もそのまま[保持/ほじ]します。
 //:
 //: ### [計算量/けいさんりょう]
 //: - [読/よ]み[込/こ]んだ byte [数/すう]を n として O(n) です。
 fn stdio_read_all_bytes <()*>ByteBuf> ():
-    io_bytebuf_from_str read_all
+    let mut cap <i32> 65536;
+    match alloc_ptr<u8> cap:
+        Result::Err _e:
+            io_bytebuf_empty
+        Result::Ok buf0:
+            let mut buf <MemPtr<u8>> buf0;
+            match alloc_ptr<u8> 8:
+                Result::Err _e:
+                    match dealloc_ptr<u8> buf cap:
+                        Result::Ok _:
+                            ()
+                        Result::Err _e2:
+                            ();
+                    io_bytebuf_empty
+                Result::Ok iov:
+                    match alloc_ptr<u8> 4:
+                        Result::Err _e:
+                            match dealloc_ptr<u8> iov 8:
+                                Result::Ok _:
+                                    ()
+                                Result::Err _e2:
+                                    ();
+                            match dealloc_ptr<u8> buf cap:
+                                Result::Ok _:
+                                    ()
+                                Result::Err _e2:
+                                    ();
+                            io_bytebuf_empty
+                        Result::Ok nread_ptr:
+                            let mut read_len <i32> 0;
+                            let mut done <i32> 0;
+                            let mut alloc_failed <i32> 0;
+                            let mut mem_failed <i32> 0;
+
+                            while eq done 0:
+                                do:
+                                    if:
+                                        eq read_len cap
+                                        then:
+                                            let new_cap <i32> mul cap 2;
+                                            match realloc_ptr<u8> buf cap new_cap:
+                                                Result::Ok new_buf:
+                                                    set buf new_buf;
+                                                    set cap new_cap;
+                                                Result::Err _e:
+                                                    set alloc_failed 1;
+                                                    set done 1;
+                                        else:
+                                            ();
+
+                                    if:
+                                        eq done 0
+                                        then:
+                                            match std_store_i32_at iov 8 0 add mem_ptr_addr buf read_len:
+                                                Result::Err _e:
+                                                    set mem_failed 1;
+                                                    set done 1;
+                                                Result::Ok _:
+                                                    match std_store_i32_at iov 8 4 sub cap read_len:
+                                                        Result::Err _e:
+                                                            set mem_failed 1;
+                                                            set done 1;
+                                                        Result::Ok _:
+                                                            match std_store_i32_at nread_ptr 4 0 0:
+                                                                Result::Err _e:
+                                                                    set mem_failed 1;
+                                                                    set done 1;
+                                                                Result::Ok _:
+                                                                    let errno <i32> stdio_fd_read_mem 0 iov 1 nread_ptr;
+                                                                    if:
+                                                                        ne errno 0
+                                                                        then:
+                                                                            set done 1;
+                                                                        else:
+                                                                            match std_load_i32_at nread_ptr 4 0:
+                                                                                Result::Err _e:
+                                                                                    set mem_failed 1;
+                                                                                    set done 1;
+                                                                                Result::Ok n:
+                                                                                    if:
+                                                                                        eq n 0
+                                                                                        then:
+                                                                                            set done 1;
+                                                                                        else:
+                                                                                            set read_len add read_len n;
+                                        else:
+                                            ();
+
+                            match dealloc_ptr<u8> iov 8:
+                                Result::Ok _:
+                                    ()
+                                Result::Err _e:
+                                    ();
+                            match dealloc_ptr<u8> nread_ptr 4:
+                                Result::Ok _:
+                                    ()
+                                Result::Err _e:
+                                    ();
+
+                            if:
+                                or eq alloc_failed 1 eq mem_failed 1
+                                then:
+                                    match dealloc_ptr<u8> buf cap:
+                                        Result::Ok _:
+                                            ()
+                                        Result::Err _e:
+                                            ();
+                                    io_bytebuf_empty
+                                else:
+                                    ByteBuf buf read_len
 
 //: print: 文字列を標準出力へ出す
 //:

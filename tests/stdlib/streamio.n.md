@@ -138,3 +138,53 @@ fn main <()*>i32> ():
         Result::Err _e:
             1
 ```
+
+## stream_scanner_reads_numbers
+
+neplg2:test[normalize_newlines]
+stdin: "10 -20 +30 4.5\n"
+stdout: "10\n-20\n30\n4.500000\n"
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/streamio" as *
+fn main <()*>i32> ():
+    let sc <StreamScanner> unwrap_ok stream_scanner_new;
+    let a <i32> stream_scanner_read_i32 sc;
+    let b <i32> stream_scanner_read_i32 sc;
+    let c <i64> stream_scanner_read_u64 sc;
+    let d <f64> stream_scanner_read_f64 sc;
+    let mut w <StreamWriter> unwrap_ok stream_writer_new;
+    set w stream_writer_write_i32_ln w a;
+    set w stream_writer_write_i32_ln w b;
+    set w stream_writer_write_i64_ln w c;
+    set w stream_writer_write_f64_ln w d;
+    set w stream_writer_flush w;
+    stream_writer_free w;
+    0
+```
+
+## stream_scanner_skips_bom_and_token
+
+neplg2:test[normalize_newlines]
+stdin: "\ufeffabc 42\n"
+stdout: "abc\n42\n"
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/streamio" as *
+#import "std/stdio" as *
+
+fn main <()*>i32> ():
+    let sc <StreamScanner> unwrap_ok stream_scanner_new;
+    let token <str> stream_scanner_read_token sc;
+    let value <i32> stream_scanner_read_i32 sc;
+    print token;
+    println "";
+    println_i32 value;
+    0
+```
