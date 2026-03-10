@@ -9914,3 +9914,32 @@
   - `node nodesrc/run_doctest.js -i tests/stdlib/nm.n.md -n 2` -> pass
   - `node nodesrc/tests.js -i tests/stdlib/nm.n.md -i stdlib/nm/parser.nepl -i stdlib/nm/html_gen.nepl -i stdlib/core/result.nepl --no-stdlib --no-tree -o /tmp/tests-nm-result-focus.json -j 15`
     - [結果/けっか]: `12/12 pass`
+
+# 2026-03-10 作業メモ (`move_check` と `vec/sort` の stale test を現行仕様へ同期)
+
+- [目的/もくてき]:
+  - old failure list のうち、`move_check.n.md` と `sort.nepl doctest#3` を focused に再現し、現在の move model / collection API に合わせて直す。
+- [根本原因/こんぽんげんいん]:
+  - `tests/compiler/move_check.n.md`
+    - ローカル非Copy型の回帰が `RegionToken` という名前のまま std/prelude 文脈で書かれており、現行 stdlib の `core/mem` 側 `RegionToken<.T>` と衝突していた。
+    - その結果、本来見たい move check ではなく constructor 解析時点の `D3016` に流れていた。
+  - `stdlib/alloc/collections/vec/sort.nepl`
+    - `sort_merge` の doctest が、古い `Result` 返却前提で `push ... |> uwok` と書かれていた。
+    - 現行の `Vec::push` は `Vec` をそのまま返すため、pipe の途中で `uwok` を挟むと `D3006` / `D3013` になっていた。
+- [変更/へんこう]:
+  - `tests/compiler/move_check.n.md`
+    - 各 snippet を `#target core` に揃えた。
+    - ローカル型名を `RegionToken` から `LocalToken` へ変更し、prelude / stdlib 名との衝突を避けた。
+    - 関連する field / borrow / consume / reassign の型注釈も同時に更新した。
+  - `stdlib/alloc/collections/vec/sort.nepl`
+    - `sort_merge` の使用例を `new<i32> |> push ...` 形式へ更新し、不要な `uwok` を除去した。
+- [設計/せっけい][判断/はんだん]:
+  - `move_check` は compiler の move rule を測る回帰なので、stdlib 名や prelude 影響を受ける状態のままにせず、`#target core` + ローカル型名で隔離するのが適切と判断した。
+  - `sort` は API を昔の `Result` 形へ戻すのではなく、現在の `Vec` chaining API に doctest を合わせるのが正しい。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/compiler/move_check.n.md -n 1` -> pass
+  - `node nodesrc/tests.js -i tests/compiler/move_check.n.md --no-stdlib --no-tree -o /tmp/tests-move-check.json -j 15`
+    - [結果/けっか]: `13/13 pass`
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec/sort.nepl -n 3` -> pass
+  - `node nodesrc/tests.js -i tests/compiler/move_check.n.md -i stdlib/alloc/collections/vec/sort.nepl --no-stdlib --no-tree -o /tmp/tests-move-sort-focus.json -j 15`
+    - [結果/けっか]: `16/16 pass`

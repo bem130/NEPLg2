@@ -942,10 +942,10 @@ fn sort_merge_range_data <.T: Ord> <(i32,MemPtr<.T>,i32,i32)->()> (data_ptr, buf
 //:| #import "core/result" as *
 //: fn main <()*>i32> ():
 //:     let v <Vec<i32>>:
-//:         new
-//:         |> push 3 |> uwok
-//:         |> push 1 |> uwok
-//:         |> push 2 |> uwok
+//:         new<i32>
+//:         |> push 3
+//:         |> push 1
+//:         |> push 2
 //:     sort_merge<i32> v;
 //:     0
 //: ```
