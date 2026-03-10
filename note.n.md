@@ -9812,3 +9812,27 @@
     - [結果/けっか]: `3/3 pass`
   - [確認/かくにん]:
     - 上記実行から `[MODULE_TYPELESS_PACKAGE_JSON]` warning が消えた。
+
+# 2026-03-10 作業メモ (`doc/testing.md` を現行 nodesrc / reboot 運用へ全面同期)
+
+- [目的/もくてき]:
+  - test 運用の説明が旧 `cargo run -p nepl-cli -- test` 中心のまま残っていたため、現在の `nodesrc` ベース運用へ同期する。
+  - reboot 中に新しい回帰を追加する人が、`tests/stdlib` / `stdlib/tests` / doc comment doctest の役割を取り違えないようにする。
+- [根本原因/こんぽんげんいん]:
+  - `doc/testing.md` には古い stdlib 要約、旧 tuple 記法、旧 test runner 前提が残っており、現在の repo 構成と一致していなかった。
+  - 特に `nodesrc/run_test.js` の wasix 対応が入った後も、その runtime 分岐や `run_doctest.js` / `tests.js` 中心の運用が文書化されていなかった。
+  - そのままだと、今の実装を前提に test を追加しようとしたときに、間違った入口や配置先を再導入するリスクがあった。
+- [変更/へんこう]:
+  - `doc/testing.md`
+    - 文書全体を current workflow に合わせて書き直した。
+    - `tests/compiler/*.n.md`、`tests/stdlib/*.n.md`、`stdlib/tests/*.n.md`、`stdlib/**/*.nepl` doctest、`tutorials/**/*.n.md` の役割を整理した。
+    - 推奨コマンドを `nodesrc/tests.js` / `run_doctest.js` / `cli.js` / `trunk build` に更新した。
+    - `run_test.js` が `#target wasix` を `wasmer run` で実行することを明記した。
+    - 古い tuple 記法説明と、現状に合わない stdlib 一覧を削除した。
+- [設計/せっけい][判断/はんだん]:
+  - `doc/testing.md` は detailed API reference ではなく「どこに何を書くか、どう実行するか」の運用文書なので、列挙型の stdlib カタログではなく workflow 中心に再構成した。
+  - docs の役割上、ここでは `.md` 制約に従い ruby は使わず、簡潔な plain markdown に揃えた。
+- [検証/けんしょう]:
+  - `node nodesrc/cli.js -i doc/testing.md -o html=/tmp/doc-testing-html`
+    - [結果/けっか]: `generated 0 html file(s)`
+    - [確認/かくにん]: `.md` は HTML 生成対象外であり、異常ではない。

@@ -1,141 +1,140 @@
-# Testing and stdlib status
+# Testing and doctest workflow
 
-This document describes the current NEPL test feature, how standard library
-tests are organized, and what is implemented in the stdlib today.
+This document describes the current NEPLg2 test workflow and where each kind of
+test lives.
 
-## Test execution
+## Overview
 
-Stdlib tests are NEPL programs under `stdlib/tests`. Each test file is a
-standalone program that must compile and exit with status 0.
+The repository currently uses three main layers of verification:
 
-Run all stdlib tests:
+- Rust-side compiler tests under `nepl-core/tests/`
+- doctests and focused behavioral tests under `tests/`, `tutorials/`, and `stdlib/`
+- end-to-end sample regressions such as `nodesrc/tui_regression.js`
 
-```
-cargo run -p nepl-cli -- test
-```
+The main day-to-day workflow for stdlib reboot work is based on `nodesrc/`.
 
-Enable verbose compiler logs (for debugging):
+## Recommended commands
 
-```
-cargo run -p nepl-cli -- test --verbose
-```
+Run focused doctests and test files with JSON output:
 
-Filter by substring (path match):
-
-```
-cargo run -p nepl-cli -- test string
+```bash
+node nodesrc/tests.js -i tests/compiler -i tests/stdlib --no-tree -o /tmp/tests.json -j 15
 ```
 
-Notes:
-- Tests are compiled and executed with the WASI target.
-- A non-zero exit code is treated as a failure.
-- The test runner loads stdlib from the repository `stdlib/` directory.
-- The test runner passes fixed arguments `--flag value` (argv[1..]) to WASI programs.
-- The test runner colors `test/ok/FAILED` output using ANSI escape codes when supported.
+Run one doctest directly:
 
-## stdlib test module
-
-The stdlib provides a small `std/test` module for assertions.
-
-Exports:
-- `assert <(bool)*()>`
-- `assert_eq_i32 <(i32,i32)*()>`
-- `assert_str_eq <(str,str)*()>`
-- `assert_ok_i32 <(ResultI32)*()>`
-- `assert_err_i32 <(ResultI32)*()>`
-- `test_checked <(str)*()>` (WASI: prints green "Checked ...")
-
-Failure behavior:
-- On WASI targets, assertion failures print a red message and then call `trap`.
-- On wasm targets, failures call `trap` without printing.
-
-Important syntax rule:
-- NEPL does not support parenthesized expressions for grouping; use prefix calls directly.
-- Tuple literals are allowed using commas, e.g. `(a, b)`.
-
-Example:
-
-```
-#import "std/test"
-#use std::test::*
-#import "std/math"
-#use std::math::*
-
-fn main <()*> ()> ():
-    assert_eq_i32 3 add 1 2;
-    assert lt 1 2;
-    ()
+```bash
+node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 3
+node nodesrc/run_doctest.js -i stdlib/core/traits/deserialize.nepl -n 1
 ```
 
-Move rule reminder:
-- `ResultI32` is not Copy. If a value is consumed by `unwrap_or` or similar,
-  create a new value for additional checks.
+Generate HTML from `.n.md` / `.nepl` documents:
+
+```bash
+node nodesrc/cli.js -i stdlib/features/tui.nepl -i tests/stdlib/features_tui.n.md -o html=/tmp/doc-html
+```
+
+When Rust-side code changes, rebuild the web compiler bundle first:
+
+```bash
+NO_COLOR=false trunk build
+```
 
 ## Where tests live
 
-- Language core / compiler behavior: Rust tests under `nepl-core/tests/*.rs`
-- Standard library behavior: NEPL tests under `stdlib/tests/*.nepl`
+### `tests/compiler/*.n.md`
 
-## Current stdlib scope (summary)
+Compiler-facing regression cases.
 
-The current stdlib is intentionally minimal and i32-focused:
+- parse / name resolution / typecheck / diagnostics
+- `compile_fail` cases with `diag_id`
+- target-specific behavior such as LLVM / WASM / WASIX checks
 
-- `std/math`: i32 arithmetic and comparisons
-- `std/mem`: linear memory alloc/load/store helpers
-- `alloc/string`: length, equality, from_i32, to_i32 (Result<i32,i32>), find (stub),
-  trim, starts_with, ends_with, slice, split, StringBuilder
-- `std/result`: `ResultI32` and helpers
-- `std/option`: `OptionI32` and helpers
-- `std/list`: fixed-capacity list of i32 with bounds-checked get
-- `std/stdio`: standard output helpers plus `stdio_read_all_bytes`
-- `std/env/cliarg`: WASI `args_sizes_get/args_get` argument access (`cliarg_count`,
-  `cliarg_get`, `cliarg_program`)
-- `std/hashmap`: i32 キーの簡易ハッシュマップ（オープンアドレス法）
-- `std/hashset`: i32 要素の簡易ハッシュ集合（オープンアドレス法）
-- `std/hashmap_str`: str キーの簡易ハッシュマップ（FNV-1a + str_eq）
-- `std/hashset_str`: str 要素の簡易ハッシュ集合（FNV-1a + str_eq）
-- `std/json`: JsonValue の簡易表現とアクセサ
-- `std/btreemap`: i32 キーの順序付きマップ（配列ベース、二分探索）
-- `std/btreeset`: i32 要素の順序付き集合（配列ベース、二分探索）
-- `std/test`: basic assertions for stdlib tests
+### `tests/stdlib/*.n.md`
 
-If you extend stdlib behavior, add a matching `.nepl` test under
-`stdlib/tests` and ensure `cargo run -p nepl-cli -- test` stays green.
+User-facing stdlib behavior and reboot migration regressions.
 
-## Node doctest runner (`nodesrc/tests.js`)
+- facade behavior
+- end-user API expectations
+- focused reproductions for bugs found during reboot work
 
-Use this runner for doctests embedded in `.n.md` and `.nepl` documents:
+These are the main place to add a regression when an API contract breaks.
 
-```
-node nodesrc/tests.js -i tests -i tutorials -i stdlib -o /tmp/nmd-tests.json -j 4
-```
+### `stdlib/tests/*.n.md`
 
-Behavior summary:
-- Executes doctests in-process via `nodesrc/run_test.js` API (no child-process stdin IPC).
-- Resolves dist candidates by checking actual compiler artifacts (`nepl-web-*.js` + `*_bg.wasm`), not just directory existence.
-- Loads compiler artifacts once per worker to reduce initialization overhead.
-- Prints compact JSON to stdout with only key points:
-  - `dist.resolved`: resolved dist directories used by the run
-  - `summary`: `total/passed/failed/errored`
-  - `top_issues`: first 5 failing/errored cases with `id/status/phase/error`
-- Writes full result details to the JSON file specified by `-o`.
-- Full JSON includes `resolved_dist_dirs`.
+Library-adjacent requirement and support tests that are still useful as
+standalone fixtures.
 
-Failure classification helper:
+These are kept when they are still meaningful, but new public-facing behavior
+checks should usually go to `tests/stdlib/*.n.md`.
 
-```
-node nodesrc/analyze_tests_json.js /tmp/nmd-tests.json
-```
+### `stdlib/**/*.nepl`
 
-- Aggregates `fail/error` reasons into coarse categories for prioritizing fixes.
+Doc comments may contain `neplg2:test` doctests.
 
-## Analysis API checks
+Use these for:
 
-Use this script to verify analyzer APIs used by LSP/debug tooling:
+- small usage examples
+- contract examples that should stay close to the definition
 
-```
-node nodesrc/test_analysis_api.js
+Do not use doc comments for large regression matrices or heavy edge-case suites.
+Those belong in `tests/`.
+
+### `tutorials/**/*.n.md`
+
+Tutorials also contain doctests.
+
+These act as executable documentation and should reflect the current stdlib
+layout and API style.
+
+## Runtime model used by `nodesrc`
+
+`nodesrc/run_test.js` chooses the execution path from `#target`:
+
+- `#target wasi` / `wasip1`-style cases run through Node's WASI support
+- `#target wasix` cases run through `wasmer run`
+
+This matters for features such as TUI, which require WASIX imports and cannot be
+executed by the preview1-only Node WASI runtime.
+
+You can override the `wasmer` binary with:
+
+```bash
+WASMER_BIN=/path/to/wasmer node nodesrc/run_doctest.js -i tests/stdlib/features_tui.n.md -n 1
 ```
 
-- Verifies `analyze_lex` / `analyze_parse` / `analyze_name_resolution`.
-- Includes shadowing and alias-target resolution checks.
+## Output expectations
+
+`nodesrc/tests.js` and `run_doctest.js` both understand doctest metadata such as:
+
+- `stdin:`
+- `stdout:`
+- `stderr:`
+- `ret:`
+- `diag_id:`
+
+If a doctest includes `stdout:` or `stderr:`, `nodesrc/tests.js` checks those
+expectations by default. `--assert-io` is optional and only makes the intent
+explicit.
+
+## `std/test`
+
+`std/test` is the basic assertion module used in NEPL-side tests.
+
+Typical helpers include:
+
+- `assert`
+- `assert_eq_i32`
+- `assert_str_eq`
+- `test_checked`
+- `test_fail`
+
+Use the smallest assertion that makes failures obvious.
+
+## Current guidance
+
+- Prefer `tests/stdlib/*.n.md` for new reboot regressions.
+- Prefer `stdlib/**/*.nepl` doctests for short examples attached to one API.
+- Use `run_doctest.js` for the fastest reproduction loop.
+- Use `nodesrc/tui_regression.js` for TUI end-to-end checks after WASIX-facing changes.
+- Keep docs, doctests, and implementation in sync in the same change.
