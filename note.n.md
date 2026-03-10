@@ -10542,3 +10542,23 @@
   - `node nodesrc/run_doctest.js -i tutorials/getting_started/11_testing_workflow.n.md -n 2` -> pass
   - `node nodesrc/tests.js -i tutorials/getting_started/08_if_layouts.n.md -i tutorials/getting_started/09_import_and_structure.n.md -i tutorials/getting_started/11_testing_workflow.n.md --no-stdlib --no-tree -o /tmp/tests-tutorial-if-import-testing.json -j 4`
     - [結果/けっか]: `8/8 pass`
+
+# 2026-03-10 作業メモ (`02_numbers` / `03_functions` tutorial を explicit report 流儀へ追従)
+
+- [目的/もくてき]:
+  - `tutorials/getting_started/02_numbers_and_variables.n.md` と `tutorials/getting_started/03_functions.n.md` を、[現行/げんこう]の explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - [最初期/さいしょき] tutorial に[残/のこ]っている `test_checked` success log を[除去/じょきょ]し、[新/あたら]しい test [書式/しょしき]を[序盤/じょばん]から[一貫/いっかん]して[示/しめ]す。
+- [根本原因/こんぽんげんいん]:
+  - `02_numbers_and_variables` と `03_functions` は[主題/しゅだい]が[基本/きほん][構文/こうぶん]であるにもかかわらず、test 部分だけが[過渡期/かとき]の `test_checked` [依存/いぞん]のままだった。
+  - [利用者/りようしゃ]が[最初/さいしょ]に[触/ふ]れる chapter で old style が[残/のこ]っていると、repo [全体/ぜんたい]で[採用/さいよう]している reboot [後/ご] test [方針/ほうしん]が[伝/つた]わりにくい。
+- [変更/へんこう]:
+  - `tutorials/getting_started/02_numbers_and_variables.n.md`
+    - 5 [件/けん]の doctest すべてを `check_eq_i32` + `checks_print_report` [構成/こうせい]へ[変更/へんこう]した。
+  - `tutorials/getting_started/03_functions.n.md`
+    - `function call`, `inline if expression`, `if colon form` の 3 [件/けん]を[同様/どうよう]に explicit report [形/けい]へ[変更/へんこう]した。
+- [設計/せっけい][判断/はんだん]:
+  - これらの chapter では test helper が[主題/しゅだい]ではないため、`check_eq_i32` と `checks_print_report` だけを[使/つか]う[最小/さいしょう]変更で[揃/そろ]えた。
+  - [表示/ひょうじ]を test case [末尾/まつび]に[集約/しゅうやく]する[形/かたち]に[統一/とういつ]したことで、「runner が[勝手/かって]に[成功/せいこう]を[出/だ]す」のではなく「code [側/がわ]が[最後/さいご]に[明示/めいじ]する」という reboot [後/ご] test [哲学/てつがく]へ[沿/そ]わせた。
+- [検証/けんしょう]:
+  - `node nodesrc/tests.js -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/03_functions.n.md --no-stdlib --no-tree -o /tmp/tests-tutorial-numbers-functions.json -j 4`
+    - [結果/けっか]: `8/8 pass`

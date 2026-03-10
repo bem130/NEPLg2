@@ -19,12 +19,12 @@ ret: 0
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 6 add 1 5
-        |> checks_push assert_eq_i32 5 sub 8 3
-        |> checks_push assert_eq_i32 42 mul 6 7
-        |> checks_push assert_eq_i32 4 div_s 9 2
-    let _done <Result<(),str>> test_checked "prefix arithmetic";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 6 add 1 5
+        |> checks_push check_eq_i32 5 sub 8 3
+        |> checks_push check_eq_i32 42 mul 6 7
+        |> checks_push check_eq_i32 4 div_s 9 2
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 複合式と「優先順位」の考え方
@@ -59,10 +59,10 @@ fn main <()*>i32> ():
     let b <i32> sub left_b <i32> 3
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 30 a
-        |> checks_push assert_eq_i32 7 b
-    let _done <Result<(),str>> test_checked "prefix composition without precedence";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 30 a
+        |> checks_push check_eq_i32 7 b
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 変数定義（`let`）と型注釈（`<T>`）
@@ -87,9 +87,9 @@ fn main <()*>i32> ():
     let c <i32> add a b
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 42 c
-    let _done <Result<(),str>> test_checked "let with type annotation";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 42 c
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 可変変数（`let mut` / `set`）
@@ -113,9 +113,9 @@ fn main <()*>i32> ():
     set x mul x 3
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 15 x
-    let _done <Result<(),str>> test_checked "let mut and set";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 15 x
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 注意: `i32` のオーバーフロー
@@ -139,7 +139,7 @@ fn main <()*>i32> ():
     let y <i32> add x 1
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 -2147483648 y
-    let _done <Result<(),str>> test_checked "overflow";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 -2147483648 y
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

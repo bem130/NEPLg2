@@ -25,10 +25,10 @@ fn square <(i32)->i32> (x):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 7 add2 3 4
-        |> checks_push assert_eq_i32 81 square 9
-    let _done <Result<(),str>> test_checked "function call";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 7 add2 3 4
+        |> checks_push check_eq_i32 81 square 9
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## `if` も式: inline 形式
@@ -53,10 +53,10 @@ fn abs_i32 <(i32)->i32> (x):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 7 abs_i32 -7
-        |> checks_push assert_eq_i32 5 abs_i32 5
-    let _done <Result<(),str>> test_checked "inline if expression";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 7 abs_i32 -7
+        |> checks_push check_eq_i32 5 abs_i32 5
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## `if:` 形式と block 形式
@@ -87,8 +87,8 @@ fn classify <(i32)->i32> (x):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 103 classify -3
-        |> checks_push assert_eq_i32 205 classify 5
-    let _done <Result<(),str>> test_checked "if colon form";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 103 classify -3
+        |> checks_push check_eq_i32 205 classify 5
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
