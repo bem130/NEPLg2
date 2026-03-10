@@ -9287,3 +9287,40 @@
     - [結果/けっか]: `compile_fail` + `diag_id: D3006` [確認/かくにん] pass
 - [状況/じょうきょう]:
   - stdlib reboot [中/ちゅう]の doctest [修正/しゅうせい]は、まず `run_doctest.js` で 1 件を[固/かた]め、そのあと `tests.js` で[小/ちい]さい[範囲/はんい]を[集約/しゅうやく][確認/かくにん]する[流/なが]れで[進/すす]められるようになった。
+
+# 2026-03-10 作業メモ (`kpread` / `kpwrite` の[所有権/しょゆうけん][整理/せいり]と doctest [回復/かいふく])
+
+- [目的/もくてき]:
+  - `kpwrite` の stdout が[空/から]になる doctest [不具合/ふぐあい]と、`kpread` / `kpgraph` が `Vec.data` の `MemPtr` 化に[追従/ついじゅう]しきれていない[不整合/ふせいごう]を、[所有権/しょゆうけん]の[設計/せっけい]から[直/なお]す。
+  - `kp` [系/けい] helper の[実装/じっそう]を[新/あたら]しい doc comment policy に[合/あ]わせ、[修正/しゅうせい]した API の[意味/いみ]が[型/かた]とコメントの[両方/りょうほう]で[分/わ]かるようにする。
+- [根本原因/こんぽんげんいん]:
+  - `Writer` は header [領域/りょういき]だけを[共有/きょうゆう]すればよいのに `RegionToken<u8>` を field に[保持/ほじ]しており、header [参照/さんしょう]のたびに `region_ptr get w "region"` を[経由/けいゆ]していた。この[設計/せっけい]だと[所有権/しょゆうけん]を[持/も]つ token と[軽量/けいりょう] handle の[責務/せきむ]が[混/ま]ざり、doctest [実行/じっこう]で[状態/じょうたい]が[壊/こわ]れやすかった。
+  - `Scanner` も同様に `RegionToken<u8>` を field に[持/も]っていたため、[読/よ]み[取/と]り[位置/いち]だけを[共有/きょうゆう]したい helper [群/ぐん]が[毎回/まいかい] token を[消費/しょうひ]する[形/かたち]になっていた。
+  - `kpread_core` は header [領域/りょういき]を[触/さわ]るだけの helper にも `RegionToken<u8>` を[要求/ようきゅう]しており、[内部/ないぶ][実装/じっそう]が[不要/ふよう]に[重/おも]かった。
+- [変更/へんこう]:
+  - `stdlib/kp/kpwrite.nepl`
+    - `Writer.region` を `Writer.header <MemPtr<u8>>` に[変更/へんこう]した。
+    - header [操作/そうさ] helper は `MemPtr<u8>` を[直接/ちょくせつ][受/う]けるようにし、`writer_free_handle` / `writer_flush_handle` / `writer_ensure_handle` / `writer_put_u8_handle` / `writer_write_str_handle` / `writer_write_i32_handle` / `writer_write_u64_handle` の[参照/さんしょう]をすべて[追従/ついじゅう]させた。
+    - file header と `Writer` struct の doc comment を[新/あたら]しい policy に[揃/そろ]えた。
+  - `stdlib/kp/kpread.nepl`
+    - `Scanner.region` を `Scanner.header <MemPtr<u8>>` に[変更/へんこう]した。
+    - `Scanner` は[入力/にゅうりょく][状態/じょうたい]を[共有/きょうゆう]する[軽量/けいりょう] handle なので、`Copy` / `Clone` を[明示的/めいじてき]に[実装/じっそう]した。
+    - `scanner_header_ptr` / `scanner_load_header` / `scanner_store_header` を header pointer [基準/きじゅん]に[変更/へんこう]した。
+    - `scanner_skip_ws_header` を[追加/ついか]し、各 helper が `let header <MemPtr<u8>> get sc "header";` で[先/さき]に header を[束縛/そくばく]してから[処理/しょり]する[形/かたち]へ[揃/そろ]えた。
+    - file header と `Scanner` struct の doc comment を[新/あたら]しい policy に[揃/そろ]えた。
+  - `stdlib/kp/kpread_core.nepl`
+    - `mem_i32_region_ptr` / `store_i32_u8_at` / `load_i32_u8_at` を `MemPtr<u8>` + size [基準/きじゅん]へ[変更/へんこう]した。
+    - `scanner_new_impl` の header [初期化/しょきか]で[一時的/いちじてき]な `RegionToken<u8>` を[作/つく]らず、raw header pointer と size を[直接/ちょくせつ][渡/わた]す[形/かたち]へ[整理/せいり]した。
+    - file header の doc comment を[新/あたら]しい policy に[揃/そろ]えた。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/kp/kpwrite.nepl -n 2`
+    - [結果/けっか]: pass, stdout=`1 2\n`
+  - `node nodesrc/run_doctest.js -i stdlib/kp/kpwrite.nepl -n 3`
+    - [結果/けっか]: pass, stdout=`123\n`
+  - `node nodesrc/run_doctest.js -i stdlib/kp/kpwrite.nepl -n 4`
+    - [結果/けっか]: pass, stdout=`42\n`
+  - `node nodesrc/run_doctest.js -i stdlib/kp/kpgraph.nepl -n 1`
+    - [結果/けっか]: pass, stdout=`0 1 2 3\n`
+- [状況/じょうきょう]:
+  - `kpwrite` / `kpread` の[修正/しゅうせい]は doctest を[通/とお]すための[場当/ばあ]たり[対応/たいおう]ではなく、header pointer と[所有権/しょゆうけん] token の[責務/せきむ][分離/ぶんり]を[回復/かいふく]するもの。
+  - `kpread.nepl` には[実行対象/じっこうたいしょう]の doctest はまだなく `skip` のみだが、`scanner_read_i32` を[使/つか]う最小 source test と `kpgraph` の doctest で[現行/げんこう]設計が[成立/せいりつ]することを[確認/かくにん]した。
