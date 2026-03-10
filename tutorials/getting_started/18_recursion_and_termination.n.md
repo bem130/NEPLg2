@@ -30,11 +30,11 @@ fn sum_to <(i32)->i32> (n):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 0 sum_to 0
-        |> checks_push assert_eq_i32 1 sum_to 1
-        |> checks_push assert_eq_i32 15 sum_to 5
-    let _done <Result<(),str>> test_checked "recursion with base case";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 0 sum_to 0
+        |> checks_push check_eq_i32 1 sum_to 1
+        |> checks_push check_eq_i32 15 sum_to 5
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 条件分岐を `if:` で分けて書く
@@ -66,11 +66,11 @@ fn fib <(i32)->i32> (n):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 0 fib 0
-        |> checks_push assert_eq_i32 1 fib 1
-        |> checks_push assert_eq_i32 8 fib 6
-    let _done <Result<(),str>> test_checked "recursive if-colon form";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 0 fib 0
+        |> checks_push check_eq_i32 1 fib 1
+        |> checks_push check_eq_i32 8 fib 6
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 実装上の注意

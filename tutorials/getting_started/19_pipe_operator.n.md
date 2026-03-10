@@ -21,10 +21,10 @@ fn main <()*>i32> ():
     let b <i32> add 1 add 2 3 |> add 4
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 3 a
-        |> checks_push assert_eq_i32 10 b
-    let _done <Result<(),str>> test_checked "pipe basic";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 3 a
+        |> checks_push check_eq_i32 10 b
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 複数段の変換を連結する
@@ -49,9 +49,9 @@ fn main <()*>i32> ():
         |> add 6
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 12 v
-    let _done <Result<(),str>> test_checked "pipe chain";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 12 v
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 補足

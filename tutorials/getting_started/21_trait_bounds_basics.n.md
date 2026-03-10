@@ -26,9 +26,9 @@ impl Show for i32:
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 12 Show::show 12
-    let _done <Result<(),str>> test_checked "trait and impl";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 12 Show::show 12
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## ジェネリック関数に trait 制約を付ける
@@ -57,9 +57,9 @@ fn call_show <.T: Show> <(.T)->i32> (x):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 5 call_show 5
-    let _done <Result<(),str>> test_checked "trait bound generic";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 5 call_show 5
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 補足

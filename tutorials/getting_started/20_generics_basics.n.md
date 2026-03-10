@@ -21,10 +21,10 @@ fn id <.T> <(.T)->.T> (x):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 42 id 42
-        |> checks_push assert_str_eq "nepl" id "nepl"
-    let _done <Result<(),str>> test_checked "generic id";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 42 id 42
+        |> checks_push check_str_eq "nepl" id "nepl"
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## ジェネリックな enum を扱う
@@ -54,10 +54,10 @@ fn main <()*>i32> ():
     let b <Option<i32>> Option::None
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 7 keep_or_default a 0
-        |> checks_push assert_eq_i32 9 keep_or_default b 9
-    let _done <Result<(),str>> test_checked "generic option";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 7 keep_or_default a 0
+        |> checks_push check_eq_i32 9 keep_or_default b 9
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 補足

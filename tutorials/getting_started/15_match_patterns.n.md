@@ -26,10 +26,10 @@ fn describe_opt <(Option<i32>)->i32> (v):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 42 describe_opt some<i32> 42
-        |> checks_push assert_eq_i32 -1 describe_opt none<i32>
-    let _done <Result<(),str>> test_checked "match option";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 42 describe_opt some<i32> 42
+        |> checks_push check_eq_i32 -1 describe_opt none<i32>
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## Result を `match` で処理する
@@ -54,8 +54,8 @@ fn result_code <(Result<i32,str>)->i32> (r):
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 7 result_code Result::Ok 7
-        |> checks_push assert_eq_i32 0 result_code Result::Err "ng"
-    let _done <Result<(),str>> test_checked "match result";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 7 result_code Result::Ok 7
+        |> checks_push check_eq_i32 0 result_code Result::Err "ng"
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

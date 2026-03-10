@@ -10586,3 +10586,22 @@
 - [検証/けんしょう]:
   - `node nodesrc/tests.js -i tutorials/getting_started/12_pure_function_pipeline.n.md -i tutorials/getting_started/13_type_driven_error_modeling.n.md -i tutorials/getting_started/14_refactor_with_properties.n.md --no-stdlib --no-tree -o /tmp/tests-tutorial-pipeline-modeling-refactor.json -j 4`
     - [結果/けっか]: `6/6 pass`
+
+# 2026-03-10 作業メモ (`15` / `17` / `18` / `19` / `20` / `21` tutorial を explicit report 流儀へ追従)
+
+- [目的/もくてき]:
+  - `tutorials/getting_started/15_match_patterns.n.md`, `17_namespace_and_alias.n.md`, `18_recursion_and_termination.n.md`, `19_pipe_operator.n.md`, `20_generics_basics.n.md`, `21_trait_bounds_basics.n.md` を、[現行/げんこう]の explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - tutorial [後半/こうはん]に[残/のこ]っていた `test_checked` success log を[除去/じょきょ]し、[`match` / namespace / recursion / pipe / generics / trait bounds] の例も current の test [書式/しょしき]に[統一/とういつ]する。
+- [根本原因/こんぽんげんいん]:
+  - 6 chapter とも[検査/けんさ]の[本体/ほんたい]はすでに `Vec<Result<(),str>>` [中心/ちゅうしん]へ[寄/よ]っていたが、[最後/さいご]だけ old style の `test_checked` に[依存/いぞん]していた。
+  - これが[残/のこ]ると「途中は new style、最後だけ old style」という[混在/こんざい]が[続/つづ]き、tutorial [全体/ぜんたい]で[一貫/いっかん]した[記述/きじゅつ]にならない。
+- [変更/へんこう]:
+  - 6 chapter の doctest すべてで、`assert_*` を `check_*` へ[置換/ちかん]し、[末尾/まつび]の `test_checked` を `checks_print_report` + `checks_exit_code` へ[置換/ちかん]した。
+  - `20_generics_basics.n.md` では `assert_str_eq` も `check_str_eq` へ[揃/そろ]えた。
+  - `21_trait_bounds_basics.n.md` も `trait and impl` / `trait bound generic` の 2 case を[同様/どうよう]に[更新/こうしん]した。
+- [設計/せっけい][判断/はんだん]:
+  - これらは[説明/せつめい]の[主題/しゅだい]が[言語/げんご][機能/きのう]そのものであり、test helper の[細部/さいぶ]を[増/ふ]やすべきではない。そのため、`check_*` と `checks_print_report` だけへ[寄/よ]せる[最小/さいしょう]変更に[留/とど]めた。
+  - tutorial [後半/こうはん]でも explicit report を[徹底/てってい]することで、repo [全体/ぜんたい]として「success log は test case [末尾/まつび]の[明示 print/めいじ print]からだけ[出/で]る」という[方針/ほうしん]を[共有/きょうゆう]できるようにした。
+- [検証/けんしょう]:
+  - `node nodesrc/tests.js -i tutorials/getting_started/15_match_patterns.n.md -i tutorials/getting_started/17_namespace_and_alias.n.md -i tutorials/getting_started/18_recursion_and_termination.n.md -i tutorials/getting_started/19_pipe_operator.n.md -i tutorials/getting_started/20_generics_basics.n.md -i tutorials/getting_started/21_trait_bounds_basics.n.md --no-stdlib --no-tree -o /tmp/tests-tutorial-late-basics.json -j 4`
+    - [結果/けっか]: `12/12 pass`

@@ -21,10 +21,10 @@ ret: 0
 fn main <()*>i32> ():
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 9 m::add 4 5
-        |> checks_push assert_eq_i32 6 m::mul 2 3
-    let _done <Result<(),str>> test_checked "namespace function call";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 9 m::add 4 5
+        |> checks_push check_eq_i32 6 m::mul 2 3
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## enum バリアントも `::` で参照する
@@ -54,10 +54,10 @@ fn main <()*>i32> ():
     let v2 <Option<i32>> Option::None
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push assert_eq_i32 12 unwrap_or_zero v1
-        |> checks_push assert_eq_i32 0 unwrap_or_zero v2
-    let _done <Result<(),str>> test_checked "enum variant path";
-    checks_exit_code checks
+        |> checks_push check_eq_i32 12 unwrap_or_zero v1
+        |> checks_push check_eq_i32 0 unwrap_or_zero v2
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## 使い分けの目安
