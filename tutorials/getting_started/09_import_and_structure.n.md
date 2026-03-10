@@ -7,12 +7,14 @@ NEPLg2 では巨大な1関数よりも、目的ごとに関数を分離したほ
 ## `#import` と関数分割
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "std/test" as *
 
 fn twice <(i32)->i32> (x):
@@ -24,9 +26,12 @@ fn add_one <(i32)->i32> (x):
 fn pipeline_like <(i32)->i32> (x):
     add_one twice x
 
-fn main <()*> ()> ():
-    assert_eq_i32 9 pipeline_like 4
-    test_checked "import and split functions"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 9 pipeline_like 4
+    let _done <Result<(),str>> test_checked "import and split functions";
+    checks_exit_code checks
 ```
 
 ## 標準I/Oと組み合わせる

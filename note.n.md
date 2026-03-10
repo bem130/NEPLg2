@@ -10149,3 +10149,61 @@
   - `node nodesrc/run_doctest.js -i stdlib/tests/math.n.md -n 1` -> pass
   - `node nodesrc/tests.js -i tutorials/getting_started/02_numbers_and_variables.n.md -i tutorials/getting_started/03_functions.n.md -i stdlib/tests/cast.n.md -i stdlib/tests/math.n.md -i stdlib/tests/vec.n.md --no-stdlib --no-tree -o /tmp/tests-safe-result-batch1.json -j 4`
     - [結果/けっか]: `11/11 pass`
+
+# 2026-03-10 作業メモ (control-flow tutorial の safe `Result` 化を継続)
+
+- [目的/もくてき]:
+  - `while` / `block` / `if` / `#import` を[説明/せつめい]する tutorial [群/ぐん]も、`std/test` の[現行/げんこう][方針/ほうしん]に[合/あ]わせて `ret:` + `checks_exit_code` [前提/ぜんてい]へ[統一/とういつ]する。
+  - [初学者/しょがくしゃ]が tutorial を[順/じゅん]に[読/よ]んだとき、chapter ごとに test [流儀/りゅうぎ]が[揺/ゆ]れないようにする。
+- [根本原因/こんぽんげんいん]:
+  - `tutorials/getting_started/07_while_and_block.n.md`, `08_if_layouts.n.md`, `09_import_and_structure.n.md` に、unit-return の `main` と `assert_*` [直列/ちょくれつ][実行/じっこう]を[前提/ぜんてい]にした[古/ふる]い[書/か]き[方/かた]が[残/のこ]っていた。
+  - `11_testing_workflow` だけ safe `Result` [流儀/りゅうぎ]へ[更新/こうしん]されても、それより[前/まえ]の tutorial が[古/ふる]いままだと reboot [後/ご]の test [哲学/てつがく]が[途中/とちゅう]で[逆戻/ぎゃくもど]りしてしまう。
+- [変更/へんこう]:
+  - `tutorials/getting_started/07_while_and_block.n.md`
+    - `while` と `block:` の 2 [件/けん]の doctest に `ret: 0` を[追加/ついか]した。
+    - `fn main <()*> ()> ():` を `fn main <()*>i32> ():` に[変更/へんこう]し、`checks_new` / `checks_push` / `checks_exit_code` [前提/ぜんてい]へ[揃/そろ]えた。
+  - `tutorials/getting_started/08_if_layouts.n.md`
+    - 4 [件/けん]の `if` [レイアウト/れいあうと]例を `ret: 0` + `checks_exit_code` [前提/ぜんてい]へ[更新/こうしん]した。
+    - inline / `if:` / `then:` / mixed layout の[全例/ぜんれい]で `core/result` を import し、`test_checked` を `Result<(),str>` として[受/う]ける[形/かたち]に[統一/とういつ]した。
+  - `tutorials/getting_started/09_import_and_structure.n.md`
+    - `std/test` を[使/つか]う 1 [件/けん]の doctest を safe `Result` [流儀/りゅうぎ]へ[更新/こうしん]した。
+    - `stdio` [出力/しゅつりょく]だけを[検証/けんしょう]する doctest は、`ret:` [比較/ひかく]を[要/よう]しないためそのまま[維持/いじ]した。
+- [設計/せっけい][判断/はんだん]:
+  - tutorial [冒頭/ぼうとう][部/ぶ]は[文法/ぶんぽう]の[説明/せつめい]が[主目的/しゅもくてき]だが、test [入口/いりぐち]だけ[古/ふる]い trap [流儀/りゅうぎ]を[残/のこ]すと、`std/test` の reboot [後/ご][設計/せっけい]と[説明責任/せつめいせきにん]が[矛盾/むじゅん]する。
+  - `stdout:` [比較/ひかく]だけで[十分/じゅうぶん]な case まで[無理/むり]に `std/test` へ[寄/よ]せるのは[不要/ふよう]なので、`09_import_and_structure` の I/O [例/れい]は[既存/きそん]の[責務/せきむ]を[維持/いじ]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/08_if_layouts.n.md -n 4` -> pass
+  - `node nodesrc/tests.js -i tutorials/getting_started/07_while_and_block.n.md -i tutorials/getting_started/08_if_layouts.n.md -i tutorials/getting_started/09_import_and_structure.n.md --no-stdlib --no-tree -o /tmp/tests-safe-result-batch2.json -j 4`
+    - [結果/けっか]: `8/8 pass`
+
+# 2026-03-10 作業メモ (`Vec<Result<(),str>>` の test [結果/けっか][表示/ひょうじ]を human / machine に[分離/ぶんり])
+
+- [目的/もくてき]:
+  - reboot の「[値中心/あたいちゅうしん]・[安全/あんぜん] API [優先/ゆうせん]・[責務/せきむ][分離/ぶんり]」に[従/したが]い、`Vec<Result<(),str>>` の test [結果/けっか][表示/ひょうじ]を machine [向/む]け summary と human [向/む]け ANSI [表示/ひょうじ]へ[分離/ぶんり]する。
+  - `finish_checks` が failure [時/じ]だけ[断片的/だんぺんてき]に[詳細/しょうさい]を[出/だ]す[旧来/きゅうらい]の[挙動/きょどう]をやめ、success / failure [両方/りょうほう]で `Vec<Result>` [全体/ぜんたい]を[読/よ]みやすく[見/み]せる。
+- [根本原因/こんぽんげんいん]:
+  - `stdlib/std/test.nepl` の `checks_summary` は `[ok,err,...]` ないし `[ok,err <msg>,...]` の 1 [行/ぎょう] summary に[偏/かたよ]っており、[人間/にんげん]が `Vec<Result>` [全体/ぜんたい]を[追/お]うには[不足/ふそく]していた。
+  - failure [時/じ]の `checks_report_failures` も `Err` [要素/ようそ]だけを `check[i] ...` として[出/だ]していたため、success [項目/こうもく]との[並/なら]びや[全体像/ぜんたいぞう]が[見/み]えにくかった。
+  - reboot.md の[設計原則/せっけいげんそく]では、machine [向/む]けと human [向/む]けの[表示責務/ひょうじせきむ]を[分/わ]けるべきであり、ここが[未整理/みせいり]だった。
+- [変更/へんこう]:
+  - `stdlib/std/test.nepl`
+    - `check_status_str` を machine [向/む]け summary helper として[整理/せいり]し、`Err` では `err <msg>` を[返/かえ]すようにした。
+    - `checks_summary` の doc comment を、「machine / log [向/む]けの[安定/あんてい][表現/ひょうげん]」として[明記/めいき]した。
+    - `checks_print_human_line`
+      - 1 [件/けん]の `Result<(),str>` を `[index] ok` / `[index] err <msg>` で[表示/ひょうじ]する helper を[追加/ついか]した。
+      - [添字/そえじ]は灰色、`ok` は緑、`err <msg>` は赤で[表示/ひょうじ]する。
+    - `checks_print_human_loop` / `checks_print_human`
+      - `Vec<Result<(),str>>` [全体/ぜんたい]を[順/じゅん]に[色付/いろづ]き[表示/ひょうじ]する helper を[追加/ついか]した。
+    - `finish_checks`
+      - まず machine [向/む]け summary を `Checked ...` / `FAIL: ...` として 1 [行/ぎょう][表示/ひょうじ]し、その[後/あと]で `checks_print_human` により[全要素/ぜんようそ]を[色付/いろづ]き[表示/ひょうじ]する[形/かたち]へ[変更/へんこう]した。
+      - これにより success / failure [両方/りょうほう]で `Vec<Result>` [全体/ぜんたい]の[可視性/かしせい]を[揃/そろ]えた。
+  - `tests/stdlib/std_test_collect.n.md`
+    - success / failure [両方/りょうほう]の[期待/きたい] stdout を、新しい machine summary + human list [形式/けいしき]へ[更新/こうしん]した。
+- [設計/せっけい][判断/はんだん]:
+  - machine [向/む]け summary は `checks_summary` の 1 [行/ぎょう][文字列/もじれつ]へ[残/のこ]し、runner / log / [比較/ひかく]の[安定性/あんていせい]を[維持/いじ]した。
+  - human [向/む]けには `checks_print_human` を[別/べつ][責務/せきむ]として[設/もう]け、ANSI color を[使/つか]って[成功/せいこう]と[失敗/しっぱい]を[視覚的/しかくてき]に[分離/ぶんり]した。
+  - failure だけ[詳細/しょうさい]を[出/だ]す[方式/ほうしき]ではなく success も[含/ふく]めて[全件/ぜんけん]を[表示/ひょうじ]するようにしたのは、`Vec<Result>` [全体/ぜんたい]の[読み/よ]やすさを[優先/ゆうせん]したためである。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/std_test_collect.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/std_test_collect.n.md -i tutorials/getting_started/11_testing_workflow.n.md -i stdlib/tests/vec.n.md -i tutorials/getting_started/07_while_and_block.n.md -i tutorials/getting_started/08_if_layouts.n.md -i tutorials/getting_started/09_import_and_structure.n.md -i stdlib/std/test.nepl --no-stdlib --no-tree -o /tmp/tests-std-test-human-machine.json -j 4`
+    - [結果/けっか]: `25/25 pass`

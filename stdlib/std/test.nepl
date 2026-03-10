@@ -435,16 +435,17 @@ fn check_err_i32 <(Result<i32,i32>)->Result<(),str>> (r):
             Result<(),str>::Ok ()
 
 //: ## check_status_str
-//: [集約/しゅうやく][表示/ひょうじ][用/よう]の[状態/じょうたい][文字列/もじれつ]を[返/かえ]す
+//: [機械/きかい][向/む]け summary [用/よう]の[状態/じょうたい][文字列/もじれつ]を[返/かえ]す
 //:
 //: ### [目的/もくてき]
-//: - `Result<(),str>` を `ok` / `err` の短い表示へ変換します。
+//: - `Result<(),str>` を `ok` / `err <msg>` の[安定/あんてい]した summary [片/へん]へ[変換/へんかん]し、machine [側/がわ]でも[追跡/ついせき]しやすくします。
 //:
 //: ### [実装/じっそう]
-//: - `Ok` と `Err` を `match` で分岐します。
+//: - `Ok` は `ok` を[返/かえ]し、`Err msg` は `err ` と msg を[連結/れんけつ]して[返/かえ]します。
 //:
 //: ### [注意/ちゅうい]
-//: - 集約表示専用の内部 helper です。
+//: - `checks_summary` の[内部/ないぶ] helper です。
+//: - msg をそのまま summary に[含/ふく]めるため、[非常/ひじょう]に[長/なが]い[失敗/しっぱい][文/ぶん]は summary [行/ぎょう]も[長/なが]くなります。
 //:
 //: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(1)
@@ -454,7 +455,7 @@ fn check_status_str <(Result<(),str>)->str> (r):
         Result::Ok v:
             "ok"
         Result::Err e:
-            "err"
+            concat "err " e
 
 //: ## checks_has_err_loop
 //: `Err` を[含/ふく]むかを[順/じゅん]に[調/しら]べる[内部/ないぶ] helper
@@ -511,16 +512,16 @@ fn checks_has_err <(Vec<Result<(),str>>)->bool> (checks):
     out
 
 //: ## checks_summary_loop
-//: `[ok,err,...]` [形式/けいしき]の[要約/ようやく]を[作/つく]る[内部/ないぶ] helper
+//: `[ok,err <msg>,...]` [形式/けいしき]の[要約/ようやく]を[作/つく]る[内部/ないぶ] helper
 //:
 //: ### [目的/もくてき]
-//: - [集約/しゅうやく][済/ず]み[検査列/けんされつ]を[短/みじか]い[進捗/しんちょく][表示/ひょうじ][文字列/もじれつ]へ[変換/へんかん]します。
+//: - [集約/しゅうやく][済/ず]み[検査列/けんされつ]を、`ok` と `err <msg>` が[並/なら]ぶ summary [文字列/もじれつ]へ[変換/へんかん]します。
 //:
 //: ### [実装/じっそう]
-//: - `Vec` の raw data を[先頭/せんとう]から[順/じゅん]に[走査/そうさ]し、`ok` / `err` を[連結/れんけつ]して[必要/ひつよう]な[区切/くぎ]りだけを[追加/ついか]します。
+//: - `Vec` の raw data を[先頭/せんとう]から[順/じゅん]に[走査/そうさ]し、`check_status_str` の[結果/けっか]を[必要/ひつよう]な[区切/くぎ]りとともに[連結/れんけつ]します。
 //:
 //: ### [注意/ちゅうい]
-//: - [失敗/しっぱい][件数/けんすう]だけでなく[並/なら]び[順/じゅん]も[見/み]たい[場面/ばめん]を[想定/そうてい]した helper です。
+//: - [失敗/しっぱい][件数/けんすう]だけでなく、summary [行/ぎょう]だけで[各/かく][失敗/しっぱい][理由/りゆう]まで[追/お]いたい[場面/ばめん]を[想定/そうてい]した helper です。
 //:
 //: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n^2)（[文字列/もじれつ][連結/れんけつ]を[繰/く]り[返/かえ]すため）
@@ -538,16 +539,16 @@ fn checks_summary_loop <(i32,i32,i32,str)->str> (checks_data, n, i, acc):
             checks_summary_loop checks_data n add i 1 a1
 
 //: ## checks_summary
-//: [集約/しゅうやく][済/ず]み[検査列/けんされつ]を `[ok,err,...]` [形式/けいしき]へ[整形/せいけい]する
+//: [集約/しゅうやく][済/ず]み[検査列/けんされつ]を `[ok,err <msg>,...]` [形式/けいしき]へ[整形/せいけい]する
 //:
 //: ### [目的/もくてき]
-//: - [複数/ふくすう]の[検査/けんさ][結果/けっか]を[一目/ひとめ]で[把握/はあく]できる[短/みじか]い[要約/ようやく][文字列/もじれつ]を[返/かえ]します。
+//: - [複数/ふくすう]の[検査/けんさ][結果/けっか]を[安定/あんてい]した 1 [行/ぎょう]の[文字列表現/もじれつひょうげん]へ[畳/たた]み、runner や log [側/がわ]で[扱/あつか]いやすくします。
 //:
 //: ### [実装/じっそう]
 //: - `Vec<Result<(),str>>` を temporary memory に[保存/ほぞん]し、`[` から[始/はじ]めて `checks_summary_loop` で[連結/れんけつ]します。
 //:
 //: ### [注意/ちゅうい]
-//: - これは[概要/がいよう][専用/せんよう]です。どの[検査/けんさ]が[失敗/しっぱい]したかは `finish_checks` の[詳細/しょうさい][出力/しゅつりょく]を[見/み]てください。
+//: - これは machine / log [向/む]けの[安定/あんてい][表現/ひょうげん]です。[人間/にんげん][向/む]けの[色付/いろづ]き[表示/ひょうじ]は `checks_print_human` を[使/つか]います。
 //:
 //: ### [計算量/けいさんりょう]
 //: - [時間/じかん]: O(n^2)（[文字列/もじれつ][連結/れんけつ]を[繰/く]り[返/かえ]すため）
@@ -561,64 +562,82 @@ fn checks_summary <(Vec<Result<(),str>>)->str> (checks):
     dealloc_raw checks_mem size_of<Vec<Result<(),str>>>;
     out
 
-//: ## checks_print_failures_loop
-//: [失敗/しっぱい][詳細/しょうさい]を[順/じゅん]に[表示/ひょうじ]する[内部/ないぶ] helper
+//: ## checks_print_human_line
+//: 1 [件/けん]ぶんの test [結果/けっか]を[人間/にんげん][向/む]けに[色付/いろづ]きで[表示/ひょうじ]する
 //:
 //: ### [目的/もくてき]
-//: - `Err` になった[検査/けんさ]だけを[抽出/ちゅうしゅつ]し、[添字/そえじ][付/つ]きで[表示/ひょうじ]します。
+//: - `[index] ok` または `[index] err <msg>` の[形/かたち]で、1 [件/けん]の[検査/けんさ][結果/けっか]を[見/み]やすく[表示/ひょうじ]します。
 //:
 //: ### [実装/じっそう]
-//: - `Vec` の raw data を[順/じゅん]に[走査/そうさ]し、`Err` のときだけ `check[i] ...` の[形/かたち]に[整形/せいけい]して `test_print_fail` に[渡/わた]します。
+//: - [添字/そえじ][部分/ぶぶん]は灰色、`ok` は緑、`err <msg>` は赤で[表示/ひょうじ]します。
 //:
 //: ### [注意/ちゅうい]
 //: - [標準/ひょうじゅん][出力/しゅつりょく]への[表示/ひょうじ]は `#target std` のときだけ[行/おこな]います。
 //:
 //: ### [計算量/けいさんりょう]
-//: - [時間/じかん]: O(n)
+//: - [時間/じかん]: O(m)（m は msg の[長/なが]さ）
+//: - [空間/くうかん]: O(m)
+#if[target=std]
+fn checks_print_human_line <(i32,Result<(),str>)*>()> (i, r):
+    let si <str> from_i32 i;
+    let prefix0 <str> concat "[" si;
+    let prefix <str> concat prefix0 "] ";
+    print_color ansi_gray prefix;
+    match r:
+        Result::Ok v:
+            println_color ansi_green "ok"
+        Result::Err msg:
+            println_color ansi_red concat "err " msg
+
+//: ## checks_print_human_loop
+//: `Vec<Result<(),str>>` を[順/じゅん]に[色付/いろづ]き[表示/ひょうじ]する[内部/ないぶ] helper
+//:
+//: ### [目的/もくてき]
+//: - [集約/しゅうやく][済/ず]み[検査列/けんされつ]の[全要素/ぜんようそ]を[人間/にんげん][向/む]けに[並/なら]べて[表示/ひょうじ]します。
+//:
+//: ### [実装/じっそう]
+//: - raw data を[順/じゅん]に[走査/そうさ]し、`checks_print_human_line` へ 1 [件/けん]ずつ[渡/わた]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [成功/せいこう] case でも[失敗/しっぱい] case でも[全件/ぜんけん]を[表示/ひょうじ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [時間/じかん]: O(n + s)（s は[全/すべ]ての msg [長/なが]さの[合計/ごうけい]）
 //: - [空間/くうかん]: O(n)（[再帰/さいき]）
 #if[target=std]
-fn checks_print_failures_loop <(i32,i32,i32)*>()> (checks_data, n, i):
+fn checks_print_human_loop <(i32,i32,i32)*>()> (checks_data, n, i):
     if:
         eq i n
         then:
             ()
         else:
             let r <Result<(),str>> load<Result<(),str>> add checks_data mul i size_of<Result<(),str>>;
-            match r:
-                Result::Ok v:
-                    checks_print_failures_loop checks_data n add i 1
-                Result::Err msg:
-                    let si <str> from_i32 i
-                    let m0 <str> concat "check[" si
-                    let m1 <str> concat m0 "] "
-                    let m2 <str> concat m1 msg
-                    test_print_fail m2
-                    checks_print_failures_loop checks_data n add i 1
+            checks_print_human_line i r
+            checks_print_human_loop checks_data n add i 1
 
-//: ## checks_report_failures
-//: [失敗時/しっぱいじ]の[概要/がいよう]と[詳細/しょうさい]をまとめて[表示/ひょうじ]する
+//: ## checks_print_human
+//: `Vec<Result<(),str>>` を[人間/にんげん][向/む]けに[色付/いろづ]き[表示/ひょうじ]する
 //:
 //: ### [目的/もくてき]
-//: - [集約/しゅうやく][済/ず]み[検査/けんさ]の summary と[失敗/しっぱい][詳細/しょうさい]を[標準/ひょうじゅん][出力/しゅつりょく]へ[出/だ]します。
+//: - `Vec<Result<(),str>>` を `[index] ok / err <msg>` の[形/かたち]で[全件/ぜんけん][表示/ひょうじ]し、[人間/にんげん]が[成功/せいこう]と[失敗/しっぱい]を[即座/そくざ]に[読/よ]めるようにします。
 //:
 //: ### [実装/じっそう]
-//: - summary を 1 [行/ぎょう][表示/ひょうじ]し、その[後/あと]で `Err` [要素/ようそ]だけを[添字/そえじ][付/つ]きで[列挙/れっきょ]します。
-//: - `checks` は temporary memory に[保存/ほぞん]し、raw data を `checks_print_failures_loop` へ[渡/わた]します。
+//: - `checks` を temporary memory に[保存/ほぞん]し、raw data を `checks_print_human_loop` へ[渡/わた]します。
 //:
 //: ### [注意/ちゅうい]
 //: - `#target std` [専用/せんよう]です。
+//: - machine [向/む]けの[安定/あんてい][表現/ひょうげん]が[必要/ひつよう]なら `checks_summary` を[使/つか]います。
 //:
 //: ### [計算量/けいさんりょう]
-//: - [時間/じかん]: O(n)
+//: - [時間/じかん]: O(n + s)（s は[全/すべ]ての msg [長/なが]さの[合計/ごうけい]）
 //: - [空間/くうかん]: O(n)（[再帰/さいき]）
 #if[target=std]
-fn checks_report_failures <(Vec<Result<(),str>>,str)*>()> (checks, summary):
-    test_print_fail summary
+fn checks_print_human <(Vec<Result<(),str>>)*>()> (checks):
     let checks_mem <i32> alloc_raw size_of<Vec<Result<(),str>>>;
     store<Vec<Result<(),str>>> checks_mem checks;
     let checks_len <i32> get load<Vec<Result<(),str>>> checks_mem "len";
     let checks_data <i32> mem_ptr_addr get load<Vec<Result<(),str>>> checks_mem "data";
-    checks_print_failures_loop checks_data checks_len 0
+    checks_print_human_loop checks_data checks_len 0
     dealloc_raw checks_mem size_of<Vec<Result<(),str>>>;
 
 //: ## finish_checks
@@ -629,14 +648,14 @@ fn checks_report_failures <(Vec<Result<(),str>>,str)*>()> (checks, summary):
 //: - [途中/とちゅう]の[検査/けんさ]は[継続/けいぞく]しつつ、[最後/さいご]に[要約/ようやく]と[各/かく][失敗/しっぱい][内容/ないよう]を[表示/ひょうじ]して[一括/いっかつ][失敗/しっぱい]できます。
 //:
 //: ### [実装/じっそう]
-//: - まず `checks_summary` で `[ok,err,...]` [形式/けいしき]の[要約/ようやく]を[作/つく]ります。
-//: - [失敗/しっぱい]が 1 [件/けん]でもあれば summary と[各/かく] `Err` の[詳細/しょうさい]を[表示/ひょうじ]して `Result::Err summary` を[返/かえ]します。
-//: - [失敗/しっぱい]がなければ summary を `Checked ...` として[表示/ひょうじ]し、`Result::Ok ()` を[返/かえ]します。
+//: - まず `checks_summary` で machine [向/む]け summary を[作/つく]ります。
+//: - [失敗/しっぱい]が 1 [件/けん]でもあれば `FAIL: <summary>` を[表示/ひょうじ]し、その[後/あと]に `checks_print_human` で[全件/ぜんけん]を[色付/いろづ]き[表示/ひょうじ]して `Result::Err summary` を[返/かえ]します。
+//: - [失敗/しっぱい]がなければ `Checked <summary>` を[表示/ひょうじ]し、その[後/あと]に `checks_print_human` で[全件/ぜんけん]を[色付/いろづ]き[表示/ひょうじ]して `Result::Ok ()` を[返/かえ]します。
 //: - move model に[合/あ]わせ、[入力/にゅうりょく]の `Vec<Result<(),str>>` は 1 [回/かい]だけ memory に[保存/ほぞん]してから helper へ[渡/わた]します。
 //:
 //: ### [注意/ちゅうい]
 //: - [想定/そうてい][用途/ようと]は `<Vec<Result<(),str>>> new |> push check_* ...` のような[段階的/だんかいてき][収集/しゅうしゅう]です。
-//: - [失敗/しっぱい]の[添字/そえじ]は 0 [始/はじ]まりです。summary の `err` と[同/おな]じ[並/なら]びで[対応/たいおう]します。
+//: - [失敗/しっぱい]の[添字/そえじ]は 0 [始/はじ]まりで、`checks_print_human` の[表示/ひょうじ]と[対応/たいおう]します。
 //: - [標準/ひょうじゅん][出力/しゅつりょく]への[表示/ひょうじ]は `#target std` のときのみ[行/おこな]います。
 //: - runner [連携/れんけい]で[終了/しゅうりょう] code が[必要/ひつよう]な[場合/ばあい]は `checks_exit_code` を[使/つか]います。
 //:
@@ -668,12 +687,14 @@ fn finish_checks <(Vec<Result<(),str>>)*>Result<(),str>> (checks):
         checks_has_err load<Vec<Result<(),str>>> checks_mem
         then:
             #if[target=std]
-            checks_report_failures load<Vec<Result<(),str>>> checks_mem summary
+            test_print_fail summary
+            checks_print_human load<Vec<Result<(),str>>> checks_mem
             dealloc_raw checks_mem size_of<Vec<Result<(),str>>>
             Result<(),str>::Err summary
         else:
             #if[target=std]
             test_checked summary
+            checks_print_human load<Vec<Result<(),str>>> checks_mem
             dealloc_raw checks_mem size_of<Vec<Result<(),str>>>
             Result<(),str>::Ok ()
 
