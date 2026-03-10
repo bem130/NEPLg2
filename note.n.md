@@ -9467,3 +9467,26 @@
 - [状況/じょうきょう]:
   - binary stream の媒体は `Vec<u8>` ではなく `ByteBuf` に固定した。
   - `nodesrc/tests.js` で I/O を見る focused 検証は、今後 `--assert-io` を付ける前提で扱う。
+
+# 2026-03-10 作業メモ (`nodesrc/tests.js` の I/O 検証既定値を修正)
+
+- [目的/もくてき]:
+  - `tests.js` が `stdout:` / `stderr:` を書いた doctest を既定で厳密比較し、`run_doctest.js` と同じ期待で使えるようにする。
+- [根本原因/こんぽんげんいん]:
+  - これまでの `tests.js` は `--assert-io` / `NEPL_ASSERT_IO=1` / `assert_io` tag が無い限り、`expected_stdout` / `expected_stderr` を持つ case でも I/O mismatch を pass 扱いしていた。
+  - そのため、binary streamio の不正出力が JSON 集計上では `pass` に見え、focused suite の信頼性が落ちていた。
+- [変更/へんこう]:
+  - `nodesrc/tests.js`
+    - `expected_stdout` または `expected_stderr` がある case は、既定で I/O 比較を有効にするよう変更した。
+    - `--assert-io` / `NEPL_ASSERT_IO=1` / `assert_io` tag は明示フラグとして残しつつ、「I/O 検証を有効化する唯一条件」ではなくした。
+  - `nodesrc/README.n.md`
+    - `tests.js` でも `stdout:` / `stderr:` を既定で検証することを追記した。
+    - `--assert-io` は補助フラグであり、I/O 期待値の有無そのものを有効化する必須条件ではないことを明記した。
+- [検証/けんしょう]:
+  - `node nodesrc/tests.js -i tests/stdlib/stdout.n.md -i tests/stdlib/stdin.n.md -i tests/stdlib/kp.n.md -i tests/stdlib/streamio.n.md --no-stdlib --no-tree -o /tmp/tests-io-default-assert.json -j 15`
+    - [結果/けっか]: `22/22 pass`
+  - `node nodesrc/tests.js -i stdlib/alloc/io.nepl -i stdlib/std/streamio.nepl --no-stdlib --no-tree -o /tmp/tests-stdlib-io-doctest-default.json -j 15`
+    - [結果/けっか]: `2/2 pass`
+- [状況/じょうきょう]:
+  - `tests.js` と `run_doctest.js` の I/O 検証期待は揃った。
+  - 今後 `stdout:` / `stderr:` を書いた doctest は、追加フラグなしでも mismatch で落ちる。

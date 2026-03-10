@@ -530,10 +530,14 @@ function applyDoctestExpectations(result, testCase, options = {}) {
         }
         return r;
     }
-    const strictIo = !!options.assertIo || process.env.NEPL_ASSERT_IO === '1' || hasTag(tags, 'assert_io');
+    if (!wantsStdout && !wantsStderr) return r;
+    const strictIo = wantsStdout
+        || wantsStderr
+        || !!options.assertIo
+        || process.env.NEPL_ASSERT_IO === '1'
+        || hasTag(tags, 'assert_io');
     if (!strictIo) return r;
     if (hasTag(tags, 'should_panic')) return r;
-    if (!wantsStdout && !wantsStderr) return r;
 
     if (wantsStdout) {
         const expected = normalizeOutputByTags(String(testCase.expected_stdout), tags);
