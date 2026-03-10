@@ -14,16 +14,20 @@ neplg2:test
 #import "std/test" as *
 #import "alloc/collections/vec" as *
 #import "alloc/collections/vec/sort" as *
+#import "core/result" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
     let v <Vec<i32>>:
         new<i32>
         |> push 5
         |> push 1
         |> push 3
         |> sort_quick_ret
-    assert sort_is_sorted<i32> v;
-    test_checked "sort_quick on Vec<i32>"
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push check sort_is_sorted<i32> v
+    let shown <Vec<Result<(),str>>> checks_print_report checks
+    checks_exit_code shown
 ```
 
 ## lower_bound / upper_bound / 個数
@@ -45,16 +49,30 @@ stdout: "1 3 2\n"
 #import "std/stdio" as *
 
 fn main <()*>()> ():
-    let v <Vec<i32>>:
+    let v_lower <Vec<i32>>:
         new<i32>
         |> push 1
         |> push 3
         |> push 3
         |> push 7
         |> sort_quick_ret
-    print_i32 lower_bound_vec_i32 v 2;
+    let v_upper <Vec<i32>>:
+        new<i32>
+        |> push 1
+        |> push 3
+        |> push 3
+        |> push 7
+        |> sort_quick_ret
+    let v_count <Vec<i32>>:
+        new<i32>
+        |> push 1
+        |> push 3
+        |> push 3
+        |> push 7
+        |> sort_quick_ret
+    print_i32 lower_bound_vec_i32 v_lower 2;
     print " ";
-    print_i32 upper_bound_vec_i32 v 3;
+    print_i32 upper_bound_vec_i32 v_upper 3;
     print " ";
-    println_i32 count_equal_range_vec_i32 v 3
+    println_i32 count_equal_range_vec_i32 v_count 3
 ```

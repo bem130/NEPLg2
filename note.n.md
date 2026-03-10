@@ -10605,3 +10605,33 @@
 - [検証/けんしょう]:
   - `node nodesrc/tests.js -i tutorials/getting_started/15_match_patterns.n.md -i tutorials/getting_started/17_namespace_and_alias.n.md -i tutorials/getting_started/18_recursion_and_termination.n.md -i tutorials/getting_started/19_pipe_operator.n.md -i tutorials/getting_started/20_generics_basics.n.md -i tutorials/getting_started/21_trait_bounds_basics.n.md --no-stdlib --no-tree -o /tmp/tests-tutorial-late-basics.json -j 4`
     - [結果/けっか]: `12/12 pass`
+
+# 2026-03-10 作業メモ (`vec` / `list` / `fs` fixture と `23_competitive_sort` を current 仕様へ揃え、`kpsearch` Vec wrapper を修正)
+
+- [目的/もくてき]:
+  - `stdlib/tests/vec.n.md`, `stdlib/tests/list.n.md`, `stdlib/tests/fs.n.md`, `tutorials/getting_started/23_competitive_sort_and_search.n.md` に[残/のこ]っていた old helper [呼/よ]び[出/だ]しを[除去/じょきょ]し、explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - `23_competitive_sort` の `lower_bound_vec_i32` / `upper_bound_vec_i32` / `count_equal_range_vec_i32` が current move model と[整合/せいごう]するよう、`kpsearch` 本体の `Vec<i32>` wrapper を[根本/こんぽん]から[修正/しゅうせい]する。
+- [根本原因/こんぽんげんいん]:
+  - `vec` / `list` fixture は explicit report [形/けい]へ[寄/よ]っていたが、`test_fail` / `assert_*` helper [呼/よ]び[出/だ]しが[残/のこ]り、完全には current [方針/ほうしん]へ[収束/しゅうそく]していなかった。
+  - `stdlib/tests/fs.n.md` も unit-return + `test_fail` [直呼/じかよ]びの[古/ふる]い[形/かたち]が[残/のこ]っていた。
+  - `23_competitive_sort_and_search.n.md` の 2 [件/けん]目が[空出力/からしゅつりょく]になった[真因/しんいん]は tutorial [側/がわ]ではなく、[stdlib/kp/kpsearch.nepl](/mnt/d/project/NEPLg2/stdlib/kp/kpsearch.nepl) の `*_vec_i32` wrapper が `v` を 2 [回/かい][読/よ]む[実装/じっそう]で current move model と[不整合/ふせいごう]だったことだった。
+- [変更/へんこう]:
+  - `stdlib/tests/vec.n.md`
+    - `assert` / `assert_eq_i32` / `test_fail` を `check` / `check_eq_i32` / `Result::Err` [直接/ちょくせつ][積/つ]みへ[置換/ちかん]し、[末尾/まつび]を `checks_print_report` + `checks_exit_code` へ[統一/とういつ]した。
+  - `stdlib/tests/list.n.md`
+    - `Option::None` [分岐/ぶんき]の `test_fail` を `Result::Err` へ[置換/ちかん]し、success [側/がわ]も `check_*` [中心/ちゅうしん]へ[揃/そろ]えた。
+  - `stdlib/tests/fs.n.md`
+    - missing file case を `i32` return + explicit report [形/けい]へ[更新/こうしん]した。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+    - `sort_quick on Vec<i32>` を `check` + explicit report [形/けい]へ[変更/へんこう]した。
+    - `lower_bound` / `upper_bound` / `count_equal_range` 例は、wrapper 修正後の API に[依存/いぞん]する[形/かたち]でそのまま[動作/どうさ]するようにした。
+  - `stdlib/kp/kpsearch.nepl`
+    - `lower_bound_vec_i32` / `upper_bound_vec_i32` / `contains_vec_i32` / `count_equal_range_vec_i32` で、`Vec<i32>` を temporary memory に 1 [回/かい]だけ[退避/たいひ]し、そこから `data` / `len` を[抽出/ちゅうしゅつ]して raw-array helper へ[渡/わた]す[実装/じっそう]へ[変更/へんこう]した。
+    - これにより `Vec` を 2 [回/かい][読/よ]む[構造/こうぞう]を[除去/じょきょ]し、current move model へ[整合/せいごう]させた。
+- [設計/せっけい][判断/はんだん]:
+  - `23_competitive_sort` の[失敗/しっぱい]は tutorial [側/がわ]の[書/か]き[方/かた]ではなく wrapper 本体の[所有権/しょゆうけん][扱/あつか]いが[古/ふる]かったことが[真因/しんいん]だったため、tutorial だけの[迂回/うかい]ではなく `kpsearch` 本体を[修正/しゅうせい]した。
+  - `Vec` から `ptr` / `len` を[取/と]る wrapper は[今後/こんご]も[再発/さいはつ]しやすい箇所なので、「temporary memory に[退避/たいひ]して[一度/いちど]だけ[観察/かんさつ]する」という[方針/ほうしん]を[明示的/めいじてき]に[採用/さいよう]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/23_competitive_sort_and_search.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i stdlib/tests/vec.n.md -i stdlib/tests/list.n.md -i stdlib/tests/fs.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md -i stdlib/kp/kpsearch.nepl --no-stdlib --no-tree -o /tmp/tests-stdlib-vec-list-fs-sort.json -j 4`
+    - [結果/けっか]: `8/8 pass`
