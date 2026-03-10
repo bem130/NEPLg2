@@ -110,7 +110,7 @@ function runCompile(opts) {
 
 function runScenario(opts, wasmPath, scenario, vfsRoot) {
     return new Promise((resolve, reject) => {
-        const child = spawn(opts.wasmer, ['run', `--dir=${vfsRoot}`, wasmPath], {
+        const child = spawn(opts.wasmer, ['run', `--volume=${vfsRoot}:${vfsRoot}`, wasmPath], {
             stdio: ['pipe', 'pipe', 'pipe'],
         });
         let stdout = '';

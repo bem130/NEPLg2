@@ -54,6 +54,11 @@ node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 3
 - `tests.js` を[介/かい]さず、1 [件/けん]の[内容/ないよう]を[明示的/めいじてき]に[渡/わた]したいとき
 - nodesrc [側/がわ]の test harness [自体/じたい]を[調/しら]べたいとき
 
+### [注意/ちゅうい]
+
+- `#target wasix` の case は Node.js [内蔵/ないぞう] WASI ではなく `wasmer run` で[実行/じっこう]します。
+- `WASMER_BIN` を[設定/せってい]すると、`wasmer` [以外/いがい]の[実行/じっこう][バイナリ/ばいなり]を[指定/してい]できます。
+
 ## `cli.js`
 
 Node.js から compiler/runtime を[呼/よ]び[出/だ]す CLI です。

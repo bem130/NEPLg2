@@ -9728,3 +9728,64 @@
 - [状況/じょうきょう]:
   - TUI の利用者向け入口は `features/tui` に固定され、todo 8 のうち TUI 配置は完了した。
   - `features` 層には GUI / HTTP / 音声など未整理の領域が残るため、todo 8 自体は「残作業整理」として継続する。
+
+# 2026-03-10 作業メモ (`features/tui` facade の focused regression を追加)
+
+- [目的/もくてき]:
+  - 直前に入れた `features/tui` への移行を、examples compile のみではなく `tests/stdlib` の focused case として固定する。
+  - `platforms/wasix/tui` 直参照への逆戻りや、`TerminalSize` の field access 退行を小さな fixture で早期検知できるようにする。
+- [根本原因/こんぽんげんいん]:
+  - 直前の変更は examples compile と runtime regression では確認できていたが、stdlib reboot の本流で使う `tests/stdlib/*` 側に専用 fixture が存在しなかった。
+  - そのままだと、将来 `features/tui` facade の reexport が崩れても、重い wasix example を個別に回すまで気づけない状態だった。
+- [変更/へんこう]:
+  - `tests/stdlib/features_tui.n.md`
+    - `features_tui_facade_reexports_text_helpers` を追加し、`features/tui` 経由で `line_pad_to_cols` と `repeat_text` が使えることを stdout で固定した。
+    - `features_tui_terminal_size_uses_named_fields` を追加し、`get_terminal_size` の戻り値に対して `get size "cols"` / `"rows"` が使えることを `ret: 0` で固定した。
+- [設計/せっけい][判断/はんだん]:
+  - TTY を前提とする raw mode や full-screen 描画は重く壊れ方も多様なので、focused regression では「TTY なしでも再現できる helper」と「named field access」の 2 点に責務を絞った。
+  - これにより、`features/tui` facade の契約面が examples より短い再現で検証できるようになった。
+
+# 2026-03-10 作業メモ (`features/tui` focused test を通すために library / nodesrc の wasix 経路を是正)
+
+- [目的/もくてき]:
+  - 追加した `tests/stdlib/features_tui.n.md` を `run_doctest.js` / `tests.js` から安定して実行できるようにする。
+  - `features/tui` facade の focused regression を「手元で個別に wasmer を叩けば通る」状態ではなく、既存 nodesrc harness で再現できる状態に戻す。
+- [根本原因/こんぽんげんいん]:
+  - `stdlib/platforms/wasix/tui.nepl` は module 内で `print` / `print_i32` を使っていたが、`std/stdio` を import しておらず、呼び出し側 module がたまたま `std/stdio` を import している前提に依存していた。
+  - そのため、`features/tui` だけを import する focused test では `undefined identifier` になっていた。
+  - さらに `nodesrc/run_test.js` は実行系を Node.js の WASI preview1 に固定しており、`#target wasix` doctest を実行すると `wasix_32v1` import を解決できなかった。
+  - `spawnSync wasmer` へ切り替えた初期案も sandbox 下で `EPERM` を起こしたため、wasix 実行経路は `tui_regression.js` と同じ async `spawn` へ揃える必要があった。
+  - あわせて `wasmer run --dir=...` の deprecated warning が stderr を汚しており、I/O 比較系 test の将来リスクになっていた。
+- [変更/へんこう]:
+  - `stdlib/platforms/wasix/tui.nepl`
+    - `#import "std/stdio" as *` を追加し、module 単体で `print` 系 symbol を解決できるようにした。
+  - `nodesrc/run_test.js`
+    - source から `#target` を読み取り、`wasix` の場合は `runWasixBytes` を使う分岐を追加した。
+    - `runWasixBytes` を async `spawn` ベースで実装し、stdin / stdout / stderr capture と timeout を持つ汎用 wasix 実行経路にした。
+    - `wasmer run` の mount option を `--dir` から `--volume host:guest` へ更新し、deprecated warning を除去した。
+  - `nodesrc/tui_regression.js`
+    - 同じく `--volume` へ更新し、scenario 実行時の stderr warning を除去した。
+  - `nodesrc/README.n.md`
+    - `run_test.js` が `#target wasix` では `wasmer run` を使うことと、`WASMER_BIN` で override できることを追記した。
+  - `tests/stdlib/features_tui.n.md`
+    - 追加済み focused test を正式に回帰へ組み込んだ。
+- [設計/せっけい][判断/はんだん]:
+  - `platforms/wasix/tui` のような feature backend は、呼び出し側 import に依存せず self-contained にしておくべきなので、test 側へ `std/stdio` を足すのではなく library 側を修正した。
+  - wasix 実行は Node.js 標準 WASI では本質的に扱えないため、test harness 側で target 分岐を持つのが根本修正と判断した。
+  - `tui_regression.js` と `run_test.js` の実行方式を揃えたことで、focused test と end-to-end regression の差が減った。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/features_tui.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/features_tui.n.md -n 2` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/features_tui.n.md -i stdlib/features/tui.nepl -i stdlib/platforms/wasix/tui.nepl --no-stdlib --no-tree -o /tmp/tests-features-tui.json -j 15`
+    - [結果/けっか]: `3/3 pass`
+  - `/tmp/tests-features-tui.json`
+    - [確認/かくにん]: `summary.total = 3`, `summary.passed = 3`, `summary.failed = 0`
+  - `node nodesrc/tui_regression.js --timeout-ms 8000`
+    - [結果/けっか]: `ok: true`
+    - [確認/かくにん]: 全 16 scenario が `exit_code = 0`, `stderr_len = 0`
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/cli.js -i stdlib/features/tui.nepl -i tests/stdlib/features_tui.n.md -o html=/tmp/features-tui-tests-doc-html`
+    - [結果/けっか]: `generated 2 html file(s)`
+- [状況/じょうきょう]:
+  - `features/tui` は facade と examples だけでなく、focused doctest harness からも検証できる状態になった。
+  - nodesrc 側は `#target wasix` を扱えるようになり、今後の `features` 系回帰追加でも同じ経路を再利用できる。

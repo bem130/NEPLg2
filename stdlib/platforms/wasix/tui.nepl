@@ -9,6 +9,7 @@
 #import "core/math" as *
 #import "alloc/string" as *
 #import "alloc/collections/vec" as *
+#import "std/stdio" as *
 
 //: wasix/tui: WASIX 端末制御と TUI 描画補助ライブラリ
 //:

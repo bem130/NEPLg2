@@ -12,6 +12,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { spawn } = require('node:child_process');
 const { WASI } = require('node:wasi');
 const { candidateDistDirs } = require('./util_paths');
 const { loadCompilerFromCandidates } = require('./compiler_loader');
@@ -102,6 +103,95 @@ function runWasiBytes(wasmBytes, stdinText, argv = []) {
         stdout: out,
         stderr: err,
     };
+}
+
+function detectTarget(source) {
+    const m = String(source || '').match(/^\s*#target\s+([^\s]+)/m);
+    return m ? String(m[1]).trim() : '';
+}
+
+function runWasixBytes(wasmBytes, stdinText, argv = []) {
+    const wasmPath = mkTmpPath('nepl-doctest') + '.wasm';
+    const vfsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nepl-doctest-wasix-'));
+    fs.writeFileSync(wasmPath, Buffer.from(wasmBytes));
+
+    const wasmerBin = process.env.WASMER_BIN || 'wasmer';
+    const timeoutMs = (() => {
+        const raw = parseInt(process.env.NEPL_WASIX_TIMEOUT_MS || '5000', 10);
+        return Number.isFinite(raw) && raw > 0 ? raw : 5000;
+    })();
+
+    return new Promise((resolve) => {
+        const child = spawn(
+            wasmerBin,
+            ['run', `--volume=${vfsRoot}:${vfsRoot}`, wasmPath, ...(Array.isArray(argv) ? argv.map((v) => String(v)) : [])],
+            { stdio: ['pipe', 'pipe', 'pipe'] },
+        );
+        let stdout = '';
+        let stderr = '';
+        let finished = false;
+
+        const cleanup = () => {
+            safeUnlink(wasmPath);
+            try { fs.rmSync(vfsRoot, { recursive: true, force: true }); } catch {}
+        };
+
+        const finish = (result) => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            cleanup();
+            resolve(result);
+        };
+
+        child.stdout.on('data', (chunk) => {
+            stdout += chunk.toString('utf8');
+        });
+        child.stderr.on('data', (chunk) => {
+            stderr += chunk.toString('utf8');
+        });
+        child.on('error', (e) => {
+            finish({
+                trapped: true,
+                trapError: formatError(e),
+                stdout,
+                stderr,
+                exitCode: null,
+            });
+        });
+        child.on('close', (code) => {
+            finish({
+                trapped: code !== 0,
+                trapError: code === 0 ? null : `wasmer exit code=${code}\n${stderr.trim()}`.trim(),
+                stdout,
+                stderr,
+                exitCode: typeof code === 'number' ? code : null,
+            });
+        });
+
+        try {
+            child.stdin.end(Buffer.from(stdinText || '', 'utf-8'));
+        } catch {}
+
+        const timer = setTimeout(() => {
+            try { child.kill('SIGKILL'); } catch {}
+            finish({
+                trapped: true,
+                trapError: `wasmer timeout after ${timeoutMs}ms`,
+                stdout,
+                stderr,
+                exitCode: null,
+            });
+        }, timeoutMs);
+    });
+}
+
+async function runTargetBytes(source, wasmBytes, stdinText, argv = []) {
+    const target = detectTarget(source);
+    if (target === 'wasix') {
+        return await runWasixBytes(wasmBytes, stdinText, argv);
+    }
+    return runWasiBytes(wasmBytes, stdinText, argv);
 }
 
 function hasTag(tags, name) {
@@ -323,7 +413,7 @@ async function runSingle(req, preloaded) {
             };
         }
 
-        const runRes = runWasiBytes(wasmU8, stdinText, argv);
+        const runRes = await runTargetBytes(source, wasmU8, stdinText, argv);
 
         if (hasTag(tags, 'should_panic')) {
             const ok = runRes.trapped;
