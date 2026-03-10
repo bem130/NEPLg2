@@ -1,7 +1,7 @@
 # prefix sum と two pointers
 
 `O(N^2)` を `O(N)` へ落とす定番として、累積和と尺取り法を扱います。  
-この章は `Vec` と `kp/*` の補助 API を優先して、手書きメモリ操作を減らします。
+この章は `Vec` と `std/streamio` / `kp/*` の補助 API を優先して、手書きメモリ操作を減らします。
 
 ## prefix sum で区間和を `O(1)` にする
 
@@ -17,33 +17,34 @@ stdout: "6\n14\n15\n"
 |
 #import "core/math" as *
 #import "core/result" as *
-#import "kp/kpread" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 #import "kp/kpprefix" as *
 #import "alloc/collections/vec" as *
 
 fn main <()*> ()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    let n <i32> scanner_read_i32 sc;
-    let q <i32> scanner_read_i32 sc;
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let n <i32> read sc;
+    let q <i32> read sc;
     let mut a <Vec<i32>> new<i32>;
     let mut i <i32> 0;
     while lt i n:
         do:
-            set a push a scanner_read_i32 sc;
+            set a push a read sc;
             set i add i 1;
     let pref <PrefixI32> prefix_build_vec_i32 a;
-    let mut w <Writer> unwrap_ok writer_new;
+    let mut w <StreamWriter> unwrap_ok open WriteStream::Stdio;
     let mut k <i32> 0;
     while lt k q:
         do:
-            let l1 <i32> scanner_read_i32 sc;
-            let r1 <i32> scanner_read_i32 sc;
-            set w writer_write_i32 w prefix_sum_i32 pref sub l1 1 r1;
-            set w writer_writeln w;
+            let l1 <i32> read sc;
+            let r1 <i32> read sc;
+            let ans <i32> prefix_sum_i32 pref sub l1 1 r1;
+            set w writeln w ans;
             set k add k 1;
-    set w writer_flush w;
-    writer_free w;
+    close sc;
+    set w flush w;
+    close w;
     prefix_free_i32 pref
 ```
 

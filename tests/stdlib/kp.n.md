@@ -1,6 +1,6 @@
-# kp 入出力の組み合わせテスト
+# kp 補助ライブラリと streamio の組み合わせテスト
 
-## kpread_to_stdio_stdout_i32
+## stream_scanner_to_stdio_stdout_i32
 
 neplg2:test[normalize_newlines]
 stdin: "10 20 30\n"
@@ -10,17 +10,21 @@ stdout: "10\n20\n30\n"
 #indent 4
 #target std
 
-#import "kp/kpread" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 #import "std/stdio" as *
 
 fn main <()*>()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    println_i32 scanner_read_i32 sc;
-    println_i32 scanner_read_i32 sc;
-    println_i32 scanner_read_i32 sc;
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let a <i32> read sc;
+    let b <i32> read sc;
+    let c <i32> read sc;
+    println_i32 a;
+    println_i32 b;
+    println_i32 c;
 ```
 
-## stdio_stdin_to_kpwrite_stdout
+## stdio_stdin_to_stream_writer_stdout
 
 neplg2:test[normalize_newlines]
 stdin: "hello world\n"
@@ -31,17 +35,18 @@ stdout: "hello world"
 #target std
 
 #import "std/stdio" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 
 fn main <()*>()> ():
     let line <str> read_line;
-    let mut w <Writer> unwrap_ok writer_new;
-    set w writer_write_str w line;
-    set w writer_flush w;
-    writer_free w;
+    unwrap_ok open WriteStream::Stdio
+    |> write line
+    |> flush
+    |> close;
 ```
 
-## kpread_to_kpwrite_i32
+## stream_scanner_to_stream_writer_i32
 
 neplg2:test[normalize_newlines]
 stdin: "5 3\n1 2 3 4 5\n1 3\n2 5\n1 5\n"
@@ -54,13 +59,13 @@ stdout: "6\n14\n15\n"
 #import "core/math" as *
 #import "core/result" as *
 #import "core/mem" as *
-#import "kp/kpread" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 
 fn main <()*>()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    let n <i32> scanner_read_i32 sc;
-    let q <i32> scanner_read_i32 sc;
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let n <i32> read sc;
+    let q <i32> read sc;
 
     let pref_len <i32> add n 1;
     let pref <i32> unwrap_ok alloc mul pref_len 4;
@@ -69,7 +74,7 @@ fn main <()*>()> ():
     let mut i <i32> 1;
     while le i n:
         do:
-            let a <i32> scanner_read_i32 sc;
+            let a <i32> read sc;
             let im1 <i32> sub i 1;
             let prev_off <i32> mul im1 4;
             let prev_ptr <i32> add pref prev_off;
@@ -80,12 +85,12 @@ fn main <()*>()> ():
             store_i32 cur_ptr cur;
             set i add i 1;
 
-    let mut w <Writer> unwrap_ok writer_new;
+    let mut w <StreamWriter> unwrap_ok open WriteStream::Stdio;
     let mut k <i32> 0;
     while lt k q:
         do:
-            let l1 <i32> scanner_read_i32 sc;
-            let r1 <i32> scanner_read_i32 sc;
+            let l1 <i32> read sc;
+            let r1 <i32> read sc;
             let l <i32> sub l1 1;
             let left_off <i32> mul l 4;
             let right_off <i32> mul r1 4;
@@ -94,16 +99,16 @@ fn main <()*>()> ():
             let left <i32> load_i32 left_ptr;
             let right <i32> load_i32 right_ptr;
             let diff <i32> sub right left;
-            set w writer_write_i32 w diff;
-            set w writer_writeln w;
+            set w writeln w diff;
             set k add k 1;
 
-    set w writer_flush w;
-    writer_free w;
+    set w flush w;
+    close w;
+    close sc;
     unwrap_ok dealloc pref mul pref_len 4;
 ```
 
-## kpread_to_kpwrite_i64
+## stream_scanner_to_stream_writer_i64
 
 neplg2:test[normalize_newlines]
 stdin: "6\n"
@@ -116,8 +121,8 @@ stdout: "13\n"
 #import "core/math" as *
 #import "core/result" as *
 #import "core/cast" as *
-#import "kp/kpread" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 
 fn ways <(i32)*>i64> (n):
     if le n 1:
@@ -135,17 +140,17 @@ fn ways <(i32)*>i64> (n):
             b
 
 fn main <()*>()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    let n <i32> scanner_read_i32 sc;
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let n <i32> read sc;
     let ans <i64> ways n;
-    let mut w <Writer> unwrap_ok writer_new;
-    set w writer_write_i64 w ans;
-    set w writer_writeln w;
-    set w writer_flush w;
-    writer_free w;
+    close sc;
+    unwrap_ok open WriteStream::Stdio
+    |> writeln ans
+    |> flush
+    |> close;
 ```
 
-## kpread_to_kpwrite_f64
+## stream_scanner_to_stream_writer_f64
 
 neplg2:test[normalize_newlines]
 stdin: "3.5 -2.25 1e2\n"
@@ -155,23 +160,24 @@ stdout: "3.500000\n-2.250000\n100.000000\n"
 #indent 4
 #target std
 
-#import "kp/kpread" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 
 fn main <()*>()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    let a <f64> scanner_read_f64 sc;
-    let b <f64> scanner_read_f64 sc;
-    let c <f64> scanner_read_f64 sc;
-    let mut w <Writer> unwrap_ok writer_new;
-    set w writer_write_f64_ln w a;
-    set w writer_write_f64_ln w b;
-    set w writer_write_f64_ln w c;
-    set w writer_flush w;
-    writer_free w;
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let a <f64> read sc;
+    let b <f64> read sc;
+    let c <f64> read sc;
+    close sc;
+    unwrap_ok open WriteStream::Stdio
+    |> writeln a
+    |> writeln b
+    |> writeln c
+    |> flush
+    |> close;
 ```
 
-## kpread_to_kpwrite_f32
+## stream_scanner_to_stream_writer_f32
 
 neplg2:test[normalize_newlines]
 stdin: "1.25\n"
@@ -181,16 +187,17 @@ stdout: "1.250000\n"
 #indent 4
 #target std
 
-#import "kp/kpread" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 
 fn main <()*>()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    let v <f32> scanner_read_f32 sc;
-    let mut w <Writer> unwrap_ok writer_new;
-    set w writer_write_f32_ln w v;
-    set w writer_flush w;
-    writer_free w;
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let v <f32> read sc;
+    close sc;
+    unwrap_ok open WriteStream::Stdio
+    |> writeln v
+    |> flush
+    |> close;
 ```
 
 ## kpsearch_unique_and_count

@@ -18,33 +18,33 @@
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "kp/kpread" as *
-//:| #import "kp/kpwrite" as *
+//:| #import "std/streamio" as *
+//:| #import "std/iotarget" as *
 //:| #import "kp/kpgraph" as *
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/field" as *
 //:| #import "core/mem" as *
 //: fn main <()*> ()> ():
-//:     let sc_obj <Scanner> unwrap_ok scanner_new;
-//:     let sc <Scanner> sc_obj;
+//:     let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
 //:     let g <DenseGraph> dense_graph_read_undirected_1indexed sc;
 //:     let n <i32> get g "n";
 //:     let mat <i32> get g "mat";
 //:     let dist <Vec<i32>> dense_graph_bfs_dist_raw n mat 0;
 //:
 //:     let data <i32> mem_ptr_addr get dist "data";
-//:     let mut w <Writer> unwrap_ok writer_new;
+//:     let mut w <StreamWriter> unwrap_ok open WriteStream::Stdio;
 //:     let mut i <i32> 0;
 //:     while lt i n:
 //:         do:
 //:             if lt 0 i:
-//:                 then set w writer_write_space w
+//:                 then set w write w " "
 //:                 else ()
-//:             set w writer_write_i32 w load_i32 add data mul i 4;
+//:             set w write w load_i32 add data mul i 4;
 //:             set i add i 1;
-//:     set w writer_writeln w;
-//:     set w writer_flush w;
-//:     writer_free w;
+//:     set w write w "\n";
+//:     set w flush w;
+//:     close w;
+//:     close sc;
 //:
 //:     dense_graph_free g
 //: ```
@@ -56,8 +56,7 @@
 #import "core/math" as *
 #import "alloc/collections/vec" as *
 #import "core/field" as *
-#import "kp/kpread" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
 
 //: DenseGraph: 密行列表現の無向グラフ
 //:
@@ -121,9 +120,9 @@ fn dense_graph_add_undirected <(DenseGraph,i32,i32)*>()> (g, u, v):
 //:
 //: [計算量/けいさんりょう]:
 //: - O(n^2 + m)
-fn dense_graph_read_undirected_1indexed <(Scanner)*>DenseGraph> (sc):
-    let n <i32> scanner_read_i32 sc;
-    let m <i32> scanner_read_i32 sc;
+fn dense_graph_read_undirected_1indexed <(StreamScanner)*>DenseGraph> (sc):
+    let n <i32> read sc;
+    let m <i32> read sc;
     let size <i32> mul n n;
     let mat <i32> alloc_raw size;
     let mut z <i32> 0;
@@ -134,8 +133,8 @@ fn dense_graph_read_undirected_1indexed <(Scanner)*>DenseGraph> (sc):
     let mut i <i32> 0;
     while lt i m:
         do:
-            let u1 <i32> scanner_read_i32 sc;
-            let v1 <i32> scanner_read_i32 sc;
+            let u1 <i32> read sc;
+            let v1 <i32> read sc;
             let u <i32> sub u1 1;
             let v <i32> sub v1 1;
             let uv <i32> add mul u n v;

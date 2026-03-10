@@ -19,8 +19,8 @@ stdout: "13\n"
 #import "core/math" as *
 #import "core/result" as *
 #import "core/cast" as *
-#import "kp/kpread" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 
 fn ways <(i32)*>i64> (n):
     if le n 1:
@@ -38,14 +38,13 @@ fn ways <(i32)*>i64> (n):
             b
 |
 fn main <()*> ()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    let ans <i64> ways scanner_read_i32 sc;
-    let w <Writer>:
-        unwrap_ok writer_new
-        |> writer_write_i64 ans
-        |> writer_writeln
-        |> writer_flush
-    writer_free w
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let ans <i64> ways read sc;
+    close sc;
+    unwrap_ok open WriteStream::Stdio
+    |> writeln ans
+    |> flush
+    |> close
 ```
 
 ## DP 実装時のチェックリスト

@@ -1,6 +1,6 @@
 # [競/きょう]プロ[向/む]け I/O と[演算/えんざん]
 
-この章は、競技プログラミングで最初に使う入出力パターンを、`kp/kpread` と `kp/kpwrite` だけで短く書く練習です。
+この章は、競技プログラミングで最初に使う入出力パターンを、`std/streamio` の scanner / open だけで短く書く練習です。
 
 ## 2 整数を読んで和を出力する
 
@@ -14,18 +14,17 @@ stdout: "7\n"
 |
 #import "core/math" as *
 #import "core/result" as *
-#import "kp/kpread" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 
 fn main <()*> ()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    let ans <i32> add scanner_read_i32 sc scanner_read_i32 sc;
-    let w <Writer>:
-        unwrap_ok writer_new
-        |> writer_write_i32 ans
-        |> writer_writeln
-        |> writer_flush
-    writer_free w
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let ans <i32> add read sc read sc;
+    close sc;
+    unwrap_ok open WriteStream::Stdio
+    |> writeln ans
+    |> flush
+    |> close
 ```
 
 ## i64 を読んで加算する
@@ -42,23 +41,22 @@ stdout: "1000000000007\n"
 |
 #import "core/math" as *
 #import "core/result" as *
-#import "kp/kpread" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 
 fn main <()*> ()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    let ans <i64> add scanner_read_i64 sc scanner_read_i64 sc;
-    let w <Writer>:
-        unwrap_ok writer_new
-        |> writer_write_i64 ans
-        |> writer_writeln
-        |> writer_flush
-    writer_free w
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let ans <i64> add read sc read sc;
+    close sc;
+    unwrap_ok open WriteStream::Stdio
+    |> writeln ans
+    |> flush
+    |> close
 ```
 
 ## 3 値を 1 行で空白区切り出力する
 
-`writer_write_space` を使うと、出力フォーマットを崩さずに書けます。
+`write w " "` を使うと、出力フォーマットを崩さずに書けます。
 
 neplg2:test[stdio, normalize_newlines]
 stdin: "5 8 13\n"
@@ -69,22 +67,21 @@ stdout: "5 8 13\n"
 | #target std
 |
 #import "core/result" as *
-#import "kp/kpread" as *
-#import "kp/kpwrite" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 
 fn main <()*> ()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    let a <i32> scanner_read_i32 sc;
-    let b <i32> scanner_read_i32 sc;
-    let c <i32> scanner_read_i32 sc;
-    let w <Writer>:
-        unwrap_ok writer_new
-        |> writer_write_i32 a
-        |> writer_write_space
-        |> writer_write_i32 b
-        |> writer_write_space
-        |> writer_write_i32 c
-        |> writer_writeln
-        |> writer_flush
-    writer_free w
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let a <i32> read sc;
+    let b <i32> read sc;
+    let c <i32> read sc;
+    close sc;
+    unwrap_ok open WriteStream::Stdio
+    |> write a
+    |> write " "
+    |> write b
+    |> write " "
+    |> writeln c
+    |> flush
+    |> close
 ```

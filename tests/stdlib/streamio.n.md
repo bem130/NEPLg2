@@ -1,6 +1,6 @@
 # streamio facade
 
-## stdout_text_writer_via_trait_helper
+## stdout_text_writer_via_common_write
 
 neplg2:test
 stdout: "stream text\n"
@@ -10,18 +10,15 @@ stdout: "stream text\n"
 #target std
 
 #import "std/streamio" as *
+#import "std/iotarget" as *
 #import "core/result" as *
 
 fn main <()*>i32> ():
-    match stream_write_str stdout_stream "stream text\n":
-        Result::Ok out:
-            match stream_flush out:
-                Result::Ok _:
-                    0
-                Result::Err _e:
-                    1
-        Result::Err _e:
-            1
+    unwrap_ok open WriteStream::Stdio
+    |> write "stream text\n"
+    |> flush
+    |> close;
+    0
 ```
 
 ## stdout_binary_writer_roundtrip
@@ -34,19 +31,16 @@ stdout: "AB\n"
 #target std
 
 #import "std/streamio" as *
+#import "std/iotarget" as *
 #import "core/result" as *
 
 fn main <()*>i32> ():
     let bytes0 <ByteBuf> stream_bytes_from_str "AB\n"
-    match stream_write_bytes stdout_stream bytes0:
-        Result::Ok out:
-            match stream_flush out:
-                Result::Ok _:
-                    0
-                Result::Err _e:
-                    1
-        Result::Err _e:
-            1
+    unwrap_ok open WriteStream::Stdio
+    |> write bytes0
+    |> flush
+    |> close;
+    0
 ```
 
 ## stdout_binary_writer_preserves_nul
@@ -67,6 +61,7 @@ fn main <()*>i32> ():
     0
 ```
 
+
 ## stream_writer_text_and_i32
 
 neplg2:test
@@ -77,14 +72,15 @@ stdout: "sum=42\n"
 #target std
 
 #import "std/streamio" as *
+#import "std/iotarget" as *
 #import "core/result" as *
 
 fn main <()*>i32> ():
-    let mut w <StreamWriter> unwrap_ok stream_writer_new;
-    set w stream_writer_write_str w "sum=";
-    set w stream_writer_write_i32_ln w 42;
-    set w stream_writer_flush w;
-    stream_writer_free w;
+    unwrap_ok open WriteStream::Stdio
+    |> write "sum="
+    |> writeln 42
+    |> flush
+    |> close;
     0
 ```
 
@@ -98,15 +94,16 @@ stdout: "1 2\n"
 #target std
 
 #import "std/streamio" as *
+#import "std/iotarget" as *
 #import "core/cast" as *
 
 fn main <()*>i32> ():
-    let mut w <StreamWriter> unwrap_ok stream_writer_new;
-    set w stream_writer_write_i32 w 1;
-    set w stream_writer_write_space w;
-    set w stream_writer_write_i64_ln w <i64> cast 2;
-    set w stream_writer_flush w;
-    stream_writer_free w;
+    unwrap_ok open WriteStream::Stdio
+    |> write 1
+    |> write " "
+    |> writeln <i64> cast 2
+    |> flush
+    |> close;
     0
 ```
 
@@ -121,14 +118,79 @@ stdout: "line1\nline2"
 #target std
 
 #import "std/streamio" as *
+#import "std/iotarget" as *
 #import "core/result" as *
 
 fn main <()*>i32> ():
-    match stream_read_all_bytes stdin_stream:
+    let bytes0 <Result<ByteBuf, StdErrorKind>> read StdinStream ()
+    match bytes0:
         Result::Ok bytes:
-            match stream_write_bytes stdout_stream bytes:
+            match write StdoutStream () bytes:
                 Result::Ok out:
-                    match stream_flush out:
+                    match flush out:
+                        Result::Ok _:
+                            0
+                        Result::Err _e:
+                            1
+                Result::Err _e:
+                    1
+        Result::Err _e:
+            1
+```
+
+## stdin_text_reader_via_common_read
+
+neplg2:test
+stdin: "text via read"
+stdout: "text via read"
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/streamio" as *
+#import "std/iotarget" as *
+#import "core/result" as *
+
+fn main <()*>i32> ():
+    let text0 <Result<str, StdErrorKind>> read StdinStream ()
+    match text0:
+        Result::Ok text:
+            match write StdoutStream () text:
+                Result::Ok out:
+                    match flush out:
+                        Result::Ok _:
+                            0
+                        Result::Err _e:
+                            1
+                Result::Err _e:
+                    1
+        Result::Err _e:
+            1
+```
+
+## text_literal_stream_reads_like_other_streams
+
+neplg2:test
+stdout: "literal stream"
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/streamio" as *
+#import "std/iotarget" as *
+#import "core/result" as *
+
+fn main <()*>i32> ():
+    let input <ReadStream> ReadStream::Text "literal stream"
+    let in_stream <TextInputStream> TextInputStream "literal stream"
+    let text0 <Result<str, StdErrorKind>> read in_stream
+    match text0:
+        Result::Ok text:
+            match write StdoutStream () text:
+                Result::Ok out:
+                    match flush out:
                         Result::Ok _:
                             0
                         Result::Err _e:
@@ -150,19 +212,51 @@ stdout: "10\n-20\n30\n4.500000\n"
 #target std
 
 #import "std/streamio" as *
+#import "std/iotarget" as *
 fn main <()*>i32> ():
-    let sc <StreamScanner> unwrap_ok stream_scanner_new;
-    let a <i32> stream_scanner_read_i32 sc;
-    let b <i32> stream_scanner_read_i32 sc;
-    let c <i64> stream_scanner_read_u64 sc;
-    let d <f64> stream_scanner_read_f64 sc;
-    let mut w <StreamWriter> unwrap_ok stream_writer_new;
-    set w stream_writer_write_i32_ln w a;
-    set w stream_writer_write_i32_ln w b;
-    set w stream_writer_write_i64_ln w c;
-    set w stream_writer_write_f64_ln w d;
-    set w stream_writer_flush w;
-    stream_writer_free w;
+    let input <ReadStream> ReadStream::Stdio;
+    let output <WriteStream> WriteStream::Stdio;
+    let sc <StreamScanner> unwrap_ok open input;
+    let a <i32> read sc;
+    let b <i32> read sc;
+    let c <i64> read sc;
+    let d <f64> read sc;
+    close sc;
+    unwrap_ok open output
+    |> writeln a
+    |> writeln b
+    |> writeln c
+    |> writeln d
+    |> flush
+    |> close;
+    0
+```
+
+## stream_scanner_reads_unsigned_numbers
+
+neplg2:test[normalize_newlines]
+stdin: "4294967295 18446744073709551615\n"
+stdout: "4294967295\n18446744073709551615\n"
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/streamio" as *
+#import "std/iotarget" as *
+
+fn main <()*>i32> ():
+    let input <ReadStream> ReadStream::Stdio;
+    let output <WriteStream> WriteStream::Stdio;
+    let sc <StreamScanner> unwrap_ok open input;
+    let a <u32> read sc;
+    let b <u64> read sc;
+    close sc;
+    unwrap_ok open output
+    |> writeln a
+    |> writeln b
+    |> flush
+    |> close;
     0
 ```
 
@@ -177,14 +271,69 @@ stdout: "abc\n42\n"
 #target std
 
 #import "std/streamio" as *
+#import "std/iotarget" as *
 #import "std/stdio" as *
 
 fn main <()*>i32> ():
-    let sc <StreamScanner> unwrap_ok stream_scanner_new;
-    let token <str> stream_scanner_read_token sc;
-    let value <i32> stream_scanner_read_i32 sc;
+    let input <ReadStream> ReadStream::Stdio;
+    let sc <StreamScanner> unwrap_ok open input;
+    let token <str> read sc;
+    let value <i32> read sc;
+    close sc;
     print token;
     println "";
     println_i32 value;
+    0
+```
+## stdout_binary_writer_pipe_data_to_target
+
+neplg2:test
+stdout: "CD\n"
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/streamio" as *
+#import "std/iotarget" as *
+#import "core/result" as *
+
+fn main <()*>i32> ():
+    let output <WriteStream> WriteStream::Stdio
+    let bytes0 <ByteBuf> stream_bytes_from_str "CD\n"
+    unwrap_ok open output
+    |> write bytes0
+    |> flush
+    |> close;
+    0
+```
+
+## stream_scanners_can_coexist
+
+neplg2:test[normalize_newlines]
+stdout: "13\n24\n"
+```neplg2
+#entry main
+#indent 4
+#target std
+
+#import "std/streamio" as *
+#import "std/iotarget" as *
+#import "core/math" as *
+
+fn main <()*>i32> ():
+    let left <StreamScanner> unwrap_ok open ReadStream::Text "10 3"
+    let right <StreamScanner> unwrap_ok open ReadStream::Text "20 4"
+    let a <i32> read left
+    let b <i32> read left
+    let c <i32> read right
+    let d <i32> read right
+    close left;
+    close right;
+    unwrap_ok open WriteStream::Stdio
+    |> writeln add a b
+    |> writeln add c d
+    |> flush
+    |> close;
     0
 ```

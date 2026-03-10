@@ -70,7 +70,7 @@ fn main <()*>()> ():
     ()
 ```
 
-## stdin_kpread_utf8_bom
+## stdin_stream_scanner_utf8_bom
 
 neplg2:test[normalize_newlines]
 stdin: "﻿1 3\n"
@@ -80,13 +80,15 @@ stdout: "1\n3\n"
 #indent 4
 #target std
 
-#import "kp/kpread" as *
+#import "std/streamio" as *
+#import "std/iotarget" as *
 #import "std/stdio" as *
 
 fn main <()*> ()> ():
-    let sc <Scanner> unwrap_ok scanner_new;
-    let a <i32> scanner_read_i32 sc;
-    let b <i32> scanner_read_i32 sc;
+    let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
+    let a <i32> read sc;
+    let b <i32> read sc;
+    close sc;
     println_i32 a;
     println_i32 b;
 ```

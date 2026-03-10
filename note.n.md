@@ -255,9 +255,66 @@
   - 将来の `Serialize` / `Deserialize` と同じく、型ごとの能力を stdlib trait として明示する流れを揃える。
 - 変更:
   - `stdlib/core/traits/hash.nepl`
-    - `Hash` trait
-    - `hash32_by_trait`
-    - `i32`
+  - `Hash` trait
+  - `hash32_by_trait`
+  - `i32`
+
+# 2026-03-11 作業メモ (`streamio` target 指定化と `u32/u64` bare I/O の修正)
+
+- 目的:
+  - `scanner` / `writer` を stdin/stdout 固定の no-arg API から外し、`io_stdin` / `io_stdout` / `io_text` / `io_bytes` の target 指定で生成する形へ寄せる。
+  - `u32` / `u64` の bare `read` / `write` を、型 suffix 名に戻さず current overload 方針のまま安定化する。
+  - Part6 tutorial と `kp` 周辺に残っていた old move-model 前提を、現行所有権モデルへ合わせる。
+- 原因:
+  - `std/streamio` だけ `read` / `write` の bare 名へ寄せても、生成入口 `scanner()` / `writer()` が stdin/stdout 固定のままだと、`std/io` / `iotarget` と責務が二重化していた。
+  - `u64` は compiler 側で `wasm_shared::valtype` がまだ `i32` 扱いの箇所を残しており、Wasm signature が崩れていた。
+  - `u32` / `u64` の 10 進出力は、unsigned 値を signed overload へ落としていたため `4294967295` が `18446744073709551615` に化けていた。
+  - `PrefixI32` や tutorial Part6 の `Vec` 走査には old move-model 前提が残っていた。
+- 変更:
+  - `stdlib/std/streamio.nepl`
+    - `scanner <(IoReadTarget)*>Result<StreamScanner,str>>`
+    - `writer <(IoWriteTarget)*>Result<StreamWriter,str>>`
+    - `scanner_from_bytes`
+    - `StreamWriter` header に `TargetKind` を追加
+    - `u32` / `u64` の append 実装を unsigned decimal として修正
+    - `StreamScanner` / `StreamWriter` の doc comment を current 実装へ同期
+  - `stdlib/std/iotarget.nepl`
+    - `io_stdin` / `io_stdout` / `io_text` / `io_bytes` を生成入口として利用
+  - `nepl-core/src/wasm_shared.rs`
+    - `u64` を Wasm `I64` として扱うよう修正
+  - `nodesrc/run_test.js`
+    - `BigInt` の JSON 出力と return decode を追加
+  - `stdlib/kp/kpprefix.nepl`
+    - `PrefixI32` に `Copy` / `Clone` を付与
+    - `prefix_build_vec_i32` を `vec_data_len` ベースへ修正
+  - `tests/stdlib/streamio.n.md`
+  - `tests/stdlib/kp.n.md`
+  - `tests/stdlib/kp_i64.n.md`
+  - `tests/stdlib/stdin.n.md`
+  - `tests/compiler/move_effect.n.md`
+  - `tutorials/getting_started/22_competitive_io_and_arith.n.md`
+  - `tutorials/getting_started/24_competitive_dp_basics.n.md`
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+  - `tutorials/getting_started/27_competitive_algorithms_catalog.n.md`
+  - `stdlib/kp/kpgraph.nepl`
+    - `unwrap_ok scanner io_stdin` / `unwrap_ok writer io_stdout` へ統一
+- 検証:
+  - `NO_COLOR=false trunk build`
+  - `node nodesrc/run_doctest.js -i /tmp/u64_probe2.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 4`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 10`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/kp_i64.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/kp.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/kp.n.md -n 2`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/kp.n.md -n 3`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/stdin.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/22_competitive_io_and_arith.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/24_competitive_dp_basics.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i stdlib/kp/kpgraph.nepl -n 1`
+  - `node nodesrc/run_doctest.js -i stdlib/kp/kpprefix.nepl -n 1`
+  - `node nodesrc/run_doctest.js -i tests/compiler/move_effect.n.md -n 20`
 
 # 2026-03-09 作業メモ (compiler 前提固定: `#prelude` 最小実装と Copy 固定表撤去)
 
@@ -10635,3 +10692,136 @@
   - `node nodesrc/run_doctest.js -i tutorials/getting_started/23_competitive_sort_and_search.n.md -n 2` -> pass
   - `node nodesrc/tests.js -i stdlib/tests/vec.n.md -i stdlib/tests/list.n.md -i stdlib/tests/fs.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md -i stdlib/kp/kpsearch.nepl --no-stdlib --no-tree -o /tmp/tests-stdlib-vec-list-fs-sort.json -j 4`
     - [結果/けっか]: `8/8 pass`
+# 2026-03-10 io/streamio common read write facade
+
+- `todo.md` の `stdio, io` 指示と `doc/stdlib_breaking_reboot.md` を突き合わせ、現行 `std/streamio` / `std/io` の公開面が reboot の bare 名方針にまだ届いていないことを確認した。
+- `alloc/io.nepl` は target 非依存の trait / `ByteBuf` helper だけを担当する土台として据え、そこでの `ByteReader` / `TextReader` / `ByteWriter` / `TextWriter` / `Flush` / `Close` を `std` facade 側から再利用する方針にした。
+- `std/streamio.nepl` には `read` / `write` / `writeln` / `flush` / `close` の bare facade を置き、`stdin` / `stdout` / in-memory text / in-memory bytes を同じ語彙で扱えるようにした。
+- `std/io.nepl` と `std/iotarget.nepl` を追加し、`IoReadTarget` / `IoWriteTarget` enum を通じて `read target` / `write target data` / `data |> write target` を書ける category facade を用意した。
+- `tests/stdlib/streamio.n.md` と `tests/stdlib/io.n.md` は、新 API を直接使う focused case に更新した。
+
+# 2026-03-10 作業メモ (`std/streamio` caller だけを新しい共通名へ置換)
+
+- [目的/もくてき]:
+  - [利用側/りようがわ]ファイルだけで、`std/streamio` の old read/write API [呼/よ]び[出/だ]しを reboot [方針/ほうしん]どおり `read` / `write` / `flush` / `stream io_*` へ[寄/よ]せる。
+  - [指示/しじ]どおり `stdlib/std/streamio.nepl`, `stdlib/std/io.nepl`, `stdlib/alloc/io.nepl`, `stdlib/std/iotarget.nepl` には[触/ふ]れず、`kp` wrapper / tests [側/がわ]だけを[更新/こうしん]する。
+- [変更/へんこう]:
+  - `stdlib/kp/kpread.nepl`
+    - `stream_scanner_read_token` / `_i32` / `_i64` / `_f64` / `_f32` を `read scanner_as_stream sc` へ[置換/ちかん]した。
+    - `u64` [読/よ]みだけは current の common `read` overload では[符号/ふごう]つき `i64` と[意味/いみ]が[一致/いっち]しないため、`stream_scanner_read_u64` を[維持/いじ]した。
+  - `stdlib/kp/kpwrite.nepl`
+    - `stream_writer_flush` / `_writeln` / `_write_str` / `_write_i32` / `_write_i64` / `_write_f64` / `_write_f32` を `flush` / `write` / `write "\n"` へ[置換/ちかん]した。
+    - `writer_write_space` / `writer_write_*_ln` の[内部/ないぶ][実装/じっそう]と doc comment も、`write inner " "` と `write inner v` + `write inner "\n"` の current [流儀/りゅうぎ]へ[揃/そろ]えた。
+    - `u64` / fixed precision は current common `write` overload だけでは[意味論/いみろん]を[保/たも]てないため、old helper [呼/よ]び[出/だ]しを[維持/いじ]した。
+  - `tests/stdlib/streamio.n.md`
+    - `stream_writer_write_*` / `stream_writer_writeln` / `stream_writer_write_space` / `stdout_stream` [直呼/じかよ]びを、`write` / `flush` / `stream io_stdout` へ[置換/ちかん]した。
+    - scanner case も `read sc` へ[統一/とういつ]した。
+- [根本原因/こんぽんげんいん]:
+  - old caller は `stream_scanner_read_*` / `stream_writer_write_*` の[長/なが]い[名前/なまえ]へ[直接/ちょくせつ][依存/いぞん]しており、reboot の「[利用者向/りようしゃむ]け[入口/いりぐち]は facade の[共通名/きょうつうめい]へ[一本化/いっぽんか]する」という[設計/せっけい]と[食/く]い[違/ちが]っていた。
+  - とくに `kp` wrapper は「`std/streamio` を[薄/うす]く[包/つつ]む」[役割/やくわり]なのに、[内部/ないぶ]で old helper [名/めい]へ[固定/こてい]されており、`std` facade の[改名/かいめい]を[利用側/りようがわ]へ[波及/はきゅう]させる[構造/こうぞう]になっていた。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 3`
+    - [結果/けっか]: fail
+    - [原因/げんいん]: caller [側/がわ]ではなく `stdlib/std/streamio.nepl` [本体/ほんたい]の `read` / `write` overload [定義/ていぎ]が、すでに[削除/さくじょ]・[改名/かいめい]された old helper [名/めい] (`stream_scanner_read_token`, `stream_writer_write_str` など) をまだ[参照/さんしょう]しており、library compile error で[停止/ていし]した。
+  - `node nodesrc/run_doctest.js -i tests/stdlib/io.n.md -n 1`
+    - [結果/けっか]: fail
+    - [原因/げんいん]: [上記/じょうき]と[同/おな]じ library [本体/ほんたい] compile error の[影響/えいきょう]で、`std/io` 経由 case も[通過/つうか]しない。
+- [状況/じょうきょう]:
+  - caller [側/がわ]で[置換/ちかん]できる old read/write call site は、`u64` / fixed precision のような current common overload [未提供/みていきょう]ケースを[除/のぞ]いて[更新/こうしん]した。
+  - [今回/こんかい]の[指示範囲外/しじはんいがい]である `stdlib/std/streamio.nepl` [本体/ほんたい]が、current facade [名/めい]への[内部/ないぶ][追従/ついじゅう]をまだ[終/お]えていないため、ここでは library [側/がわ]を[触/さわ]らずに[切/き]り[分/わ]けだけ[残/のこ]した。
+
+# 2026-03-10 作業メモ (`io` / `streamio` の bare `read` / `stream` を generic trait 化)
+
+- [目的/もくてき]:
+  - `reboot` の「bare 名 `read` / `write` / `writeln` / `flush` / `close` に統一し、型差は trait / overload で表す」という[方針/ほうしん]に[沿/そ]って、`std/io` / `std/streamio` の I/O facade を current compiler で[安定/あんてい]して[解決/かいけつ]できる[形/かたち]に[固定/こてい]する。
+  - [利用者/りようしゃ]が `read sc` / `read io_stdin` / `stream io_stdout` をそのまま[書/か]けるようにしつつ、返り値型だけに[依存/いぞん]する old overload を[排除/はいじょ]する。
+- [根本原因/こんぽんげんいん]:
+  - `std/streamio` の `read` / `stream` と `std/io` の `read` は、`(StreamScanner)->i32` と `(StreamScanner)->f64` のように「引数は同じで返り値だけが違う overload」に[依存/いぞん]していた。
+  - current compiler はその[形/かたち]を `let x <i32> read sc;` のような[文脈/ぶんみゃく]だけで常に[解決/かいけつ]できず、`ambiguous overload` を[起/お]こしていた。
+  - `std/io` [内部/ないぶ]でも `stream io_stdin` / `stream io_stdout` の[戻/もど]り[型/がた]が[曖昧/あいまい]になり、`match` [全体/ぜんたい]が unit に[崩/くず]れて `read` facade [本体/ほんたい]まで[連鎖/れんさ][故障/こしょう]していた。
+- [変更/へんこう]:
+  - `stdlib/std/streamio.nepl`
+    - `StreamFromReadTarget` / `StreamFromWriteTarget` を[追加/ついか]し、`stream` を「返り値型 generic + trait dispatch」で[実装/じっそう]した。
+    - `ScannerReadable` を[追加/ついか]し、`read sc` を `str` / `i32` / `i64` / `f32` / `f64` の bare 名 generic へ[統一/とういつ]した。
+    - `StreamReadableResult` を[追加/ついか]し、`StdinStream` / `TextInputStream` / `ByteInputStream` からの `read` も返り値型 generic へ[統一/とういつ]した。
+  - `stdlib/std/io.nepl`
+    - `TargetReadable` を[追加/ついか]し、`read target` を `ByteBuf` / `str` の generic facade に[変更/へんこう]した。
+    - [内部/ないぶ]では `std/streamio` の generic `stream` を[型注釈/かたちゅうしゃく]つき local binding で[受/う]け、その[後/あと]は `alloc/io` helper (`io_read_all_bytes` / `io_read_all_text` / `io_write_bytes` / `io_write_str` / `io_flush` / `io_close`) へ[委譲/いじょう]する[形/かたち]に[整理/せいり]した。
+  - `stdlib/kp/kpwrite.nepl`
+    - `stream_writer_new` / `stream_writer_free` の old 参照を `writer` / `free` へ[置換/ちかん]し、`stream_writer_flush` も `flush` へ[置換/ちかん]した。
+  - `tests/stdlib/streamio.n.md`
+    - duplicate していた `stdout_binary_writer_pipe_data_to_target` case を 1 [件/けん][削除/さくじょ]した。
+- [設計/せっけい][判断/はんだん]:
+  - [名前/なまえ]を bare 化するだけでは current compiler の overload 解決と[矛盾/むじゅん]するため、`cast` / `deserialize` と[同/おな]じく「返り値型 generic を trait で[決/き]める」[形/かたち]へ[寄/よ]せた。
+  - これにより `read` / `stream` は bare 名を[維持/いじ]しつつ、suffix や compatibility alias を[増/ふ]やさずに[運用/うんよう]できる。
+  - `std/io` [内部/ないぶ]の stream [操作/そうさ]は、`std/streamio` の facade 名へ[依存/いぞん]しすぎると[再帰的/さいきてき]に overload を[複雑化/ふくざつか]するため、共通 trait helper へ[一段/いちだん][落/お]として[整理/せいり]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/std/io.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/io.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/io.n.md -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 9`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 10`
+    - [結果/けっか]: pass
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+
+# 2026-03-11 作業メモ (`streamio` / `io` の open/close 統一と scanner 所有権モデルの固定)
+
+- [目的/もくてき]:
+  - `reboot` の「[型/かた]で[区別/くべつ]し、関数名では[区別/くべつ]しない」「[後方互換/こうほうごかん]は[残/のこ]さない」という[方針/ほうしん]に[従/したが]い、`std/streamio` / `std/io` の[公開面/こうかいめん]を `open` / `read` / `write` / `writeln` / `flush` / `close` へ[統一/とういつ]する。
+  - `ReadStream` / `WriteStream` を enum target として[固定/こてい]し、stdin / stdout / in-memory text / bytes / fs path を[同/おな]じ[語彙/ごい]で[扱/あつか]えるようにする。
+  - [複数/ふくすう] stream を[同時/どうじ]に[維持/いじ]できるよう、scanner / writer の[所有権/しょゆうけん][規則/きそく]を current move model と[矛盾/むじゅん]しない[形/かたち]へ[固定/こてい]する。
+- [根本原因/こんぽんげんいん]:
+  - `std/streamio` の `open(ReadStream)` / `open(WriteStream)` は high-level `StreamScanner` / `StreamWriter` を[返/かえ]す[方向/ほうこう]へ[寄/よ]っていたのに、`std/io` と一部 test / tutorial はまだ `open -> StdinStream` / `StdoutStream` [前提/ぜんてい]で[残/のこ]っており、公開 API と caller が[食/く]い[違/ちが]っていた。
+  - `StreamScanner` を non-copy resource にしたまま `read sc` の bare API へ[寄/よ]せたため、`read sc` を[複数回/ふくすうかい][書/か]く current tutorial / kp case が `D3053 use of moved value` で[壊/こわ]れていた。
+  - `close(StreamScanner)` [内部/ないぶ]にも old helper `io_bytebuf_new` [参照/さんしょう]が[残/のこ]っており、library compile error を[誘発/ゆうはつ]していた。
+- [変更/へんこう]:
+  - `stdlib/std/iotarget.nepl`
+    - `ReadStream` / `WriteStream` の enum target を current public API として[固定/こてい]した。
+    - `WriteStream::Stdio` は payload なし、`ReadStream` は `Stdio` / `Fs <str>` / `Text <str>` / `Bytes <ByteBuf>` を[持/も]つ[形/かたち]に[整理/せいり]した。
+  - `stdlib/std/streamio.nepl`
+    - `open(ReadStream) -> Result<StreamScanner,str>` と `open(WriteStream) -> Result<StreamWriter,str>` を[公開/こうかい][入口/いりぐち]として[固定/こてい]した。
+    - `StreamScanner` に `Copy` / `Clone` を[復活/ふっかつ]させ、copy / clone は cursor / buffer を[共有/きょうゆう]する alias であることを doc comment に[明記/めいき]した。
+    - `close(StreamScanner)` の old helper [参照/さんしょう]を `ByteBuf mem_ptr_wrap buf_addr len` に[置換/ちかん]した。
+    - file header と `StreamScanner` / `StreamWriter` comment を new policy / format へ[寄/よ]せ、[複数/ふくすう] stream 同時保持の[性質/せいしつ]も[追記/ついき]した。
+    - `stream_scanners_can_coexist` doctest を[追加/ついか]し、[別々/べつべつ]に `open` した scanner が[独立/どくりつ]して[読/よ]めることを[固定/こてい]した。
+  - `stdlib/std/io.nepl`
+    - category facade [内部/ないぶ]を `open(ReadStream/WriteStream)` [依存/いぞん]から[切/き]り[離/はな]し、`StdinStream ()` / `StdoutStream ()` の low-level handle を[内部利用/ないぶりよう]する[形/かたち]へ[整理/せいり]した。
+    - これにより `read ReadStream::Stdio` / `write WriteStream::Stdio ...` の facade と `streamio` の resource [生成/せいせい]が[衝突/しょうとつ]しないようにした。
+  - `tests/stdlib/io.n.md`, `tests/stdlib/streamio.n.md`, `tests/stdlib/kp.n.md`, `tests/stdlib/kp_i64.n.md`, `tests/stdlib/stdin.n.md`
+    - old low-level `open -> StdinStream/StdoutStream` [前提/ぜんてい]を[除去/じょきょ]し、current public API へ[追従/ついじゅう]した。
+    - `unwrap_ok open WriteStream::Stdio` から `|> write` / `|> writeln` / `|> flush` / `|> close` の multiline pipe [流儀/りゅうぎ]へ[統一/とういつ]した。
+    - scanner を[使/つか]い[切/き]った case では `close sc` を[追加/ついか]した。
+  - `tutorials/getting_started/22_competitive_io_and_arith.n.md`, `24_competitive_dp_basics.n.md`, `25_competitive_prefixsum_twopointers.n.md`, `27_competitive_algorithms_catalog.n.md`, `stdlib/kp/kpgraph.nepl`
+    - `kpread` / `kpwrite` [前提/ぜんてい]や old writer/scanner helper [名/めい]を[除去/じょきょ]し、current `std/streamio` [流儀/りゅうぎ]へ[書/か]き[換/か]えた。
+- [設計/せっけい][判断/はんだん]:
+  - scanner を non-copy resource のままにすると `read sc` を[複数回/ふくすうかい][書/か]く自然な public API と[両立/りょうりつ]しないため、handle [自体/じたい]は copyable alias、buffer [解放/かいほう]だけ `close` へ[集約/しゅうやく]する[形/かたち]に[戻/もど]した。
+  - `std/io` は category facade、`std/streamio` は resource facade と[責務/せきむ]を[分離/ぶんり]し、同じ `open` [名/めい]を[使/つか]っても[返/かえ]り[値/あたい]と target [型/かた]で[静的/せいてき]に[分/わ]かれる[構造/こうぞう]へ[寄/よ]せた。
+  - [別々/べつべつ]に `open` した scanner / writer が[同時/どうじ]に[存在/そんざい]できることは public API の[重要/じゅうよう]な[性質/せいしつ]なので、doctest で[固定/こてい]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 11`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 13`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/io.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/io.n.md -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/kp.n.md -n 3`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/kp_i64.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/22_competitive_io_and_arith.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -n 1`
+    - [結果/けっか]: pass
