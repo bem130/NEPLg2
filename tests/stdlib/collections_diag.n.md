@@ -21,14 +21,17 @@ neplg2:test
 #import "core/result" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
     let hm0 <HashMap<i32>> unwrap_ok<HashMap<i32>, Diag> hashmap_new<i32>;
     let hm1 <HashMap<i32>> unwrap_ok<HashMap<i32>, Diag> hashmap_insert<i32> hm0 1 10;
     match hashmap_remove<i32> hm1 99:
         Result::Ok _h:
-            test_fail "expected KeyNotFound";
+            set checks checks_push checks Result<(),str>::Err "expected KeyNotFound";
         Result::Err d:
-            assert_str_eq "KeyNotFound" diag_std_error_kind_str d;
+            set checks checks_push checks check_str_eq "KeyNotFound" diag_std_error_kind_str d;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## hashset_remove_missing_key_returns_diag
@@ -49,14 +52,17 @@ neplg2:test
 #import "core/result" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
     let hs0 <HashSet> unwrap_ok hashset_new;
     let hs1 <HashSet> unwrap_ok hashset_insert hs0 1;
     match hashset_remove hs1 99:
         Result::Ok _h:
-            test_fail "expected KeyNotFound";
+            set checks checks_push checks Result<(),str>::Err "expected KeyNotFound";
         Result::Err d:
-            assert_str_eq "KeyNotFound" diag_std_error_kind_str d;
+            set checks checks_push checks check_str_eq "KeyNotFound" diag_std_error_kind_str d;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## hashmap_insert_capacity_exceeded_returns_diag
@@ -78,7 +84,8 @@ neplg2:test
 #import "core/math" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
     let mut hm <HashMap<i32>> unwrap_ok<HashMap<i32>, Diag> hashmap_new<i32>;
     let mut i <i32> 0;
     while lt i 16:
@@ -88,9 +95,11 @@ fn main <()*>()> ():
 
     match hashmap_insert<i32> hm 999 1:
         Result::Ok _h:
-            test_fail "expected CapacityExceeded";
+            set checks checks_push checks Result<(),str>::Err "expected CapacityExceeded";
         Result::Err d:
-            assert_str_eq "CapacityExceeded" diag_std_error_kind_str d;
+            set checks checks_push checks check_str_eq "CapacityExceeded" diag_std_error_kind_str d;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## hashset_insert_capacity_exceeded_returns_diag
@@ -112,7 +121,8 @@ neplg2:test
 #import "core/math" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
     let mut hs <HashSet> unwrap_ok hashset_new;
     let mut i <i32> 0;
     while lt i 16:
@@ -122,9 +132,11 @@ fn main <()*>()> ():
 
     match hashset_insert hs 999:
         Result::Ok _h:
-            test_fail "expected CapacityExceeded";
+            set checks checks_push checks Result<(),str>::Err "expected CapacityExceeded";
         Result::Err d:
-            assert_str_eq "CapacityExceeded" diag_std_error_kind_str d;
+            set checks checks_push checks check_str_eq "CapacityExceeded" diag_std_error_kind_str d;
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## queue_pop_empty_returns_none
@@ -146,13 +158,16 @@ neplg2:test
 #import "core/result" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
     let q <Queue<i32>> unwrap_ok<Queue<i32>, Diag> queue_new<i32>;
     match queue_pop<i32> q:
         Option::Some _v:
-            test_fail "expected none";
+            set checks checks_push checks Result<(),str>::Err "expected none";
         Option::None:
-            assert true;
+            set checks checks_push checks Result<(),str>::Ok ();
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```
 
 ## ringbuffer_pop_empty_returns_none
@@ -174,11 +189,14 @@ neplg2:test
 #import "core/result" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
     let rb <RingBuffer<i32>> unwrap_ok<RingBuffer<i32>, Diag> ringbuffer_new<i32>;
     match ringbuffer_pop_front<i32> rb:
         Option::Some _v:
-            test_fail "expected none";
+            set checks checks_push checks Result<(),str>::Err "expected none";
         Option::None:
-            assert true;
+            set checks checks_push checks Result<(),str>::Ok ();
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

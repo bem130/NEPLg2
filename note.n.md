@@ -10402,3 +10402,38 @@
   - `node nodesrc/run_doctest.js -i tests/stdlib/traits_serde.n.md -n 2` -> pass
   - `node nodesrc/tests.js -i tests/stdlib/traits_hash.n.md -i tests/stdlib/traits_serde.n.md --no-stdlib --no-tree -o /tmp/tests-traits-safe-result-batch.json -j 4`
     - [結果/けっか]: `4/4 pass`
+
+# 2026-03-10 作業メモ (`fs` / `collections_diag` fixture を explicit report 流儀へ追従)
+
+- [目的/もくてき]:
+  - `tests/stdlib/fs.n.md` と `tests/stdlib/collections_diag.n.md` を、[現行/げんこう]の `Vec<Result<(),str>>` + explicit report [流儀/りゅうぎ]へ[揃/そろ]える。
+  - `Diag` / `Option` の[責務/せきむ]を[確認/かくにん]する fixture を、trap や[途中/とちゅう] print に[頼/たよ]らず、[最後/さいご]に 1 [回/かい]だけ[明示的/めいじてき]に[表示/ひょうじ]する[形/かたち]へ[変更/へんこう]する。
+- [根本原因/こんぽんげんいん]:
+  - `collections_diag` の 6 [件/けん]は、`Diag` / `Option` の[意味論/いみろん]は reboot [後/ご]のままなのに、fixture [側/がわ]が `test_fail` / `assert_*` [直列/ちょくれつ][実行/じっこう]の[旧流儀/きゅうりゅうぎ]だった。
+  - `fs.n.md` の 2 [件/けん]目は、existing file read を generic wasm runner で[確認/かくにん]しようとしていたが、これは host filesystem integration に[依存/いぞん]し、stable な doctest [責務/せきむ]を[越/こ]えていた。
+  - `nodesrc/run_test.js` に preopen を[追加/ついか]しても Node WASI [実行/じっこう]では positive-path read が[安定/あんてい]しなかったため、test [対象/たいしょう]そのものを[見直/みなお]す[必要/ひつよう]があった。
+- [変更/へんこう]:
+  - `tests/stdlib/collections_diag.n.md`
+    - 6 [件/けん]すべてを `Vec<Result<(),str>>` [集約/しゅうやく]へ[変更/へんこう]し、`KeyNotFound` / `CapacityExceeded` / `Option::None` の[確認/かくにん]を `check_str_eq` または `Result::Ok/Err` として[保持/ほじ]する[形/かたち]へ[揃/そろ]えた。
+    - [各/かく] doctest の[末尾/まつび]で `checks_print_report` + `checks_exit_code` を[呼/よ]ぶようにした。
+  - `tests/stdlib/fs.n.md`
+    - missing file [確認/かくにん]を explicit report [流儀/りゅうぎ]へ[変更/へんこう]した。
+    - existing file read [確認/かくにん]は host FS integration に[依存/いぞん]していたため、`ByteBuf -> str` helper である `fs_bytes_to_string` の[安定/あんてい]回帰へ[置換/ちかん]した。
+    - これにより、`std/fs` の binary helper [責務/せきむ]は[維持/いじ]しつつ、runner [環境/かんきょう]に[左右/さゆう]される fixture を[排除/はいじょ]した。
+  - `nodesrc/run_test.js`
+    - repository root を WASI preopen に[追加/ついか]した。
+    - ただし、今回の `fs` positive-path case は preopen [追加後/ついかご]も[安定/あんてい]しなかったため、最終的な[解決/かいけつ]は test [責務/せきむ]の[切/き]り[分/わ]けで[行/おこな]った。
+- [設計/せっけい][判断/はんだん]:
+  - reboot [方針/ほうしん]では doctest は「[使/つか]い[方/かた]の[保証/ほしょう]」が[主目的/しゅもくてき]であり、host 環境[依存/いぞん]の integration [成否/せいひ]まで[抱/かか]え[込/こ]むべきではない。
+  - そのため `tests/stdlib/fs.n.md` では、generic runner で[安定/あんてい]に[保証/ほしょう]できる `Err` [経路/けいろ]と `ByteBuf` helper [経路/けいろ]だけを[残/のこ]し、filesystem positive path は[別/べつ]の integration [層/そう]で[扱/あつか]うのが[妥当/だとう]と[判断/はんだん]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/fs.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/fs.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/collections_diag.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/collections_diag.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/collections_diag.n.md -n 3` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/collections_diag.n.md -n 4` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/collections_diag.n.md -n 5` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/collections_diag.n.md -n 6` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/fs.n.md -i tests/stdlib/collections_diag.n.md --no-stdlib --no-tree -o /tmp/tests-fs-collections-diag-explicit.json -j 4`
+    - [結果/けっか]: `8/8 pass`

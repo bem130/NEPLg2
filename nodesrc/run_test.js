@@ -68,6 +68,7 @@ function runWasiBytes(wasmBytes, stdinText, argv = []) {
     const stdinPath = mkTmpPath('wasi-stdin');
     const stdoutPath = mkTmpPath('wasi-stdout');
     const stderrPath = mkTmpPath('wasi-stderr');
+    const preopenRoot = process.cwd();
 
     fs.writeFileSync(wasmPath, Buffer.from(wasmBytes));
     fs.writeFileSync(stdinPath, Buffer.from(stdinText || '', 'utf-8'));
@@ -82,6 +83,9 @@ function runWasiBytes(wasmBytes, stdinText, argv = []) {
         version: 'preview1',
         args: [wasmPath, ...(Array.isArray(argv) ? argv.map((v) => String(v)) : [])],
         env: {},
+        preopens: {
+            '/': preopenRoot,
+        },
         stdin: stdinFd,
         stdout: stdoutFd,
         stderr: stderrFd,
