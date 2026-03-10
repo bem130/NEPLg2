@@ -3,6 +3,7 @@
 ## hash_main
 
 neplg2:test
+ret: 0
 ```neplg2
 
 #entry test_hash
@@ -14,32 +15,24 @@ neplg2:test
 #import "std/test" as *
 #import "alloc/collections/vec" as *
 #import "core/math" as *
+#import "core/result" as *
 
 fn test_hash <()*>i32> ():
-    // FNV-1a Test
     let h0 new_fnv1a32
-    // Hash "a" (0x61 = 97)
     let h1 fnv1a32_update h0 97
     let result fnv1a32_finalize h1
-    
-    // Expected: (basis ^ 97) * prime
-    // 0x811c9dc5 ^ 0x61 = 0x811c9da4
-    // 0x811c9da4 * 0x01000193 = 0xe40c292c
-    // 0xe40c292c = -468965076 (signed)
-    assert_eq_i32 -468965076 result
-    assert_eq_i32 hash32_i32 123456 hash32_i32 123456
-    assert ne hash32_i32 123456 hash32_i32 123457
 
-    test_checked "fnv1a32 basic test passed"
-
-    // SHA-256 Skeleton Test
     let s0 new_sha256
     let s1 sha256_update s0 10
     let s2 sha256_update s1 20
     let res_vec sha256_finalize s2
-    
-    assert_eq_i32 2 (vec_len<i32> res_vec)
-    
-    test_checked "sha256 skeleton test passed"
-    0
+
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 -468965076 result
+        |> checks_push assert_eq_i32 hash32_i32 123456 hash32_i32 123456
+        |> checks_push assert ne hash32_i32 123456 hash32_i32 123457
+        |> checks_push assert_eq_i32 2 vec_len<i32> res_vec
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
 ```

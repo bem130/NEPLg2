@@ -6,20 +6,25 @@
 ## 基本: 左辺を第1引数へ注入する
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
     let a <i32> 1 |> add 2
     let b <i32> add 1 add 2 3 |> add 4
-    assert_eq_i32 3 a
-    assert_eq_i32 10 b
-    test_checked "pipe basic"
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 3 a
+        |> checks_push assert_eq_i32 10 b
+    let _done <Result<(),str>> test_checked "pipe basic";
+    checks_exit_code checks
 ```
 
 ## 複数段の変換を連結する
@@ -27,21 +32,26 @@ fn main <()*>()> ():
 式を左から上から順に追えるので、段階的な変換が読みやすくなります。
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "core/math" as *
+#import "core/result" as *
 #import "std/test" as *
 
-fn main <()*>()> ():
+fn main <()*>i32> ():
     let v <i32> block:
         3
         |> mul 2
         |> add 6
-    assert_eq_i32 12 v
-    test_checked "pipe chain"
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 12 v
+    let _done <Result<(),str>> test_checked "pipe chain";
+    checks_exit_code checks
 ```
 
 ## 補足

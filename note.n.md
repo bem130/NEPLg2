@@ -10268,3 +10268,30 @@
   - `node nodesrc/run_doctest.js -i tests/stdlib/std_test_collect.n.md -n 2` -> pass
   - `node nodesrc/tests.js -i tests/stdlib/std_test_collect.n.md -i tutorials/getting_started/11_testing_workflow.n.md -i stdlib/std/test.nepl --no-stdlib --no-tree -o /tmp/tests-explicit-check-print.json -j 4`
     - [結果/けっか]: `16/16 pass`
+
+# 2026-03-10 作業メモ (late getting_started と `hash` fixture を explicit print / safe `Result` 流儀へ追従)
+
+- [目的/もくてき]:
+  - `19_pipe_operator`, `20_generics_basics`, `21_trait_bounds_basics` と `stdlib/tests/hash.n.md` を、[現行/げんこう]の safe `Result` + explicit print [流儀/りゅうぎ]へ[揃/そろ]える。
+  - tutorial [終盤/しゅうばん]でも `std/test` の[古/ふる]い unit-return / [暗黙/あんもく]表示[前提/ぜんてい]を[残/のこ]さない。
+- [根本原因/こんぽんげんいん]:
+  - `19`〜`21` の doctest は、まだ unit-return `main` と `assert_*` [直列/ちょくれつ][実行/じっこう]の[旧流儀/きゅうりゅうぎ]が[残/のこ]っていた。
+  - `stdlib/tests/hash.n.md` も `test_checked` を[途中/とちゅう]で[呼/よ]ぶ[古/ふる]い[形/かたち]のままで、`Vec<Result>` の[集約/しゅうやく]と test [末尾/まつび]の explicit report [方針/ほうしん]に[乗/の]っていなかった。
+- [変更/へんこう]:
+  - `tutorials/getting_started/19_pipe_operator.n.md`
+    - 2 [件/けん]の doctest に `ret: 0` を[追加/ついか]した。
+    - `core/result` を import し、`checks_new` / `checks_push` / `checks_exit_code` [前提/ぜんてい]へ[変更/へんこう]した。
+  - `tutorials/getting_started/20_generics_basics.n.md`
+    - generic `id` / generic `Option` の doctest を safe `Result` [流儀/りゅうぎ]へ[変更/へんこう]した。
+  - `tutorials/getting_started/21_trait_bounds_basics.n.md`
+    - trait / impl と trait bound generic の doctest を safe `Result` [流儀/りゅうぎ]へ[変更/へんこう]した。
+  - `stdlib/tests/hash.n.md`
+    - `ret: 0` を[追加/ついか]し、FNV-1a / `hash32_i32` / SHA-256 skeleton の[確認/かくにん]を `Vec<Result<(),str>>` [集約/しゅうやく]へ[移/うつ]した。
+    - stdout [確認/かくにん]のある fixture として、test [末尾/まつび]で `checks_print_report checks` を[明示的/めいじてき]に[呼/よ]ぶ[形/かたち]へ[変更/へんこう]した。
+- [設計/せっけい][判断/はんだん]:
+  - tutorial [側/がわ]は stdout [期待/きたい]がないため、`checks_exit_code` だけを[使/つか]う[最小/さいしょう]構成を[維持/いじ]した。
+  - `hash.n.md` は[回帰/かいき] fixture として stdout [観察/かんさつ]の[価値/かち]があるため、`checks_print_report` を[入/い]れて explicit print [方針/ほうしん]の[実例/じつれい]にもした。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/tests/hash.n.md -n 1` -> pass
+  - `node nodesrc/tests.js -i tutorials/getting_started/19_pipe_operator.n.md -i tutorials/getting_started/20_generics_basics.n.md -i tutorials/getting_started/21_trait_bounds_basics.n.md -i stdlib/tests/hash.n.md --no-stdlib --no-tree -o /tmp/tests-safe-result-batch5.json -j 4`
+    - [結果/けっか]: `7/7 pass`

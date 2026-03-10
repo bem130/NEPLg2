@@ -6,11 +6,13 @@ trait は「この型が満たすべき振る舞い」を表現します。
 ## trait と impl を最小構成で作る
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
+#import "core/result" as *
 #import "std/test" as *
 
 trait Show:
@@ -21,19 +23,24 @@ impl Show for i32:
     fn show <(i32)->i32> (x):
         x
 |
-fn main <()*>()> ():
-    assert_eq_i32 12 Show::show 12
-    test_checked "trait and impl"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 12 Show::show 12
+    let _done <Result<(),str>> test_checked "trait and impl";
+    checks_exit_code checks
 ```
 
 ## ジェネリック関数に trait 制約を付ける
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
+#import "core/result" as *
 #import "std/test" as *
 
 trait Show:
@@ -47,9 +54,12 @@ impl Show for i32:
 fn call_show <.T: Show> <(.T)->i32> (x):
     Show::show x
 |
-fn main <()*>()> ():
-    assert_eq_i32 5 call_show 5
-    test_checked "trait bound generic"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 5 call_show 5
+    let _done <Result<(),str>> test_checked "trait bound generic";
+    checks_exit_code checks
 ```
 
 ## 補足

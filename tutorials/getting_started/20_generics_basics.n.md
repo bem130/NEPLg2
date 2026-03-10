@@ -6,20 +6,25 @@ NEPLg2 では型パラメータを `<.T>` のように書きます。
 ## 汎用関数 `id`
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
+#import "core/result" as *
 #import "std/test" as *
 
 fn id <.T> <(.T)->.T> (x):
     x
 |
-fn main <()*>()> ():
-    assert_eq_i32 42 id 42
-    assert_str_eq "nepl" id "nepl"
-    test_checked "generic id"
+fn main <()*>i32> ():
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 42 id 42
+        |> checks_push assert_str_eq "nepl" id "nepl"
+    let _done <Result<(),str>> test_checked "generic id";
+    checks_exit_code checks
 ```
 
 ## ジェネリックな enum を扱う
@@ -27,12 +32,14 @@ fn main <()*>()> ():
 `Option<.T>` のように、enum 側にも型パラメータを持たせられます。
 
 neplg2:test
+ret: 0
 ```neplg2
 | #entry main
 | #indent 4
 | #target std
 |
 #import "core/option" as *
+#import "core/result" as *
 #import "std/test" as *
 
 fn keep_or_default <.T> <(Option<.T>,.T)->.T> (opt, default):
@@ -42,12 +49,15 @@ fn keep_or_default <.T> <(Option<.T>,.T)->.T> (opt, default):
         Option::None:
             default
 |
-fn main <()*>()> ():
+fn main <()*>i32> ():
     let a <Option<i32>> Option::Some 7
     let b <Option<i32>> Option::None
-    assert_eq_i32 7 keep_or_default a 0
-    assert_eq_i32 9 keep_or_default b 9
-    test_checked "generic option"
+    let checks <Vec<Result<(),str>>>:
+        checks_new
+        |> checks_push assert_eq_i32 7 keep_or_default a 0
+        |> checks_push assert_eq_i32 9 keep_or_default b 9
+    let _done <Result<(),str>> test_checked "generic option";
+    checks_exit_code checks
 ```
 
 ## 補足
