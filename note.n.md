@@ -10942,3 +10942,33 @@
   - `node nodesrc/tests.js -i stdlib/tests/btreemap.n.md -i stdlib/tests/btreeset.n.md -i tests/stdlib/pipe_collections.n.md --no-stdlib --no-tree -o /tmp/tests-btree-focus.json -j 4`
     - [結果/けっか]: `14/14 pass`
     - output JSON: `/tmp/tests-btree-focus.json`
+
+# 2026-03-11 作業メモ (`alloc/hash` comment / fixture の reboot 追従)
+
+- [目的/もくてき]:
+  - `alloc/hash` [配下/はいか]の comment と fixture を reboot [後/ご]の test [流儀/りゅうぎ]と doc comment policy へ[揃/そろ]える。
+  - old `hash32_i32` / old `ret: 0` / old test output [前提/ぜんてい]を[除去/じょきょ]し、current bare API と explicit report [流儀/りゅうぎ]を[固定/こてい]する。
+- [根本原因/こんぽんげんいん]:
+  - `stdlib/tests/hash.n.md` は old success/failure [流儀/りゅうぎ]のままで、`checks_print_report` / `checks_exit_code` による current safe test flow と[不一致/ふいっち]だった。
+  - `alloc/hash/fnv1a32.nepl` / `alloc/hash/sha256.nepl` の comment は new policy / format に[沿/そ]っておらず、[現状/げんじょう]の scaffold [状態/じょうたい]や[注意点/ちゅういてん]が file header と item comment から[読/よ]み[取/と]れなかった。
+  - `hash` fixture は old `hash32_i32` [前提/ぜんてい]が[残/のこ]っており、current trait [委譲/いじょう]の説明とズレていた。
+- [変更/へんこう]:
+  - `stdlib/alloc/hash/fnv1a32.nepl`
+    - file header と `Fnv1a32` / `new_fnv1a32` / `fnv1a32_update` / `fnv1a32_finalize` の doc comment を new policy / format へ[書/か]き[直/なお]した。
+    - [暗号/あんごう]用途ではないこと、lightweight state であること、`update` / `finalize` の O(1) を[明記/めいき]した。
+  - `stdlib/alloc/hash/sha256.nepl`
+    - file header と `Sha256` / `new_sha256` / `sha256_update` / `sha256_finalize` の doc comment を new policy / format へ[書/か]き[直/なお]した。
+    - [現状/げんじょう]では SHA-256 digest を[計算/けいさん]しておらず、buffering scaffold であることを[明記/めいき]した。
+  - `stdlib/tests/hash.n.md`
+    - `#entry main` + `Vec<Result<(),str>>` + `checks_print_report` + `checks_exit_code` の explicit report [流儀/りゅうぎ]へ[更新/こうしん]した。
+    - old `hash32_i32` を[除去/じょきょ]し、trait [経由/けいゆ]の `hash32_by_trait` で determinism / distinctness を[確認/かくにん]するようにした。
+    - `sha256_finalize` は scaffold [仕様/しよう]として buffer len を[確認/かくにん]する test に[切/き]り[替/か]えた。
+- [設計/せっけい][判断/はんだん]:
+  - `sha256` は[未実装/みじっそう] digest を「できているように[見/み]せる」ことをせず、scaffold [段階/だんかい]で[保証/ほしょう]していることだけを test / comment [両方/りょうほう]に[明記/めいき]した。
+  - hash fixture では bare `hash32` overload の[曖昧性/あいまいせい]を[避/さ]けるため、current trait 設計を[表/あらわ]す `hash32_by_trait` を[使/つか]う[形/かたち]にした。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/tests/hash.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i stdlib/tests/hash.n.md -i tests/stdlib/traits_hash.n.md --no-stdlib --no-tree -o /tmp/tests-hash-focus.json -j 4`
+    - [結果/けっか]: `4/4 pass`
+    - output JSON: `/tmp/tests-hash-focus.json`
