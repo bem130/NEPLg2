@@ -9398,3 +9398,37 @@
 - [状況/じょうきょう]:
   - 今回の修正では compiler 本体は変更していない。
   - 残っていた failure は reboot 後仕様に対する test 側の前提ずれと、prelude で露出する generic `RegionToken<.T>` との名前衝突が原因だった。
+
+# 2026-03-10 作業メモ (`alloc/io` / `std/streamio` の最小 facade 追加)
+
+- [目的/もくてき]:
+  - reboot 文書で定義されている `alloc/io` と `std/streamio` の土台を、既存の `std/stdio` / `kpread` / `kpwrite` を壊さずに追加する。
+  - streamio は text 専用でなく、byte stream も扱える形で設計する。
+- [根本原因/こんぽんげんいん]:
+  - `todo.md` と `doc/stdlib_breaking_reboot.md` では `alloc/io` と `std/streamio` が明示されていたが、現状の stdlib にはまだ対応ファイルが無く、`std/stdio` と `kp*` helper が直接結び付いたままだった。
+  - `streamio` を text 専用にすると、後続の file/socket/event stream や `kpwrite` 昇格先として使い回せない。
+- [変更/へんこう]:
+  - `stdlib/alloc/io.nepl`
+    - `ByteReader` / `ByteWriter` / `TextReader` / `TextWriter` / `Flush` / `Close` trait を追加した。
+    - `io_read_all_bytes` / `io_write_bytes` / `io_read_all_text` / `io_write_str` / `io_flush` / `io_close` helper を追加した。
+    - doc comment は現行 policy の `#` / `##` / `###` 構成へ揃えた。
+  - `stdlib/std/streamio.nepl`
+    - `StdinStream` / `StdoutStream` を追加し、`alloc/io` trait を実装した。
+    - `stream_bytes_from_str` / `stream_bytes_to_str` を追加し、binary/text helper の橋渡しを行えるようにした。
+    - `stream_read_all_bytes` / `stream_write_bytes` / `stream_read_all_text` / `stream_write_str` / `stream_flush` / `stream_close` を facade 名で再公開した。
+    - [現状/げんじょう]の `std/stdio` が詳細 error を返さない制約は doc comment へ明記した。
+  - `tests/stdlib/streamio.n.md`
+    - text write, binary write, stdin bytes -> stdout bytes の focused case を追加した。
+- [設計/せっけい][判断/はんだん]:
+  - low-level 抽象は byte stream を基準にし、text は extension trait と helper へ分離した。
+  - writer / flush は handle を返す値指向 API にし、NEPLg2 の move / pipe 記法へ合わせた。
+  - `std/streamio` の module doctest は stable な入口確認に絞り、実 stdout/stderr の end-to-end は `tests/stdlib/streamio.n.md` 側で固定した。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/io.nepl -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/std/streamio.nepl -n 1` -> pass
+  - `node nodesrc/tests.js -i tests/stdlib/streamio.n.md -i stdlib/alloc/io.nepl -i stdlib/std/streamio.nepl --no-stdlib --no-tree -o /tmp/tests-streamio-focused.json -j 15`
+    - [結果/けっか]: `5/5 pass`
+- [状況/じょうきょう]:
+  - `std/streamio` はまだ stdin/stdout の最小 facade に留めているが、binary/text の trait 面は先に固定できた。
+  - `kpwrite` / `kpread` をこの層へ段階移行する足場はできた。

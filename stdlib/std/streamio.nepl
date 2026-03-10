@@ -1,0 +1,217 @@
+//: # streamio
+//: `alloc/io` の stream [抽象/ちゅうしょう]を `std` の stdin/stdout へ[接続/せつぞく]する facade
+//:
+//: ### [目的/もくてき]
+//: - `std/stdio` が[持/も]つ stdin/stdout の[入口/いりぐち]を、reboot [後/ご]の `alloc/io` trait [群/ぐん]へ[載/の]せ[替/か]えます。
+//: - low-level は binary stream を[基準/きじゅん]にしつつ、text helper も[併設/へいせつ]して、`kpwrite` / `kpread` や[将来/しょうらい]の file/socket stream の[昇格/しょうかく][先/さき]を[用意/ようい]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [現在/げんざい]の `std/stdio` は error code を[外部/がいぶ]へ[公開/こうかい]していないため、`StdoutStream` / `StdinStream` の impl は[失敗/しっぱい]を[詳細化/しょうさいか]できません。[現状/げんじょう]は成功として[丸/まる]めます。
+//: - stdin の text read は `std/stdio.read_all` に[従/したが]い、[現状/げんじょう]では 4096 byte までの[固定長/こていちょう][読/よ]み[込/こ]みです。
+//:
+//: ### [計算量/けいさんりょう]
+//: - byte/text の[相互/そうご][変換/へんかん]は O(n)、flush / close の no-op impl は O(1) です。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "std/streamio" as *
+//: fn main <()*>i32> ():
+//:     let bytes0 <Vec<u8>> stream_bytes_from_str "ab";
+//:     assert_eq_i32 2 vec_len<u8> bytes0;
+//:     match stream_close stdout_stream:
+//:         Result::Ok _:
+//:             ()
+//:         Result::Err _e:
+//:             test_fail "stdout close should be ok";
+//:     0
+//: ```
+
+#indent 4
+
+#import "alloc/collections/vec" as *
+#import "alloc/diag/error" as *
+#import "alloc/io" as *
+#import "alloc/string" as *
+#import "core/cast" as *
+#import "core/math" as *
+#import "core/mem" as *
+#import "core/option" as *
+#import "core/result" as *
+#import "core/traits/copy" as *
+#import "std/stdio" as *
+
+//: ## StdinStream
+//: [標準入力/ひょうじゅんにゅうりょく]を[表/あらわ]す[軽量/けいりょう] handle
+//:
+//: ### [目的/もくてき]
+//: - `alloc/io` の reader trait [群/ぐん]に stdin を[載/の]せるための[具体型/ぐたいかた]を[与/あた]えます。
+//:
+//: ### [注意/ちゅうい]
+//: - [内部/ないぶ][状態/じょうたい]を[持/も]たないので `Copy` / `Clone` を[実装/じっそう]します。
+struct StdinStream:
+    marker <()>
+
+impl Copy for StdinStream:
+    fn copy_mark <(StdinStream)->StdinStream> (stream):
+        stream
+
+impl Clone for StdinStream:
+    fn clone <(StdinStream)->StdinStream> (stream):
+        stream
+
+//: ## StdoutStream
+//: [標準出力/ひょうじゅんしゅつりょく]を[表/あらわ]す[軽量/けいりょう] handle
+//:
+//: ### [目的/もくてき]
+//: - `alloc/io` の writer / flush / close trait [群/ぐん]に stdout を[載/の]せるための[具体型/ぐたいかた]を[与/あた]えます。
+//:
+//: ### [注意/ちゅうい]
+//: - [内部/ないぶ][状態/じょうたい]を[持/も]たないので `Copy` / `Clone` を[実装/じっそう]します。
+struct StdoutStream:
+    marker <()>
+
+impl Copy for StdoutStream:
+    fn copy_mark <(StdoutStream)->StdoutStream> (stream):
+        stream
+
+impl Clone for StdoutStream:
+    fn clone <(StdoutStream)->StdoutStream> (stream):
+        stream
+
+//: ## stdin_stream
+//: stdin handle を[返/かえ]す
+fn stdin_stream <()->StdinStream> ():
+    StdinStream ()
+
+//: ## stdout_stream
+//: stdout handle を[返/かえ]す
+fn stdout_stream <()->StdoutStream> ():
+    StdoutStream ()
+
+//: ## stream_bytes_from_str
+//: `str` を byte [列/れつ]へ[変換/へんかん]する
+//:
+//: ### [目的/もくてき]
+//: - text helper と binary helper の[橋渡/はしわた]しとして、`str` を `Vec<u8>` に[詰/つ]め[替/か]えます。
+//:
+//: ### [実装/じっそう]
+//: - [内部/ないぶ]の string layout から byte [長/ちょう]と[本文/ほんぶん] pointer を[読/よ]み[出/だ]し、`Vec<u8>` へ 1 byte ずつ push します。
+//:
+//: ### [注意/ちゅうい]
+//: - UTF-8 [検証/けんしょう]や[変換/へんかん]は[行/おこな]わず、[保持/ほじ]している byte [列/れつ]をそのまま[複製/ふくせい]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - byte [長/ちょう]を n として O(n) です。
+fn stream_bytes_from_str <(str)->Vec<u8>> (text):
+    let byte_len <i32> load_i32 text
+    let data <MemPtr<u8>> string_data_ptr text
+    let mut out <Vec<u8>> vec_new<u8>
+    let mut i <i32> 0
+    while lt i byte_len:
+        do:
+            let b <i32> unwrap<i32> load_u8 mem_ptr_add data i
+            set out vec_push<u8> out <u8> cast b
+            set i add i 1
+    out
+
+//: ## stream_bytes_to_str
+//: byte [列/れつ]を `str` として[包/つつ]み[直/なお]す
+//:
+//: ### [目的/もくてき]
+//: - binary stream の[内容/ないよう]を text helper へ[渡/わた]したい[場合/ばあい]の[最小/さいしょう][変換/へんかん]を[提供/ていきょう]します。
+//:
+//: ### [実装/じっそう]
+//: - `string_alloc_region` で[長/なが]さ header [付/つ]きの[領域/りょういき]を[確保/かくほ]し、byte [列/れつ]を 1 byte ずつ[書/か]き[込/こ]んで `string_finish` します。
+//:
+//: ### [注意/ちゅうい]
+//: - UTF-8 [検証/けんしょう]は[行/おこな]いません。[任意/にんい] byte [列/れつ]をそのまま `str` [表現/ひょうげん]へ[載/の]せます。
+//: - [確保/かくほ][失敗/しっぱい]は[現状/げんじょう]の string helper に[合/あ]わせて[空文字列/からもじれつ]へ[丸/まる]めます。
+//:
+//: ### [計算量/けいさんりょう]
+//: - byte [長/ちょう]を n として O(n) です。
+fn stream_bytes_to_str <(Vec<u8>)*>str> (bytes):
+    let byte_len <i32> get bytes "len"
+    match string_alloc_region byte_len:
+        Result::Err _e:
+            ""
+        Result::Ok region:
+            let out <MemPtr<u8>> get region "ptr"
+            let in_data_raw <i32> mem_ptr_addr get bytes "data"
+            let mut i <i32> 0
+            while lt i byte_len:
+                do:
+                    let b <i32> load_u8 add in_data_raw i
+                    match store_u8 mem_ptr_add out add 4 i b:
+                        Result::Ok _:
+                            ()
+                        Result::Err _e:
+                            #intrinsic "unreachable" <> ()
+                    set i add i 1
+            match store_i32 mem_ptr_wrap mem_ptr_addr out byte_len:
+                Result::Ok _:
+                    mem_ptr_addr out
+                Result::Err _e:
+                    #intrinsic "unreachable" <> ()
+
+impl ByteReader for StdinStream:
+    fn read_all_bytes <(StdinStream)*>Result<Vec<u8>, StdErrorKind>> (_stream):
+        Result::Ok stream_bytes_from_str read_all
+
+impl TextReader for StdinStream:
+    fn read_all_text <(StdinStream)*>Result<str, StdErrorKind>> (_stream):
+        Result::Ok read_all
+
+impl Close for StdinStream:
+    fn close <(StdinStream)*>Result<(), StdErrorKind>> (_stream):
+        Result::Ok ()
+
+impl ByteWriter for StdoutStream:
+    fn write_bytes <(StdoutStream, Vec<u8>)*>Result<StdoutStream, StdErrorKind>> (stream, bytes):
+        print stream_bytes_to_str bytes
+        Result::Ok stream
+
+impl TextWriter for StdoutStream:
+    fn write_str <(StdoutStream, str)*>Result<StdoutStream, StdErrorKind>> (stream, text):
+        print text
+        Result::Ok stream
+
+impl Flush for StdoutStream:
+    fn flush <(StdoutStream)*>Result<StdoutStream, StdErrorKind>> (stream):
+        Result::Ok stream
+
+impl Close for StdoutStream:
+    fn close <(StdoutStream)*>Result<(), StdErrorKind>> (_stream):
+        Result::Ok ()
+
+//: ## stream_read_all_bytes
+//: `alloc/io` helper を `std/streamio` の[名前/なまえ]で[再公開/さいこうかい]する
+fn stream_read_all_bytes <.T: ByteReader> <(.T)*>Result<Vec<u8>, StdErrorKind>> (stream):
+    io_read_all_bytes stream
+
+//: ## stream_write_bytes
+//: `alloc/io` helper を `std/streamio` の[名前/なまえ]で[再公開/さいこうかい]する
+fn stream_write_bytes <.T: ByteWriter> <(.T, Vec<u8>)*>Result<.T, StdErrorKind>> (stream, bytes):
+    io_write_bytes stream bytes
+
+//: ## stream_read_all_text
+//: `alloc/io` helper を `std/streamio` の[名前/なまえ]で[再公開/さいこうかい]する
+fn stream_read_all_text <.T: TextReader> <(.T)*>Result<str, StdErrorKind>> (stream):
+    io_read_all_text stream
+
+//: ## stream_write_str
+//: `alloc/io` helper を `std/streamio` の[名前/なまえ]で[再公開/さいこうかい]する
+fn stream_write_str <.T: TextWriter> <(.T, str)*>Result<.T, StdErrorKind>> (stream, text):
+    io_write_str stream text
+
+//: ## stream_flush
+//: `alloc/io` helper を `std/streamio` の[名前/なまえ]で[再公開/さいこうかい]する
+fn stream_flush <.T: Flush> <(.T)*>Result<.T, StdErrorKind>> (stream):
+    io_flush stream
+
+//: ## stream_close
+//: `alloc/io` helper を `std/streamio` の[名前/なまえ]で[再公開/さいこうかい]する
+fn stream_close <.T: Close> <(.T)*>Result<(), StdErrorKind>> (stream):
+    io_close stream
