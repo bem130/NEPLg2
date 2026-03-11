@@ -13,11 +13,11 @@ ret: 1234
 #import "core/math" as *
 
 fn make_vec4 <()->Vec<i32>> ():
-    let mut v vec_new<i32>;
-    set v vec_push<i32> v 4;
-    set v vec_push<i32> v 1;
-    set v vec_push<i32> v 3;
-    set v vec_push<i32> v 2;
+    let mut v new<i32>;
+    set v push<i32> v 4;
+    set v push<i32> v 1;
+    set v push<i32> v 3;
+    set v push<i32> v 2;
     v
 
 fn main <()->i32> ():
@@ -38,11 +38,11 @@ ret: 1234
 #import "core/math" as *
 
 fn make_vec4 <()->Vec<i32>> ():
-    let mut v vec_new<i32>;
-    set v vec_push<i32> v 4;
-    set v vec_push<i32> v 1;
-    set v vec_push<i32> v 3;
-    set v vec_push<i32> v 2;
+    let mut v new<i32>;
+    set v push<i32> v 4;
+    set v push<i32> v 1;
+    set v push<i32> v 3;
+    set v push<i32> v 2;
     v
 
 fn main <()->i32> ():
@@ -66,16 +66,16 @@ ret: 1334
 #import "core/option" as *
 
 fn make_vec4 <()->Vec<i32>> ():
-    let mut v vec_new<i32>;
-    set v vec_push<i32> v 4;
-    set v vec_push<i32> v 1;
-    set v vec_push<i32> v 3;
-    set v vec_push<i32> v 2;
+    let mut v new<i32>;
+    set v push<i32> v 4;
+    set v push<i32> v 1;
+    set v push<i32> v 3;
+    set v push<i32> v 2;
     v
 
 fn main <()->i32> ():
     let v sort_quick_ret<i32> make_vec4;
-    let s vec_data_len<i32> v;
+    let s data_len<i32> v;
     let p <i32> mem_ptr_addr get s "data";
     let n <i32> get s "len";
     let bn <bool> eq n 4;
@@ -99,9 +99,9 @@ ret: 0
 #import "core/field" as *
 
 fn main <()->i32> ():
-    let v0 vec_new<i32>;
+    let v0 new<i32>;
     let v1 sort_quick_ret<i32> v0;
-    let s vec_data_len<i32> v1;
+    let s data_len<i32> v1;
     get s "len"
 ```
 
@@ -118,17 +118,17 @@ ret: 1
 #import "core/field" as *
 
 fn main <()->i32> ():
-    let v0 vec_new<i32>;
-    let v1 vec_push<i32> v0 42;
+    let v0 new<i32>;
+    let v1 push<i32> v0 42;
     let v2 sort_quick_ret<i32> v1;
-    let s vec_data_len<i32> v2;
+    let s data_len<i32> v2;
     get s "len"
 ```
 
 ## sort_quick_ret_vec_is_reusable_after_sort
 
 neplg2:test
-ret: 5
+ret: 3
 ```neplg2
 #entry main
 #indent 4
@@ -138,12 +138,12 @@ ret: 5
 #import "core/field" as *
 
 fn main <()->i32> ():
-    let v0 vec_new<i32>;
-    let v1 vec_push<i32> v0 4;
-    let v2 vec_push<i32> v1 1;
+    let v0 new<i32>;
+    let v1 push<i32> v0 4;
+    let v2 push<i32> v1 1;
     let v3 sort_quick_ret<i32> v2;
-    let v4 vec_push<i32> v3 5;
-    let s vec_data_len<i32> v4;
+    let v4 push<i32> v3 5;
+    let s data_len<i32> v4;
     get s "len"
 ```
 
@@ -160,11 +160,11 @@ ret: 1234
 #import "core/math" as *
 
 fn make_vec4 <()->Vec<i32>> ():
-    let mut v vec_new<i32>;
-    set v vec_push<i32> v 4;
-    set v vec_push<i32> v 1;
-    set v vec_push<i32> v 3;
-    set v vec_push<i32> v 2;
+    let mut v new<i32>;
+    set v push<i32> v 4;
+    set v push<i32> v 1;
+    set v push<i32> v 3;
+    set v push<i32> v 2;
     v
 
 fn main <()->i32> ():
@@ -188,16 +188,16 @@ ret: 1434
 #import "core/option" as *
 
 fn make_vec4 <()->Vec<i32>> ():
-    let mut v vec_new<i32>;
-    set v vec_push<i32> v 4;
-    set v vec_push<i32> v 1;
-    set v vec_push<i32> v 3;
-    set v vec_push<i32> v 2;
+    let mut v new<i32>;
+    set v push<i32> v 4;
+    set v push<i32> v 1;
+    set v push<i32> v 3;
+    set v push<i32> v 2;
     v
 
 fn main <()->i32> ():
     let v sort_heap_ret<i32> make_vec4;
-    let s vec_data_len<i32> v;
+    let s data_len<i32> v;
     let p <i32> mem_ptr_addr get s "data";
     let n <i32> get s "len";
     let bn <bool> eq n 4;
@@ -221,9 +221,9 @@ ret: 0
 #import "core/field" as *
 
 fn main <()->i32> ():
-    let v0 vec_new<i32>;
+    let v0 new<i32>;
     let v1 sort_heap_ret<i32> v0;
-    let s vec_data_len<i32> v1;
+    let s data_len<i32> v1;
     get s "len"
 ```
 
@@ -240,17 +240,17 @@ ret: 1
 #import "core/field" as *
 
 fn main <()->i32> ():
-    let v0 vec_new<i32>;
-    let v1 vec_push<i32> v0 42;
+    let v0 new<i32>;
+    let v1 push<i32> v0 42;
     let v2 sort_heap_ret<i32> v1;
-    let s vec_data_len<i32> v2;
+    let s data_len<i32> v2;
     get s "len"
 ```
 
 ## sort_heap_ret_vec_is_reusable_after_sort
 
 neplg2:test
-ret: 5
+ret: 3
 ```neplg2
 #entry main
 #indent 4
@@ -260,12 +260,12 @@ ret: 5
 #import "core/field" as *
 
 fn main <()->i32> ():
-    let v0 vec_new<i32>;
-    let v1 vec_push<i32> v0 4;
-    let v2 vec_push<i32> v1 1;
+    let v0 new<i32>;
+    let v1 push<i32> v0 4;
+    let v2 push<i32> v1 1;
     let v3 sort_heap_ret<i32> v2;
-    let v4 vec_push<i32> v3 5;
-    let s vec_data_len<i32> v4;
+    let v4 push<i32> v3 5;
+    let s data_len<i32> v4;
     get s "len"
 ```
 
@@ -285,16 +285,16 @@ ret: 1534
 #import "core/option" as *
 
 fn make_vec4 <()->Vec<i32>> ():
-    let mut v vec_new<i32>;
-    set v vec_push<i32> v 4;
-    set v vec_push<i32> v 1;
-    set v vec_push<i32> v 3;
-    set v vec_push<i32> v 2;
+    let mut v new<i32>;
+    set v push<i32> v 4;
+    set v push<i32> v 1;
+    set v push<i32> v 3;
+    set v push<i32> v 2;
     v
 
 fn main <()->i32> ():
     let v sort_merge_ret<i32> make_vec4;
-    let s vec_data_len<i32> v;
+    let s data_len<i32> v;
     let p <i32> mem_ptr_addr get s "data";
     let n <i32> get s "len";
     let bn <bool> eq n 4;
@@ -318,9 +318,9 @@ ret: 0
 #import "core/field" as *
 
 fn main <()->i32> ():
-    let v0 vec_new<i32>;
+    let v0 new<i32>;
     let v1 sort_merge_ret<i32> v0;
-    let s vec_data_len<i32> v1;
+    let s data_len<i32> v1;
     get s "len"
 ```
 
@@ -337,17 +337,17 @@ ret: 1
 #import "core/field" as *
 
 fn main <()->i32> ():
-    let v0 vec_new<i32>;
-    let v1 vec_push<i32> v0 42;
+    let v0 new<i32>;
+    let v1 push<i32> v0 42;
     let v2 sort_merge_ret<i32> v1;
-    let s vec_data_len<i32> v2;
+    let s data_len<i32> v2;
     get s "len"
 ```
 
 ## sort_merge_ret_vec_is_reusable_after_sort
 
 neplg2:test
-ret: 5
+ret: 3
 ```neplg2
 #entry main
 #indent 4
@@ -357,12 +357,12 @@ ret: 5
 #import "core/field" as *
 
 fn main <()->i32> ():
-    let v0 vec_new<i32>;
-    let v1 vec_push<i32> v0 4;
-    let v2 vec_push<i32> v1 1;
+    let v0 new<i32>;
+    let v1 push<i32> v0 4;
+    let v2 push<i32> v1 1;
     let v3 sort_merge_ret<i32> v2;
-    let v4 vec_push<i32> v3 5;
-    let s vec_data_len<i32> v4;
+    let v4 push<i32> v3 5;
+    let s data_len<i32> v4;
     get s "len"
 ```
 
@@ -379,11 +379,11 @@ ret: 1234
 #import "core/math" as *
 
 fn make_vec4 <()->Vec<i32>> ():
-    let mut v vec_new<i32>;
-    set v vec_push<i32> v 4;
-    set v vec_push<i32> v 1;
-    set v vec_push<i32> v 3;
-    set v vec_push<i32> v 2;
+    let mut v new<i32>;
+    set v push<i32> v 4;
+    set v push<i32> v 1;
+    set v push<i32> v 3;
+    set v push<i32> v 2;
     v
 
 fn main <()->i32> ():
@@ -404,21 +404,21 @@ ret: 10
 #import "core/math" as *
 
 fn make_vec4 <()->Vec<i32>> ():
-    let mut v vec_new<i32>;
-    set v vec_push<i32> v 4;
-    set v vec_push<i32> v 1;
-    set v vec_push<i32> v 3;
-    set v vec_push<i32> v 2;
+    let mut v new<i32>;
+    set v push<i32> v 4;
+    set v push<i32> v 1;
+    set v push<i32> v 3;
+    set v push<i32> v 2;
     v
 
 fn main <()->i32> ():
     let before sort_is_sorted<i32> make_vec4;
     let after sort_is_sorted<i32> block:
-        let mut v vec_new<i32>;
-        set v vec_push<i32> v 1;
-        set v vec_push<i32> v 2;
-        set v vec_push<i32> v 3;
-        set v vec_push<i32> v 4;
+        let mut v new<i32>;
+        set v push<i32> v 1;
+        set v push<i32> v 2;
+        set v push<i32> v 3;
+        set v push<i32> v 4;
         v
     if and not before after 10 0
 ```

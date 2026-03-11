@@ -11233,3 +11233,31 @@
     - [結果/けっか]: pass
   - `node nodesrc/run_doctest.js -i tests/stdlib/pipe_collections.n.md -n 4`
     - [結果/けっか]: pass
+
+# 2026-03-12 作業メモ (sort fixture の bare Vec API 追従)
+
+- [目的/もくてき]:
+  - `tests/stdlib/sort.n.md` に残っていた旧 `vec_*` 実体名を current bare API へ[揃/そろ]える。
+  - sort return fixture に残っていた stale expected を current `Vec` [意味論/いみろん]へ[同期/どうき]する。
+- [根本原因/こんぽんげんいん]:
+  - `Vec` 本体は actual def が `new` / `push` / `data_len` へ[移行/いこう]したが、sort fixture だけが旧 `vec_new` / `vec_push` / `vec_data_len` のまま[残存/ざんそん]していた。
+  - `sort_*_ret_vec_is_reusable_after_sort` は 2 [要素/ようそ]を sort [後/ご]に 1 [要素/ようそ]だけ[追加/ついか]して `len` を[見/み]る test なのに、旧 expected `5` が[残/のこ]っていた。
+- [変更/へんこう]:
+  - `tests/stdlib/sort.n.md`
+    - `vec_new` / `vec_push` / `vec_data_len` を `new` / `push` / `data_len` へ[置換/ちかん]した。
+    - `sort_quick_ret_vec_is_reusable_after_sort`
+    - `sort_heap_ret_vec_is_reusable_after_sort`
+    - `sort_merge_ret_vec_is_reusable_after_sort`
+      の expected `ret` を `3` へ[修正/しゅうせい]した。
+- [設計/せっけい][判断/はんだん]:
+  - ここでの failure は sort [実装/じっそう]の bug ではなく fixture の[前提/ぜんてい]ずれであり、library [本体/ほんたい]は[変/か]えず test だけを current public API と current `len` [意味論/いみろん]へ[寄/よ]せた。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 6`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 11`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 15`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i tests/stdlib/sort.n.md --no-stdlib --no-tree -o /tmp/tests-stdlib-sort.json -j 2`
+    - [結果/けっか]: `22/22 pass`
+    - output JSON: `/tmp/tests-stdlib-sort.json`
