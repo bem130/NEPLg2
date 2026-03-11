@@ -863,7 +863,8 @@ fn str_split <(str,str)->Vec<str>> (s, sep):
             let s_len <i32> load_i32 s;
             let mut i <i32> 0;
             let mut start <i32> 0;
-            while le <i32> add i sep_len s_len:
+            let mut scan_end <i32> add i sep_len;
+            while le <i32> scan_end s_len:
                 do:
                     if:
                         str_match_at s sep i sep_len
@@ -872,8 +873,10 @@ fn str_split <(str,str)->Vec<str>> (s, sep):
                             set out unwrap_ok v::push<str> out part;
                             set i <i32> add i sep_len;
                             set start i;
+                            set scan_end <i32> add i sep_len;
                         else:
                             set i <i32> add i 1;
+                            set scan_end <i32> add i sep_len;
             let tail <str> str_slice s start s_len;
             set out unwrap_ok v::push<str> out tail;
             out
@@ -911,11 +914,13 @@ fn str_split <(str,str)->Vec<str>> (s, sep):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "std/test" as *
 //:| #import "alloc/string" as *
-//: fn main <()*>()> ():
-//:     assert_str_eq "true" from_bool true;
-//:     assert_str_eq "false" from_bool false;
+//:| #import "core/math" as *
+//: fn main <()*>i32> ():
+//:     let ok0 <bool> eq from_bool true "true";
+//:     let ok1 <bool> eq from_bool false "false";
+//:     let ok <bool> and ok0 ok1;
+//:     if ok 1 0
 //: ```
 fn from_bool <(bool)->str> (b):
     if:
@@ -1350,11 +1355,13 @@ fn u128_divrem_small <(u128,i32)->U128DivRem> (v, radix):
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "std/test" as *
 //:| #import "alloc/string" as *
-//: fn main <()*>()> ():
-//:     assert_str_eq "42" from_i32 42;
-//:     assert_str_eq "-42" from_i32 -42;
+//:| #import "core/math" as *
+//: fn main <()*>i32> ():
+//:     let ok0 <bool> eq from_i32 42 "42";
+//:     let ok1 <bool> eq from_i32 -42 "-42";
+//:     let ok <bool> and ok0 ok1;
+//:     if ok 1 0
 //: ```
 fn from_i32 <(i32)->str> (x):
     match from_i32_radix x 10:
@@ -1645,14 +1652,19 @@ fn to_u128_radix <(str,i32)->Result<u128,i32>> (s, radix):
                 then:
                     set ok 0;
                 else:
+                    let first_ptr <i32> add s 4;
+                    let first <i32> load_u8 first_ptr;
                     if:
-                        eq load_u8 add s 4 45
+                        eq first 45
                         then:
                             set ok 0;
                         else:
                             while lt i n:
                                 do:
-                                    match digit_from_char load_u8 add s add 4 i:
+                                    let digit_off <i32> add 4 i;
+                                    let digit_ptr <i32> add s digit_off;
+                                    let digit_chr <i32> load_u8 digit_ptr;
+                                    match digit_from_char digit_chr:
                                         Result::Ok digit:
                                             if:
                                                 ge digit radix

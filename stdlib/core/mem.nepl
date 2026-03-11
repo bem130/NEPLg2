@@ -24,27 +24,32 @@
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "std/test" as *
 //:| #import "core/mem" as *
-//: fn main <()*>()> ():
-//:     assert_eq_i32 0 align8 0;
-//:     assert_eq_i32 8 align8 1;
-//:     assert_eq_i32 8 align8 8;
-//:     assert_eq_i32 16 align8 9;
+//:| #import "core/math" as *
+//: fn main <()*>i32> ():
+//:     let ok0 <bool> eq align8 0 0;
+//:     let ok1 <bool> eq align8 1 8;
+//:     let ok2 <bool> eq align8 8 8;
+//:     let ok3 <bool> eq align8 9 16;
+//:     let ok01 <bool> and ok0 ok1;
+//:     let ok23 <bool> and ok2 ok3;
+//:     let ok <bool> and ok01 ok23;
+//:     if ok 1 0
 //: ```
 //:
 //: neplg2:test
 //: ```neplg2
 //:| #entry main
 //:| #target std
-//:| #import "std/test" as *
 //:| #import "core/mem" as *
-//: fn main <()*>()> ():
+//:| #import "core/math" as *
+//: fn main <()*>i32> ():
 //:     let p alloc_raw 4;
-//:     assert ne 0 p;
+//:     let ok0 <bool> ne 0 p;
 //:     store_i32 p 123;
-//:     assert_eq_i32 123 load_i32 p;
+//:     let ok1 <bool> eq load_i32 p 123;
 //:     dealloc_raw p 4;
+//:     if and ok0 ok1 1 0
 //: ```
 
 
@@ -254,7 +259,8 @@ fn alloc_raw <(i32)->i32> (size):
                                 then:
                                     store_i32 4 next
                                 else:
-                                    store_i32 add prev 4 next
+                                    let prev_next_ptr <i32> add prev 4
+                                    store_i32 prev_next_ptr next
                             let remain <i32> sub blk_sz total
                             if:
                                 cond:
@@ -262,7 +268,8 @@ fn alloc_raw <(i32)->i32> (size):
                                 then:
                                     let new_blk <i32> add cur total
                                     store_i32 new_blk remain
-                                    store_i32 add new_blk 4 next
+                                    let new_blk_next_ptr <i32> add new_blk 4
+                                    store_i32 new_blk_next_ptr next
                                     store_i32 cur total
                                 else:
                                     store_i32 cur blk_sz
@@ -336,7 +343,8 @@ fn dealloc_raw <(i32,i32)->()> (ptr, size):
             let blk <i32> sub ptr header
             let head <i32> load_i32 4
             store_i32 blk total
-            store_i32 add blk 4 head
+            let blk_next_ptr <i32> add blk 4
+            store_i32 blk_next_ptr head
             store_i32 4 blk
 
 //: realloc_raw: 既存領域を再確保する（生ポインタAPI）
@@ -378,8 +386,10 @@ fn realloc_raw <(i32,i32,i32)->i32> (ptr, old_size, new_size):
                             let mut i <i32> 0
                             while lt i copy_bytes:
                                 do:
-                                    let b <i32> load_u8 add ptr i
-                                    store_u8 add new_ptr i b
+                                    let src_ptr <i32> add ptr i
+                                    let b <i32> load_u8 src_ptr
+                                    let dst_ptr <i32> add new_ptr i
+                                    store_u8 dst_ptr b
                                     set i add i 1
                             dealloc_raw ptr old_size
                             new_ptr
@@ -620,7 +630,8 @@ fn memset_u8 <(i32,i32,i32)->()> (ptr, len, value):
     let mut i <i32> 0;
     while lt i len:
         do:
-            store_u8 add ptr i value;
+            let dst_ptr <i32> add ptr i;
+            store_u8 dst_ptr value;
             set i add i 1;
 
 //: fill_u8: `memset_u8` の同義 API

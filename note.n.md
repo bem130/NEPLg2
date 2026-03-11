@@ -11484,3 +11484,67 @@
     - [結果/けっか]: pass
   - `node nodesrc/run_doctest.js -i tests/stdlib/stack_collections.n.md -n 2`
     - [結果/けっか]: pass
+
+# 2026-03-12 作業メモ (`Fenwick` [追加/ついか]と current collection regression [回収/かいしゅう])
+
+- [目的/もくてき]:
+  - `alloc/collections` に Fenwick Tree を[追加/ついか]し、prefix sum / range sum の bare API を[標準/ひょうじゅん]で[提供/ていきょう]する。
+  - その[途中/とちゅう]で[露出/ろしゅつ]した `mem` / `string` / `vec` の current regression を[根本/こんぽん]から[回収/かいしゅう]する。
+- [根本原因/こんぽんげんいん]:
+  - `Fenwick` は owner 型なのに、`field::get` で `fw` を[複数回/ふくすうかい][読/よ]んでおり、move model と[衝突/しょうとつ]していた。
+  - `mem` / `string` / `vec` には、[前置/ぜんち][記法/きほう]の call の[内部/ないぶ]へさらに call を[埋/う]め[込/こ]んだ[箇所/かしょ]が[残/のこ]っており、current compiler では stack reduction が[不安定/ふあんてい]だった。
+  - `mem` / `string` の doc comment doctest に old `assert_*` [流儀/りゅうぎ]が[残/のこ]っていた。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/fenwick.nepl`
+    - `Fenwick` と `new` / `len` / `add` / `sum_prefix` / `sum_range` / `free` を[追加/ついか]した。
+    - owner [値/あたい]を[複数回/ふくすうかい][読/よ]まないよう、temporary memory と raw helper を[使/つか]って `add` / `sum_prefix` / `sum_range` / `free` を[実装/じっそう]した。
+    - public usage doctest を new doc comment policy に[従/したが]って[付与/ふよ]した。
+  - `stdlib/tests/fenwick.n.md`, `tests/stdlib/fenwick_collections.n.md`
+    - `Fenwick` fixture を[追加/ついか]し、`new |> add ... |> uwok` と `sum_prefix` / `sum_range` の[基本/きほん][利用例/りようれい]を[固定/こてい]した。
+    - owner [値/あたい]の[再利用/さいりよう]を[避/さ]けるため、query ごとに[独立/どくりつ]の `Fenwick` を[作/つく]る[形/かたち]へ[揃/そろ]えた。
+  - `stdlib/core/mem.nepl`
+    - `store_i32 add ...` / `store_u8 add ...` / `load_u8 add ...` のような nested call を temporary binding に[展開/てんかい]した。
+    - doc comment doctest #1 を current safe style に[更新/こうしん]した。
+  - `stdlib/alloc/collections/vec.nepl`
+    - `push` の `realloc_ptr` / constructor path を temporary binding に[分解/ぶんかい]し、current compiler で[安定/あんてい]して[読/よ]める[形/かたち]へ[修正/しゅうせい]した。
+  - `stdlib/alloc/string.nepl`
+    - `str_split` と `u128` parse path の nested call を temporary binding に[展開/てんかい]した。
+    - `from_bool` / `from_i32` の doc comment doctest を current safe style に[更新/こうしん]した。
+- [設計/せっけい][判断/はんだん]:
+  - `Fenwick` は `kpfenwick` をそのまま[持/も]ち[上/あ]げるのでなく、reboot 後の bare API と `Result` [方針/ほうしん]に[合/あ]わせて `alloc/collections` の owner collection として[再設計/さいせっけい]した。
+  - regression fix は fixture [側/がわ]だけでなく、nested prefix call を source [側/がわ]で[排除/はいじょ]して[根本/こんぽん]から[修正/しゅうせい]した。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: pass（`web/dist` の compiler [更新/こうしん]を[確認/かくにん]）
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/stack.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/stack.n.md -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/btreeset.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/core/mem.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/string.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/string.nepl -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/fenwick.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/fenwick.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/fenwick.nepl -n 3`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/fenwick.nepl -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/fenwick.nepl -n 5`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/fenwick.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/fenwick_collections.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i stdlib/tests/fenwick.n.md -i tests/stdlib/fenwick_collections.n.md --no-stdlib --no-tree -o /tmp/tests-fenwick.json -j 2`
+    - [結果/けっか]: `3/3 pass`

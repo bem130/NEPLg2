@@ -1,0 +1,294 @@
+//: # fenwick
+//: [累積和/るいせきわ]クエリを[高速/こうそく]に[処理/しょり]する Fenwick Tree
+//:
+//: ### [目的/もくてき]
+//: - `new` / `add` / `sum_prefix` / `sum_range` / `len` / `free` を bare 名で[提供/ていきょう]し、[点更新/てんこうしん]と prefix/range sum を `O(log n)` で[扱/あつか]えるようにします。
+//: - `kpfenwick` の[競技/きょうぎ][向/む]け実装を `alloc/collections` へ[昇格/しょうかく]し、[一般用途/いっぱんようと]の collection として[再利用/さいりよう]できるようにします。
+//:
+//: ### [実装/じっそう]
+//: - [内部/ないぶ]は 1-indexed `bit[1..n]` [配列/はいれつ]を[持/も]つ[古典的/こてんてき] Fenwick Tree です。
+//: - [公開/こうかい] API の index は 0-index で[受/う]け、[内部/ないぶ]で 1-index に[変換/へんかん]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `new` と `add` は `Result` を[返/かえ]します。
+//: - `sum_prefix` は `[0, r)`、`sum_range` は `[l, r)` を[返/かえ]します。
+//: - [範囲外/はんいがい] index や[不正/ふせい] range は `Result::Err Diag` です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `len` は O(1)。
+//: - `add` / `sum_prefix` / `sum_range` は O(log n)。
+//: - `new` / `free` は O(n)。
+
+#indent 4
+
+#import "core/math" as *
+#import "core/mem" as *
+#import "core/result" as *
+#import "core/field" as field
+#import "alloc/diag/error" as *
+
+//: ## Fenwick
+//: [点更新/てんこうしん]と[累積和/るいせきわ]クエリを[保持/ほじ]する[所有者/しょゆうしゃ]
+//:
+//: ### [目的/もくてき]
+//: - [長/なが]さ `n` と internal `bit` [配列/はいれつ]を 1 [値/あたい]として[受/う]け[渡/わた]しできるようにします。
+//:
+//: ### [注意/ちゅうい]
+//: - `bit` は 1-indexed [内部配列/ないぶはいれつ]です。
+//: - `Fenwick` は[内部/ないぶ]メモリの[所有権/しょゆうけん]を[持/も]つので、[不要/ふよう]になったら `free` します。
+struct Fenwick:
+    n <i32>
+    bit <MemPtr<i32>>
+
+fn fenwick_diag_index <(str,i32,i32)*>Diag> (op, idx, n):
+    let msg0 <str> concat op ": index out of bounds ";
+    let msg1 <str> concat msg0 from_i32 idx;
+    let msg2 <str> concat msg1 " for len ";
+    let msg3 <str> concat msg2 from_i32 n;
+    diag_error StdErrorKind::IndexOutOfBounds msg3
+
+fn fenwick_diag_range <(str,i32,i32,i32)*>Diag> (op, l, r, n):
+    let msg0 <str> concat op ": invalid range [";
+    let msg1 <str> concat msg0 from_i32 l;
+    let msg2 <str> concat msg1 ", ";
+    let msg3 <str> concat msg2 from_i32 r;
+    let msg4 <str> concat msg3 ") for len ";
+    let msg5 <str> concat msg4 from_i32 n;
+    diag_error StdErrorKind::IndexOutOfBounds msg5
+
+fn fenwick_check_index <(str,Fenwick,i32)*>Result<(), Diag>> (op, fw, idx):
+    let n <i32> field::get fw "n"
+    if:
+        and le 0 idx lt idx n
+        then ok<(), Diag> ()
+        else diag_err<()> fenwick_diag_index op idx n
+
+fn fenwick_check_prefix <(str,Fenwick,i32)*>Result<(), Diag>> (op, fw, r):
+    let n <i32> field::get fw "n"
+    if:
+        and le 0 r le r n
+        then ok<(), Diag> ()
+        else diag_err<()> fenwick_diag_index op r n
+
+fn fenwick_check_range <(str,Fenwick,i32,i32)*>Result<(), Diag>> (op, fw, l, r):
+    let n <i32> field::get fw "n"
+    if:
+        and and le 0 l le l r le r n
+        then ok<(), Diag> ()
+        else diag_err<()> fenwick_diag_range op l r n
+
+fn fenwick_sum_prefix_raw <(MemPtr<i32>,i32)->i32> (bit, r):
+    let mut i <i32> r
+    let mut acc <i32> 0
+    while lt 0 i:
+        do:
+            let ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr bit mul i 4
+            match load_i32 ptr:
+                Option::Some v:
+                    set acc add acc v
+                Option::None:
+                    ()
+            let neg_i <i32> sub 0 i
+            let lb <i32> and i neg_i
+            set i sub i lb
+    acc
+
+//: ## new
+//: [長/なが]さ `n` の Fenwick Tree を[作/つく]る
+//:
+//: ### [目的/もくてき]
+//: - [全要素/ぜんようそ] 0 の Fenwick Tree を[確保/かくほ]して[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/fenwick" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let fw <Fenwick> unwrap_ok<Fenwick, Diag> new 5;
+//:     if eq len fw 5 1 0
+//: ```
+fn new <(i32)*>Result<Fenwick, Diag>> (n):
+    let bit_len <i32> add n 1
+    match alloc_ptr<i32> mul bit_len 4:
+        Result::Err _e:
+            diag_err<Fenwick> diag_out_of_memory "fenwick_new(bit)"
+        Result::Ok bit:
+            let mut i <i32> 0
+            while lt i bit_len:
+                do:
+                    let ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr bit mul i 4
+                    let _ <()> uwok store_i32 ptr 0
+                    set i add i 1
+            ok<Fenwick, Diag> Fenwick n bit
+
+//: ## len
+//: [保持/ほじ]している[長/なが]さを[返/かえ]す
+fn len <(Fenwick)->i32> (fw):
+    field::get fw "n"
+
+//: ## add
+//: `idx` に `delta` を[加算/かさん]する
+//:
+//: ### [注意/ちゅうい]
+//: - [範囲外/はんいがい] index は `Result::Err Diag` です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(log n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/fenwick" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let fw <Fenwick>:
+//:         unwrap_ok<Fenwick, Diag> new 4
+//:         |> add 0 2 |> uwok
+//:         |> add 3 5 |> uwok
+//:     let total <i32> unwrap_ok<i32, Diag> sum_range fw 0 4;
+//:     if eq total 7 1 0
+//: ```
+fn add <(Fenwick,i32,i32)*>Result<Fenwick, Diag>> (fw, idx, delta):
+    let fw_mem <i32> alloc_raw size_of<Fenwick>
+    store<Fenwick> fw_mem fw
+    let n <i32> get load<Fenwick> fw_mem "n"
+    let bit <MemPtr<i32>> get load<Fenwick> fw_mem "bit"
+    if:
+        and le 0 idx lt idx n
+        then:
+            let mut i <i32> add idx 1
+            while le i n:
+                do:
+                    let ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr bit mul i 4
+                    match load_i32 ptr:
+                        Option::Some cur:
+                            let _ <()> uwok store_i32 ptr add cur delta
+                        Option::None:
+                            ()
+                    let neg_i <i32> sub 0 i
+                    let lb <i32> and i neg_i
+                    set i add i lb
+            let out <Fenwick> load<Fenwick> fw_mem
+            dealloc_raw fw_mem size_of<Fenwick>
+            ok<Fenwick, Diag> out
+        else:
+            let d <Diag> fenwick_diag_index "fenwick_add" idx n
+            dealloc_raw fw_mem size_of<Fenwick>
+            err<Fenwick, Diag> d
+
+//: ## sum_prefix
+//: [区間/くかん] `[0, r)` の[和/わ]を[返/かえ]す
+//:
+//: ### [注意/ちゅうい]
+//: - `r` は 0 以上 `len` 以下でなければなりません。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(log n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/fenwick" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let fw <Fenwick>:
+//:         unwrap_ok<Fenwick, Diag> new 5
+//:         |> add 0 1 |> uwok
+//:         |> add 1 2 |> uwok
+//:         |> add 2 3 |> uwok
+//:     let total <i32> unwrap_ok<i32, Diag> sum_prefix fw 3;
+//:     if eq total 6 1 0
+//: ```
+fn sum_prefix <(Fenwick,i32)*>Result<i32, Diag>> (fw, r):
+    let fw_mem <i32> alloc_raw size_of<Fenwick>
+    store<Fenwick> fw_mem fw
+    let n <i32> get load<Fenwick> fw_mem "n"
+    let bit <MemPtr<i32>> get load<Fenwick> fw_mem "bit"
+    if:
+        and le 0 r le r n
+        then:
+            let acc <i32> fenwick_sum_prefix_raw bit r
+            dealloc_raw fw_mem size_of<Fenwick>
+            ok<i32, Diag> acc
+        else:
+            let d <Diag> fenwick_diag_index "fenwick_sum_prefix" r n
+            dealloc_raw fw_mem size_of<Fenwick>
+            err<i32, Diag> d
+
+//: ## sum_range
+//: [区間/くかん] `[l, r)` の[和/わ]を[返/かえ]す
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(log n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/fenwick" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let fw <Fenwick>:
+//:         unwrap_ok<Fenwick, Diag> new 5
+//:         |> add 0 1 |> uwok
+//:         |> add 1 2 |> uwok
+//:         |> add 2 3 |> uwok
+//:         |> add 3 4 |> uwok
+//:     let total <i32> unwrap_ok<i32, Diag> sum_range fw 1 4;
+//:     if eq total 9 1 0
+//: ```
+fn sum_range <(Fenwick,i32,i32)*>Result<i32, Diag>> (fw, l, r):
+    let fw_mem <i32> alloc_raw size_of<Fenwick>
+    store<Fenwick> fw_mem fw
+    let n <i32> get load<Fenwick> fw_mem "n"
+    let bit <MemPtr<i32>> get load<Fenwick> fw_mem "bit"
+    if:
+        and and le 0 l le l r le r n
+        then:
+            let sr <i32> fenwick_sum_prefix_raw bit r
+            let sl <i32> fenwick_sum_prefix_raw bit l
+            dealloc_raw fw_mem size_of<Fenwick>
+            ok<i32, Diag> sub sr sl
+        else:
+            let d <Diag> fenwick_diag_range "fenwick_sum_range" l r n
+            dealloc_raw fw_mem size_of<Fenwick>
+            err<i32, Diag> d
+
+//: ## free
+//: [内部/ないぶ][配列/はいれつ]を[解放/かいほう]する
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/fenwick" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let fw <Fenwick> unwrap_ok<Fenwick, Diag> new 2;
+//:     free fw;
+//:     1
+//: ```
+fn free <(Fenwick)*>()> (fw):
+    let fw_mem <i32> alloc_raw size_of<Fenwick>
+    store<Fenwick> fw_mem fw
+    let n <i32> get load<Fenwick> fw_mem "n"
+    let bit <MemPtr<i32>> get load<Fenwick> fw_mem "bit"
+    let bit_len <i32> add n 1
+    let bytes <i32> mul bit_len 4
+    dealloc_raw fw_mem size_of<Fenwick>
+    let _ <()> uwok dealloc_ptr<i32> bit bytes

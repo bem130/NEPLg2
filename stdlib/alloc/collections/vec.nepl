@@ -414,17 +414,23 @@ fn push <.T> <(Vec<.T>,.T)->Result<Vec<.T>, StdErrorKind>> (v, item):
         eq v_len v_cap
         then:
             let grown_cap <i32> if eq v_cap 0 1 mul v_cap 2
-            match realloc_ptr<.T> v_data mul v_cap size_of<.T> mul grown_cap size_of<.T>:
+            let old_bytes <i32> mul v_cap size_of<.T>
+            let new_bytes <i32> mul grown_cap size_of<.T>
+            match realloc_ptr<.T> v_data old_bytes new_bytes:
                 Result::Ok grown_data:
                     let write_off <i32> mul v_len size_of<.T>
-                    store<.T> add mem_ptr_addr grown_data write_off item
-                    Result::Ok<Vec<.T>, StdErrorKind> Vec<.T> add v_len 1 grown_cap grown_data
+                    let write_ptr <i32> add mem_ptr_addr grown_data write_off
+                    let next_len <i32> add v_len 1
+                    store<.T> write_ptr item
+                    Result::Ok<Vec<.T>, StdErrorKind> Vec<.T> next_len grown_cap grown_data
                 Result::Err _e:
                     Result::Err<Vec<.T>, StdErrorKind> StdErrorKind::OutOfMemory
         else:
             let write_off <i32> mul v_len size_of<.T>
-            store<.T> add mem_ptr_addr v_data write_off item
-            Result::Ok<Vec<.T>, StdErrorKind> Vec<.T> add v_len 1 v_cap v_data
+            let write_ptr <i32> add mem_ptr_addr v_data write_off
+            let next_len <i32> add v_len 1
+            store<.T> write_ptr item
+            Result::Ok<Vec<.T>, StdErrorKind> Vec<.T> next_len v_cap v_data
 
 //: ## get
 //: [要素/ようそ]を[取得/しゅとく]する
