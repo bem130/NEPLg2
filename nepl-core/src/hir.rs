@@ -153,6 +153,7 @@ pub enum FuncRef {
     User(String, Vec<TypeId>), // new: added type_args
     Trait {
         trait_name: String,
+        trait_args: Vec<TypeId>,
         method: String,
         self_ty: TypeId,
     },
@@ -178,6 +179,8 @@ pub struct HirTrait {
 pub struct HirImpl {
     pub doc: Option<String>,
     pub trait_name: String,
+    pub trait_base_name: Option<String>,
+    pub trait_args: Vec<TypeId>,
     pub type_args: Vec<TypeId>,
     pub target_ty: TypeId,
     pub methods: Vec<HirImplMethod>,

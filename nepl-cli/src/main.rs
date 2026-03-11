@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use nepl_core::{
     compile_module,
+    compile_module_with_source_map,
     diagnostic::{Diagnostic, Severity},
     error::CoreError,
     loader::{Loader, SourceMap},
@@ -328,7 +329,7 @@ fn execute(cli: Cli) -> Result<()> {
     };
 
     eprintln!("DEBUG: Calling compile_module");
-    let artifact = match compile_module(module, options) {
+    let artifact = match compile_module_with_source_map(module, Some(&source_map), options) {
         Ok(a) => {
             eprintln!("DEBUG: compile_module returned Ok");
             a
@@ -452,8 +453,9 @@ fn run_test_file(path: &Path, std_root: &Path, verbose: bool) -> Result<()> {
         Err(e) => return Err(anyhow::anyhow!(e.to_string())),
     };
     println!("[nepl-cli] compile_module for {}", path.display());
-    let artifact = match compile_module(
+    let artifact = match compile_module_with_source_map(
         res.module,
+        Some(loader.source_map()),
         CompileOptions {
             target: Some(CompileTarget::Wasi),
             verbose,

@@ -32,11 +32,13 @@
 #indent 4
 
 #import "core/cast" as *
+#import "core/traits/copy" as *
+#import "core/traits/hash_key" as *
 #import "alloc/hash/hash32" as *
 #import "alloc/hash/fnv1a32" as *
 #import "alloc/string" as string
 
-fn hash_bytes_loop <(str,i32,i32,Fnv1a32)->Fnv1a32> (s, n, idx, h):
+fn trait_hash_bytes_loop <(str,i32,i32,Fnv1a32)->Fnv1a32> (s, n, idx, h):
     if:
         ge idx n
         then h
@@ -44,7 +46,7 @@ fn hash_bytes_loop <(str,i32,i32,Fnv1a32)->Fnv1a32> (s, n, idx, h):
             let s_data <i32> add s 4
             let p <i32> add s_data idx
             let b <i32> load_u8 p
-            hash_bytes_loop s n add idx 1 fnv1a32_update h b
+            trait_hash_bytes_loop s n add idx 1 fnv1a32_update h b
 
 //: Hash: map / set [向/む]け 32-bit ハッシュ[能力/のうりょく]
 //:
@@ -56,6 +58,48 @@ fn hash_bytes_loop <(str,i32,i32,Fnv1a32)->Fnv1a32> (s, n, idx, h):
 trait Hash:
     fn hash32 <(Self)->i32> (self):
         0
+
+//: Hasher: key [型/かた]ごとの hash [戦略/せんりゃく]
+//:
+//: [目的/もくてき]:
+//: - collection が default hash を[内部固定/ないぶこてい]せず、ユーザー[提供/ていきょう]の hasher [値/あたい]を[受/う]け[取/と]れるようにします。
+//: - `Hasher<.K>` として key [型/かた]ごとに[能力/のうりょく]を[要求/ようきゅう]し、custom hasher を `impl Hasher<MyKey> for MyHasher` の[形/かたち]で[実装/じっそう]できるようにします。
+//:
+//: [注意/ちゅうい]:
+//: - `Hasher<.K>::hash32` は key の `eq` と[整合/せいごう]している[必要/ひつよう]があります。
+//: - hasher [自体/じたい]が[内部状態/ないぶじょうたい]を[持/も]たない[場合/ばあい]でも、zero-sized struct などの[値/あたい]として[明示的/めいじてき]に[渡/わた]します。
+trait Hasher<.K: HashKey>:
+    #capability clone
+    #capability copy
+    fn hash32 <(Self,.K)->i32> (self, key):
+        0
+
+//: ## DefaultHash32
+//: stdlib の[既定/きてい] hasher
+struct DefaultHash32:
+    tag <()>
+
+impl Clone for DefaultHash32:
+    fn clone <(DefaultHash32)->DefaultHash32> (self):
+        self
+
+impl Copy for DefaultHash32:
+    fn copy_mark <(DefaultHash32)->DefaultHash32> (self):
+        self
+
+impl<.K: HashKey> Hasher<.K> for DefaultHash32:
+    fn hash32 <(DefaultHash32,.K)->i32> (_self, key):
+        hashkey_hash32 key
+
+//: hash_with: hasher [経由/けいゆ]で key を hash する
+//:
+//: [目的/もくてき]:
+//: - free function として hasher [呼/よ]び[出/だ]しを 1 [箇所/かしょ]へ[集約/しゅうやく]します。
+//:
+//: [実装/じっそう]:
+//: - `Hasher::hash32` をそのまま[呼/よ]びます。
+fn hash_with <.K: HashKey,.H: Hasher<.K>> <(.H,.K)->i32> (hasher, key):
+    Hasher::hash32 hasher key
 
 //: hash32_by_trait: `Hash` trait [経由/けいゆ]で 32-bit ハッシュを[得/え]る
 //:

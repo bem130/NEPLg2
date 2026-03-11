@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use js_sys::{Reflect, Uint8Array};
 use nepl_core::ast::{Block, Directive, FnBody, MatchArm, PrefixExpr, PrefixItem, Stmt, Symbol};
+use nepl_core::compiler::compile_module_with_source_map;
 use nepl_core::diagnostic::{Diagnostic, Severity};
 use nepl_core::diagnostic_ids::DiagnosticId;
 use nepl_core::error::CoreError;
@@ -12,7 +13,7 @@ use nepl_core::loader::{Loader, LoaderError, SourceMap};
 use nepl_core::parser::parse_tokens;
 use nepl_core::span::{FileId, Span};
 use nepl_core::typecheck::typecheck;
-use nepl_core::{compile_module, BuildProfile, CompileOptions, CompileTarget};
+use nepl_core::{BuildProfile, CompileOptions, CompileTarget};
 use wasmprinter::print_bytes;
 use wasm_bindgen::prelude::*;
 
@@ -2236,7 +2237,7 @@ pub fn analyze_semantics(source: &str) -> JsValue {
             .any(|d| matches!(d.severity, Severity::Error));
         all_diags.append(&mut target_diags);
 
-        let tc = typecheck(module, target, BuildProfile::Debug);
+        let tc = typecheck(module, target, BuildProfile::Debug, None);
         has_error |= tc
             .diagnostics
             .iter()
@@ -2592,7 +2593,7 @@ pub fn analyze_semantics_with_vfs(entry_path: &str, source: &str, vfs: JsValue) 
         .any(|d| matches!(d.severity, Severity::Error));
     all_diags.append(&mut target_diags);
 
-    let tc = typecheck(&module, target, BuildProfile::Debug);
+    let tc = typecheck(&module, target, BuildProfile::Debug, Some(&source_map));
     has_error |= tc
         .diagnostics
         .iter()
@@ -3111,8 +3112,9 @@ fn compile_wasm_with_entry_and_profile_and_stdlib(
     let loaded = loader
         .load_inline_with_provider(PathBuf::from(entry_path), source.to_string(), &mut provider)
         .map_err(|e| render_loader_error(e, loader.source_map()))?;
-    let artifact = compile_module(
+    let artifact = compile_module_with_source_map(
         loaded.module,
+        Some(&loaded.source_map),
         CompileOptions {
             target: None,
             verbose: false,

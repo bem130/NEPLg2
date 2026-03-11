@@ -13,6 +13,7 @@ use crate::diagnostic::Diagnostic;
 use crate::diagnostic_ids::DiagnosticId;
 use crate::error::CoreError;
 use crate::lexer;
+use crate::loader::SourceMap;
 use crate::monomorphize;
 use crate::parser;
 use crate::passes;
@@ -235,6 +236,14 @@ pub fn compile_module(
     module: ast::Module,
     options: CompileOptions,
 ) -> Result<CompilationArtifact, CoreError> {
+    compile_module_with_source_map(module, None, options)
+}
+
+pub fn compile_module_with_source_map(
+    module: ast::Module,
+    source_map: Option<&SourceMap>,
+    options: CompileOptions,
+) -> Result<CompilationArtifact, CoreError> {
     crate::log::set_verbose(options.verbose);
     let target = resolve_target(&module, options)?;
     if matches!(target, CompileTarget::Llvm) {
@@ -246,7 +255,8 @@ pub fn compile_module(
         return Err(CoreError::from_diagnostics(diags));
     }
     let profile = options.profile.unwrap_or(BuildProfile::detect());
-    let prepared = prepare_module_for_codegen(&module, target, profile)?;
+    let prepared =
+        prepare_module_for_codegen_with_source_map(&module, target, profile, source_map)?;
     let pre_codegen_diags =
         passes::codegen_precheck::precheck_wasm_codegen(&prepared.types, &prepared.hir_module);
     if pre_codegen_diags
@@ -317,8 +327,9 @@ fn run_typecheck(
     module: &ast::Module,
     target: CompileTarget,
     profile: BuildProfile,
+    source_map: Option<&SourceMap>,
 ) -> Result<TypedProgram, CoreError> {
-    let tc = typecheck::typecheck(module, target, profile);
+    let tc = typecheck::typecheck(module, target, profile, source_map);
     match tc.module {
         Some(m) => Ok(TypedProgram {
             types: tc.types,
@@ -347,6 +358,15 @@ pub fn prepare_module_for_codegen(
     target: CompileTarget,
     profile: BuildProfile,
 ) -> Result<PreparedProgram, CoreError> {
+    prepare_module_for_codegen_with_source_map(module, target, profile, None)
+}
+
+pub fn prepare_module_for_codegen_with_source_map(
+    module: &ast::Module,
+    target: CompileTarget,
+    profile: BuildProfile,
+    source_map: Option<&SourceMap>,
+) -> Result<PreparedProgram, CoreError> {
     let precheck_diags = crate::target_precheck::precheck_module_before_codegen(module, target, profile);
     if precheck_diags
         .iter()
@@ -354,7 +374,7 @@ pub fn prepare_module_for_codegen(
     {
         return Err(CoreError::from_diagnostics(precheck_diags));
     }
-    let mut tc = run_typecheck(module, target, profile)?;
+    let mut tc = run_typecheck(module, target, profile, source_map)?;
     passes::insert_drops(&mut tc.module, &mut tc.types);
     let mut types = tc.types;
     let mut hir_module = monomorphize::monomorphize(&mut types, tc.module);

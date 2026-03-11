@@ -53,6 +53,13 @@ impl SourceMap {
         self.files.get(id.0 as usize).map(|(p, _)| p)
     }
 
+    pub fn iter_paths(&self) -> impl Iterator<Item = (FileId, &PathBuf)> {
+        self.files
+            .iter()
+            .enumerate()
+            .map(|(idx, (path, _))| (FileId(idx as u32), path))
+    }
+
     /// Convert a byte offset to (line, column) 0-based.
     pub fn line_col(&self, id: FileId, byte: u32) -> Option<(usize, usize)> {
         let src = self.get(id)?;

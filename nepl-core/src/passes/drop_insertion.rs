@@ -169,6 +169,7 @@ fn drop_call_expr(
         kind: HirExprKind::Call {
             callee: FuncRef::Trait {
                 trait_name: plan.trait_name.clone(),
+                trait_args: Vec::new(),
                 method: plan.method_name.clone(),
                 self_ty: ty,
             },

@@ -17,15 +17,16 @@ neplg2:test
 #entry main
 #indent 4
 #import "alloc/collections/hashmap" as *
+#import "core/traits/hash" as *
 #import "alloc/diag/error" as *
 #import "core/result" as *
 #import "std/test" as *
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let hm0 <HashMap<i32,i32>> unwrap_ok<HashMap<i32,i32>, Diag> new<i32,i32>;
-    let hm1 <HashMap<i32,i32>> unwrap_ok<HashMap<i32,i32>, Diag> insert<i32,i32> hm0 1 10;
-    match remove<i32,i32> hm1 99:
+    let hm0 <HashMap<i32,i32,DefaultHash32>> unwrap_ok<HashMap<i32,i32,DefaultHash32>, Diag> new DefaultHash32;
+    let hm1 <HashMap<i32,i32,DefaultHash32>> unwrap_ok<HashMap<i32,i32,DefaultHash32>, Diag> insert hm0 1 10;
+    match remove hm1 99:
         Result::Ok _h:
             set checks checks_push checks Result<(),str>::Err "expected KeyNotFound";
         Result::Err d:
@@ -48,15 +49,16 @@ neplg2:test
 #entry main
 #indent 4
 #import "alloc/collections/hashset" as *
+#import "core/traits/hash" as *
 #import "alloc/diag/error" as *
 #import "core/result" as *
 #import "std/test" as *
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let hs0 <HashSet<i32>> unwrap_ok<HashSet<i32>, Diag> new<i32>;
-    let hs1 <HashSet<i32>> unwrap_ok<HashSet<i32>, Diag> insert<i32> hs0 1;
-    match remove<i32> hs1 99:
+    let hs0 <HashSet<i32,DefaultHash32>> unwrap_ok<HashSet<i32,DefaultHash32>, Diag> new DefaultHash32;
+    let hs1 <HashSet<i32,DefaultHash32>> unwrap_ok<HashSet<i32,DefaultHash32>, Diag> insert hs0 1;
+    match remove hs1 99:
         Result::Ok _h:
             set checks checks_push checks Result<(),str>::Err "expected KeyNotFound";
         Result::Err d:
@@ -79,6 +81,7 @@ neplg2:test
 #entry main
 #indent 4
 #import "alloc/collections/hashmap" as *
+#import "core/traits/hash" as *
 #import "alloc/diag/error" as *
 #import "core/result" as *
 #import "core/math" as *
@@ -86,14 +89,14 @@ neplg2:test
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let mut hm <HashMap<i32,i32>> unwrap_ok<HashMap<i32,i32>, Diag> new<i32,i32>;
+    let mut hm <HashMap<i32,i32,DefaultHash32>> unwrap_ok<HashMap<i32,i32,DefaultHash32>, Diag> new DefaultHash32;
     let mut i <i32> 0;
     while lt i 16:
         do:
-            set hm unwrap_ok<HashMap<i32,i32>, Diag> insert<i32,i32> hm i i;
+            set hm unwrap_ok<HashMap<i32,i32,DefaultHash32>, Diag> insert hm i i;
             set i add i 1;
 
-    match insert<i32,i32> hm 999 1:
+    match insert hm 999 1:
         Result::Ok _h:
             set checks checks_push checks Result<(),str>::Err "expected CapacityExceeded";
         Result::Err d:
@@ -116,6 +119,7 @@ neplg2:test
 #entry main
 #indent 4
 #import "alloc/collections/hashset" as *
+#import "core/traits/hash" as *
 #import "alloc/diag/error" as *
 #import "core/result" as *
 #import "core/math" as *
@@ -123,14 +127,14 @@ neplg2:test
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let mut hs <HashSet<i32>> unwrap_ok<HashSet<i32>, Diag> new<i32>;
+    let mut hs <HashSet<i32,DefaultHash32>> unwrap_ok<HashSet<i32,DefaultHash32>, Diag> new DefaultHash32;
     let mut i <i32> 0;
     while lt i 16:
         do:
-            set hs unwrap_ok<HashSet<i32>, Diag> insert<i32> hs i;
+            set hs unwrap_ok<HashSet<i32,DefaultHash32>, Diag> insert hs i;
             set i add i 1;
 
-    match insert<i32> hs 999:
+    match insert hs 999:
         Result::Ok _h:
             set checks checks_push checks Result<(),str>::Err "expected CapacityExceeded";
         Result::Err d:

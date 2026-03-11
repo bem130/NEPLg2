@@ -3,6 +3,7 @@ extern crate alloc;
 extern crate std;
 
 use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -13,7 +14,16 @@ use crate::runtime_helpers::{
 use crate::types::{TypeCtx, TypeId, TypeKind};
 
 pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
+    monomorphize_internal(ctx, module, true).0
+}
+
+fn monomorphize_internal(
+    ctx: &mut TypeCtx,
+    module: HirModule,
+    assert_trait_calls: bool,
+) -> (HirModule, Vec<String>) {
     let mut impl_map: BTreeMap<(String, String, TypeId), String> = BTreeMap::new();
+    let mut impl_entries: Vec<(String, Vec<TypeId>, String, TypeId, String)> = Vec::new();
     for imp in &module.impls {
         let ty = ctx.resolve_id(imp.target_ty);
         for m in &imp.methods {
@@ -21,6 +31,15 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
                 (imp.trait_name.clone(), m.name.clone(), ty),
                 m.func.name.clone(),
             );
+            if let Some(base) = &imp.trait_base_name {
+                impl_entries.push((
+                    base.clone(),
+                    imp.trait_args.clone(),
+                    m.name.clone(),
+                    ty,
+                    m.func.name.clone(),
+                ));
+            }
         }
     }
     let mut mono = Monomorphizer {
@@ -30,6 +49,7 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
         worklist: Vec::new(),
         queued: BTreeSet::new(),
         impl_map,
+        impl_entries,
     };
 
     for f in module.functions {
@@ -91,19 +111,30 @@ pub fn monomorphize(ctx: &mut TypeCtx, module: HirModule) -> HirModule {
         }
     }
 
+    let mut unresolved_trait_calls = Vec::new();
+    for f in mono.specialized.values() {
+        let unresolved = mono.collect_unresolved_trait_calls(f);
+        if assert_trait_calls && !unresolved.is_empty() {
+            mono.assert_no_trait_calls(f);
+        }
+        unresolved_trait_calls.extend(unresolved);
+    }
     let mut new_functions = Vec::new();
     for (_, f) in mono.specialized {
         new_functions.push(f);
     }
 
-    HirModule {
-        functions: new_functions,
-        entry: module.entry,
-        externs: module.externs,
-        string_literals: module.string_literals,
-        traits: module.traits,
-        impls: module.impls,
-    }
+    (
+        HirModule {
+            functions: new_functions,
+            entry: module.entry,
+            externs: module.externs,
+            string_literals: module.string_literals,
+            traits: module.traits,
+            impls: module.impls,
+        },
+        unresolved_trait_calls,
+    )
 }
 
 struct Monomorphizer<'a> {
@@ -113,9 +144,114 @@ struct Monomorphizer<'a> {
     worklist: Vec<(String, Vec<TypeId>)>,
     queued: BTreeSet<String>,
     impl_map: BTreeMap<(String, String, TypeId), String>,
+    impl_entries: Vec<(String, Vec<TypeId>, String, TypeId, String)>,
 }
 
 impl<'a> Monomorphizer<'a> {
+    fn collect_unresolved_trait_calls(&self, func: &HirFunction) -> Vec<String> {
+        fn walk_expr(ctx: &TypeCtx, func_name: &str, expr: &HirExpr, out: &mut Vec<String>) {
+            match &expr.kind {
+                HirExprKind::Call { callee, args } => {
+                    for arg in args {
+                        walk_expr(ctx, func_name, arg, out);
+                    }
+                    if let FuncRef::Trait {
+                        trait_name,
+                        trait_args,
+                        method,
+                        self_ty,
+                    } = callee
+                    {
+                        let rendered_args = trait_args
+                            .iter()
+                            .map(|ty| ctx.type_to_string(*ty))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        out.push(format!(
+                            "{} :: {}<{}>::{} [self={}]",
+                            func_name,
+                            trait_name,
+                            rendered_args,
+                            method,
+                            ctx.type_to_string(*self_ty),
+                        ));
+                    }
+                }
+                HirExprKind::CallIndirect { callee, args, .. } => {
+                    walk_expr(ctx, func_name, callee, out);
+                    for arg in args {
+                        walk_expr(ctx, func_name, arg, out);
+                    }
+                }
+                HirExprKind::If { cond, then_branch, else_branch } => {
+                    walk_expr(ctx, func_name, cond, out);
+                    walk_expr(ctx, func_name, then_branch, out);
+                    walk_expr(ctx, func_name, else_branch, out);
+                }
+                HirExprKind::While { cond, body } => {
+                    walk_expr(ctx, func_name, cond, out);
+                    walk_expr(ctx, func_name, body, out);
+                }
+                HirExprKind::Match { scrutinee, arms } => {
+                    walk_expr(ctx, func_name, scrutinee, out);
+                    for arm in arms {
+                        walk_expr(ctx, func_name, &arm.body, out);
+                    }
+                }
+                HirExprKind::Block(block) => walk_block(ctx, func_name, block, out),
+                HirExprKind::Let { value, .. }
+                | HirExprKind::Set { value, .. }
+                | HirExprKind::AddrOf(value)
+                | HirExprKind::Deref(value) => walk_expr(ctx, func_name, value, out),
+                HirExprKind::TupleConstruct { items }
+                | HirExprKind::Intrinsic { args: items, .. } => {
+                    for item in items {
+                        walk_expr(ctx, func_name, item, out);
+                    }
+                }
+                HirExprKind::EnumConstruct { payload, .. } => {
+                    if let Some(payload) = payload {
+                        walk_expr(ctx, func_name, payload, out);
+                    }
+                }
+                HirExprKind::StructConstruct { fields, .. } => {
+                    for field in fields {
+                        walk_expr(ctx, func_name, field, out);
+                    }
+                }
+                HirExprKind::FnValue(_)
+                | HirExprKind::Var(_)
+                | HirExprKind::Unit
+                | HirExprKind::LiteralI32(_)
+                | HirExprKind::LiteralF32(_)
+                | HirExprKind::LiteralBool(_)
+                | HirExprKind::LiteralStr(_)
+                | HirExprKind::Drop { .. } => {}
+            }
+        }
+        fn walk_block(ctx: &TypeCtx, func_name: &str, block: &HirBlock, out: &mut Vec<String>) {
+            for line in &block.lines {
+                walk_expr(ctx, func_name, &line.expr, out);
+            }
+        }
+
+        let mut out = Vec::new();
+        if let HirBody::Block(block) = &func.body {
+            walk_block(self.ctx, &func.name, block, &mut out);
+        }
+        out
+    }
+
+    fn assert_no_trait_calls(&self, func: &HirFunction) {
+        let unresolved = self.collect_unresolved_trait_calls(func);
+        if let Some(first) = unresolved.first() {
+            panic!(
+                "internal compiler error: unresolved trait call remained after monomorphize: {}",
+                first,
+            );
+        }
+    }
+
     fn resolve_remaining_trait_calls(&mut self) {
         let names: Vec<String> = self.specialized.keys().cloned().collect();
         for name in names {
@@ -144,16 +280,35 @@ impl<'a> Monomorphizer<'a> {
                 }
                 if let FuncRef::Trait {
                     trait_name,
+                    trait_args,
                     method,
                     self_ty,
                 } = callee
                 {
+                    for trait_arg in trait_args.iter_mut() {
+                        *trait_arg = self.ctx.resolve_id(*trait_arg);
+                    }
                     let resolved = self.ctx.resolve_id(*self_ty);
-                    *self_ty = resolved;
+                    let dispatch_self_ty = match self.ctx.get(resolved) {
+                        TypeKind::Var(_) => args
+                            .first()
+                            .map(|arg| self.ctx.resolve_id(arg.ty))
+                            .unwrap_or(resolved),
+                        _ => resolved,
+                    };
+                    *self_ty = dispatch_self_ty;
                     if let Some(name) =
-                        self.resolve_trait_impl_name(trait_name.as_str(), method.as_str(), resolved)
+                        self.resolve_trait_impl_name(
+                            trait_name.as_str(),
+                            trait_args,
+                            method.as_str(),
+                            dispatch_self_ty,
+                        )
                     {
-                        *callee = FuncRef::User(self.request_instantiation(name, Vec::new()), Vec::new());
+                        *callee = FuncRef::User(
+                            self.request_instantiation(name, trait_args.clone()),
+                            Vec::new(),
+                        );
                     }
                 }
             }
@@ -217,6 +372,7 @@ impl<'a> Monomorphizer<'a> {
     fn resolve_trait_impl_name(
         &self,
         trait_name: &str,
+        trait_args: &[TypeId],
         method: &str,
         resolved_self_ty: TypeId,
     ) -> Option<String> {
@@ -229,6 +385,31 @@ impl<'a> Monomorphizer<'a> {
                 continue;
             }
             if self.ctx.same_type(resolved_self_ty, *target_ty) {
+                return Some(func_name.clone());
+            }
+        }
+        for (base, impl_trait_args, meth, target_ty, func_name) in self.impl_entries.iter() {
+            if base != trait_name || meth != method {
+                continue;
+            }
+            if !self.ctx.same_type(resolved_self_ty, *target_ty) {
+                continue;
+            }
+            if impl_trait_args.len() != trait_args.len() {
+                continue;
+            }
+            let mut matched = true;
+            for (impl_arg, call_arg) in impl_trait_args.iter().zip(trait_args.iter()) {
+                let impl_arg = self.ctx.resolve_id(*impl_arg);
+                let call_arg = self.ctx.resolve_id(*call_arg);
+                if !self.ctx.type_pattern_matches(impl_arg, call_arg)
+                    && !self.ctx.type_pattern_matches(call_arg, impl_arg)
+                {
+                    matched = false;
+                    break;
+                }
+            }
+            if matched {
                 return Some(func_name.clone());
             }
         }
@@ -254,6 +435,20 @@ impl<'a> Monomorphizer<'a> {
             }
             s
         };
+
+        if crate::log::is_verbose() {
+            let rendered_args = args
+                .iter()
+                .map(|arg| self.ctx.type_to_string(*arg))
+                .collect::<Vec<_>>()
+                .join(", ");
+            std::eprintln!(
+                "monomorphize: request '{}' [{}] -> '{}'",
+                name,
+                rendered_args,
+                mangled
+            );
+        }
 
         if !self.specialized.contains_key(&mangled) {
             if self.queued.insert(mangled.clone()) {
@@ -409,16 +604,33 @@ impl<'a> Monomorphizer<'a> {
                     }
                     FuncRef::Trait {
                         trait_name,
+                        trait_args,
                         method,
                         self_ty,
                     } => {
+                        for trait_arg in trait_args.iter_mut() {
+                            *trait_arg = self.ctx.substitute(*trait_arg, mapping);
+                            *trait_arg = self.ctx.resolve_id(*trait_arg);
+                        }
                         *self_ty = self.ctx.substitute(*self_ty, mapping);
                         let resolved = self.ctx.resolve_id(*self_ty);
-                        *self_ty = resolved;
+                        let dispatch_self_ty = match self.ctx.get(resolved) {
+                            TypeKind::Var(_) => args
+                                .first()
+                                .map(|arg| self.ctx.resolve_id(arg.ty))
+                                .unwrap_or(resolved),
+                            _ => resolved,
+                        };
+                        *self_ty = dispatch_self_ty;
                         if let Some(func_name) =
-                            self.resolve_trait_impl_name(trait_name.as_str(), method.as_str(), resolved)
+                            self.resolve_trait_impl_name(
+                                trait_name.as_str(),
+                                trait_args,
+                                method.as_str(),
+                                dispatch_self_ty,
+                            )
                         {
-                            let inst = self.request_instantiation(func_name, Vec::new());
+                            let inst = self.request_instantiation(func_name, trait_args.clone());
                             *callee = FuncRef::User(inst, Vec::new());
                         }
                     }

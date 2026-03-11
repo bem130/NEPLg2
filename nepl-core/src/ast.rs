@@ -133,7 +133,13 @@ pub struct FnAlias {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeParam {
     pub name: Ident,
-    pub bounds: Vec<String>,
+    pub bounds: Vec<TraitRef>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitRef {
+    pub name: Ident,
+    pub args: Vec<TypeExpr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -159,7 +165,7 @@ pub enum TraitCapability {
 pub struct ImplDef {
     pub doc: Option<String>,
     pub type_params: Vec<TypeParam>,
-    pub trait_name: Option<Ident>, // None for inherent impl
+    pub trait_ref: Option<TraitRef>, // None for inherent impl
     pub target_ty: TypeExpr,
     pub methods: Vec<FnDef>,
     pub span: Span,

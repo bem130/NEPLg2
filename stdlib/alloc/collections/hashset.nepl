@@ -1,9 +1,9 @@
 //: # hashset
-//: `HashKey` trait に[基/もと]づく generic [集合/しゅうごう]
+//: key capability と hasher [型/がた]に[基/もと]づく generic [集合/しゅうごう]
 //:
 //: ### [目的/もくてき]
-//: - `HashSet<.T>` を[提供/ていきょう]し、`new` / `insert` / `contains` / `remove` / `len` / `free` の bare 名で[操作/そうさ]できるようにします。
-//: - key ごとの[比較/ひかく]と hash [計算/けいさん]は `HashKey` trait に[委譲/いじょう]し、型名埋め込み API をなくします。
+//: - `HashSet<.T, .H>` を[提供/ていきょう]し、`new` / `insert` / `contains` / `remove` / `len` / `free` の bare 名で[操作/そうさ]できるようにします。
+//: - key [比較/ひかく]は `HashKey` trait に、hash [計算/けいさん]は hasher value へ[対/たい]する `hash32` overload に[委譲/いじょう]します。
 //:
 //: ### [実装/じっそう]
 //: - open addressing + linear probing を[用/もち]いる[固定長/こていちょう] hash table です。
@@ -11,6 +11,7 @@
 //:
 //: ### [注意/ちゅうい]
 //: - key 型 `.T` は `HashKey` の impl を[持/も]つ[必要/ひつよう]があります。
+//: - hasher 型 `.H` は `Hasher<.T>` を impl する[必要/ひつよう]があります。
 //: - [容量/ようりょう]は[固定/こてい]で、自動 rehash はまだ[行/おこな]いません。
 //:
 //: ### [計算量/けいさんりょう]
@@ -23,18 +24,20 @@
 #import "core/result" as *
 #import "core/field" as field
 #import "core/traits/hash_key" as *
+#import "core/traits/hash" as *
 #import "alloc/diag/error" as *
 
 //: ## HashSet
 //: hash table [本体/ほんたい]
-struct HashSet<.T>:
+struct HashSet<.T,.H>:
     hdr <i32>
+    hasher <.H>
 
 fn hashset_entry_size <.T> <()->i32> ():
     add 4 size_of<.T>
 
-fn hashset_bucket_index <.T: HashKey> <(i32,.T)->i32> (cap, key):
-    rem_u hashkey_hash32 key cap
+fn hashset_bucket_index <.T: HashKey,.H: Hasher<.T>> <(i32,.H,.T)->i32> (cap, hasher, key):
+    rem_u hash_with hasher key cap
 
 fn hashset_status_ptr <(i32,i32,i32)->i32> (entries, size, idx):
     add entries mul idx size
@@ -50,8 +53,8 @@ fn hashset_slot_matches <.T: HashKey> <(i32,i32,i32,.T)->bool> (entries, size, i
     let saved <.T> load<.T> ptr
     hashkey_eq saved key
 
-fn hashset_find_present <.T: HashKey> <(i32,i32,i32,.T)->i32> (entries, size, cap, key):
-    let start <i32> hashset_bucket_index<.T> cap key
+fn hashset_find_present <.T: HashKey,.H: Hasher<.T>> <(i32,i32,i32,.H,.T)->i32> (entries, size, cap, hasher, key):
+    let start <i32> hashset_bucket_index<.T,.H> cap hasher key
     let mut cur <i32> start
     let mut found <i32> -1
     let mut done <bool> false
@@ -79,14 +82,14 @@ fn hashset_find_present <.T: HashKey> <(i32,i32,i32,.T)->i32> (entries, size, ca
     found
 
 //: ## new
-//: [空/から]の `HashSet<.T>` を[作/つく]る
-fn new <.T> <()*>Result<HashSet<.T>, Diag>> ():
+//: [空/から]の `HashSet<.T, .H>` を[作/つく]る
+fn new <.T: HashKey,.H: Hasher<.T>> <(.H)*>Result<HashSet<.T,.H>, Diag>> (hasher):
     let cap <i32> 16
     let size <i32> hashset_entry_size<.T>
     let entries <i32> alloc_raw mul cap size
     if:
         eq entries 0
-        then diag_err<HashSet<.T>> diag_out_of_memory "hashset_new(entries)"
+        then diag_err<HashSet<.T,.H>> diag_out_of_memory "hashset_new(entries)"
         else:
             let mut i <i32> 0
             while lt i cap:
@@ -99,21 +102,22 @@ fn new <.T> <()*>Result<HashSet<.T>, Diag>> ():
                 eq hdr 0
                 then:
                     dealloc_raw entries mul cap size
-                    diag_err<HashSet<.T>> diag_out_of_memory "hashset_new(header)"
+                    diag_err<HashSet<.T,.H>> diag_out_of_memory "hashset_new(header)"
                 else:
                     store_i32 hdr 0
                     store_i32 add hdr 4 cap
                     store_i32 add hdr 8 entries
-                    ok<HashSet<.T>, Diag> HashSet hdr
+                    ok<HashSet<.T,.H>, Diag> HashSet hdr hasher
 
 //: ## insert
 //: [要素/ようそ]を[追加/ついか]する
-fn insert <.T: HashKey> <(HashSet<.T>,.T)*>Result<HashSet<.T>, Diag>> (hs, key):
+fn insert <.T: HashKey,.H: Hasher<.T>> <(HashSet<.T,.H>,.T)*>Result<HashSet<.T,.H>, Diag>> (hs, key):
     let hdr <i32> field::get hs "hdr"
+    let hasher <.H> field::get hs "hasher"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let size <i32> hashset_entry_size<.T>
-    let start <i32> hashset_bucket_index<.T> cap key
+    let start <i32> hashset_bucket_index<.T,.H> cap hasher key
     let mut cur <i32> start
     let mut first_tomb <i32> -1
     let mut placed <bool> false
@@ -188,45 +192,47 @@ fn insert <.T: HashKey> <(HashSet<.T>,.T)*>Result<HashSet<.T>, Diag>> (hs, key):
                                         else set cur nxt
     if:
         success
-        then ok<HashSet<.T>, Diag> hs
-        else diag_err<HashSet<.T>> diag_capacity_exceeded "hashset_insert"
+        then ok<HashSet<.T,.H>, Diag> hs
+        else diag_err<HashSet<.T,.H>> diag_capacity_exceeded "hashset_insert"
 
 //: ## contains
 //: [要素/ようそ]の[存在/そんざい]を[確/たし]かめる
-fn contains <.T: HashKey> <(HashSet<.T>,.T)->bool> (hs, key):
+fn contains <.T: HashKey,.H: Hasher<.T>> <(HashSet<.T,.H>,.T)->bool> (hs, key):
     let hdr <i32> field::get hs "hdr"
+    let hasher <.H> field::get hs "hasher"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let size <i32> hashset_entry_size<.T>
-    let idx <i32> hashset_find_present<.T> entries size cap key
+    let idx <i32> hashset_find_present<.T,.H> entries size cap hasher key
     not lt idx 0
 
 //: ## remove
 //: [要素/ようそ]を[削除/さくじょ]する
-fn remove <.T: HashKey> <(HashSet<.T>,.T)*>Result<HashSet<.T>, Diag>> (hs, key):
+fn remove <.T: HashKey,.H: Hasher<.T>> <(HashSet<.T,.H>,.T)*>Result<HashSet<.T,.H>, Diag>> (hs, key):
     let hdr <i32> field::get hs "hdr"
+    let hasher <.H> field::get hs "hasher"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let size <i32> hashset_entry_size<.T>
-    let idx <i32> hashset_find_present<.T> entries size cap key
+    let idx <i32> hashset_find_present<.T,.H> entries size cap hasher key
     if:
         lt idx 0
-        then diag_err<HashSet<.T>> diag_key_not_found "hashset_remove"
+        then diag_err<HashSet<.T,.H>> diag_key_not_found "hashset_remove"
         else:
             let st_ptr <i32> hashset_status_ptr entries size idx
             store_i32 st_ptr 2
             store_i32 hdr sub load_i32 hdr 1
-            ok<HashSet<.T>, Diag> hs
+            ok<HashSet<.T,.H>, Diag> hs
 
 //: ## len
 //: [要素数/ようそすう]を[返/かえ]す
-fn len <.T> <(HashSet<.T>)->i32> (hs):
+fn len <.T,.H> <(HashSet<.T,.H>)->i32> (hs):
     let hdr <i32> field::get hs "hdr"
     load_i32 hdr
 
 //: ## free
 //: [内部/ないぶ]メモリを[解放/かいほう]する
-fn free <.T> <(HashSet<.T>)*>()> (hs):
+fn free <.T,.H> <(HashSet<.T,.H>)*>()> (hs):
     let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8

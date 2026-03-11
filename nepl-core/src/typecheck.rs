@@ -8,6 +8,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+use std::path::Path;
 
 use crate::ast::*;
 use crate::builtins::BuiltinKind;
@@ -16,6 +17,7 @@ use crate::diagnostic::Diagnostic;
 use crate::diagnostic_ids::DiagnosticId;
 use crate::effects::{intrinsic_effect, raw_body_effect};
 use crate::hir::*;
+use crate::loader::SourceMap;
 use crate::span::Span;
 use crate::types::{EnumVariantInfo, TypeCtx, TypeId, TypeKind};
 
@@ -113,7 +115,7 @@ impl TraitSemantics {
                         if !copy_traits.iter().any(|(_, id)| *id == info.self_ty) {
                             copy_traits.push((name.clone(), info.self_ty));
                         }
-                    }
+                    },
                     TraitCapability::Clone => {
                         if !clone_traits.iter().any(|(_, id)| *id == info.self_ty) {
                             clone_traits.push((name.clone(), info.self_ty));
@@ -165,6 +167,8 @@ impl TraitSemantics {
 struct ImplInfo {
     doc: Option<String>,
     trait_name: Option<String>,
+    trait_base_name: Option<String>,
+    trait_args: Vec<TypeId>,
     trait_self_ty: Option<TypeId>,
     target_ty: TypeId,
     methods: BTreeMap<String, (String, TypeId)>, // name -> (mangled_name, type)
@@ -173,6 +177,8 @@ struct ImplInfo {
 #[derive(Debug, Clone)]
 struct TraitBoundRef {
     name: String,
+    trait_base_name: String,
+    trait_args: Vec<TypeId>,
     trait_self_ty: TypeId,
 }
 
@@ -180,6 +186,12 @@ struct TraitBoundRef {
 enum FieldIdx {
     Index(usize),
     Name(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FieldAccessorKind {
+    Get,
+    Put,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -211,9 +223,31 @@ fn collect_type_params(
         let mut clone_cap = false;
         let mut drop_cap = false;
         for b in &p.bounds {
-            if let Some(info) = traits.get(b) {
+            if let Some(info) = traits.get(&b.name.name) {
+                if info.type_params.len() != b.args.len() {
+                    diags.push(
+                        Diagnostic::error(
+                            format!(
+                                "trait bound '{}' expects {} type arguments, found {}",
+                                b.name.name,
+                                info.type_params.len(),
+                                b.args.len()
+                            ),
+                            b.name.span,
+                        )
+                        .with_id(DiagnosticId::TypeTraitTypeParamsUnsupported),
+                    );
+                    continue;
+                }
+                let arg_tys: Vec<TypeId> = b
+                    .args
+                    .iter()
+                    .map(|arg| type_from_expr(ctx, labels, arg))
+                    .collect();
                 bounds.push(TraitBoundRef {
-                    name: b.clone(),
+                    name: format_trait_ref_name(&b.name.name, &arg_tys, ctx),
+                    trait_base_name: b.name.name.clone(),
+                    trait_args: arg_tys,
                     trait_self_ty: info.self_ty,
                 });
                 for cap in info.capabilities.iter().copied() {
@@ -225,7 +259,10 @@ fn collect_type_params(
                 }
             } else {
                 diags.push(
-                    Diagnostic::error(format!("unknown trait bound '{}'", b), p.name.span)
+                    Diagnostic::error(
+                        format!("unknown trait bound '{}'", b.name.name),
+                        p.name.span,
+                    )
                         .with_id(DiagnosticId::TypeUnknownTraitBound),
                 );
             }
@@ -240,19 +277,67 @@ fn collect_type_params(
     (tps, bounds_vec, bounds_map)
 }
 
+fn format_trait_ref_name(base: &str, args: &[TypeId], ctx: &TypeCtx) -> String {
+    if args.is_empty() {
+        return base.to_string();
+    }
+    let mut name = String::from(base);
+    name.push('<');
+    for (idx, arg) in args.iter().enumerate() {
+        if idx > 0 {
+            name.push(',');
+        }
+        name.push_str(&ctx.type_to_string(*arg));
+    }
+    name.push('>');
+    name
+}
+
+fn trait_application_matches(
+    ctx: &TypeCtx,
+    base_name: &str,
+    args: &[TypeId],
+    other_base_name: &str,
+    other_args: &[TypeId],
+) -> bool {
+    if base_name != other_base_name || args.len() != other_args.len() {
+        return false;
+    }
+    args.iter().zip(other_args.iter()).all(|(lhs, rhs)| {
+        let lhs = ctx.resolve_id(*lhs);
+        let rhs = ctx.resolve_id(*rhs);
+        ctx.type_pattern_matches(lhs, rhs) || ctx.type_pattern_matches(rhs, lhs)
+    })
+}
+
 fn type_param_has_trait_bound(
     ctx: &TypeCtx,
     type_param_bounds: &BTreeMap<TypeId, Vec<TraitBoundRef>>,
     ty: TypeId,
-    trait_self_ty: TypeId,
+    trait_name: &str,
 ) -> bool {
+    let matches_bound = |b: &TraitBoundRef| {
+        if b.name == trait_name {
+            return true;
+        }
+        if let Some((base, args)) = parse_trait_ref_name(trait_name, ctx) {
+            return trait_application_matches(
+                ctx,
+                &base,
+                &args,
+                &b.trait_base_name,
+                &b.trait_args,
+            );
+        }
+        false
+    };
     let resolved = ctx.resolve_id(ty);
     if let Some(bounds) = type_param_bounds.get(&resolved) {
-        return bounds.iter().any(|b| b.trait_self_ty == trait_self_ty);
+        return bounds.iter().any(matches_bound);
     }
     if type_param_bounds.iter().any(|(tp, bounds)| {
         ctx.resolve_id(*tp) == resolved
-            && bounds.iter().any(|b| b.trait_self_ty == trait_self_ty)
+            && bounds.iter().any(matches_bound)
     }) {
         return true;
     }
@@ -268,8 +353,35 @@ fn type_param_has_trait_bound(
             TypeKind::Var(v) => v.label.as_deref() == Some(label.as_str()),
             _ => false,
         };
-        same_label && bounds.iter().any(|b| b.trait_self_ty == trait_self_ty)
+        same_label && bounds.iter().any(matches_bound)
     })
+}
+
+fn parse_trait_ref_name(name: &str, ctx: &TypeCtx) -> Option<(String, Vec<TypeId>)> {
+    let lt = name.find('<')?;
+    let gt = name.rfind('>')?;
+    if gt <= lt {
+        return None;
+    }
+    let base = name[..lt].to_string();
+    let inner = &name[lt + 1..gt];
+    if inner.trim().is_empty() {
+        return Some((base, Vec::new()));
+    }
+    let mut args = Vec::new();
+    for part in inner.split(',') {
+        let ty_name = part.trim();
+        let ty = match ty_name {
+            "i32" => Some(ctx.i32()),
+            "u8" => Some(ctx.u8()),
+            "f32" => Some(ctx.f32()),
+            "bool" => Some(ctx.bool()),
+            "str" => Some(ctx.str()),
+            _ => None,
+        }?;
+        args.push(ty);
+    }
+    Some((base, args))
 }
 
 fn merge_inferred_instantiation(
@@ -432,6 +544,7 @@ pub fn typecheck(
     module: &crate::ast::Module,
     target: CompileTarget,
     profile: BuildProfile,
+    source_map: Option<&SourceMap>,
 ) -> TypeCheckResult {
     let mut ctx = TypeCtx::new();
     let mut label_env = LabelEnv::new();
@@ -445,6 +558,7 @@ pub fn typecheck(
     let mut rejected_copy_targets: Vec<TypeId> = Vec::new();
     let mut pending_copy_clone_checks: Vec<(TypeId, Span)> = Vec::new();
     let mut duplicate_impl_spans: BTreeSet<(u32, u32, u32)> = BTreeSet::new();
+    let qualified_import_targets = build_qualified_import_targets(module, source_map);
 
     let mut entry: Option<(String, Span)> = None;
     let mut externs: Vec<HirExtern> = Vec::new();
@@ -511,6 +625,7 @@ pub fn typecheck(
                         effect,
                         arity: params.len(),
                         builtin: None,
+                        field_accessor: None,
                         type_param_bounds: BTreeMap::new(),
                         captures: Vec::new(),
                     },
@@ -664,6 +779,7 @@ pub fn typecheck(
                             effect: Effect::Pure,
                             arity: params.len(),
                             builtin: None,
+                            field_accessor: None,
                             type_param_bounds: BTreeMap::new(),
                             captures: Vec::new(),
                         },
@@ -683,6 +799,7 @@ pub fn typecheck(
                             effect: Effect::Pure,
                             arity: params.len(),
                             builtin: None,
+                            field_accessor: None,
                             type_param_bounds: BTreeMap::new(),
                             captures: Vec::new(),
                         },
@@ -735,13 +852,22 @@ pub fn typecheck(
                     },
                 );
                 
-                // Register constructor in environment
+                let is_tag_unit_struct = fs.len() == 1
+                    && f_names.len() == 1
+                    && f_names[0] == "tag"
+                    && matches!(ctx.get(ctx.resolve_id(fs[0])), TypeKind::Unit);
                 let ret_ty = if tps.is_empty() {
                     ty
                 } else {
                     ctx.apply(ty, tps.clone())
                 };
-                let constructor_ty = ctx.function(tps.clone(), fs.clone(), ret_ty, Effect::Pure);
+                let constructor_params = if is_tag_unit_struct {
+                    Vec::new()
+                } else {
+                    fs.clone()
+                };
+                let constructor_ty =
+                    ctx.function(tps.clone(), constructor_params, ret_ty, Effect::Pure);
                 env.insert_global(Binding {
                     name: s.name.name.clone(),
                     ty: constructor_ty,
@@ -753,8 +879,9 @@ pub fn typecheck(
                     kind: BindingKind::Func {
                         symbol: s.name.name.clone(),
                         effect: Effect::Pure,
-                        arity: fs.len(),
+                        arity: if is_tag_unit_struct { 0 } else { fs.len() },
                         builtin: None,
+                        field_accessor: None,
                         type_param_bounds: BTreeMap::new(),
                         captures: Vec::new(),
                     },
@@ -805,17 +932,21 @@ pub fn typecheck(
                         }
                     }
                 }
-                if !t.type_params.is_empty() {
-                    diagnostics.push(
-                        Diagnostic::error(
-                            "trait type parameters are not supported yet",
-                            t.name.span,
-                        )
-                        .with_id(DiagnosticId::TypeTraitTypeParamsUnsupported),
-                    );
-                }
+                let mut type_param_labels = LabelEnv::new();
+                let (tps, _bounds_vec, _bounds_map) = collect_type_params(
+                    &mut ctx,
+                    &mut type_param_labels,
+                    &t.type_params,
+                    &traits,
+                    &mut diagnostics,
+                );
                 let self_ty = ctx.fresh_var(Some(String::from("Self")));
                 f_labels.insert(String::from("Self"), self_ty);
+                for tp in &t.type_params {
+                    if let Some(ty) = type_param_labels.get(&tp.name.name) {
+                        f_labels.insert(tp.name.name.clone(), *ty);
+                    }
+                }
                 let mut methods = BTreeMap::new();
                 for m in &t.methods {
                     if !m.type_params.is_empty() {
@@ -831,7 +962,7 @@ pub fn typecheck(
                     let sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
                     methods.insert(m.name.name.clone(), sig);
                 }
-                traits.insert(
+                    traits.insert(
                     t.name.name.clone(),
                     TraitInfo {
                         doc: t.doc.clone(),
@@ -875,6 +1006,7 @@ pub fn typecheck(
                         effect: Effect::Pure,
                         arity: params.len(),
                         builtin: None,
+                        field_accessor: None,
                         type_param_bounds: BTreeMap::new(),
                         captures: Vec::new(),
                     },
@@ -902,14 +1034,14 @@ pub fn typecheck(
             continue;
         }
         if let Stmt::Impl(i) = item {
-            if i.trait_name.is_none() {
+            if i.trait_ref.is_none() {
                 diagnostics.push(
                     Diagnostic::error("inherent impl is not supported yet", i.span)
                         .with_id(DiagnosticId::TypeInherentImplUnsupported),
                 );
                 continue;
             }
-            let trait_name = i.trait_name.as_ref().map(|tn| tn.name.clone());
+            let trait_name = i.trait_ref.as_ref().map(|tr| tr.name.name.clone());
             let mut trait_self_ty = None;
             if let Some(tn) = &trait_name {
                 if !traits.contains_key(tn) {
@@ -933,9 +1065,35 @@ pub fn typecheck(
                 continue;
             }
             let mut f_labels = LabelEnv::new();
-            let (tps, _bounds_vec, _bounds_map) =
+            let (tps, _bounds_vec, impl_bounds_map) =
                 collect_type_params(&mut ctx, &mut f_labels, &i.type_params, &traits, &mut diagnostics);
             let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
+            let applied_trait_name = if let Some(trait_ref) = &i.trait_ref {
+                let trait_info = traits.get(&trait_ref.name.name).unwrap();
+                if trait_info.type_params.len() != trait_ref.args.len() {
+                    diagnostics.push(
+                        Diagnostic::error(
+                            format!(
+                                "trait '{}' expects {} type arguments, found {}",
+                                trait_ref.name.name,
+                                trait_info.type_params.len(),
+                                trait_ref.args.len()
+                            ),
+                            trait_ref.name.span,
+                        )
+                        .with_id(DiagnosticId::TypeTraitTypeParamsUnsupported),
+                    );
+                    continue;
+                }
+                let trait_args: Vec<TypeId> = trait_ref
+                    .args
+                    .iter()
+                    .map(|arg| type_from_expr(&mut ctx, &mut f_labels, arg))
+                    .collect();
+                format_trait_ref_name(&trait_ref.name.name, &trait_args, &ctx)
+            } else {
+                trait_name.clone().unwrap_or_default()
+            };
             f_labels.insert(String::from("Self"), target_ty);
             let generic_impl_target = type_contains_unbound_var(&ctx, target_ty);
             if generic_impl_target
@@ -964,7 +1122,8 @@ pub fn typecheck(
                 pending_copy_clone_checks.push((target_ty, i.span));
             }
             if impls.iter().any(|imp| {
-                imp.trait_self_ty == trait_self_ty
+                imp.trait_name.as_ref() == Some(&applied_trait_name)
+                    && imp.trait_self_ty == trait_self_ty
                     && (ctx.type_pattern_matches(imp.target_ty, target_ty)
                         || ctx.type_pattern_matches(target_ty, imp.target_ty))
             }) {
@@ -986,7 +1145,17 @@ pub fn typecheck(
             }
             impls.push(ImplInfo {
                 doc: i.doc.clone(),
-                trait_name,
+                trait_name: Some(applied_trait_name),
+                trait_base_name: trait_name,
+                trait_args: if let Some(trait_ref) = &i.trait_ref {
+                    trait_ref
+                        .args
+                        .iter()
+                        .map(|arg| type_from_expr(&mut ctx, &mut f_labels, arg))
+                        .collect()
+                } else {
+                    Vec::new()
+                },
                 trait_self_ty,
                 target_ty,
                 methods,
@@ -1045,6 +1214,7 @@ pub fn typecheck(
                     effect: Effect::Pure,
                     arity: info.fields.len(),
                     builtin: None,
+                    field_accessor: None,
                     type_param_bounds: BTreeMap::new(),
                     captures: Vec::new(),
                 },
@@ -1196,6 +1366,12 @@ pub fn typecheck(
                 }
                 env.remove_duplicate_func(&f.name.name, ty, &ctx);
                 let symbol = mangle_function_symbol(&f.name.name, ty, &ctx);
+                if crate::log::is_verbose() && f.name.name == "new" {
+                    std::eprintln!(
+                        "typecheck: registering global func new sig={}",
+                        function_signature_string(&ctx, ty)
+                    );
+                }
                 env.insert_global(Binding {
                     name: f.name.name.clone(),
                     ty,
@@ -1207,8 +1383,9 @@ pub fn typecheck(
                     kind: BindingKind::Func {
                         symbol,
                         effect,
-                        arity: params.len(),
+                        arity: f.params.len(),
                         builtin: None,
+                        field_accessor: detect_field_accessor_fn(f),
                         type_param_bounds: bounds_map.clone(),
                         captures: Vec::new(),
                     },
@@ -1240,12 +1417,13 @@ pub fn typecheck(
         }
         let mut target_infos = Vec::new();
         for target in targets {
-            let (symbol, effect, arity, builtin, bounds, captures) = match &target.kind {
+            let (symbol, effect, arity, builtin, field_accessor, bounds, captures) = match &target.kind {
                 BindingKind::Func {
                     symbol,
                     effect,
                     arity,
                     builtin,
+                    field_accessor,
                     type_param_bounds,
                     captures,
                 } => (
@@ -1253,14 +1431,15 @@ pub fn typecheck(
                     *effect,
                     *arity,
                     *builtin,
+                    *field_accessor,
                     type_param_bounds.clone(),
                     captures.clone(),
                 ),
                 _ => continue,
             };
-            target_infos.push((target.ty, symbol, effect, arity, builtin, bounds, captures));
+            target_infos.push((target.ty, symbol, effect, arity, builtin, field_accessor, bounds, captures));
         }
-        for (ty, symbol, effect, arity, builtin, bounds, captures) in target_infos {
+        for (ty, symbol, effect, arity, builtin, field_accessor, bounds, captures) in target_infos {
             if let Some(prev) = find_same_signature_func(&env, &alias.name.name, ty, &ctx) {
                 diagnostics.push(
                     Diagnostic::warning(
@@ -1364,6 +1543,7 @@ pub fn typecheck(
                     effect,
                     arity,
                     builtin,
+                    field_accessor,
                     type_param_bounds: bounds,
                     captures,
                 },
@@ -1447,9 +1627,31 @@ pub fn typecheck(
                     if !p_node.bounds.is_empty() {
                         let mut bounds = Vec::new();
                         for b in &p_node.bounds {
-                            if let Some(info) = traits.get(b) {
+                            if let Some(info) = traits.get(&b.name.name) {
+                                if info.type_params.len() != b.args.len() {
+                                    diagnostics.push(
+                                        Diagnostic::error(
+                                            format!(
+                                                "trait bound '{}' expects {} type arguments, found {}",
+                                                b.name.name,
+                                                info.type_params.len(),
+                                                b.args.len()
+                                            ),
+                                            b.name.span,
+                                        )
+                                        .with_id(DiagnosticId::TypeTraitTypeParamsUnsupported),
+                                    );
+                                    continue;
+                                }
+                                let arg_tys: Vec<TypeId> = b
+                                    .args
+                                    .iter()
+                                    .map(|arg| type_from_expr(&mut ctx, &mut label_env, arg))
+                                    .collect();
                                 bounds.push(TraitBoundRef {
-                                    name: b.clone(),
+                                    name: format_trait_ref_name(&b.name.name, &arg_tys, &ctx),
+                                    trait_base_name: b.name.name.clone(),
+                                    trait_args: arg_tys,
                                     trait_self_ty: info.self_ty,
                                 });
                             }
@@ -1482,6 +1684,7 @@ pub fn typecheck(
                 &traits,
                 &impls,
                 &mut nested_functions,
+                &qualified_import_targets,
             ) {
                 Ok(checked) => {
                     diagnostics.extend(checked.diagnostics);
@@ -1528,8 +1731,8 @@ pub fn typecheck(
             if duplicate_impl_spans.contains(&impl_key) {
                 continue;
             }
-            let trait_name = match &i.trait_name {
-                Some(tn) => tn.name.clone(),
+            let trait_ref = match &i.trait_ref {
+                Some(tr) => tr,
                 None => {
                     diagnostics.push(
                         Diagnostic::error("inherent impl is not supported yet", i.span)
@@ -1538,6 +1741,7 @@ pub fn typecheck(
                     continue;
                 }
             };
+            let trait_name = trait_ref.name.name.clone();
             let trait_info = match traits.get(&trait_name) {
                 Some(info) => info,
                 None => {
@@ -1562,9 +1766,30 @@ pub fn typecheck(
 
             let mut impl_methods = Vec::new();
             let mut f_labels = LabelEnv::new();
-            let (tps, _bounds_vec, _bounds_map) =
+            let (tps, _bounds_vec, impl_bounds_map) =
                 collect_type_params(&mut ctx, &mut f_labels, &i.type_params, &traits, &mut diagnostics);
             let target_ty = type_from_expr(&mut ctx, &mut f_labels, &i.target_ty);
+            if trait_info.type_params.len() != trait_ref.args.len() {
+                diagnostics.push(
+                    Diagnostic::error(
+                        format!(
+                            "trait '{}' expects {} type arguments, found {}",
+                            trait_name,
+                            trait_info.type_params.len(),
+                            trait_ref.args.len()
+                        ),
+                        trait_ref.name.span,
+                    )
+                    .with_id(DiagnosticId::TypeTraitTypeParamsUnsupported),
+                );
+                continue;
+            }
+            let trait_args: Vec<TypeId> = trait_ref
+                .args
+                .iter()
+                .map(|arg| type_from_expr(&mut ctx, &mut f_labels, arg))
+                .collect();
+            let applied_trait_name = format_trait_ref_name(&trait_name, &trait_args, &ctx);
             if type_contains_unbound_var(&ctx, target_ty)
                 && !trait_semantics.has_copy_capability(Some(trait_info.self_ty))
                 && !trait_semantics.has_clone_capability(Some(trait_info.self_ty))
@@ -1621,6 +1846,9 @@ pub fn typecheck(
                 };
                 let mut mapping = BTreeMap::new();
                 mapping.insert(ctx.resolve_id(trait_info.self_ty), ctx.resolve_id(target_ty));
+                for (tp, arg) in trait_info.type_params.iter().zip(trait_args.iter()) {
+                    mapping.insert(ctx.resolve_id(*tp), ctx.resolve_id(*arg));
+                }
                 let expected_sig = ctx.substitute(trait_sig, &mapping);
                 let actual_sig = type_from_expr(&mut ctx, &mut f_labels, &m.signature);
                 if !ctx.same_type(expected_sig, actual_sig) {
@@ -1630,10 +1858,19 @@ pub fn typecheck(
                     );
                     continue;
                 }
+                let checked_sig = match ctx.get(expected_sig) {
+                    TypeKind::Function {
+                        params,
+                        result,
+                        effect,
+                        ..
+                    } => ctx.function(tps.clone(), params.clone(), result, effect),
+                    _ => expected_sig,
+                };
                 let mut nested_functions = Vec::new();
-                let mut checked = match check_function(
+                let checked = match check_function(
                     m,
-                    expected_sig,
+                    checked_sig,
                     false,
                     target,
                     profile,
@@ -1645,10 +1882,11 @@ pub fn typecheck(
                     &enums,
                     &structs,
                     &mut instantiations,
-                    BTreeMap::new(),
+                    impl_bounds_map.clone(),
                     &traits,
                     &impls,
                     &mut nested_functions,
+                    &qualified_import_targets,
                 ) {
                     Ok(checked) => checked,
                     Err(mut diags) => {
@@ -1658,7 +1896,7 @@ pub fn typecheck(
                 };
                 diagnostics.extend(checked.diagnostics);
                 let mut func = checked.function;
-                let mangled = mangle_impl_method(&trait_name, &m.name.name, target_ty, &ctx);
+                let mangled = mangle_impl_method(&applied_trait_name, &m.name.name, target_ty, &ctx);
                 func.name = mangled.clone();
                 functions.push(func.clone());
                 functions.extend(nested_functions);
@@ -1688,7 +1926,9 @@ pub fn typecheck(
 
             final_impls.push(HirImpl {
                 doc: i.doc.clone(),
-                trait_name,
+                trait_name: applied_trait_name,
+                trait_base_name: Some(trait_name.clone()),
+                trait_args: trait_args.clone(),
                 type_args: tps,
                 target_ty,
                 methods: impl_methods,
@@ -1765,6 +2005,7 @@ fn check_function(
     traits: &BTreeMap<String, TraitInfo>,
     impls: &Vec<ImplInfo>,
     generated_functions: &mut Vec<HirFunction>,
+    qualified_import_targets: &BTreeMap<u32, BTreeMap<String, BTreeSet<u32>>>,
 ) -> Result<CheckedFunction, Vec<Diagnostic>> {
     let mut diags = Vec::new();
     let func_ty_snapshot = ctx.snapshot_type_var_bindings(func_ty);
@@ -1843,6 +2084,7 @@ fn check_function(
             structs,
             instantiations,
             type_param_bounds: type_param_bounds.clone(),
+            qualified_import_targets,
             traits,
             impls,
             generated_functions,
@@ -1902,10 +2144,21 @@ fn check_function(
     for (bound, ty, span) in pending_trait_checks {
         let resolved = ctx.resolve_id(ty);
         let satisfied =
-            type_param_has_trait_bound(ctx, &type_param_bounds, ty, bound.trait_self_ty)
-                || type_param_has_trait_bound(ctx, &type_param_bounds, resolved, bound.trait_self_ty)
+            type_param_has_trait_bound(ctx, &type_param_bounds, ty, &bound.name)
+                || type_param_has_trait_bound(ctx, &type_param_bounds, resolved, &bound.name)
                 || impls.iter().any(|imp| {
-                    imp.trait_self_ty == Some(bound.trait_self_ty)
+                    imp.trait_base_name
+                        .as_deref()
+                        .map(|base| {
+                            trait_application_matches(
+                                ctx,
+                                &bound.trait_base_name,
+                                &bound.trait_args,
+                                base,
+                                &imp.trait_args,
+                            )
+                        })
+                        .unwrap_or(false)
                         && ctx.type_pattern_matches(imp.target_ty, resolved)
                 });
         if !satisfied {
@@ -1991,6 +2244,7 @@ struct BlockChecker<'a> {
     structs: &'a BTreeMap<String, StructInfo>,
     instantiations: &'a mut BTreeMap<String, Vec<Vec<TypeId>>>, // new
     type_param_bounds: BTreeMap<TypeId, Vec<TraitBoundRef>>,
+    qualified_import_targets: &'a BTreeMap<u32, BTreeMap<String, BTreeSet<u32>>>,
     traits: &'a BTreeMap<String, TraitInfo>,
     impls: &'a Vec<ImplInfo>,
     generated_functions: &'a mut Vec<HirFunction>,
@@ -1999,6 +2253,23 @@ struct BlockChecker<'a> {
 }
 
 impl<'a> BlockChecker<'a> {
+    fn lookup_qualified_bindings(&self, id: &Ident) -> Option<(String, Vec<Binding>)> {
+        let (ns, member) = parse_variant_name(&id.name)?;
+        if self.enums.contains_key(ns) || self.traits.contains_key(ns) {
+            return None;
+        }
+        let file_aliases = self.qualified_import_targets.get(&id.span.file_id.0)?;
+        let target_files = file_aliases.get(ns)?;
+        let bindings = self
+            .env
+            .lookup_all_any_defined(member)
+            .into_iter()
+            .filter(|b| target_files.contains(&b.span.file_id.0))
+            .cloned()
+            .collect::<Vec<_>>();
+        Some((member.to_string(), bindings))
+    }
+
     fn validate_raw_body_effect(&mut self, body: &HirBody, span: Span) -> bool {
         if matches!(self.current_effect, Effect::Pure) && matches!(raw_body_effect(body), Effect::Impure)
         {
@@ -2054,22 +2325,23 @@ impl<'a> BlockChecker<'a> {
         selected
     }
 
-    fn user_visible_arity(&self, func_expr: &HirExpr, total_param_len: usize) -> usize {
+    fn user_visible_arity(&self, func_expr: &HirExpr, params: &[TypeId]) -> usize {
+        let total_param_len = params.len();
         if let HirExprKind::Var(name) = &func_expr.kind {
             let bindings = self.env.lookup_all_callables(name);
             if !bindings.is_empty() {
-                let mut cap_len: Option<usize> = None;
+                let mut arity: Option<usize> = None;
                 for b in bindings {
-                    if let BindingKind::Func { captures, .. } = &b.kind {
-                        match cap_len {
-                            Some(prev) if prev != captures.len() => return total_param_len,
+                    if let BindingKind::Func { arity: current, .. } = &b.kind {
+                        match arity {
+                            Some(prev) if prev != *current => return total_param_len,
                             Some(_) => {}
-                            None => cap_len = Some(captures.len()),
+                            None => arity = Some(*current),
                         }
                     }
                 }
-                if let Some(c) = cap_len {
-                    return total_param_len.saturating_sub(c);
+                if let Some(arity) = arity {
+                    return arity;
                 }
             }
         }
@@ -2196,7 +2468,7 @@ impl<'a> BlockChecker<'a> {
                 continue;
             };
             let total_arity = params.len();
-            let arity = self.user_visible_arity(&stack[j].expr, total_arity);
+            let arity = self.user_visible_arity(&stack[j].expr, &params);
             if stack.len() < j + 1 + arity {
                 continue;
             }
@@ -2239,7 +2511,7 @@ impl<'a> BlockChecker<'a> {
                 continue;
             };
             let total_arity = params.len();
-            let arity = self.user_visible_arity(&stack[j].expr, total_arity);
+            let arity = self.user_visible_arity(&stack[j].expr, &params);
             if stack.len() < j + 1 + arity {
                 continue;
             }
@@ -2298,7 +2570,7 @@ impl<'a> BlockChecker<'a> {
                 continue;
             };
             let total_arity = params.len();
-            let arity = self.user_visible_arity(&stack[j].expr, total_arity);
+            let arity = self.user_visible_arity(&stack[j].expr, &params);
             if inner_pos < j + 1 {
                 continue;
             }
@@ -2380,7 +2652,7 @@ impl<'a> BlockChecker<'a> {
             return None;
         };
         let total_arity = params.len();
-        let arity = self.user_visible_arity(&entry.expr, total_arity);
+        let arity = self.user_visible_arity(&entry.expr, &params);
         if arity == 0 {
             return None;
         }
@@ -2392,37 +2664,31 @@ impl<'a> BlockChecker<'a> {
         Some(self.ctx.resolve_id(params[arg_idx]))
     }
 
-    fn reduce_pipe_pending_value_with_target(
+    fn reduce_pipe_pending_segment_with_target(
         &mut self,
-        val: StackEntry,
+        mut pending: Vec<StackEntry>,
         target: &StackEntry,
         fallback_expected: Option<TypeId>,
-    ) -> StackEntry {
-        let rty = self.ctx.resolve_id(val.ty);
-        let is_nullary_callable = if !val.auto_call {
-            false
-        } else {
-            match self.ctx.get(rty) {
-                TypeKind::Function { params, .. } => {
-                    self.user_visible_arity(&val.expr, params.len()) == 0
-                }
-                _ => false,
-            }
-        };
-        if !is_nullary_callable {
-            return val;
+    ) -> Option<StackEntry> {
+        if pending.is_empty() {
+            return None;
         }
         let expected_input = self
             .pipe_target_input_type(target)
             .filter(|t| self.is_concrete_type(*t))
             .or(fallback_expected.map(|t| self.ctx.resolve_id(t)));
-        let mut stack = vec![val.clone()];
         let mut open_calls = Vec::new();
-        self.reduce_calls(&mut stack, &mut open_calls, expected_input.map(|t| (t, 0)));
-        if stack.len() == 1 {
-            stack.pop().unwrap_or(val)
+        for (i, entry) in pending.iter().enumerate() {
+            let rty = self.ctx.resolve_id(entry.ty);
+            if entry.auto_call && matches!(self.ctx.get(rty), TypeKind::Function { .. }) {
+                open_calls.push(i);
+            }
+        }
+        self.reduce_calls(&mut pending, &mut open_calls, expected_input.map(|t| (t, 0)));
+        if pending.len() == 1 {
+            pending.pop()
         } else {
-            val
+            None
         }
     }
 
@@ -2444,11 +2710,65 @@ impl<'a> BlockChecker<'a> {
         false
     }
 
+    fn unresolved_overloaded_entry_has_larger_arity(
+        &mut self,
+        stack: &[StackEntry],
+        pos: usize,
+    ) -> bool {
+        if pos >= stack.len() {
+            return false;
+        }
+        let entry = &stack[pos];
+        if !self.is_unresolved_overloaded_callable_entry(entry) {
+            return false;
+        }
+        let available_args = stack.len().saturating_sub(pos + 1);
+        match &entry.expr.kind {
+            HirExprKind::Var(name) => self.env.lookup_all_callables(name).iter().any(|b| {
+                match &b.kind {
+                    BindingKind::Func { arity, captures, .. } => arity.saturating_sub(captures.len()) > available_args,
+                    _ => false,
+                }
+            }),
+            _ => false,
+        }
+    }
+
+    fn should_defer_overloaded_nullary_entry(
+        &mut self,
+        stack: &[StackEntry],
+        pos: usize,
+    ) -> bool {
+        if pos >= stack.len() {
+            return false;
+        }
+        let entry = &stack[pos];
+        if !self.is_unresolved_overloaded_callable_entry(entry) {
+            return false;
+        }
+        let has_nullary_overload = match &entry.expr.kind {
+            HirExprKind::Var(name) => self.env.lookup_all_callables(name).iter().any(|b| {
+                match &b.kind {
+                    BindingKind::Func { arity, captures, .. } => arity.saturating_sub(captures.len()) == 0,
+                    _ => false,
+                }
+            }),
+            _ => false,
+        };
+        if !has_nullary_overload {
+            return false;
+        }
+        stack.iter().skip(pos + 1).any(|entry| {
+            let rty = self.ctx.resolve_id(entry.ty);
+            entry.auto_call && matches!(self.ctx.get(rty), TypeKind::Function { .. })
+        })
+    }
+
     fn choose_callable_type_by_available_arity(
         &mut self,
         name: &str,
         available_args: usize,
-    ) -> Option<TypeId> {
+    ) -> Option<(usize, TypeId)> {
         let callables = self.env.lookup_all_callables(name);
         if callables.len() <= 1 {
             return None;
@@ -2481,25 +2801,38 @@ impl<'a> BlockChecker<'a> {
                 }
             }
         }
-        best.map(|(_, ty)| ty)
+        best
     }
 
     fn is_concrete_type(&self, ty: TypeId) -> bool {
-        let resolved = self.ctx.resolve_id(ty);
-        !matches!(self.ctx.get(resolved), TypeKind::Var(v) if v.binding.is_none())
+        !type_contains_unbound_var(self.ctx, ty)
     }
 
-    fn type_param_has_bound(&self, ty: TypeId, trait_self_ty: TypeId) -> bool {
+    fn type_param_has_bound_ref(
+        &self,
+        ty: TypeId,
+        trait_base_name: &str,
+        trait_args: &[TypeId],
+    ) -> bool {
+        let matches_bound = |b: &TraitBoundRef| {
+            trait_application_matches(
+                self.ctx,
+                trait_base_name,
+                trait_args,
+                &b.trait_base_name,
+                &b.trait_args,
+            )
+        };
         let resolved = self.ctx.resolve_id(ty);
         if let Some(bounds) = self.type_param_bounds.get(&resolved) {
-            return bounds.iter().any(|b| b.trait_self_ty == trait_self_ty);
+            return bounds.iter().any(matches_bound);
         }
 
         // 型変数が他の型変数へ束縛された場合、resolve 後の TypeId が
         // 直接 type_param_bounds に存在しないことがあるため、正規化後 ID でも照合する。
         if self.type_param_bounds.iter().any(|(tp, bounds)| {
             self.ctx.resolve_id(*tp) == resolved
-                && bounds.iter().any(|b| b.trait_self_ty == trait_self_ty)
+                && bounds.iter().any(matches_bound)
         }) {
             return true;
         }
@@ -2518,13 +2851,20 @@ impl<'a> BlockChecker<'a> {
                 TypeKind::Var(v) => v.label.as_deref() == Some(label.as_str()),
                 _ => false,
             };
-            same_label && bounds.iter().any(|b| b.trait_self_ty == trait_self_ty)
+            same_label && bounds.iter().any(matches_bound)
         })
+    }
+
+    fn type_param_has_bound(&self, ty: TypeId, trait_name: &str) -> bool {
+        if let Some((base, args)) = parse_trait_ref_name(trait_name, self.ctx) {
+            return self.type_param_has_bound_ref(ty, &base, &args);
+        }
+        self.type_param_has_bound_ref(ty, trait_name, &[])
     }
 
     fn trait_bound_satisfied_by_ref(&self, bound: &TraitBoundRef, ty: TypeId) -> bool {
         if !self.is_concrete_type(ty) {
-            return self.type_param_has_bound(ty, bound.trait_self_ty);
+            return self.type_param_has_bound_ref(ty, &bound.trait_base_name, &bound.trait_args);
         }
         if crate::log::is_verbose() {
             std::eprintln!(
@@ -2534,7 +2874,24 @@ impl<'a> BlockChecker<'a> {
                 self.ctx.type_to_string(ty),
                 self.ctx.resolve_id(ty),
             );
-            for imp in self.impls.iter().filter(|imp| imp.trait_self_ty == Some(bound.trait_self_ty)) {
+            for imp in self
+                .impls
+                .iter()
+                .filter(|imp| {
+                    imp.trait_base_name
+                        .as_deref()
+                        .map(|base| {
+                            trait_application_matches(
+                                self.ctx,
+                                &bound.trait_base_name,
+                                &bound.trait_args,
+                                base,
+                                &imp.trait_args,
+                            )
+                        })
+                        .unwrap_or(false)
+                })
+            {
                 std::eprintln!(
                     "  impl candidate target={} ({:?}) same_type={}",
                     self.ctx.type_to_string(imp.target_ty),
@@ -2544,15 +2901,38 @@ impl<'a> BlockChecker<'a> {
             }
         }
         self.impls.iter().any(|imp| {
-            imp.trait_self_ty == Some(bound.trait_self_ty)
+            imp.trait_base_name
+                .as_deref()
+                .map(|base| {
+                    trait_application_matches(
+                        self.ctx,
+                        &bound.trait_base_name,
+                        &bound.trait_args,
+                        base,
+                        &imp.trait_args,
+                    )
+                })
+                .unwrap_or(false)
                 && self.ctx.type_pattern_matches(imp.target_ty, ty)
         })
     }
 
-    fn infer_unique_type_param_for_trait(&self, trait_self_ty: TypeId) -> Option<TypeId> {
+    fn infer_unique_type_param_for_trait_ref(
+        &self,
+        trait_base_name: &str,
+        trait_args: &[TypeId],
+    ) -> Option<TypeId> {
         let mut matched: Option<TypeId> = None;
         for (tp, bounds) in &self.type_param_bounds {
-            if !bounds.iter().any(|b| b.trait_self_ty == trait_self_ty) {
+            if !bounds.iter().any(|b| {
+                trait_application_matches(
+                    self.ctx,
+                    trait_base_name,
+                    trait_args,
+                    &b.trait_base_name,
+                    &b.trait_args,
+                )
+            }) {
                 continue;
             }
             let resolved = self.ctx.resolve_id(*tp);
@@ -2563,6 +2943,77 @@ impl<'a> BlockChecker<'a> {
             }
         }
         matched
+    }
+
+    fn infer_unique_type_param_for_trait(&self, trait_name: &str) -> Option<TypeId> {
+        if let Some((base, args)) = parse_trait_ref_name(trait_name, self.ctx) {
+            return self.infer_unique_type_param_for_trait_ref(&base, &args);
+        }
+        self.infer_unique_type_param_for_trait_ref(trait_name, &[])
+    }
+
+    fn infer_trait_application_name(
+        &self,
+        trait_name: &str,
+        trait_info: &TraitInfo,
+        sig: TypeId,
+        args: &[StackEntry],
+        expected_ret: Option<TypeId>,
+    ) -> String {
+        let inferred = self.infer_trait_application_args(trait_info, sig, args, expected_ret);
+        format_trait_ref_name(trait_name, &inferred, self.ctx)
+    }
+
+    fn infer_trait_application_args(
+        &self,
+        trait_info: &TraitInfo,
+        sig: TypeId,
+        args: &[StackEntry],
+        expected_ret: Option<TypeId>,
+    ) -> Vec<TypeId> {
+        if trait_info.type_params.is_empty() {
+            return Vec::new();
+        }
+        let resolved_sig = self.ctx.resolve_id(sig);
+        let TypeKind::Function { params, result, .. } = self.ctx.get(resolved_sig) else {
+            return Vec::new();
+        };
+        let mut inferred = Vec::new();
+        for tp in &trait_info.type_params {
+            let label = match self.ctx.get(self.ctx.resolve_id(*tp)) {
+                TypeKind::Var(v) => v.label.clone(),
+                _ => None,
+            };
+            let mut found = None;
+            for (param_ty, arg) in params.iter().zip(args.iter()) {
+                found = merge_inferred_instantiation(
+                    self.ctx,
+                    found,
+                    infer_type_param_from_instantiated_pair(
+                        self.ctx,
+                        *param_ty,
+                        arg.ty,
+                        *tp,
+                        label.as_deref(),
+                    ),
+                );
+            }
+            if let Some(expected) = expected_ret {
+                found = merge_inferred_instantiation(
+                    self.ctx,
+                    found,
+                    infer_type_param_from_instantiated_pair(
+                        self.ctx,
+                        result,
+                        expected,
+                        *tp,
+                        label.as_deref(),
+                    ),
+                );
+            }
+            inferred.push(found.unwrap_or(*tp));
+        }
+        inferred
     }
 
     fn resolve_field_access(
@@ -2581,6 +3032,21 @@ impl<'a> BlockChecker<'a> {
         span: Span,
         emit_diagnostics: bool,
     ) -> Option<(TypeId, usize)> {
+        fn invalid_field(
+            checker: &mut BlockChecker<'_>,
+            emit_diagnostics: bool,
+            span: Span,
+            message: String,
+        ) -> Option<(TypeId, usize)> {
+            if emit_diagnostics {
+                checker.diagnostics.push(
+                    Diagnostic::error(message, span)
+                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
+                );
+            }
+            None
+        }
+
         let resolved_ty = self.ctx.resolve(base_ty);
         match self.ctx.get(resolved_ty) {
             TypeKind::Struct {
@@ -2592,32 +3058,24 @@ impl<'a> BlockChecker<'a> {
                     if i < fields.len() {
                         Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                     } else {
-                                        if emit_diagnostics {
-                                            self.diagnostics.push(
-                                                Diagnostic::error(
-                                                    format!("struct index out of bounds: {}", i),
-                                                    span,
-                                                )
-                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                            );
-                                        }
-                        None
+                        invalid_field(
+                            self,
+                            emit_diagnostics,
+                            span,
+                            format!("struct index out of bounds: {}", i),
+                        )
                     }
                 }
                 FieldIdx::Name(name) => {
                     if let Some(i) = field_names.iter().position(|n| *n == name) {
                         Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                     } else {
-                                        if emit_diagnostics {
-                                            self.diagnostics.push(
-                                                Diagnostic::error(
-                                                    format!("struct has no field {}", name),
-                                                    span,
-                                                )
-                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                            );
-                                        }
-                        None
+                        invalid_field(
+                            self,
+                            emit_diagnostics,
+                            span,
+                            format!("struct has no field {}", name),
+                        )
                     }
                 }
             },
@@ -2626,16 +3084,12 @@ impl<'a> BlockChecker<'a> {
                     if i < items.len() {
                         Some((items[i], composite_field_offset_bytes(self.ctx, &items, i)))
                     } else {
-                                        if emit_diagnostics {
-                                            self.diagnostics.push(
-                                                Diagnostic::error(
-                                                    format!("tuple index out of bounds: {}", i),
-                                                    span,
-                                                )
-                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                            );
-                                        }
-                        None
+                        invalid_field(
+                            self,
+                            emit_diagnostics,
+                            span,
+                            format!("tuple index out of bounds: {}", i),
+                        )
                     }
                 }
                 FieldIdx::Name(name) => {
@@ -2643,28 +3097,20 @@ impl<'a> BlockChecker<'a> {
                         if i < items.len() {
                             Some((items[i], composite_field_offset_bytes(self.ctx, &items, i)))
                         } else {
-                            if emit_diagnostics {
-                                self.diagnostics.push(
-                                    Diagnostic::error(
-                                        format!("tuple index out of bounds: {}", i),
-                                        span,
-                                    )
-                                    .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                );
-                            }
-                            None
+                            invalid_field(
+                                self,
+                                emit_diagnostics,
+                                span,
+                                format!("tuple index out of bounds: {}", i),
+                            )
                         }
                     } else {
-                        if emit_diagnostics {
-                            self.diagnostics.push(
-                                Diagnostic::error(
-                                    format!("invalid tuple field access: {}", name),
-                                    span,
-                                )
-                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                            );
-                        }
-                        None
+                        invalid_field(
+                            self,
+                            emit_diagnostics,
+                            span,
+                            format!("invalid tuple field access: {}", name),
+                        )
                     }
                 }
             },
@@ -2690,38 +3136,38 @@ impl<'a> BlockChecker<'a> {
                                 if i < substituted_fields.len() {
                                     Some((
                                         substituted_fields[i],
-                                        composite_field_offset_bytes(self.ctx, &substituted_fields, i),
+                                        composite_field_offset_bytes(
+                                            self.ctx,
+                                            &substituted_fields,
+                                            i,
+                                        ),
                                     ))
                                 } else {
-                                    if emit_diagnostics {
-                                        self.diagnostics.push(
-                                            Diagnostic::error(
-                                                format!("generic struct index out of bounds: {}", i),
-                                                span,
-                                            )
-                                            .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                        );
-                                    }
-                                    None
+                                    invalid_field(
+                                        self,
+                                        emit_diagnostics,
+                                        span,
+                                        format!("generic struct index out of bounds: {}", i),
+                                    )
                                 }
                             }
                             FieldIdx::Name(name) => {
                                 if let Some(i) = field_names.iter().position(|n| *n == name) {
                                     Some((
                                         substituted_fields[i],
-                                        composite_field_offset_bytes(self.ctx, &substituted_fields, i),
+                                        composite_field_offset_bytes(
+                                            self.ctx,
+                                            &substituted_fields,
+                                            i,
+                                        ),
                                     ))
                                 } else {
-                                    if emit_diagnostics {
-                                        self.diagnostics.push(
-                                            Diagnostic::error(
-                                                format!("generic struct has no field {}", name),
-                                                span,
-                                            )
-                                            .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                        );
-                                    }
-                                    None
+                                    invalid_field(
+                                        self,
+                                        emit_diagnostics,
+                                        span,
+                                        format!("generic struct has no field {}", name),
+                                    )
                                 }
                             }
                         }
@@ -2744,60 +3190,56 @@ impl<'a> BlockChecker<'a> {
                                     if i < substituted_fields.len() {
                                         Some((
                                             substituted_fields[i],
-                                            composite_field_offset_bytes(self.ctx, &substituted_fields, i),
+                                            composite_field_offset_bytes(
+                                                self.ctx,
+                                                &substituted_fields,
+                                                i,
+                                            ),
                                         ))
                                     } else {
-                                        if emit_diagnostics {
-                                            self.diagnostics.push(
-                                                Diagnostic::error(
-                                                    format!("generic struct index out of bounds: {}", i),
-                                                    span,
-                                                )
-                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                            );
-                                        }
-                                        None
+                                        invalid_field(
+                                            self,
+                                            emit_diagnostics,
+                                            span,
+                                            format!("generic struct index out of bounds: {}", i),
+                                        )
                                     }
                                 }
                                 FieldIdx::Name(name) => {
                                     if let Some(i) = field_names.iter().position(|n| *n == name) {
                                         Some((
                                             substituted_fields[i],
-                                            composite_field_offset_bytes(self.ctx, &substituted_fields, i),
+                                            composite_field_offset_bytes(
+                                                self.ctx,
+                                                &substituted_fields,
+                                                i,
+                                            ),
                                         ))
                                     } else {
-                                        if emit_diagnostics {
-                                            self.diagnostics.push(
-                                                Diagnostic::error(
-                                                    format!("generic struct has no field {}", name),
-                                                    span,
-                                                )
-                                                .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                            );
-                                        }
-                                        None
+                                        invalid_field(
+                                            self,
+                                            emit_diagnostics,
+                                            span,
+                                            format!("generic struct has no field {}", name),
+                                        )
                                     }
                                 }
                             }
                         } else {
-                            if emit_diagnostics {
-                                self.diagnostics.push(
-                                    Diagnostic::error("cannot access field on this type", span)
-                                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                );
-                            }
-                            None
+                            invalid_field(
+                                self,
+                                emit_diagnostics,
+                                span,
+                                "cannot access field on this type".to_string(),
+                            )
                         }
                     }
-                    _ => {
-                        if emit_diagnostics {
-                            self.diagnostics.push(
-                                Diagnostic::error("cannot access field on this type", span)
-                                    .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                            );
-                        }
-                        None
-                    }
+                    _ => invalid_field(
+                        self,
+                        emit_diagnostics,
+                        span,
+                        "cannot access field on this type".to_string(),
+                    ),
                 }
             }
             TypeKind::Named(type_name) => {
@@ -2809,60 +3251,42 @@ impl<'a> BlockChecker<'a> {
                             if i < fields.len() {
                                 Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                             } else {
-                                if emit_diagnostics {
-                                    self.diagnostics.push(
-                                        Diagnostic::error(
-                                            format!("struct index out of bounds: {}", i),
-                                            span,
-                                        )
-                                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                    );
-                                }
-                                None
+                                invalid_field(
+                                    self,
+                                    emit_diagnostics,
+                                    span,
+                                    format!("struct index out of bounds: {}", i),
+                                )
                             }
                         }
                         FieldIdx::Name(name) => {
                             if let Some(i) = field_names.iter().position(|n| *n == name) {
                                 Some((fields[i], composite_field_offset_bytes(self.ctx, &fields, i)))
                             } else {
-                                if emit_diagnostics {
-                                    self.diagnostics.push(
-                                        Diagnostic::error(
-                                            format!("struct has no field {}", name),
-                                            span,
-                                        )
-                                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                                    );
-                                }
-                                None
+                                invalid_field(
+                                    self,
+                                    emit_diagnostics,
+                                    span,
+                                    format!("struct has no field {}", name),
+                                )
                             }
                         }
                     }
                 } else {
-                    if emit_diagnostics {
-                        self.diagnostics.push(
-                            Diagnostic::error(
-                                "cannot access field on this type",
-                                span,
-                            )
-                            .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                        );
-                    }
-                    None
+                    invalid_field(
+                        self,
+                        emit_diagnostics,
+                        span,
+                        "cannot access field on this type".to_string(),
+                    )
                 }
             }
-            _ => {
-                if emit_diagnostics {
-                    self.diagnostics.push(
-                        Diagnostic::error(
-                            "cannot access field on non-composite type",
-                            span,
-                        )
-                        .with_id(DiagnosticId::TypeInvalidFieldAccess),
-                    );
-                }
-                None
-            }
+            _ => invalid_field(
+                self,
+                emit_diagnostics,
+                span,
+                "cannot access field on non-composite type".to_string(),
+            ),
         }
     }
 
@@ -3059,8 +3483,9 @@ impl<'a> BlockChecker<'a> {
                         kind: BindingKind::Func {
                             symbol: f.name.name.clone(),
                             effect,
-                            arity: params.len(),
+                            arity: f.params.len(),
                             builtin: None,
+                            field_accessor: detect_field_accessor_fn(f),
                             type_param_bounds: BTreeMap::new(),
                             captures,
                         },
@@ -3209,9 +3634,28 @@ impl<'a> BlockChecker<'a> {
                             if !p_node.bounds.is_empty() {
                                 let mut bounds = Vec::new();
                                 for b in &p_node.bounds {
-                                    if let Some(info) = self.traits.get(b) {
+                                    if let Some(info) = self.traits.get(&b.name.name) {
+                                        if info.type_params.len() != b.args.len() {
+                                            self.diagnostics.push(Diagnostic::error(
+                                                format!(
+                                                    "trait bound '{}' expects {} type arguments, found {}",
+                                                    b.name.name,
+                                                    info.type_params.len(),
+                                                    b.args.len()
+                                                ),
+                                                b.name.span,
+                                            ).with_id(DiagnosticId::TypeTraitTypeParamsUnsupported));
+                                            continue;
+                                        }
+                                        let arg_tys: Vec<TypeId> = b
+                                            .args
+                                            .iter()
+                                            .map(|arg| type_from_expr(self.ctx, &mut self.labels, arg))
+                                            .collect();
                                         bounds.push(TraitBoundRef {
-                                            name: b.clone(),
+                                            name: format_trait_ref_name(&b.name.name, &arg_tys, self.ctx),
+                                            trait_base_name: b.name.name.clone(),
+                                            trait_args: arg_tys,
                                             trait_self_ty: info.self_ty,
                                         });
                                     }
@@ -3247,6 +3691,7 @@ impl<'a> BlockChecker<'a> {
                         self.traits,
                         self.impls,
                         self.generated_functions,
+                        self.qualified_import_targets,
                     ) {
                         Ok(checked) => {
                             self.diagnostics.extend(checked.diagnostics);
@@ -3362,7 +3807,7 @@ impl<'a> BlockChecker<'a> {
 
         let mut dropped = false;
         let mut last_expr: Option<HirExpr> = None;
-        let mut pipe_pending: Option<StackEntry> = None;
+        let mut pipe_pending: Option<Vec<StackEntry>> = None;
         let mut seen_pipe = false;
         // (target_type, stack_depth_when_annotation_appeared)
         let mut pending_ascription: Option<(TypeId, usize)> =
@@ -3433,6 +3878,7 @@ impl<'a> BlockChecker<'a> {
                 }
                 PrefixItem::Symbol(sym) => match sym {
                     Symbol::Ident(id, type_args, forced_value) => {
+                        let qualified_bindings = self.lookup_qualified_bindings(id);
                         let in_let_self_init = stack.iter().rev().any(|e| {
                             matches!(e.assign, Some(AssignKind::Let))
                                 && matches!(&e.expr.kind, HirExprKind::Var(n) if n == &id.name)
@@ -3440,179 +3886,221 @@ impl<'a> BlockChecker<'a> {
                         if let Some(entry) = self.resolve_dotted_field_symbol(id, *forced_value) {
                             stack.push(entry);
                             last_expr = Some(stack.last().unwrap().expr.clone());
-                        } else if let Some(binding) = {
-                            let expected_function_from_outer = self
-                                .infer_expected_from_outer_consumer_next_arg(
-                                    &stack,
-                                    stack.len(),
-                                    0,
-                                )
-                                .map(|t| {
-                                    let resolved = self.ctx.resolve(t);
-                                    matches!(self.ctx.get(resolved), TypeKind::Function { .. })
-                                })
-                                .unwrap_or(false);
-                            let expected_function_from_ascription = pending_ascription
-                                .and_then(|(target_ty, base_len)| {
-                                    if stack.len() == base_len {
-                                        let resolved = self.ctx.resolve(target_ty);
-                                        match self.ctx.get(resolved) {
-                                            TypeKind::Function { .. } => Some(true),
-                                            _ => Some(false),
-                                        }
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .unwrap_or(false);
-                            let expected_function_from_outer =
-                                expected_function_from_outer || expected_function_from_ascription;
-                            let value_candidate =
-                                self.env
-                                    .lookup_value_for_read(&id.name, !in_let_self_init);
-                            let has_any_value = self.env.lookup_value_any(&id.name).is_some();
-                            let value_is_function = value_candidate
-                                .map(|b| {
-                                    let rty = self.ctx.resolve_id(b.ty);
-                                    matches!(self.ctx.get(rty), TypeKind::Function { .. })
-                                })
-                                .unwrap_or(false);
-                            // In head position of a prefix expression, prefer callable symbols
-                            // over non-function value symbols when both names coexist.
-                            // If the value itself is a function type, prefer the value.
-                            let preferred_callable = if !*forced_value
-                                && stack.is_empty()
-                                && expr.items.get(idx + 1).is_some()
-                                && (!has_any_value || !value_is_function)
-                            {
-                                self.env.lookup_callable_any(&id.name)
+                        } else {
+                            let selected_from_qualified = qualified_bindings.is_some();
+                            let selected_binding = if let Some((_, qualified)) = &qualified_bindings {
+                                if qualified.len() == 1 {
+                                    Some((qualified[0].clone(), false))
+                                } else {
+                                    None
+                                }
                             } else {
-                                None
+                                let expected_function_from_outer = self
+                                    .infer_expected_from_outer_consumer_next_arg(
+                                        &stack,
+                                        stack.len(),
+                                        0,
+                                    )
+                                    .map(|t| {
+                                        let resolved = self.ctx.resolve(t);
+                                        matches!(self.ctx.get(resolved), TypeKind::Function { .. })
+                                    })
+                                    .unwrap_or(false);
+                                let expected_function_from_ascription = pending_ascription
+                                    .and_then(|(target_ty, base_len)| {
+                                        if stack.len() == base_len {
+                                            let resolved = self.ctx.resolve(target_ty);
+                                            match self.ctx.get(resolved) {
+                                                TypeKind::Function { .. } => Some(true),
+                                                _ => Some(false),
+                                            }
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .unwrap_or(false);
+                                let expected_function_from_outer =
+                                    expected_function_from_outer
+                                        || expected_function_from_ascription;
+                                let value_candidate = self
+                                    .env
+                                    .lookup_value_for_read(&id.name, !in_let_self_init);
+                                let has_any_value = self.env.lookup_value_any(&id.name).is_some();
+                                let value_is_function = value_candidate
+                                    .map(|b| {
+                                        let rty = self.ctx.resolve_id(b.ty);
+                                        matches!(self.ctx.get(rty), TypeKind::Function { .. })
+                                    })
+                                    .unwrap_or(false);
+                                let preferred_callable = if !*forced_value
+                                    && stack.is_empty()
+                                    && expr.items.get(idx + 1).is_some()
+                                    && (!has_any_value || !value_is_function)
+                                {
+                                    self.env.lookup_callable_any(&id.name)
+                                } else {
+                                    None
+                                };
+                                let selected = preferred_callable
+                                    .or(value_candidate)
+                                    .or_else(|| {
+                                        if !has_any_value {
+                                            self.env.lookup_callable_any(&id.name)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .and_then(|binding| {
+                                        let should_delay_overload_resolution = !*forced_value
+                                            && !expected_function_from_outer
+                                            && matches!(binding.kind, BindingKind::Func { .. })
+                                            && type_args.is_empty()
+                                            && self.env.lookup_all_callables(&id.name).len() > 1
+                                            && expr.items.get(idx + 1).is_some();
+                                        if should_delay_overload_resolution {
+                                            None
+                                        } else {
+                                            Some(binding)
+                                        }
+                                    });
+                                selected
+                                    .cloned()
+                                    .map(|binding| (binding, expected_function_from_outer))
                             };
-                            let selected = preferred_callable
-                                .or(value_candidate)
-                                .or_else(|| {
-                                    if !has_any_value {
-                                        self.env.lookup_callable_any(&id.name)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .and_then(|binding| {
-                                    let should_delay_overload_resolution = !*forced_value
-                                        && matches!(binding.kind, BindingKind::Func { .. })
-                                        && type_args.is_empty()
-                                        && self.env.lookup_all_callables(&id.name).len() > 1
-                                        // 先頭位置で後続トークンがある場合は
-                                        // 呼び出しとして扱うため、値束縛へのフォールバックを避ける。
-                                        && !(stack.is_empty() && expr.items.get(idx + 1).is_some());
-                                    if should_delay_overload_resolution {
-                                        None
-                                    } else {
-                                        Some(binding)
-                                    }
-                                });
-                            selected.map(|binding| (binding, expected_function_from_outer))
-                        } {
-                            let (binding, expected_function_from_outer) = binding;
-                            if *forced_value {
-                                match &binding.kind {
-                                    BindingKind::Func { captures, .. } => {
-                                        if !captures.is_empty() {
+                            if let Some((binding, expected_function_from_outer)) = selected_binding {
+                                if *forced_value {
+                                    match &binding.kind {
+                                        BindingKind::Func { captures, .. } => {
+                                            if !captures.is_empty() {
+                                                self.diagnostics.push(Diagnostic::error(
+                                                    "capturing function cannot be used as a function value yet",
+                                                    id.span,
+                                                ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
+                                                return None;
+                                            }
+                                        }
+                                        _ => {
                                             self.diagnostics.push(Diagnostic::error(
-                                                "capturing function cannot be used as a function value yet",
+                                                "only callable symbols can be referenced with '@'",
                                                 id.span,
-                                            ).with_id(DiagnosticId::TypeCapturingFunctionValueUnsupported));
+                                            ).with_id(DiagnosticId::TypeAtRequiresCallable));
                                             return None;
                                         }
                                     }
+                                }
+                                let ty = binding.ty;
+                                let auto_call = match &binding.kind {
+                                    BindingKind::Func { .. } => {
+                                        !*forced_value && !expected_function_from_outer
+                                    }
+                                    _ => !*forced_value,
+                                };
+                                let hir_kind = match &binding.kind {
+                                    BindingKind::Func { symbol, .. }
+                                        if *forced_value
+                                            || expected_function_from_outer
+                                            || selected_from_qualified =>
+                                    {
+                                        HirExprKind::FnValue(symbol.clone())
+                                    }
+                                    _ => HirExprKind::Var(id.name.clone()),
+                                };
+                                let explicit_args = match binding.kind {
+                                    BindingKind::Func { .. } => {
+                                        let mut args = Vec::new();
+                                        for arg_expr in type_args {
+                                            args.push(type_from_expr(
+                                                self.ctx,
+                                                self.labels,
+                                                arg_expr,
+                                            ));
+                                        }
+                                        args
+                                    }
                                     _ => {
-                                        self.diagnostics.push(Diagnostic::error(
-                                            "only callable symbols can be referenced with '@'",
-                                            id.span,
-                                        ).with_id(DiagnosticId::TypeAtRequiresCallable));
-                                        return None;
+                                        if !type_args.is_empty() {
+                                            self.diagnostics.push(Diagnostic::error(
+                                                "type arguments are not allowed for variables",
+                                                id.span,
+                                            ).with_id(DiagnosticId::TypeVariableTypeArgsNotAllowed));
+                                        }
+                                        Vec::new()
                                     }
-                                }
-                            }
-                            let ty = binding.ty;
-                            let auto_call = match &binding.kind {
-                                BindingKind::Func { .. } => {
-                                    !*forced_value && !expected_function_from_outer
-                                }
-                                _ => !*forced_value,
-                            };
-                            let hir_kind = match &binding.kind {
-                                BindingKind::Func { symbol, .. }
-                                    if *forced_value || expected_function_from_outer =>
-                                {
-                                    HirExprKind::FnValue(symbol.clone())
-                                }
-                                _ => HirExprKind::Var(id.name.clone()),
-                            };
-                            let explicit_args = match binding.kind {
-                                BindingKind::Func { .. } => {
-                                    let mut args = Vec::new();
-                                    for arg_expr in type_args {
-                                        args.push(type_from_expr(self.ctx, self.labels, arg_expr));
-                                    }
-                                    args
-                                }
-                                _ => {
-                                    if !type_args.is_empty() {
-                                        self.diagnostics.push(Diagnostic::error(
-                                            "type arguments are not allowed for variables",
-                                            id.span,
-                                        ).with_id(DiagnosticId::TypeVariableTypeArgsNotAllowed));
-                                    }
-                                    Vec::new()
-                                }
-                            };
-                            stack.push(StackEntry {
-                                ty,
-                                expr: HirExpr {
+                                };
+                                stack.push(StackEntry {
                                     ty,
-                                    kind: hir_kind,
-                                    span: id.span,
-                                },
-                                type_args: explicit_args,
-                                assign: None,
-                                auto_call,
-                            });
-                            last_expr = Some(stack.last().unwrap().expr.clone());
-                        } else {
-                            let mut lookup_name = id.name.clone();
-                            let outer_expected_callable_arity =
-                                self.infer_expected_from_outer_consumer_next_arg(
-                                    &stack,
-                                    stack.len(),
-                                    0,
-                                )
+                                    expr: HirExpr {
+                                        ty,
+                                        kind: hir_kind,
+                                        span: id.span,
+                                    },
+                                    type_args: explicit_args,
+                                    assign: None,
+                                    auto_call,
+                                });
+                                last_expr = Some(stack.last().unwrap().expr.clone());
+                            } else {
+                                let mut lookup_name = id.name.clone();
+                                let outer_expected_callable_arity = self
+                                    .infer_expected_from_outer_consumer_next_arg(
+                                        &stack,
+                                        stack.len(),
+                                        0,
+                                    )
                                     .and_then(|expected_ty| {
                                         let resolved_target = self.ctx.resolve(expected_ty);
                                         match self.ctx.get(resolved_target) {
                                             TypeKind::Function { params, .. } => {
-                                                Some(params.len())
+                                                Some(
+                                                    if params.len() == 1
+                                                        && matches!(
+                                                            self.ctx.get(self.ctx.resolve_id(params[0])),
+                                                            TypeKind::Unit
+                                                        )
+                                                    {
+                                                        0
+                                                    } else {
+                                                        params.len()
+                                                    },
+                                                )
                                             }
                                             _ => None,
                                         }
                                     });
-                            let mut bindings = self.env.lookup_all_any_defined(&lookup_name);
-                            if bindings.is_empty() {
-                                if let Some((ns, member)) = parse_variant_name(&id.name) {
-                                    if !self.enums.contains_key(ns) && !self.traits.contains_key(ns)
-                                    {
-                                        let alt = self.env.lookup_all_any_defined(member);
-                                        if !alt.is_empty() {
-                                            lookup_name = member.to_string();
-                                            bindings = alt;
+                                let mut bindings = if let Some((member, qualified)) = &qualified_bindings
+                                {
+                                    lookup_name = member.clone();
+                                    qualified.clone()
+                                } else {
+                                    self.env
+                                        .lookup_all_any_defined(&lookup_name)
+                                        .into_iter()
+                                        .cloned()
+                                        .collect()
+                                };
+                                if bindings.is_empty() && qualified_bindings.is_none() {
+                                    if let Some((ns, member)) = parse_variant_name(&id.name) {
+                                        if !self.enums.contains_key(ns)
+                                            && !self.traits.contains_key(ns)
+                                        {
+                                            let alt = self
+                                                .env
+                                                .lookup_all_any_defined(member)
+                                                .into_iter()
+                                                .cloned()
+                                                .collect::<Vec<_>>();
+                                            if !alt.is_empty() {
+                                                lookup_name = member.to_string();
+                                                bindings = alt;
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            if !bindings.is_empty() {
-                                let callable_overload_count =
-                                    self.env.lookup_all_callables(&lookup_name).len();
+                                if !bindings.is_empty() {
+                                let callable_overload_count = bindings
+                                    .iter()
+                                    .filter(|b| matches!(b.kind, BindingKind::Func { .. }))
+                                    .count();
                                 let overloaded_callable_only = callable_overload_count > 1
                                     && bindings
                                         .iter()
@@ -3642,7 +4130,7 @@ impl<'a> BlockChecker<'a> {
                                                 .iter()
                                                 .copied()
                                                 .filter(|a| *a <= remaining_items)
-                                                .min()
+                                                .max()
                                         })
                                         .or_else(|| arities.first().copied())
                                         .unwrap_or(0);
@@ -3669,7 +4157,11 @@ impl<'a> BlockChecker<'a> {
                                         auto_call: true,
                                     });
                                     last_expr = Some(stack.last().unwrap().expr.clone());
-                                } else if let Some(binding) = self.env.lookup_value(&lookup_name) {
+                                } else if let Some(binding) = bindings
+                                    .iter()
+                                    .cloned()
+                                    .find(|b| matches!(b.kind, BindingKind::Var))
+                                {
                                     if *forced_value {
                                         self.diagnostics.push(Diagnostic::error(
                                             "only callable symbols can be referenced with '@'",
@@ -3695,6 +4187,16 @@ impl<'a> BlockChecker<'a> {
                                         assign: None,
                                         auto_call: !*forced_value,
                                     });
+                                    if crate::log::is_verbose()
+                                        && matches!(lookup_name.as_str(), "A" | "use_a" | "DefaultHash32" | "new" | "must_hm")
+                                    {
+                                        std::eprintln!(
+                                            "push value {} ty={} auto_call={}",
+                                            lookup_name,
+                                            self.ctx.type_to_string(ty),
+                                            !*forced_value
+                                        );
+                                    }
                                     last_expr = Some(stack.last().unwrap().expr.clone());
                                 } else {
                                     let expected_callable_arity = pending_ascription
@@ -3703,7 +4205,18 @@ impl<'a> BlockChecker<'a> {
                                                 let resolved_target = self.ctx.resolve(target_ty);
                                                 match self.ctx.get(resolved_target) {
                                                     TypeKind::Function { params, .. } => {
-                                                        Some(params.len())
+                                                        Some(
+                                                            if params.len() == 1
+                                                                && matches!(
+                                                                    self.ctx.get(self.ctx.resolve_id(params[0])),
+                                                                    TypeKind::Unit
+                                                                )
+                                                            {
+                                                                0
+                                                            } else {
+                                                                params.len()
+                                                            },
+                                                        )
                                                     }
                                                     _ => None,
                                                 }
@@ -3718,7 +4231,6 @@ impl<'a> BlockChecker<'a> {
                                         if allow_fnvalue_selection {
                                         let mut arity_candidates: Vec<&Binding> = bindings
                                             .iter()
-                                            .copied()
                                             .filter(|b| {
                                                 matches!(
                                                     b.kind,
@@ -3849,69 +4361,86 @@ impl<'a> BlockChecker<'a> {
                                         assign: None,
                             auto_call: true,
                                     });
+                                    if crate::log::is_verbose()
+                                        && matches!(lookup_name.as_str(), "A" | "use_a" | "DefaultHash32" | "new" | "must_hm")
+                                    {
+                                        std::eprintln!(
+                                            "push callable {} ty={} auto_call=true",
+                                            lookup_name,
+                                            self.ctx.type_to_string(ty)
+                                        );
+                                    }
                                     last_expr = Some(stack.last().unwrap().expr.clone());
                                 }
-                            } else if let Some((trait_name, method_name)) = parse_variant_name(&id.name)
-                            {
-                                if let Some(trait_info) = self.traits.get(trait_name) {
-                                    if !type_args.is_empty() {
-                                        self.diagnostics.push(Diagnostic::error(
-                                            "type arguments are not supported for trait methods yet",
-                                            id.span,
-                                        ).with_id(DiagnosticId::TypeTraitMethodTypeArgsNotSupported));
-                                        return None;
-                                    }
-                                    if let Some(sig) = trait_info.methods.get(method_name) {
-                                        let method_self = self
-                                            .infer_unique_type_param_for_trait(trait_info.self_ty)
-                                            .unwrap_or_else(|| {
-                                                self.ctx.fresh_var(Some(String::from("Self")))
-                                            });
-                                        let mut mapping = BTreeMap::new();
-                                        mapping.insert(
-                                            self.ctx.resolve_id(trait_info.self_ty),
-                                            method_self,
-                                        );
-                                        let inst_ty = self.ctx.substitute(*sig, &mapping);
-                                        stack.push(StackEntry {
-                                            ty: inst_ty,
-                                            expr: HirExpr {
+                                } else if let Some((trait_name, method_name)) =
+                                    parse_variant_name(&id.name)
+                                {
+                                    if let Some(trait_info) = self.traits.get(trait_name) {
+                                        if !type_args.is_empty() {
+                                            self.diagnostics.push(Diagnostic::error(
+                                                "type arguments are not supported for trait methods yet",
+                                                id.span,
+                                            ).with_id(DiagnosticId::TypeTraitMethodTypeArgsNotSupported));
+                                            return None;
+                                        }
+                                        if let Some(sig) = trait_info.methods.get(method_name) {
+                                            let applied_trait_name = self
+                                                .infer_trait_application_name(
+                                                    trait_name,
+                                                    trait_info,
+                                                    *sig,
+                                                    &[],
+                                                    None,
+                                                );
+                                            let method_self = self
+                                                .infer_unique_type_param_for_trait(&applied_trait_name)
+                                                .unwrap_or_else(|| {
+                                                    self.ctx.fresh_var(Some(String::from("Self")))
+                                                });
+                                            let mut mapping = BTreeMap::new();
+                                            mapping.insert(
+                                                self.ctx.resolve_id(trait_info.self_ty),
+                                                method_self,
+                                            );
+                                            let inst_ty = self.ctx.substitute(*sig, &mapping);
+                                            stack.push(StackEntry {
                                                 ty: inst_ty,
-                                                kind: if *forced_value {
-                                                    HirExprKind::FnValue(id.name.clone())
-                                                } else {
-                                                    HirExprKind::Var(id.name.clone())
+                                                expr: HirExpr {
+                                                    ty: inst_ty,
+                                                    kind: if *forced_value {
+                                                        HirExprKind::FnValue(id.name.clone())
+                                                    } else {
+                                                        HirExprKind::Var(id.name.clone())
+                                                    },
+                                                    span: id.span,
                                                 },
-                                                span: id.span,
-                                            },
-                                            type_args: vec![method_self],
-                                            assign: None,
-                                            auto_call: !*forced_value,
-                                        });
-                                        last_expr = Some(stack.last().unwrap().expr.clone());
+                                                type_args: vec![method_self],
+                                                assign: None,
+                                                auto_call: !*forced_value,
+                                            });
+                                            last_expr = Some(stack.last().unwrap().expr.clone());
+                                        } else {
+                                            self.diagnostics.push(Diagnostic::error(
+                                                format!(
+                                                    "unknown method '{}' for trait '{}'",
+                                                    method_name, trait_name
+                                                ),
+                                                id.span,
+                                            ).with_id(DiagnosticId::TypeTraitMethodNotFound));
+                                            return None;
+                                        }
                                     } else {
-                                        self.diagnostics.push(Diagnostic::error(
-                                            format!(
-                                                "unknown method '{}' for trait '{}'",
-                                                method_name, trait_name
-                                            ),
-                                            id.span,
-                                        ).with_id(DiagnosticId::TypeTraitMethodNotFound));
-                                        return None;
-                                    }
-                                } else {
-                                    self.diagnostics
-                                        .push(
+                                        self.diagnostics.push(
                                             Diagnostic::error("undefined identifier", id.span)
                                                 .with_id(DiagnosticId::TypeUndefinedIdentifier),
                                         );
-                                }
-                            } else {
-                                self.diagnostics
-                                    .push(
+                                    }
+                                } else {
+                                    self.diagnostics.push(
                                         Diagnostic::error("undefined identifier", id.span)
                                             .with_id(DiagnosticId::TypeUndefinedIdentifier),
                                     );
+                                }
                             }
                         }
                     }
@@ -4564,24 +5093,31 @@ impl<'a> BlockChecker<'a> {
                             );
                         continue;
                     }
-                    pipe_pending = stack.pop();
-                    last_expr = pipe_pending.as_ref().map(|se| se.expr.clone());
+                    let pending = stack.drain(base_depth..).collect::<Vec<_>>();
+                    last_expr = pending.last().map(|se| se.expr.clone());
+                    pipe_pending = Some(pending);
                     seen_pipe = true;
                 }
             }
 
             if !matches!(item, PrefixItem::Pipe(_) | PrefixItem::TypeAnnotation(_, _)) {
-                if let Some(val) = pipe_pending.take() {
+                if let Some(pending) = pipe_pending.take() {
                     // The last pushed element should be a callable (function type)
                     if let Some(top) = stack.last() {
                         if top.auto_call
                             && matches!(self.ctx.get(top.ty), TypeKind::Function { .. })
                         {
-                            let lowered_val = self.reduce_pipe_pending_value_with_target(
-                                val,
+                            let Some(lowered_val) = self.reduce_pipe_pending_segment_with_target(
+                                pending,
                                 top,
                                 pending_ascription.map(|(target, _)| target),
-                            );
+                            ) else {
+                                self.diagnostics.push(Diagnostic::error(
+                                    "pipe left-hand side did not reduce to a single value",
+                                    expr.span,
+                                ).with_id(DiagnosticId::TypePipeError));
+                                continue;
+                            };
                             // pipe では「関数を積んだ直後に引数を注入」するため、
                             // 通常の末尾関数追跡だけでは open_calls に載らない。
                             let func_idx = stack.len() - 1;
@@ -4595,7 +5131,7 @@ impl<'a> BlockChecker<'a> {
                                 "pipe target must be a callable expression",
                                 expr.span,
                             ).with_id(DiagnosticId::TypePipeError));
-                            stack.push(val);
+                            stack.extend(pending);
                         }
                     } else {
                         self.diagnostics
@@ -4603,7 +5139,7 @@ impl<'a> BlockChecker<'a> {
                                 Diagnostic::error("pipe target missing", expr.span)
                                     .with_id(DiagnosticId::TypePipeError),
                             );
-                        stack.push(val);
+                        stack.extend(pending);
                     }
                 }
             }
@@ -4627,20 +5163,33 @@ impl<'a> BlockChecker<'a> {
                 try_apply_pending_ascription(self, stack, &mut pending_ascription);
             }
 
-            let delay_overloaded_nullary_before_pipe = next_is_pipe
-                && pipe_pending.is_none()
-                && stack.len() == base_depth + 1
-                && stack.last().map(|entry| {
-                    if !self.is_unresolved_overloaded_callable_entry(entry) {
-                        return false;
-                    }
+            let has_more_items = idx + 1 < expr.items.len();
+            let defer_unresolved_overload = pipe_pending.is_none()
+                && has_more_items
+                && (0..stack.len()).rev().any(|i| {
+                    let entry = &stack[i];
                     let rty = self.ctx.resolve_id(entry.ty);
-                    let TypeKind::Function { params, .. } = self.ctx.get(rty) else {
-                        return false;
-                    };
-                    self.user_visible_arity(&entry.expr, params.len()) == 0
-                }).unwrap_or(false);
-            if !delay_overloaded_nullary_before_pipe {
+                    entry.auto_call
+                        && matches!(self.ctx.get(rty), TypeKind::Function { .. })
+                        && self.unresolved_overloaded_entry_has_larger_arity(stack, i)
+                });
+            let delay_overloaded_nullary = pipe_pending.is_none()
+                && stack.len() == base_depth + 1
+                && stack
+                    .last()
+                    .map(|entry| {
+                        if !self.is_unresolved_overloaded_callable_entry(entry) {
+                            return false;
+                        }
+                        let rty = self.ctx.resolve_id(entry.ty);
+                        let TypeKind::Function { params, .. } = self.ctx.get(rty) else {
+                            return false;
+                        };
+                        self.user_visible_arity(&entry.expr, &params) == 0
+                            && (next_is_pipe || has_more_items)
+                    })
+                    .unwrap_or(false);
+            if !delay_overloaded_nullary && !defer_unresolved_overload {
                 let mut pending_base = pending_ascription.map(|(_, base)| base);
                 let mut pipe_guard = false;
                 let reduction_expected = if next_is_pipe && seen_pipe {
@@ -4713,6 +5262,14 @@ impl<'a> BlockChecker<'a> {
             }
         } else if stack.len() > base_depth + 1 {
             let extras = stack.len() - (base_depth + 1);
+            if crate::log::is_verbose() {
+                let tys = stack
+                    .iter()
+                    .map(|e| self.ctx.type_to_string(e.ty))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                std::eprintln!("prefix final extras before trim [{}]", tys);
+            }
             for _ in 0..extras {
                 stack.pop();
             }
@@ -4845,31 +5402,40 @@ impl<'a> BlockChecker<'a> {
             }
             dump!("reduce_calls: stack=[{}]", stack.iter().map(|e| match &e.expr.kind { HirExprKind::Var(n) => n.clone(), _ => "<expr>".to_string() }).collect::<Vec<_>>().join(","));
 
-            let mut func_pos = match stack.iter().rposition(|e| {
-                let rty = self.ctx.resolve(e.ty);
-                e.auto_call && matches!(self.ctx.get(rty), TypeKind::Function { .. })
-            }) {
-                Some(p) => p,
-                None => break,
+            let mut func_pos = None;
+            for i in (0..stack.len()).rev() {
+                let rty = self.ctx.resolve(stack[i].ty);
+                if !(stack[i].auto_call && matches!(self.ctx.get(rty), TypeKind::Function { .. })) {
+                    continue;
+                }
+                if self.should_defer_overloaded_nullary_entry(stack, i) {
+                    continue;
+                }
+                func_pos = Some(i);
+                break;
+            }
+            let Some(mut func_pos) = func_pos else {
+                break;
             };
             if let Some(outer) = self.find_outer_function_consumer(stack, func_pos, 0) {
                 func_pos = outer;
             }
 
             let available_args = stack.len().saturating_sub(func_pos + 1);
-            let ty_for_infer = match &stack[func_pos].expr.kind {
+            let chosen_callable = match &stack[func_pos].expr.kind {
                 HirExprKind::Var(name)
                     if stack[func_pos].type_args.is_empty()
                         && self.env.lookup_all_callables(name).len() > 1 =>
                 {
                     self.choose_callable_type_by_available_arity(name, available_args)
-                        .unwrap_or(stack[func_pos].ty)
                 }
                 HirExprKind::Var(name) if self.env.lookup_value(name).is_none() => self
-                    .choose_callable_type_by_available_arity(name, available_args)
-                    .unwrap_or(stack[func_pos].ty),
-                _ => stack[func_pos].ty,
+                    .choose_callable_type_by_available_arity(name, available_args),
+                _ => None,
             };
+            let ty_for_infer = chosen_callable
+                .map(|(_, ty)| ty)
+                .unwrap_or(stack[func_pos].ty);
             let (inst_ty, fresh_args) = if !stack[func_pos].type_args.is_empty() {
                 (ty_for_infer, stack[func_pos].type_args.clone())
             } else {
@@ -4888,7 +5454,9 @@ impl<'a> BlockChecker<'a> {
                     continue;
                 }
             };
-            let needed_args = self.user_visible_arity(&stack[func_pos].expr, params.len());
+            let needed_args = chosen_callable
+                .map(|(arity, _)| arity)
+                .unwrap_or_else(|| self.user_visible_arity(&stack[func_pos].expr, &params));
             let consume_unit_sugar = needed_args == 0
                 && stack
                     .get(func_pos + 1)
@@ -5027,10 +5595,14 @@ impl<'a> BlockChecker<'a> {
             let mut func_pos: Option<usize> = None;
             for i in (min_func_pos..stack.len()).rev() {
                 let rty = self.ctx.resolve(stack[i].ty);
-                if stack[i].auto_call && matches!(self.ctx.get(rty), TypeKind::Function { .. }) {
-                    func_pos = Some(i);
-                    break;
+                if !(stack[i].auto_call && matches!(self.ctx.get(rty), TypeKind::Function { .. })) {
+                    continue;
                 }
+                if self.should_defer_overloaded_nullary_entry(stack, i) {
+                    continue;
+                }
+                func_pos = Some(i);
+                break;
             }
             let Some(mut func_pos) = func_pos else {
                 break;
@@ -5040,19 +5612,20 @@ impl<'a> BlockChecker<'a> {
             }
 
             let available_args = stack.len().saturating_sub(func_pos + 1);
-            let ty_for_infer = match &stack[func_pos].expr.kind {
+            let chosen_callable = match &stack[func_pos].expr.kind {
                 HirExprKind::Var(name)
                     if stack[func_pos].type_args.is_empty()
                         && self.env.lookup_all_callables(name).len() > 1 =>
                 {
                     self.choose_callable_type_by_available_arity(name, available_args)
-                        .unwrap_or(stack[func_pos].ty)
                 }
                 HirExprKind::Var(name) if self.env.lookup_value(name).is_none() => self
-                    .choose_callable_type_by_available_arity(name, available_args)
-                    .unwrap_or(stack[func_pos].ty),
-                _ => stack[func_pos].ty,
+                    .choose_callable_type_by_available_arity(name, available_args),
+                _ => None,
             };
+            let ty_for_infer = chosen_callable
+                .map(|(_, ty)| ty)
+                .unwrap_or(stack[func_pos].ty);
             let (inst_ty, fresh_args) = if !stack[func_pos].type_args.is_empty() {
                 (ty_for_infer, stack[func_pos].type_args.clone())
             } else {
@@ -5071,7 +5644,9 @@ impl<'a> BlockChecker<'a> {
                     continue;
                 }
             };
-            let needed_args = self.user_visible_arity(&stack[func_pos].expr, params.len());
+            let needed_args = chosen_callable
+                .map(|(arity, _)| arity)
+                .unwrap_or_else(|| self.user_visible_arity(&stack[func_pos].expr, &params));
             let consume_unit_sugar = needed_args == 0
                 && stack
                     .get(func_pos + 1)
@@ -5101,8 +5676,20 @@ impl<'a> BlockChecker<'a> {
             func_entry.ty = inst_ty;
             func_entry.expr.ty = inst_ty;
             let explicit_type_args = func_entry.type_args.clone();
+            let debug_name = match &func_entry.expr.kind {
+                HirExprKind::Var(name) => Some(name.clone()),
+                _ => None,
+            };
                 if crate::log::is_verbose() {
                     std::eprintln!("    Reducing (guarded): {} at pos {} with {} args, assign={:?}", self.ctx.type_to_string(inst_ty), func_pos, params.len(), func_entry.assign);
+                    if matches!(debug_name.as_deref(), Some("get" | "is_none" | "must_hm" | "make_hm" | "new" | "DefaultHash32" | "A" | "use_a")) {
+                        let before = stack
+                            .iter()
+                            .map(|e| self.ctx.type_to_string(e.ty))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        std::eprintln!("      stack before guarded apply [{}]", before);
+                    }
                 }
             let applied = self.apply_function(
                 func_entry,
@@ -5115,6 +5702,14 @@ impl<'a> BlockChecker<'a> {
             );
 
             if let Some(val) = applied {
+                if crate::log::is_verbose() {
+                    if matches!(debug_name.as_deref(), Some("get" | "is_none" | "must_hm" | "make_hm" | "new" | "DefaultHash32" | "A" | "use_a")) {
+                        std::eprintln!(
+                            "      guarded result {}",
+                            self.ctx.type_to_string(val.ty)
+                        );
+                    }
+                }
                 stack.insert(func_pos, val);
             } else {
                 break;
@@ -5651,115 +6246,25 @@ impl<'a> BlockChecker<'a> {
             _ => {}
         }
         
-        // Specialized inlining for core/field get/put.
-        // If user-defined overloads exist, fall back to normal overload resolution.
-        if let HirExprKind::Var(name) = &func.expr.kind {
-            if (name == "get" || name == "put") && args.len() >= 2 {
-                let obj = args[0].expr.clone();
-                let idx = &args[1].expr;
-                let field_idx = match &idx.kind {
-                    HirExprKind::LiteralI32(v) => Some(FieldIdx::Index(*v as usize)),
-                    HirExprKind::LiteralStr(sid) => {
-                        let name = self.string_table.get(*sid).unwrap().clone();
-                        Some(FieldIdx::Name(name))
-                    }
-                    _ => None,
-                };
-                if let Some(f_idx) = field_idx {
-                    if let Some((f_ty, offset)) =
-                        self.resolve_field_access_with_mode(obj.ty, f_idx.clone(), func.expr.span, false)
-                    {
-                        if name == "get" && args.len() == 2 {
-                            let addr_expr = if offset == 0 {
-                                obj
-                            } else {
-                                HirExpr {
-                                    ty: self.ctx.i32(),
-                                    kind: HirExprKind::Intrinsic {
-                                        name: "add".to_string(),
-                                        type_args: vec![self.ctx.i32()],
-                                        args: vec![
-                                            obj,
-                                            HirExpr {
-                                                ty: self.ctx.i32(),
-                                                kind: HirExprKind::LiteralI32(offset as i32),
-                                                span: idx.span,
-                                            }
-                                        ],
-                                    },
-                                    span: func.expr.span,
-                                }
-                            };
-                            return Some(StackEntry {
-                                ty: f_ty,
-                                expr: HirExpr {
-                                    ty: f_ty,
-                                    kind: HirExprKind::Intrinsic {
-                                        name: "load".to_string(),
-                                        type_args: vec![f_ty],
-                                        args: vec![addr_expr],
-                                    },
-                                    span: func.expr.span,
-                                },
-                                type_args: Vec::new(),
-                                assign: None,
-                            auto_call: true,
-                            });
-                        } else if name == "put" && args.len() == 3 {
-                            let val = args[2].expr.clone();
-                            let _ = self.ctx.unify(val.ty, f_ty);
-                            let addr_expr = if offset == 0 {
-                                obj
-                            } else {
-                                HirExpr {
-                                    ty: self.ctx.i32(),
-                                    kind: HirExprKind::Intrinsic {
-                                        name: "add".to_string(),
-                                        type_args: vec![self.ctx.i32()],
-                                        args: vec![
-                                            obj,
-                                            HirExpr {
-                                                ty: self.ctx.i32(),
-                                                kind: HirExprKind::LiteralI32(offset as i32),
-                                                span: idx.span,
-                                            }
-                                        ],
-                                    },
-                                    span: func.expr.span,
-                                }
-                            };
-                            return Some(StackEntry {
-                                ty: self.ctx.unit(),
-                                expr: HirExpr {
-                                    ty: self.ctx.unit(),
-                                    kind: HirExprKind::Intrinsic {
-                                        name: "store".to_string(),
-                                        type_args: vec![f_ty],
-                                        args: vec![addr_expr, val],
-                                    },
-                                    span: func.expr.span,
-                                },
-                                type_args: Vec::new(),
-                                assign: None,
-                            auto_call: true,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
         // General call or let/set
-        if let HirExprKind::Var(name) = &func.expr.kind {
-            let bindings = self.env.lookup_all_callables(name);
-            let has_function_value_binding = self
-                .env
-                .lookup_value(name)
-                .map(|b| {
-                    let rty = self.ctx.resolve_id(b.ty);
-                    matches!(self.ctx.get(rty), TypeKind::Function { .. })
-                })
-                .unwrap_or(false);
+        if let HirExprKind::Var(name) | HirExprKind::FnValue(name) = &func.expr.kind {
+            let symbol_resolved = matches!(&func.expr.kind, HirExprKind::FnValue(_));
+            let bindings = if symbol_resolved {
+                self.env.lookup_all_callables_by_symbol(name)
+            } else {
+                self.env.lookup_all_callables(name)
+            };
+            let has_function_value_binding = if symbol_resolved {
+                false
+            } else {
+                self.env
+                    .lookup_value(name)
+                    .map(|b| {
+                        let rty = self.ctx.resolve_id(b.ty);
+                        matches!(self.ctx.get(rty), TypeKind::Function { .. })
+                    })
+                    .unwrap_or(false)
+            };
             if !bindings.is_empty() && !has_function_value_binding {
                 {
                     let explicit_type_args = type_args.clone();
@@ -5773,7 +6278,16 @@ impl<'a> BlockChecker<'a> {
                             );
                         }
                     }
-                    let mut candidates: Vec<&Binding> = Vec::new();
+                    #[derive(Clone, Copy)]
+                    struct OverloadCandidate<'b> {
+                        binding: &'b Binding,
+                        type_param_count: usize,
+                        instantiated_specificity: usize,
+                        declared_specificity: usize,
+                        field_accessor: Option<FieldAccessorKind>,
+                    }
+
+                    let mut candidates: Vec<OverloadCandidate<'_>> = Vec::new();
                     let mut mismatch_count = false;
                     for binding in &bindings {
                         if crate::log::is_verbose() {
@@ -5882,7 +6396,7 @@ impl<'a> BlockChecker<'a> {
                                         name,
                                         function_signature_string(self.ctx, binding.ty),
                                         self.ctx.type_to_string(arg.ty),
-                                        self.ctx.type_to_string(*pty)
+                                        tmp_ctx.type_to_string(*pty)
                                     );
                                 }
                                 ok = false;
@@ -5893,16 +6407,16 @@ impl<'a> BlockChecker<'a> {
                             if let Some(expected) = expected_ret {
                                 if tmp_ctx.unify(c_result, expected).is_err() {
                                     if crate::log::is_verbose() {
-                                        std::eprintln!(
-                                            "overload debug: skip '{}' candidate {} reason=expected_ret result={} expected={}",
-                                            name,
-                                            function_signature_string(self.ctx, binding.ty),
-                                            self.ctx.type_to_string(c_result),
-                                            self.ctx.type_to_string(expected)
-                                        );
-                                    }
-                                    ok = false;
+                                    std::eprintln!(
+                                        "overload debug: skip '{}' candidate {} reason=expected_ret result={} expected={}",
+                                        name,
+                                        function_signature_string(self.ctx, binding.ty),
+                                        tmp_ctx.type_to_string(c_result),
+                                        self.ctx.type_to_string(expected)
+                                    );
                                 }
+                                ok = false;
+                            }
                             }
                         }
                         if ok {
@@ -5913,7 +6427,24 @@ impl<'a> BlockChecker<'a> {
                                     function_signature_string(self.ctx, binding.ty)
                                 );
                             }
-                            candidates.push(binding);
+                            let type_param_count = match self.ctx.get(self.ctx.resolve_id(binding.ty)) {
+                                TypeKind::Function { type_params, .. } => type_params.len(),
+                                _ => 0,
+                            };
+                            let instantiated_specificity =
+                                function_user_param_specificity(&tmp_ctx, inst_ty, args.len());
+                            let declared_specificity =
+                                function_user_param_specificity(self.ctx, binding.ty, args.len());
+                            candidates.push(OverloadCandidate {
+                                binding,
+                                type_param_count,
+                                instantiated_specificity,
+                                declared_specificity,
+                                field_accessor: match &binding.kind {
+                                    BindingKind::Func { field_accessor, .. } => *field_accessor,
+                                    _ => None,
+                                },
+                            });
                         }
                     }
 
@@ -5955,9 +6486,9 @@ impl<'a> BlockChecker<'a> {
                     }
                     if candidates.len() > 1 {
                         let mut sig_seen: BTreeSet<String> = BTreeSet::new();
-                        let mut dedup: Vec<&Binding> = Vec::new();
+                        let mut dedup: Vec<OverloadCandidate<'_>> = Vec::new();
                         for c in candidates {
-                            let sig = function_signature_string(self.ctx, c.ty);
+                            let sig = function_signature_string(self.ctx, c.binding.ty);
                             if sig_seen.insert(sig) {
                                 dedup.push(c);
                             }
@@ -5965,10 +6496,20 @@ impl<'a> BlockChecker<'a> {
                         candidates = dedup;
                     }
                     if candidates.len() > 1 {
-                        let concrete: Vec<&Binding> = candidates
+                        let ordinary: Vec<OverloadCandidate<'_>> = candidates
                             .iter()
-                            .copied()
-                            .filter(|b| !type_contains_unbound_var(self.ctx, b.ty))
+                            .filter(|b| b.field_accessor.is_none())
+                            .cloned()
+                            .collect();
+                        if !ordinary.is_empty() {
+                            candidates = ordinary;
+                        }
+                    }
+                    if candidates.len() > 1 {
+                        let concrete: Vec<OverloadCandidate<'_>> = candidates
+                            .iter()
+                            .filter(|b| !type_contains_unbound_var(self.ctx, b.binding.ty))
+                            .cloned()
                             .collect();
                         if !concrete.is_empty() {
                             candidates = concrete;
@@ -5977,12 +6518,46 @@ impl<'a> BlockChecker<'a> {
                     if candidates.len() > 1 {
                         let min_type_params = candidates
                             .iter()
-                            .map(|b| function_type_param_count(self.ctx, b.ty))
+                            .map(|b| b.type_param_count)
                             .min()
                             .unwrap_or(0);
-                        let narrowed: Vec<&Binding> = candidates
+                        let narrowed: Vec<OverloadCandidate<'_>> = candidates
                             .into_iter()
-                            .filter(|b| function_type_param_count(self.ctx, b.ty) == min_type_params)
+                            .filter(|b| b.type_param_count == min_type_params)
+                            .collect();
+                        candidates = narrowed;
+                    }
+                    if candidates.len() > 1 {
+                        if crate::log::is_verbose() {
+                            for candidate in &candidates {
+                                std::eprintln!(
+                                    "overload debug: specificity '{}' candidate {} score={}",
+                                    name,
+                                    function_signature_string(self.ctx, candidate.binding.ty),
+                                    candidate.instantiated_specificity
+                                );
+                            }
+                        }
+                        let max_specificity = candidates
+                            .iter()
+                            .map(|b| b.instantiated_specificity)
+                            .max()
+                            .unwrap_or(0);
+                        let narrowed: Vec<OverloadCandidate<'_>> = candidates
+                            .into_iter()
+                            .filter(|b| b.instantiated_specificity == max_specificity)
+                            .collect();
+                        candidates = narrowed;
+                    }
+                    if candidates.len() > 1 {
+                        let max_declared_specificity = candidates
+                            .iter()
+                            .map(|b| b.declared_specificity)
+                            .max()
+                            .unwrap_or(0);
+                        let narrowed: Vec<OverloadCandidate<'_>> = candidates
+                            .into_iter()
+                            .filter(|b| b.declared_specificity == max_declared_specificity)
                             .collect();
                         candidates = narrowed;
                     }
@@ -5994,7 +6569,17 @@ impl<'a> BlockChecker<'a> {
                         return None;
                     }
 
-                    let binding = candidates[0];
+                    let binding = candidates[0].binding;
+                    let selected_field_accessor = match &binding.kind {
+                        BindingKind::Func { field_accessor, .. } => *field_accessor,
+                        _ => None,
+                    };
+                    let (selected_symbol, selected_builtin) = match &binding.kind {
+                        BindingKind::Func { symbol, builtin, .. } => {
+                            (symbol.clone(), *builtin)
+                        }
+                        _ => (name.clone(), None),
+                    };
                     let (inst_ty, mut resolved_args, type_arg_mapping) =
                         if !explicit_type_args.is_empty() {
                         let func_data = if let TypeKind::Function {
@@ -6113,8 +6698,49 @@ impl<'a> BlockChecker<'a> {
                                 };
                                 let resolved_arg = self.ctx.resolve_id(*raw_arg);
                                 for b in bounds {
-                                    if self.trait_bound_satisfied_by_ref(b, *raw_arg)
-                                        || self.trait_bound_satisfied_by_ref(b, resolved_arg)
+                                    let substituted_trait_args = b
+                                        .trait_args
+                                        .iter()
+                                        .map(|arg| self.ctx.substitute(*arg, &type_arg_mapping))
+                                        .collect::<Vec<_>>();
+                                    let substituted_bound = TraitBoundRef {
+                                        name: format_trait_ref_name(
+                                            &b.trait_base_name,
+                                            &substituted_trait_args,
+                                            self.ctx,
+                                        ),
+                                        trait_base_name: b.trait_base_name.clone(),
+                                        trait_args: substituted_trait_args,
+                                        trait_self_ty: self
+                                            .ctx
+                                            .substitute(b.trait_self_ty, &type_arg_mapping),
+                                    };
+                                    if crate::log::is_verbose() {
+                                        std::eprintln!(
+                                            "trait-bound debug: callee='{}' tp={} raw_arg={} resolved_arg={} bound={} current_bounds={}",
+                                            name,
+                                            self.ctx.type_to_string(*tp),
+                                            self.ctx.type_to_string(*raw_arg),
+                                            self.ctx.type_to_string(resolved_arg),
+                                            substituted_bound.name,
+                                            self.type_param_bounds
+                                                .iter()
+                                                .map(|(bound_tp, bs)| {
+                                                    format!(
+                                                        "{}:[{}]",
+                                                        self.ctx.type_to_string(*bound_tp),
+                                                        bs.iter()
+                                                            .map(|bb| bb.name.clone())
+                                                            .collect::<Vec<_>>()
+                                                            .join("|")
+                                                    )
+                                                })
+                                                .collect::<Vec<_>>()
+                                                .join(", ")
+                                        );
+                                    }
+                                    if self.trait_bound_satisfied_by_ref(&substituted_bound, *raw_arg)
+                                        || self.trait_bound_satisfied_by_ref(&substituted_bound, resolved_arg)
                                     {
                                         continue;
                                     }
@@ -6125,23 +6751,122 @@ impl<'a> BlockChecker<'a> {
                                         *tp,
                                     )
                                     .unwrap_or(resolved_arg);
-                                    if self.trait_bound_satisfied_by_ref(b, inferred_arg) {
+                                    if self.trait_bound_satisfied_by_ref(&substituted_bound, inferred_arg) {
                                         continue;
                                     }
                                     if self.is_concrete_type(inferred_arg) {
                                         self.diagnostics.push(Diagnostic::error(
                                             format!(
                                                 "type does not satisfy trait bound '{}'",
-                                                b.name
+                                                substituted_bound.name
                                             ),
                                             func.expr.span,
                                         ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
                                     } else {
                                         self.pending_trait_bound_checks.push((
-                                            b.clone(),
+                                            substituted_bound,
                                             inferred_arg,
                                             func.expr.span,
                                         ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(field_accessor) = selected_field_accessor {
+                        if args.len() >= 2 {
+                            let obj = args[0].expr.clone();
+                            let idx = &args[1].expr;
+                            let field_idx = match &idx.kind {
+                                HirExprKind::LiteralI32(v) => Some(FieldIdx::Index(*v as usize)),
+                                HirExprKind::LiteralStr(sid) => {
+                                    let name = self.string_table.get(*sid).unwrap().clone();
+                                    Some(FieldIdx::Name(name))
+                                }
+                                _ => None,
+                            };
+                            if let Some(f_idx) = field_idx {
+                                if let Some((f_ty, offset)) = self.resolve_field_access_with_mode(
+                                    obj.ty,
+                                    f_idx,
+                                    func.expr.span,
+                                    false,
+                                ) {
+                                    if field_accessor == FieldAccessorKind::Get && args.len() == 2 {
+                                        let addr_expr = if offset == 0 {
+                                            obj
+                                        } else {
+                                            HirExpr {
+                                                ty: self.ctx.i32(),
+                                                kind: HirExprKind::Intrinsic {
+                                                    name: "add".to_string(),
+                                                    type_args: vec![self.ctx.i32()],
+                                                    args: vec![
+                                                        obj,
+                                                        HirExpr {
+                                                            ty: self.ctx.i32(),
+                                                            kind: HirExprKind::LiteralI32(offset as i32),
+                                                            span: idx.span,
+                                                        },
+                                                    ],
+                                                },
+                                                span: func.expr.span,
+                                            }
+                                        };
+                                        return Some(StackEntry {
+                                            ty: f_ty,
+                                            expr: HirExpr {
+                                                ty: f_ty,
+                                                kind: HirExprKind::Intrinsic {
+                                                    name: "load".to_string(),
+                                                    type_args: vec![f_ty],
+                                                    args: vec![addr_expr],
+                                                },
+                                                span: func.expr.span,
+                                            },
+                                            type_args: Vec::new(),
+                                            assign: None,
+                                            auto_call: true,
+                                        });
+                                    } else if field_accessor == FieldAccessorKind::Put && args.len() == 3 {
+                                        let val = args[2].expr.clone();
+                                        let _ = self.ctx.unify(val.ty, f_ty);
+                                        let addr_expr = if offset == 0 {
+                                            obj
+                                        } else {
+                                            HirExpr {
+                                                ty: self.ctx.i32(),
+                                                kind: HirExprKind::Intrinsic {
+                                                    name: "add".to_string(),
+                                                    type_args: vec![self.ctx.i32()],
+                                                    args: vec![
+                                                        obj,
+                                                        HirExpr {
+                                                            ty: self.ctx.i32(),
+                                                            kind: HirExprKind::LiteralI32(offset as i32),
+                                                            span: idx.span,
+                                                        },
+                                                    ],
+                                                },
+                                                span: func.expr.span,
+                                            }
+                                        };
+                                        return Some(StackEntry {
+                                            ty: self.ctx.unit(),
+                                            expr: HirExpr {
+                                                ty: self.ctx.unit(),
+                                                kind: HirExprKind::Intrinsic {
+                                                    name: "store".to_string(),
+                                                    type_args: vec![f_ty],
+                                                    args: vec![addr_expr, val],
+                                                },
+                                                span: func.expr.span,
+                                            },
+                                            type_args: Vec::new(),
+                                            assign: None,
+                                            auto_call: true,
+                                        });
                                     }
                                 }
                             }
@@ -6207,10 +6932,23 @@ impl<'a> BlockChecker<'a> {
                             ).with_id(DiagnosticId::TypeArgumentArityMismatch));
                             return None;
                         }
+                        let is_tag_unit_struct = s.fields.len() == 1
+                            && s.field_names.len() == 1
+                            && s.field_names[0] == "tag"
+                            && matches!(self.ctx.get(self.ctx.resolve_id(s.fields[0])), TypeKind::Unit);
                         let applied_ty = if resolved_args.is_empty() {
                             s.ty
                         } else {
                             self.ctx.apply(s.ty, resolved_args.clone())
+                        };
+                        let fields = if is_tag_unit_struct && args.is_empty() {
+                            vec![HirExpr {
+                                ty: self.ctx.unit(),
+                                kind: HirExprKind::Unit,
+                                span: func.expr.span,
+                            }]
+                        } else {
+                            args.into_iter().map(|a| a.expr).collect()
                         };
                         return Some(StackEntry {
                             ty: applied_ty,
@@ -6219,7 +6957,7 @@ impl<'a> BlockChecker<'a> {
                                 kind: HirExprKind::StructConstruct {
                                     name: name.clone(),
                                     type_args: resolved_args.clone(),
-                                    fields: args.into_iter().map(|a| a.expr).collect(),
+                                    fields,
                                 },
                                 span: func.expr.span,
                             },
@@ -6229,10 +6967,6 @@ impl<'a> BlockChecker<'a> {
                         });
                     }
 
-                    let (callee_name, builtin) = match &binding.kind {
-                        BindingKind::Func { symbol, builtin, .. } => (symbol.clone(), builtin),
-                        _ => (name.clone(), &None),
-                    };
                     let mut final_args: Vec<HirExpr> = Vec::new();
                     for (cap_name, cap_ty) in captures.iter() {
                         let resolved_cap_ty = self
@@ -6300,7 +7034,21 @@ impl<'a> BlockChecker<'a> {
                     let mut trait_callee: Option<FuncRef> = None;
                     if let Some((trait_name, method_name)) = parse_variant_name(name) {
                         if let Some(trait_info) = self.traits.get(trait_name) {
-                            if trait_info.methods.get(method_name).is_some() {
+                            if let Some(sig) = trait_info.methods.get(method_name) {
+                                let applied_trait_name = self.infer_trait_application_name(
+                                    trait_name,
+                                    trait_info,
+                                    *sig,
+                                    &args,
+                                    expected_ret,
+                                );
+                                let applied_trait_args =
+                                    self.infer_trait_application_args(
+                                        trait_info,
+                                        *sig,
+                                        &args,
+                                        expected_ret,
+                                    );
                                 let mut inferred_self_ty = None;
                                 if let (Some(self_hint), Some(first_param), Some(arg)) =
                                     (type_args.first().copied(), user_params.first().copied(), args.first())
@@ -6308,9 +7056,23 @@ impl<'a> BlockChecker<'a> {
                                     if self.ctx.same_type(first_param, self_hint) {
                                         let candidate = self.ctx.resolve_id(arg.ty);
                                         let candidate_ok =
-                                            self.type_param_has_bound(candidate, trait_info.self_ty)
+                                            self.type_param_has_bound_ref(
+                                                candidate,
+                                                trait_name,
+                                                &applied_trait_args,
+                                            )
                                                 || self.impls.iter().any(|imp| {
-                                                    imp.trait_self_ty == Some(trait_info.self_ty)
+                                                    imp.trait_base_name.as_deref()
+                                                        == Some(trait_name)
+                                                        && imp.trait_args.len()
+                                                            == applied_trait_args.len()
+                                                        && trait_application_matches(
+                                                            self.ctx,
+                                                            trait_name,
+                                                            &applied_trait_args,
+                                                            trait_name,
+                                                            &imp.trait_args,
+                                                        )
                                                         && self.ctx.type_pattern_matches(imp.target_ty, candidate)
                                                 });
                                         if candidate_ok {
@@ -6325,11 +7087,15 @@ impl<'a> BlockChecker<'a> {
                                         }
                                         let resolved_hint = self.ctx.resolve_id(self_hint);
                                         inferred_self_ty = self
-                                            .infer_unique_type_param_for_trait(trait_info.self_ty)
+                                            .infer_unique_type_param_for_trait_ref(
+                                                trait_name,
+                                                &applied_trait_args,
+                                            )
                                             .or_else(|| {
-                                                if self.type_param_has_bound(
+                                                if self.type_param_has_bound_ref(
                                                     resolved_hint,
-                                                    trait_info.self_ty,
+                                                    trait_name,
+                                                    &applied_trait_args,
                                                 ) {
                                                     Some(resolved_hint)
                                                 } else {
@@ -6339,14 +7105,15 @@ impl<'a> BlockChecker<'a> {
                                             .or(Some(resolved_hint));
                                     }
                                 }
-                                if inferred_self_ty.is_none() {
-                                    if let Some(first) = args.first() {
-                                        inferred_self_ty = Some(self.ctx.resolve_id(first.ty));
-                                    }
+                            if inferred_self_ty.is_none() {
+                                if let Some(first) = args.first() {
+                                    inferred_self_ty = Some(self.ctx.resolve_id(first.ty));
                                 }
+                            }
                                 if let Some(self_ty) = inferred_self_ty {
                                     trait_callee = Some(FuncRef::Trait {
                                         trait_name: trait_name.to_string(),
+                                        trait_args: applied_trait_args,
                                         method: method_name.to_string(),
                                         self_ty,
                                     });
@@ -6354,8 +7121,8 @@ impl<'a> BlockChecker<'a> {
                             }
                         }
                     }
-                    let callee = if builtin.is_some() {
-                        FuncRef::Builtin(callee_name.clone())
+                    let callee = if selected_builtin.is_some() {
+                        FuncRef::Builtin(selected_symbol.clone())
                     } else if let Some(tc) = trait_callee {
                         tc
                     } else {
@@ -6365,11 +7132,11 @@ impl<'a> BlockChecker<'a> {
                                 .all(|t| !type_contains_unbound_var(self.ctx, *t))
                         {
                             self.instantiations
-                                .entry(callee_name.clone())
+                                .entry(selected_symbol.clone())
                                 .or_insert_with(Vec::new)
                                 .push(resolved_args.clone());
                         }
-                        FuncRef::User(callee_name.clone(), resolved_args.clone())
+                        FuncRef::User(selected_symbol.clone(), resolved_args.clone())
                     };
                     let resolved_result = self.ctx.resolve_id(c_result);
                     return Some(StackEntry {
@@ -6395,7 +7162,16 @@ impl<'a> BlockChecker<'a> {
             if self.env.lookup_all_callables(name).is_empty() {
                     if let Some((trait_name, method_name)) = parse_variant_name(name) {
                         if let Some(trait_info) = self.traits.get(trait_name) {
-                            if trait_info.methods.get(method_name).is_some() {
+                            if let Some(sig) = trait_info.methods.get(method_name) {
+                            let applied_trait_name = self.infer_trait_application_name(
+                                trait_name,
+                                trait_info,
+                                *sig,
+                                &args,
+                                expected_ret,
+                            );
+                            let applied_trait_args =
+                                self.infer_trait_application_args(trait_info, *sig, &args, expected_ret);
                             let mut inferred_self_ty = None;
                             if let (Some(self_hint), Some(first_param), Some(arg)) =
                                 (type_args.first().copied(), params.first().copied(), args.first())
@@ -6403,9 +7179,22 @@ impl<'a> BlockChecker<'a> {
                                 if self.ctx.same_type(first_param, self_hint) {
                                     let candidate = self.ctx.resolve_id(arg.ty);
                                     let candidate_ok =
-                                        self.type_param_has_bound(candidate, trait_info.self_ty)
+                                        self.type_param_has_bound_ref(
+                                            candidate,
+                                            trait_name,
+                                            &applied_trait_args,
+                                        )
                                             || self.impls.iter().any(|imp| {
-                                                imp.trait_self_ty == Some(trait_info.self_ty)
+                                                imp.trait_base_name.as_deref()
+                                                    == Some(trait_name)
+                                                    && imp.trait_args.len() == applied_trait_args.len()
+                                                    && trait_application_matches(
+                                                        self.ctx,
+                                                        trait_name,
+                                                        &applied_trait_args,
+                                                        trait_name,
+                                                        &imp.trait_args,
+                                                    )
                                                     && self.ctx.type_pattern_matches(imp.target_ty, candidate)
                                             });
                                     if candidate_ok {
@@ -6420,11 +7209,15 @@ impl<'a> BlockChecker<'a> {
                                     }
                                     let resolved_hint = self.ctx.resolve_id(self_hint);
                                     inferred_self_ty = self
-                                        .infer_unique_type_param_for_trait(trait_info.self_ty)
+                                        .infer_unique_type_param_for_trait_ref(
+                                            trait_name,
+                                            &applied_trait_args,
+                                        )
                                         .or_else(|| {
-                                            if self.type_param_has_bound(
+                                            if self.type_param_has_bound_ref(
                                                 resolved_hint,
-                                                trait_info.self_ty,
+                                                trait_name,
+                                                &applied_trait_args,
                                             ) {
                                                 Some(resolved_hint)
                                             } else {
@@ -6441,16 +7234,29 @@ impl<'a> BlockChecker<'a> {
                                 ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
                                 return None;
                             };
-                                let trait_ok = self.type_param_has_bound(self_ty, trait_info.self_ty)
+                                let trait_ok = self.type_param_has_bound_ref(
+                                    self_ty,
+                                    trait_name,
+                                    &applied_trait_args,
+                                )
                                     || self.impls.iter().any(|imp| {
-                                        imp.trait_self_ty == Some(trait_info.self_ty)
+                                        imp.trait_base_name.as_deref()
+                                            == Some(trait_name)
+                                            && imp.trait_args.len() == applied_trait_args.len()
+                                            && trait_application_matches(
+                                                self.ctx,
+                                                trait_name,
+                                                &applied_trait_args,
+                                                trait_name,
+                                                &imp.trait_args,
+                                            )
                                         && self.ctx.type_pattern_matches(imp.target_ty, self_ty)
                                 });
                             if !trait_ok {
                                 self.diagnostics.push(Diagnostic::error(
                                     format!(
                                         "type does not satisfy trait bound '{}'",
-                                        trait_name
+                                        applied_trait_name
                                     ),
                                     func.expr.span,
                                 ).with_id(DiagnosticId::TypeTraitBoundUnsatisfied));
@@ -6473,6 +7279,7 @@ impl<'a> BlockChecker<'a> {
                                     kind: HirExprKind::Call {
                                         callee: FuncRef::Trait {
                                             trait_name: trait_name.to_string(),
+                                            trait_args: applied_trait_args,
                                             method: method_name.to_string(),
                                             self_ty,
                                         },
@@ -6504,7 +7311,7 @@ impl<'a> BlockChecker<'a> {
             HirExprKind::FnValue(name) => {
                 let has_capture = self
                     .env
-                    .lookup_all_callables(name)
+                    .lookup_all_callables_by_symbol(name)
                     .iter()
                     .any(|b| matches!(&b.kind, BindingKind::Func { captures, .. } if !captures.is_empty()));
                 if has_capture {
@@ -6600,6 +7407,7 @@ enum BindingKind {
         effect: Effect,
         arity: usize,
         builtin: Option<BuiltinKind>,
+        field_accessor: Option<FieldAccessorKind>,
         type_param_bounds: BTreeMap<TypeId, Vec<TraitBoundRef>>,
         captures: Vec<(String, TypeId)>,
     },
@@ -6634,7 +7442,14 @@ fn resolve_type_ids_in_expr(ctx: &TypeCtx, expr: &mut HirExpr) {
                         *ty = ctx.resolve_id(*ty);
                     }
                 }
-                FuncRef::Trait { self_ty, .. } => {
+                FuncRef::Trait {
+                    trait_args,
+                    self_ty,
+                    ..
+                } => {
+                    for ty in trait_args {
+                        *ty = ctx.resolve_id(*ty);
+                    }
                     *self_ty = ctx.resolve_id(*self_ty);
                 }
                 FuncRef::Builtin(_) => {}
@@ -6919,6 +7734,22 @@ impl Env {
         items
     }
 
+    fn lookup_all_callables_by_symbol(&self, symbol: &str) -> Vec<&Binding> {
+        let mut items = Vec::new();
+        for scope in self.scopes.iter().rev() {
+            for b in scope.callables.iter().filter(|b| {
+                b.defined
+                    && matches!(
+                        &b.kind,
+                        BindingKind::Func { symbol: s, .. } if s == symbol
+                    )
+            }) {
+                items.push(b);
+            }
+        }
+        items
+    }
+
     fn lookup_callable_any(&self, name: &str) -> Option<&Binding> {
         for scope in self.scopes.iter().rev() {
             if let Some(b) = scope
@@ -6951,14 +7782,8 @@ impl Env {
                     continue;
                 }
                 binding.ty = ty;
-                if let BindingKind::Func { captures, arity, .. } = &mut binding.kind {
+                if let BindingKind::Func { captures, .. } = &mut binding.kind {
                     *captures = captures_new.clone();
-                    if let TypeKind::Function { params, .. } = ctx.get(ty) {
-                        let cap_len = captures.len();
-                        if params.len() >= cap_len {
-                            *arity = params.len() - cap_len;
-                        }
-                    }
                 }
                 return true;
             }
@@ -7140,6 +7965,147 @@ fn function_type_param_count(ctx: &TypeCtx, ty: TypeId) -> usize {
         TypeKind::Function { type_params, .. } => type_params.len(),
         _ => 0,
     }
+}
+
+fn type_shape_specificity(ctx: &TypeCtx, ty: TypeId) -> usize {
+    match ctx.get(ctx.resolve_id(ty)) {
+        TypeKind::Var(_) => 0,
+        TypeKind::Unit
+        | TypeKind::I32
+        | TypeKind::U8
+        | TypeKind::F32
+        | TypeKind::Bool
+        | TypeKind::Str
+        | TypeKind::Never
+        | TypeKind::Named(_) => 2,
+        TypeKind::Enum { .. } | TypeKind::Struct { .. } => 3,
+        TypeKind::Apply { base, args } => {
+            4 + type_shape_specificity(ctx, base)
+                + args
+                    .iter()
+                    .map(|arg| type_shape_specificity(ctx, *arg))
+                    .sum::<usize>()
+        }
+        TypeKind::Tuple { items } => {
+            1 + items
+                .iter()
+                .map(|item| type_shape_specificity(ctx, *item))
+                .sum::<usize>()
+        }
+        TypeKind::Function { params, result, .. } => {
+            1 + params
+                .iter()
+                .map(|param| type_shape_specificity(ctx, *param))
+                .sum::<usize>()
+                + type_shape_specificity(ctx, result)
+        }
+        TypeKind::Box(inner) | TypeKind::Reference(inner, _) => 1 + type_shape_specificity(ctx, inner),
+    }
+}
+
+fn function_user_param_specificity(ctx: &TypeCtx, ty: TypeId, user_arity: usize) -> usize {
+    match ctx.get(ctx.resolve_id(ty)) {
+        TypeKind::Function { params, result, .. } => {
+            let capture_len = params.len().saturating_sub(user_arity);
+            let user_params = &params[capture_len..];
+            user_params
+                .iter()
+                .map(|param| type_shape_specificity(ctx, *param))
+                .sum::<usize>()
+                + type_shape_specificity(ctx, result)
+        }
+        _ => 0,
+    }
+}
+
+fn detect_field_accessor_fn(def: &FnDef) -> Option<FieldAccessorKind> {
+    let FnBody::Parsed(block) = &def.body else {
+        return None;
+    };
+    if block.items.len() != 1 {
+        return None;
+    }
+    let expr = match &block.items[0] {
+        Stmt::Expr(expr) | Stmt::ExprSemi(expr, _) => expr,
+        _ => return None,
+    };
+    match expr.items.as_slice() {
+        [PrefixItem::Intrinsic(intrin, _)] if intrin.name == "get_field" => {
+            Some(FieldAccessorKind::Get)
+        }
+        [PrefixItem::Intrinsic(intrin, _)] if intrin.name == "set_field" => {
+            Some(FieldAccessorKind::Put)
+        }
+        _ => None,
+    }
+}
+
+fn normalized_import_suffix(module: &str, ext: &str) -> String {
+    let mut s = module.replace('\\', "/");
+    if !s.starts_with('/') {
+        s.insert(0, '/');
+    }
+    s.push_str(ext);
+    s
+}
+
+fn build_qualified_import_targets(
+    module: &crate::ast::Module,
+    source_map: Option<&SourceMap>,
+) -> BTreeMap<u32, BTreeMap<String, BTreeSet<u32>>> {
+    let Some(source_map) = source_map else {
+        return BTreeMap::new();
+    };
+    let mut directives: Vec<&Directive> = module.directives.iter().collect();
+    for item in &module.root.items {
+        if let Stmt::Directive(d) = item {
+            directives.push(d);
+        }
+    }
+    let mut out: BTreeMap<u32, BTreeMap<String, BTreeSet<u32>>> = BTreeMap::new();
+    for directive in directives {
+        let Directive::Import { path, clause, span, .. } = directive else {
+            continue;
+        };
+        let aliases: Vec<String> = match clause {
+            ImportClause::DefaultAlias => Path::new(path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| vec![name.to_string()])
+                .unwrap_or_default(),
+            ImportClause::Alias(alias) => vec![alias.clone()],
+            _ => Vec::new(),
+        };
+        if aliases.is_empty() {
+            continue;
+        }
+        let suffixes = [
+            normalized_import_suffix(path, ".nepl"),
+            normalized_import_suffix(path, ".n.md"),
+        ];
+        let target_files = source_map
+            .iter_paths()
+            .filter_map(|(file_id, path)| {
+                let normalized = path.to_string_lossy().replace('\\', "/");
+                if suffixes.iter().any(|suffix| normalized.ends_with(suffix)) {
+                    Some(file_id.0)
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeSet<_>>();
+        if target_files.is_empty() {
+            continue;
+        }
+        let file_aliases = out.entry(span.file_id.0).or_default();
+        for alias in aliases {
+            file_aliases
+                .entry(alias)
+                .or_default()
+                .extend(target_files.iter().copied());
+        }
+    }
+    out
 }
 
 type LabelEnv = BTreeMap<String, TypeId>;

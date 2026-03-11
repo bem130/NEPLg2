@@ -2,8 +2,8 @@
 //: hash collection が key に[要求/ようきゅう]する[能力/のうりょく]
 //:
 //: ### [目的/もくてき]
-//: - `HashMap` / `HashSet` が key [比較/ひかく]と hash [計算/けいさん]を 1 [個/こ]の capability として[受/う]け[取/と]れるようにします。
-//: - [現状/げんじょう]の言語仕様で multiple trait bound を[書/か]けないため、`Eq` + `Hash` の collection [用/よう] capability を[明示/めいじ]します。
+//: - `HashMap` / `HashSet` が key [比較/ひかく]と default hash [計算/けいさん]を 1 [個/こ]の capability として[受/う]け[取/と]れるようにします。
+//: - collection は custom hasher を[受/う]け[取/と]れますが、key [側/がわ]にも canonical な hash [実装/じっそう]を[持/も]たせておき、default hasher や[単体/たんたい] helper の[基準/きじゅん]にします。
 //:
 //: ### [実装/じっそう]
 //: - trait `HashKey` は `clone` / `eq` / `hash32` を[要求/ようきゅう]します。
@@ -11,7 +11,7 @@
 //:
 //: ### [注意/ちゅうい]
 //: - `eq` と `hash32` は[整合/せいごう]している[必要/ひつよう]があります。
-//: - custom key は `HashKey` を impl すれば map/set に[載/の]せられます。
+//: - custom key は `HashKey` を impl し、さらに custom hasher を[使/つか]いたい[場合/ばあい]は hasher trait も[実装/じっそう]します。
 
 #indent 4
 

@@ -158,12 +158,13 @@ neplg2:test
 #target std
 
 #import "alloc/collections/hashmap" as *
+#import "core/traits/hash" as *
 #import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
 #import "alloc/diag/error" as *
 #import "core/option" as *
 #import "core/result" as *
 
-fn must_hm <(Result<HashMap<i32,i32>, Diag>)*>HashMap<i32,i32>> (r):
+fn must_hm <(Result<HashMap<i32,i32,DefaultHash32>, Diag>)*>HashMap<i32,i32,DefaultHash32>> (r):
     match r:
         Result::Ok hm:
             hm
@@ -172,34 +173,34 @@ fn must_hm <(Result<HashMap<i32,i32>, Diag>)*>HashMap<i32,i32>> (r):
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let hm0 <HashMap<i32,i32>>:
-        new<i32,i32>
+    let hm0 <HashMap<i32,i32,DefaultHash32>>:
+        new DefaultHash32
         |> must_hm
-        |> insert<i32,i32> 7 70
+        |> insert 7 70
         |> must_hm
-        |> insert<i32,i32> 9 90
+        |> insert 9 90
         |> must_hm
-    set checks checks_push checks check_eq_i32 2 len<i32,i32> hm0;
-    let hm1 <HashMap<i32,i32>>:
-        new<i32,i32>
+    set checks checks_push checks check_eq_i32 2 len hm0;
+    let hm1 <HashMap<i32,i32,DefaultHash32>>:
+        new DefaultHash32
         |> must_hm
-        |> insert<i32,i32> 7 70
+        |> insert 7 70
         |> must_hm
-        |> insert<i32,i32> 9 90
+        |> insert 9 90
         |> must_hm
-    match get<i32,i32> hm1 9:
+    match get hm1 9:
         Option::Some v:
             set checks checks_push checks check_eq_i32 90 v
         Option::None:
             set checks checks_push checks Result<(),str>::Err "pipe hashmap get failed";
-    let hm2 <HashMap<i32,i32>>:
-        new<i32,i32>
+    let hm2 <HashMap<i32,i32,DefaultHash32>>:
+        new DefaultHash32
         |> must_hm
-        |> insert<i32,i32> 7 70
+        |> insert 7 70
         |> must_hm
-        |> insert<i32,i32> 9 90
+        |> insert 9 90
         |> must_hm
-    set checks checks_push checks check contains<i32,i32> hm2 7;
+    set checks checks_push checks check contains hm2 7;
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
 ```
@@ -213,38 +214,39 @@ neplg2:test
 #target std
 
 #import "alloc/collections/hashset" as *
+#import "core/traits/hash" as *
 #import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
 #import "alloc/diag/error" as *
 #import "core/result" as *
 
-fn must_hs <(Result<HashSet<i32>,Diag>)*>HashSet<i32>> (r):
+fn must_hs <(Result<HashSet<i32,DefaultHash32>,Diag>)*>HashSet<i32,DefaultHash32>> (r):
     match r:
         Result::Ok hs:
             hs
         Result::Err _d:
             #intrinsic "unreachable" <> ()
 
-fn new_hs <()*>Result<HashSet<i32>,Diag>> ():
-    new<i32>
+fn new_hs <()*>Result<HashSet<i32,DefaultHash32>,Diag>> ():
+    new DefaultHash32
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let hs0 <HashSet<i32>>:
+    let hs0 <HashSet<i32,DefaultHash32>>:
         new_hs
         |> must_hs
-        |> insert<i32> 4
+        |> insert 4
         |> must_hs
-        |> insert<i32> 8
+        |> insert 8
         |> must_hs
-    set checks checks_push checks check_eq_i32 2 len<i32> hs0;
-    let hs1 <HashSet<i32>>:
+    set checks checks_push checks check_eq_i32 2 len hs0;
+    let hs1 <HashSet<i32,DefaultHash32>>:
         new_hs
         |> must_hs
-        |> insert<i32> 4
+        |> insert 4
         |> must_hs
-        |> insert<i32> 8
+        |> insert 8
         |> must_hs
-    set checks checks_push checks check contains<i32> hs1 8;
+    set checks checks_push checks check contains hs1 8;
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
 ```

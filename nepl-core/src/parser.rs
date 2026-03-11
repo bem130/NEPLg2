@@ -1212,13 +1212,10 @@ impl Parser {
 
         let first_ty = self.parse_type_expr()?;
 
-        let (trait_name, target_ty) = if self.consume_if(&TokenKind::KwFor) {
+        let (trait_ref, target_ty) = if self.consume_if(&TokenKind::KwFor) {
             let target = self.parse_type_expr()?;
-            let trait_ident = match first_ty {
-                TypeExpr::Named(n) => Some(Ident {
-                    name: n,
-                    span: kw_span,
-                }), // Approximation
+            let trait_ref = match Self::type_expr_to_trait_ref(first_ty, kw_span) {
+                Some(tr) => Some(tr),
                 _ => {
                     self.diagnostics.push(
                         Diagnostic::error(
@@ -1230,7 +1227,7 @@ impl Parser {
                     None
                 }
             };
-            (trait_ident, target)
+            (trait_ref, target)
         } else {
             (None, first_ty)
         };
@@ -1256,7 +1253,7 @@ impl Parser {
         Some(Stmt::Impl(ImplDef {
             doc: None,
             type_params,
-            trait_name,
+            trait_ref,
             target_ty,
             methods,
             span: kw_span.join(end_span).unwrap_or(kw_span),
@@ -3148,17 +3145,17 @@ impl Parser {
                     }
                     let mut bounds = Vec::new();
                     if self.consume_if(&TokenKind::Colon) {
-                        if let Some((bound, _bspan)) = self.parse_path_ident() {
+                        if let Some(bound) = self.parse_trait_ref() {
                             bounds.push(bound);
                         } else {
                             let sp = self.peek_span().unwrap_or(span);
-                            self.diagnostics.push(
-                                Diagnostic::error("expected trait name after ':'", sp)
+                                self.diagnostics.push(
+                                    Diagnostic::error("expected trait name after ':'", sp)
                                     .with_id(DiagnosticId::ParserExpectedIdentifier),
                             );
                         }
                         while self.consume_if(&TokenKind::Ampersand) {
-                            if let Some((bound, _bspan)) = self.parse_path_ident() {
+                            if let Some(bound) = self.parse_trait_ref() {
                                 bounds.push(bound);
                             } else {
                                 let sp = self.peek_span().unwrap_or(span);
@@ -3198,6 +3195,41 @@ impl Parser {
             }
         }
         Some((name, span))
+    }
+
+    fn parse_trait_ref(&mut self) -> Option<TraitRef> {
+        let (name, span) = self.parse_path_ident()?;
+        let mut args = Vec::new();
+        if self.consume_if(&TokenKind::LAngle) {
+            loop {
+                args.push(self.parse_type_expr()?);
+                if !self.consume_if(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.expect(&TokenKind::RAngle)?;
+        }
+        Some(TraitRef {
+            name: Ident { name, span },
+            args,
+        })
+    }
+
+    fn type_expr_to_trait_ref(expr: TypeExpr, span: Span) -> Option<TraitRef> {
+        match expr {
+            TypeExpr::Named(name) => Some(TraitRef {
+                name: Ident { name, span },
+                args: Vec::new(),
+            }),
+            TypeExpr::Apply(base, args) => match *base {
+                TypeExpr::Named(name) => Some(TraitRef {
+                    name: Ident { name, span },
+                    args,
+                }),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {

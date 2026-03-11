@@ -878,6 +878,7 @@ fn gen_expr(
                     FuncRef::Builtin(n) | FuncRef::User(n, _) => n.clone(),
                     FuncRef::Trait {
                         trait_name,
+                        trait_args: _,
                         method,
                         self_ty,
                     } => {

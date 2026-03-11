@@ -109,12 +109,13 @@ ret: 10
 #indent 4
 #target std
 #import "alloc/collections/hashmap" as *
+#import "core/traits/hash" as *
 #import "alloc/diag/error" as *
 #import "alloc/string" as *
 #import "core/option" as *
 #import "core/result" as *
 
-fn must_hms <(Result<HashMap<str,i32>, Diag>)*>HashMap<str,i32>> (r):
+fn must_hms <(Result<HashMap<str,i32,DefaultHash32>, Diag>)*>HashMap<str,i32,DefaultHash32>> (r):
     match r:
         Result::Ok hm:
             hm
@@ -123,11 +124,11 @@ fn must_hms <(Result<HashMap<str,i32>, Diag>)*>HashMap<str,i32>> (r):
 
 fn main <()*>i32> ():
     // 要件: キーに str を指定できる HashMap
-    let map0 <HashMap<str,i32>> must_hms new<str,i32>;
-    let map1 <HashMap<str,i32>> must_hms insert<str,i32> map0 "foo" 10;
-    let map <HashMap<str,i32>> must_hms insert<str,i32> map1 "bar" 20;
+    let map0 <HashMap<str,i32,DefaultHash32>> must_hms new DefaultHash32;
+    let map1 <HashMap<str,i32,DefaultHash32>> must_hms insert map0 "foo" 10;
+    let map <HashMap<str,i32,DefaultHash32>> must_hms insert map1 "bar" 20;
 
-    match get<str,i32> map "foo":
+    match get map "foo":
         Option::Some v:
             v
         Option::None:
@@ -170,6 +171,7 @@ diag_id: 3081
 #entry main
 #indent 4
 #import "alloc/collections/hashmap" as *
+#import "core/traits/hash" as *
 
 // ユーザー定義型
 struct Point:
@@ -187,8 +189,8 @@ impl Point:
 
 fn main <()*>i32> ():
     let p1 <Point> Point 10 20;
-    let mut map <HashMap<Point, str>> new<Point, str> ();
+    let mut map <HashMap<Point, str, DefaultHash32>> new DefaultHash32;
     
-    insert<Point, str> map p1 "Start";
+    insert map p1 "Start";
     0
 ```

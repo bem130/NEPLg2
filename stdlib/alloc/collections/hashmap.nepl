@@ -1,9 +1,9 @@
 //: # hashmap
-//: `HashKey` trait に[基/もと]づく generic [連想配列/れんそうはいれつ]
+//: key capability と hasher [型/がた]に[基/もと]づく generic [連想配列/れんそうはいれつ]
 //:
 //: ### [目的/もくてき]
-//: - `HashMap<.K, .V>` を[提供/ていきょう]し、`new` / `insert` / `get` / `contains` / `remove` / `len` / `free` の bare 名で[操作/そうさ]できるようにします。
-//: - key ごとの[比較/ひかく]と hash [計算/けいさん]は `HashKey` trait に[委譲/いじょう]し、specialized helper 名に[依存/いぞん]しない collection にします。
+//: - `HashMap<.K, .V, .H>` を[提供/ていきょう]し、`new` / `insert` / `get` / `contains` / `remove` / `len` / `free` の bare 名で[操作/そうさ]できるようにします。
+//: - key [比較/ひかく]は `HashKey` trait に、hash [計算/けいさん]は hasher value へ[対/たい]する `hash32` overload に[委譲/いじょう]します。
 //:
 //: ### [実装/じっそう]
 //: - open addressing + linear probing の[固定長/こていちょう] hash table です。
@@ -11,6 +11,7 @@
 //:
 //: ### [注意/ちゅうい]
 //: - key 型 `.K` は `HashKey` の impl を[持/も]つ[必要/ひつよう]があります。
+//: - hasher 型 `.H` は `Hasher<.K>` を impl する[必要/ひつよう]があります。
 //: - [容量/ようりょう]は[固定/こてい]で、自動 rehash はまだ[行/おこな]いません。[満杯/まんぱい]では `Diag::CapacityExceeded` を[返/かえ]します。
 //:
 //: ### [計算量/けいさんりょう]
@@ -25,18 +26,20 @@
 #import "core/result" as *
 #import "core/field" as field
 #import "core/traits/hash_key" as *
+#import "core/traits/hash" as *
 #import "alloc/diag/error" as *
 
 //: ## HashMap
 //: key/value を[保持/ほじ]する hash table の[本体/ほんたい]
-struct HashMap<.K,.V>:
+struct HashMap<.K,.V,.H>:
     hdr <i32>
+    hasher <.H>
 
 fn hashmap_entry_size <.K,.V> <()->i32> ():
     add 4 add size_of<.K> size_of<.V>
 
-fn hashmap_bucket_index <.K: HashKey> <(i32,.K)->i32> (cap, key):
-    rem_u hashkey_hash32 key cap
+fn hashmap_bucket_index <.K: HashKey,.H: Hasher<.K>> <(i32,.H,.K)->i32> (cap, hasher, key):
+    rem_u hash_with hasher key cap
 
 fn hashmap_status_ptr <(i32,i32,i32)->i32> (entries, size, idx):
     add entries mul idx size
@@ -55,8 +58,8 @@ fn hashmap_slot_matches <.K: HashKey,.V> <(i32,i32,i32,.K)->bool> (entries, size
     let saved <.K> load<.K> ptr
     hashkey_eq saved key
 
-fn hashmap_find_present <.K: HashKey,.V> <(i32,i32,i32,.K)->i32> (entries, size, cap, key):
-    let start <i32> hashmap_bucket_index<.K> cap key
+fn hashmap_find_present <.K: HashKey,.V,.H: Hasher<.K>> <(i32,i32,i32,.H,.K)->i32> (entries, size, cap, hasher, key):
+    let start <i32> hashmap_bucket_index<.K,.H> cap hasher key
     let mut cur <i32> start
     let mut found <i32> -1
     let mut done <bool> false
@@ -85,15 +88,15 @@ fn hashmap_find_present <.K: HashKey,.V> <(i32,i32,i32,.K)->i32> (entries, size,
     found
 
 //: ## new
-//: [空/から]の `HashMap<.K, .V>` を[作/つく]る
-fn new <.K,.V> <()*>Result<HashMap<.K,.V>, Diag>> ():
+//: [空/から]の `HashMap<.K, .V, .H>` を[作/つく]る
+fn new <.K: HashKey,.V,.H: Hasher<.K>> <(.H)*>Result<HashMap<.K,.V,.H>, Diag>> (hasher):
     let cap <i32> 16
     let size <i32> hashmap_entry_size<.K,.V>
     let entries <i32> alloc_raw mul cap size
     if:
         eq entries 0
         then:
-            diag_err<HashMap<.K,.V>> diag_out_of_memory "hashmap_new(entries)"
+            diag_err<HashMap<.K,.V,.H>> diag_out_of_memory "hashmap_new(entries)"
         else:
             let mut i <i32> 0
             while lt i cap:
@@ -106,21 +109,22 @@ fn new <.K,.V> <()*>Result<HashMap<.K,.V>, Diag>> ():
                 eq hdr 0
                 then:
                     dealloc_raw entries mul cap size
-                    diag_err<HashMap<.K,.V>> diag_out_of_memory "hashmap_new(header)"
+                    diag_err<HashMap<.K,.V,.H>> diag_out_of_memory "hashmap_new(header)"
                 else:
                     store_i32 hdr 0
                     store_i32 add hdr 4 cap
                     store_i32 add hdr 8 entries
-                    ok<HashMap<.K,.V>, Diag> HashMap hdr
+                    ok<HashMap<.K,.V,.H>, Diag> HashMap hdr hasher
 
 //: ## insert
 //: key に value を[挿入/そうにゅう]または[更新/こうしん]する
-fn insert <.K: HashKey,.V> <(HashMap<.K,.V>,.K,.V)*>Result<HashMap<.K,.V>, Diag>> (hm, key, value):
+fn insert <.K: HashKey,.V,.H: Hasher<.K>> <(HashMap<.K,.V,.H>,.K,.V)*>Result<HashMap<.K,.V,.H>, Diag>> (hm, key, value):
     let hdr <i32> field::get hm "hdr"
+    let hasher <.H> field::get hm "hasher"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let size <i32> hashmap_entry_size<.K,.V>
-    let start <i32> hashmap_bucket_index<.K> cap key
+    let start <i32> hashmap_bucket_index<.K,.H> cap hasher key
     let mut cur <i32> start
     let mut first_tomb <i32> -1
     let mut placed <bool> false
@@ -203,17 +207,18 @@ fn insert <.K: HashKey,.V> <(HashMap<.K,.V>,.K,.V)*>Result<HashMap<.K,.V>, Diag>
                                         else set cur nxt
     if:
         success
-        then ok<HashMap<.K,.V>, Diag> hm
-        else diag_err<HashMap<.K,.V>> diag_capacity_exceeded "hashmap_insert"
+        then ok<HashMap<.K,.V,.H>, Diag> hm
+        else diag_err<HashMap<.K,.V,.H>> diag_capacity_exceeded "hashmap_insert"
 
 //: ## get
 //: key に[対応/たいおう]する value を[探/さが]す
-fn get <.K: HashKey,.V> <(HashMap<.K,.V>,.K)->Option<.V>> (hm, key):
+fn get <.K: HashKey,.V,.H: Hasher<.K>> <(HashMap<.K,.V,.H>,.K)->Option<.V>> (hm, key):
     let hdr <i32> field::get hm "hdr"
+    let hasher <.H> field::get hm "hasher"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let size <i32> hashmap_entry_size<.K,.V>
-    let idx <i32> hashmap_find_present<.K,.V> entries size cap key
+    let idx <i32> hashmap_find_present<.K,.V,.H> entries size cap hasher key
     if:
         lt idx 0
         then none<.V>
@@ -223,36 +228,37 @@ fn get <.K: HashKey,.V> <(HashMap<.K,.V>,.K)->Option<.V>> (hm, key):
 
 //: ## contains
 //: key の[存在/そんざい]を[確/たし]かめる
-fn contains <.K: HashKey,.V> <(HashMap<.K,.V>,.K)->bool> (hm, key):
-    let got <Option<.V>> get<.K,.V> hm key
+fn contains <.K: HashKey,.V,.H: Hasher<.K>> <(HashMap<.K,.V,.H>,.K)->bool> (hm, key):
+    let got <Option<.V>> get<.K,.V,.H> hm key
     is_some<.V> got
 
 //: ## remove
 //: key を[削除/さくじょ]する
-fn remove <.K: HashKey,.V> <(HashMap<.K,.V>,.K)*>Result<HashMap<.K,.V>, Diag>> (hm, key):
+fn remove <.K: HashKey,.V,.H: Hasher<.K>> <(HashMap<.K,.V,.H>,.K)*>Result<HashMap<.K,.V,.H>, Diag>> (hm, key):
     let hdr <i32> field::get hm "hdr"
+    let hasher <.H> field::get hm "hasher"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8
     let size <i32> hashmap_entry_size<.K,.V>
-    let idx <i32> hashmap_find_present<.K,.V> entries size cap key
+    let idx <i32> hashmap_find_present<.K,.V,.H> entries size cap hasher key
     if:
         lt idx 0
-        then diag_err<HashMap<.K,.V>> diag_key_not_found "hashmap_remove"
+        then diag_err<HashMap<.K,.V,.H>> diag_key_not_found "hashmap_remove"
         else:
             let st_ptr <i32> hashmap_status_ptr entries size idx
             store_i32 st_ptr 2
             store_i32 hdr sub load_i32 hdr 1
-            ok<HashMap<.K,.V>, Diag> hm
+            ok<HashMap<.K,.V,.H>, Diag> hm
 
 //: ## len
 //: [要素数/ようそすう]を[返/かえ]す
-fn len <.K,.V> <(HashMap<.K,.V>)->i32> (hm):
+fn len <.K,.V,.H> <(HashMap<.K,.V,.H>)->i32> (hm):
     let hdr <i32> field::get hm "hdr"
     load_i32 hdr
 
 //: ## free
 //: [内部/ないぶ]メモリを[解放/かいほう]する
-fn free <.K,.V> <(HashMap<.K,.V>)*>()> (hm):
+fn free <.K,.V,.H> <(HashMap<.K,.V,.H>)*>()> (hm):
     let hdr <i32> field::get hm "hdr"
     let cap <i32> load_i32 add hdr 4
     let entries <i32> load_i32 add hdr 8

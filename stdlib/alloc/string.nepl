@@ -1824,7 +1824,9 @@ fn from_f64 <(f64)->str> (x):
             set sb sb_append sb int_s;
 
             let scratch_region <RegionToken<u8>> unwrap_ok alloc_region_bytes<u8> 6;
-            let scratch <MemPtr<u8>> region_ptr scratch_region;
+            let scratch_ptr <MemPtr<u8>> get scratch_region "ptr";
+            let scratch_size <i32> get scratch_region "size";
+            let scratch <MemPtr<u8>> scratch_ptr;
             let mut k <i32> 0;
             while lt k 6:
                 do:
@@ -1860,7 +1862,9 @@ fn from_f64 <(f64)->str> (x):
                 gt trim 0
                 then:
                     let frac_region <RegionToken<u8>> unwrap_ok string_alloc_region trim;
-                    let frac_data <MemPtr<u8>> string_region_data_ptr frac_region;
+                    let frac_ptr <MemPtr<u8>> get frac_region "ptr";
+                    let frac_size <i32> get frac_region "size";
+                    let frac_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr frac_ptr 4;
                     let mut i <i32> 0;
                     while lt i trim:
                         do:
@@ -1872,10 +1876,10 @@ fn from_f64 <(f64)->str> (x):
                                     #intrinsic "unreachable" <> ()
                             set i add i 1;
                     set sb sb_append sb ".";
-                    set sb sb_append sb string_finish frac_region trim;
+                    set sb sb_append sb string_finish region_new frac_ptr frac_size trim;
                 else:
                     ();
-            match dealloc_region scratch_region:
+            match dealloc_ptr<u8> scratch_ptr scratch_size:
                 Result::Ok _:
                     sb_build sb
                 Result::Err _e:

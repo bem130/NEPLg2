@@ -1,5 +1,48 @@
 mod harness;
+use nepl_core::loader::Loader;
+use nepl_core::typecheck;
+use nepl_core::BuildProfile;
+use nepl_core::{compile_module, CompileOptions, CompileTarget};
+use std::path::PathBuf;
 use harness::run_main_i32;
+
+fn stdlib_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("stdlib")
+}
+
+fn compile_src_with_target(src: &str, target: CompileTarget) {
+    let mut loader = Loader::new(stdlib_root());
+    let loaded = loader
+        .load_inline(PathBuf::from("overload_regression.nepl"), src.to_string())
+        .expect("load");
+    compile_module(
+        loaded.module,
+        CompileOptions {
+            target: Some(target),
+            verbose: false,
+            profile: None,
+        },
+    )
+    .expect("compile failure");
+}
+
+fn typecheck_src_with_target(src: &str, target: CompileTarget) {
+    let mut loader = Loader::new(stdlib_root());
+    let loaded = loader
+        .load_inline(PathBuf::from("overload_regression.nepl"), src.to_string())
+        .expect("load");
+    let checked = typecheck::typecheck(
+        &loaded.module,
+        target,
+        BuildProfile::Debug,
+        Some(&loaded.source_map),
+    );
+    if !checked.diagnostics.is_empty() {
+        panic!("typecheck failure: {:?}", checked.diagnostics);
+    }
+}
 
 // Note: In NEPL, overloaded functions must have the same number of arguments (arity).
 // Overloading is resolved based on the combination of:
@@ -99,4 +142,121 @@ fn main <()*>i32> ():
     // 10 + 1 = 11, and v2 is true
     let v = run_main_i32(src);
     assert_eq!(v, 11);
+}
+
+#[test]
+fn grouped_argument_overload_uses_later_items_before_reduction() {
+    let src = r#"
+#entry main
+#indent 4
+#no_prelude
+
+struct S:
+    tag <()>
+
+fn f <()->i32> ():
+    1
+
+fn f <(S)->i32> (_s):
+    2
+
+fn main <()->i32> ():
+    let x <i32> f S
+    x
+"#;
+    let v = run_main_i32(src);
+    assert_eq!(v, 2);
+}
+
+#[test]
+fn unit_like_struct_constructor_is_a_value() {
+    let src = r#"
+#entry main
+#indent 4
+#no_prelude
+
+struct A:
+    tag <()>
+
+fn use_a <(A)->i32> (_a):
+    1
+
+fn main <()->i32> ():
+    use_a A
+"#;
+    let v = run_main_i32(src);
+    assert_eq!(v, 1);
+}
+
+#[test]
+fn grouped_constructor_argument_can_flow_into_generic_new_call() {
+    let src = r#"
+#target wasm
+#indent 4
+#no_prelude
+#import "core/result" as *
+#import "alloc/diag/error" as *
+#import "core/traits/hash" as *
+#import "alloc/collections/hashmap" as *
+
+fn main <()*>i32> ():
+    let hm <HashMap<i32, i32, DefaultHash32>> unwrap_ok new DefaultHash32
+    0
+"#;
+    typecheck_src_with_target(src, CompileTarget::Wasm);
+}
+
+#[test]
+fn more_specific_get_overload_beats_generic_catchall() {
+    let src = r#"
+#target wasm
+#indent 4
+#no_prelude
+#import "core/option" as *
+#import "core/result" as *
+#import "core/field" as *
+#import "alloc/diag/error" as *
+#import "core/traits/hash" as *
+#import "alloc/collections/hashmap" as *
+
+fn main <()*>i32> ():
+    let hm <HashMap<i32, i32, DefaultHash32>> unwrap_ok new DefaultHash32
+    match get hm 10:
+        Option::Some v:
+            v
+        Option::None:
+            0
+"#;
+    typecheck_src_with_target(src, CompileTarget::Wasm);
+}
+
+#[test]
+fn annotated_let_prefers_specific_get_over_generic_field_get() {
+    let src = r#"
+#target wasm
+#indent 4
+#no_prelude
+#import "core/option" as *
+#import "core/result" as *
+#import "alloc/diag/error" as *
+#import "core/traits/hash" as *
+#import "alloc/collections/hashmap" as *
+
+fn must_hm <(Result<HashMap<i32, i32, DefaultHash32>, Diag>)*>HashMap<i32, i32, DefaultHash32>> (r):
+    match r:
+        Result::Ok hm:
+            hm
+        Result::Err _d:
+            #intrinsic "unreachable" <> ()
+
+fn main <()*>i32> ():
+    let hm <HashMap<i32, i32, DefaultHash32>> must_hm new DefaultHash32
+    let got <Option<i32>> get hm 10
+    match got:
+        Option::Some v:
+            v
+        Option::None:
+            0
+"#;
+    typecheck_src_with_target(src, CompileTarget::Wasm);
 }

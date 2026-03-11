@@ -11003,3 +11003,53 @@
   - `node nodesrc/tests.js -i tests/stdlib/collections_diag.n.md -i tests/stdlib/selfhost_req.n.md --no-stdlib --no-tree -o /tmp/tests-collections-selfhost-current.json -j 4`
     - [結果/けっか]: `12/12 pass`
     - output JSON: `/tmp/tests-collections-selfhost-current.json`
+
+# 2026-03-11 作業メモ (`HashMap` / `HashSet` custom hasher を支える compiler 根因修正)
+
+- [目的/もくてき]:
+  - `HashMap<.K,.V,.H>` / `HashSet<.K,.H>` が user-provided hasher を[値/あたい]として[受/う]け[取/と]れるようにし、`Hasher<.K>` trait [経由/けいゆ]の dispatch を current compiler / web compile path の[両方/りょうほう]で[安定/あんてい]させる。
+  - `field::get` の qualified call と bare `get` の collection API が[衝突/しょうとつ]しないようにし、NEPLg2 の[前置/ぜんち][記法/きほう] + overload 解決に[沿/そ]った root fix を[入/い]れる。
+- [根本原因/こんぽんげんいん]:
+  - `tests/stdlib/traits_hash.n.md` の compile failure は stdlib 側の hasher 実装ではなく、compiler と web compile path の[不一致/ふいっち]が[真因/しんいん]だった。
+  - native / analysis [経路/けいろ]では `SourceMap` を[使/つか]って qualified import alias から `field::get` を[正/ただ]しく[選/えら]べていたが、`nepl-web` の compile [経路/けいろ]だけは `compile_module(...)` を[通/とお]って `SourceMap` なしで typecheck していた。そのため `field::get` が bare `get` に[崩/くず]れ、`HashMap::get` と[衝突/しょうとつ]して unresolved trait call まで[連鎖/れんさ]していた。
+  - さらに trait impl lookup も applied string 名ではなく `base trait name + trait args` の[構造/こうぞう]で[扱/あつか]わないと、generic hasher impl が monomorphize [後/ご]も `FuncRef::Trait` のまま[残/のこ]ることが[分/わ]かった。
+- [変更/へんこう]:
+  - `nepl-core/src/typecheck.rs`
+    - qualified import alias から target file set を[引/ひ]く[仕組/しく]みを `SourceMap` [利用/りよう]へ[整理/せいり]し、selected qualified callable は `HirExprKind::FnValue(symbol)` として[保持/ほじ]するようにした。
+    - `field::get` の qualified call が bare `get` に[崩/くず]れず、collection API との overload [衝突/しょうとつ]を[避/さ]けられるようにした。
+  - `nepl-core/src/loader.rs`
+    - `SourceMap::iter_paths` を[追加/ついか]し、typecheck が import alias と file path suffix を[対応付/たいおうづ]けられるようにした。
+  - `nepl-core/src/hir.rs`, `nepl-core/src/monomorphize.rs`, `nepl-core/src/compiler.rs`, `nepl-core/src/ast.rs`, `nepl-core/src/parser.rs`
+    - generic trait / impl の trait args を string ではなく[構造/こうぞう]で[保持/ほじ]し、`Hasher<.K>` impl の dispatch が monomorphize [後/ご]に concrete call へ[落/お]ちるようにした。
+    - monomorphize [段階/だんかい]では unresolved trait call を[検査/けんさ]し、generic hasher 経路に[残/のこ]っていないことを[保証/ほしょう]するようにした。
+  - `nepl-web/src/lib.rs`
+    - web compile [経路/けいろ]を `compile_module_with_source_map(...)` に[切/き]り[替/か]え、native path と[同/おな]じ `SourceMap` [前提/ぜんてい]で compile するようにした。
+    - 切り[分/わ]け用の panic catch / debug export は[最終的/さいしゅうてき]に[除去/じょきょ]し、恒久修正だけを[残/のこ]した。
+  - `nepl-core/tests/overload.rs`
+    - grouped constructor / specific `get` overload / annotated `let` の regression を[追加/ついか]し、今回の root fix を compiler test として[固定/こてい]した。
+  - `stdlib/core/traits/hash.nepl`, `stdlib/core/traits/hash_key.nepl`, `stdlib/alloc/collections/hashmap.nepl`, `stdlib/alloc/collections/hashset.nepl`
+    - custom hasher を[受/う]け[取/と]る current reboot 形へ[整理/せいり]した。
+  - `stdlib/tests/hashmap*.n.md`, `stdlib/tests/hashset*.n.md`, `tests/stdlib/traits_hash.n.md`, `tests/stdlib/collections_diag.n.md`, `tests/stdlib/pipe_collections.n.md`, `tests/stdlib/selfhost_req.n.md`
+    - `DefaultHash32 ()` のような old [表記/ひょうき]を[残/のこ]さず `DefaultHash32` へ[統一/とういつ]し、current custom hasher / bare collection API [前提/ぜんてい]へ[更新/こうしん]した。
+  - `stdlib/alloc/string.nepl`
+    - hash focused を[通/とお]す[過程/かてい]で[見/み]つかった一時 `RegionToken` [再利用/さいりよう]の move model [衝突/しょうとつ]を[解消/かいしょう]した。
+- [設計/せっけい][判断/はんだん]:
+  - `field::get` と `HashMap::get` の[競合/きょうごう]は library alias を[足/た]して[回避/かいひ]するのではなく、qualified name 解決と前置記法 reduction の root fix で[解消/かいしょう]した。
+  - custom hasher は built-in special case を[増/ふ]やさず、trait impl と overload 解決で[支/ささ]える reboot [方針/ほうしん]を[維持/いじ]した。
+  - web path だけ別挙動になるのは[設計/せっけい]として[悪/わる]いので、debug helper を[常設/じょうせつ]せず compile path 自体を native と[同/おな]じ `SourceMap` [前提/ぜんてい]へ[揃/そろ]えた。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/run_doctest.js -i tests/stdlib/traits_hash.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i tests/stdlib/traits_hash.n.md -i stdlib/tests/hashmap.n.md -i stdlib/tests/hashset.n.md -i stdlib/tests/hashmap_str.n.md -i stdlib/tests/hashset_str.n.md -i tests/stdlib/collections_diag.n.md --no-stdlib --no-tree -o /tmp/tests-hash-focus.json -j 4`
+    - [結果/けっか]: `13/13 pass`
+    - output JSON: `/tmp/tests-hash-focus.json`
+  - `cargo test -p nepl-core --test overload grouped_argument_overload_uses_later_items_before_reduction -- --nocapture`
+    - [結果/けっか]: pass
+  - `cargo test -p nepl-core --test overload grouped_constructor_argument_can_flow_into_generic_new_call -- --nocapture`
+    - [結果/けっか]: pass
+  - `cargo test -p nepl-core --test overload more_specific_get_overload_beats_generic_catchall -- --nocapture`
+    - [結果/けっか]: pass
+  - `cargo test -p nepl-core --test overload annotated_let_prefers_specific_get_over_generic_field_get -- --nocapture`
+    - [結果/けっか]: pass
