@@ -26,11 +26,11 @@ fn main <()*> ()> ():
     let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
     let n <i32> read sc;
     let q <i32> read sc;
-    let mut a <Vec<i32>> new<i32>;
+    let mut a <Vec<i32>> unwrap_ok new<i32>;
     let mut i <i32> 0;
     while lt i n:
         do:
-            set a push a read sc;
+            set a unwrap_ok push a read sc;
             set i add i 1;
     let pref <PrefixI32> prefix_build_vec_i32 a;
     let mut w <StreamWriter> unwrap_ok open WriteStream::Stdio;
@@ -95,10 +95,10 @@ fn count_subarrays_leq_s <(Vec<i32>,i32)->i32> (a, s):
 |
 fn main <()*> ()> ():
     let a <Vec<i32>>:
-        new<i32>
-        |> push 1
-        |> push 2
-        |> push 3
-        |> push 4
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 4 |> uwok
     println_i32 count_subarrays_leq_s a 5
 ```

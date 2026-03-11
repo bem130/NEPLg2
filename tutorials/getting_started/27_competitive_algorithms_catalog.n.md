@@ -23,11 +23,11 @@ stdout: "60\n"
 fn main <()*> ()> ():
     let sc <StreamScanner> unwrap_ok open ReadStream::Stdio;
     let n <i32> read sc;
-    let mut a <Vec<i32>> new<i32>;
+    let mut a <Vec<i32>> unwrap_ok new<i32>;
     let mut i <i32> 0;
     while lt i n:
         do:
-            set a push a read sc;
+            set a unwrap_ok push a read sc;
             set i add i 1;
     let mut sum <i32> 0;
     let s <VecDataLen<i32>> data_len<i32> a;

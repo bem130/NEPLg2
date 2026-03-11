@@ -162,10 +162,65 @@
     - `define` 側の重複を `name__ovN_<sig>` へ正規化し、対応する `call` 参照も同一シグネチャで張り替える。
     - 前段として `#llvmir` 呼び出し要件抽出と AST raw-body 選別補助を追加し、不要な overload 出力を抑制。
 - 検証:
-  - `NO_COLOR=false trunk build` -> success
-  - `cargo build -p nepl-cli` -> success
-  - `node nodesrc/tests.js -i tests/llvm_target.n.md --no-stdlib --no-tree --runner all --llvm-all -o /tmp/tests-llvm-target-after-dedup-pass.json -j 15` -> `6/6 pass`
-  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-dedup.json -j 15` -> `791/791 pass`
+- `NO_COLOR=false trunk build` -> success
+- `cargo build -p nepl-cli` -> success
+- `node nodesrc/tests.js -i tests/llvm_target.n.md --no-stdlib --no-tree --runner all --llvm-all -o /tmp/tests-llvm-target-after-dedup-pass.json -j 15` -> `6/6 pass`
+- `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-dedup.json -j 15` -> `791/791 pass`
+
+# 2026-03-12 作業メモ (refactor(vec): Result 化した Vec API を直接依存先へ伝播)
+
+- 目的:
+  - `alloc/collections/vec` の `new / with_capacity / push` を `Result<..., StdErrorKind>` 化した変更を、直接依存する stdlib / tests / tutorials へ整合的に反映する。
+  - `Vec` 再確保を伴う API を `stack` 系と同じ失敗モデルへ寄せつつ、既存の高水準 helper では `unwrap_ok` 吸収で利用者の記述を過剰に崩さない。
+- 根本原因:
+  - `Vec` 本体だけを `Result` 化すると、`std/test` / `alloc/string` / `nm/parser` / `kpgraph` / `wasix/tui` などが旧 pure API を前提にして壊れる。
+  - さらに `StdErrorKind` が上位の `alloc/diag/error` にあると、`vec -> diag/error -> vec` の循環依存が生じる。
+- 変更:
+  - `stdlib/alloc/collections/vec.nepl`
+    - `new / with_capacity / push` を `Result<..., StdErrorKind>` 化。
+    - `with_capacity 0` は確保を行わず空 `MemPtr` を包む形にして `OutOfMemory` を不要化。
+  - `stdlib/std/test.nepl`
+    - `checks_new` / `checks_push` で `Vec<Result<(),str>>` の `Result` を内部吸収。
+  - `stdlib/alloc/string.nepl`
+    - `StringBuilder` と `str_split` の内部 `Vec` 構築・追加を `unwrap_ok` 前提へ更新。
+  - `stdlib/alloc/diag/error.nepl`
+    - `Diag` / `Diags` 内部の `Vec` 構築・追加を `unwrap_ok` 前提へ更新。
+  - `stdlib/alloc/hash/sha256.nepl`
+    - scaffold 実装の buffer 構築・更新を `unwrap_ok` 前提へ更新。
+  - `stdlib/kp/kpgraph.nepl`
+    - BFS 結果ベクタ構築を `unwrap_ok` 前提へ更新。
+  - `stdlib/platforms/wasix/tui.nepl`
+    - `text_wrap_lines` の行配列構築を `unwrap_ok` 前提へ更新。
+  - `stdlib/nm/parser.nepl`
+    - inline/block parser 内部の `Vec` 構築・追加を `unwrap_ok` 前提へ更新。
+  - `stdlib/tests/vec.n.md`
+    - current `Vec Result` API に同期。
+  - `tests/stdlib/traits_order.n.md`
+    - sort regression の `Vec` 構築を `unwrap_ok` 前提へ更新。
+  - `tests/stdlib/selfhost_req.n.md`
+    - `Vec<u8>` buffer 構築を `unwrap_ok` 前提へ更新。
+  - `tests/stdlib/sort.n.md`
+    - sort fixture の `Vec` 構築を `unwrap_ok` 前提へ更新。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+  - `tutorials/getting_started/27_competitive_algorithms_catalog.n.md`
+    - `Vec` pipe 連鎖を `unwrap_ok new` と `|> push ... |> uwok` の current 書式へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/vec.n.md -i tests/stdlib/traits_order.n.md -i tests/stdlib/selfhost_req.n.md --no-stdlib --no-tree -o /tmp/tests-vec-result-a.json -j 4`
+    - 結果: `10/10 pass`
+  - `node nodesrc/tests.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/26_competitive_graph_bfs.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md --no-stdlib --no-tree -o /tmp/tests-vec-result-b2.json -j 4`
+    - 結果: `4/4 pass`
+  - 補助確認:
+    - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 1` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/23_competitive_sort_and_search.n.md -n 1` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/23_competitive_sort_and_search.n.md -n 2` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -n 1` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -n 2` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/26_competitive_graph_bfs.n.md -n 1` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -n 1` -> pass
+- 差異メモ:
+  - `Vec` の public API Result 化は進んだが、`vec.nepl` 本体の doc comment / doctest には旧書式・旧 pure 前提の説明がまだ残る。
+  - `replace` を `set` へ改名する案は parser / keyword 制約の切り分け後に再検討する。
 
 # 2026-03-06 作業メモ (フェーズD: llvm codegen 内の precheck 後診断返却を除去)
 

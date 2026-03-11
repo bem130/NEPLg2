@@ -48,7 +48,7 @@ struct Sha256:
 //: [計算量/けいさんりょう]:
 //: - `Vec` 初期化に[従/したが]う O(1)
 fn new_sha256 <()*>Sha256> ():
-    Sha256 new<i32>
+    Sha256 unwrap_ok new<i32>
 
 //: sha256_update: 主な用途
 //:
@@ -61,7 +61,7 @@ fn new_sha256 <()*>Sha256> ():
 //: [計算量/けいさんりょう]:
 //: - [償却/しょうきゃく] O(1)
 fn sha256_update <(Sha256, i32)*>Sha256> (ctx, byte):
-    let new_vec <Vec<i32>> push<i32> ctx.buffer byte
+    let new_vec <Vec<i32>> unwrap_ok push<i32> ctx.buffer byte
     Sha256 new_vec
 
 //: sha256_finalize: 主な用途

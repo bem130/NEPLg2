@@ -49,9 +49,9 @@ fn main <()*>i32> ():
     let b2 <u8> cast 0xAD;
     
     // 要件: Vec<u8> (バイトバッファ)
-    let mut buf <Vec<u8>> new<u8>;
-    set buf push<u8> buf b1;
-    set buf push<u8> buf b2;
+    let mut buf <Vec<u8>> unwrap_ok new<u8>;
+    set buf unwrap_ok push<u8> buf b1;
+    set buf unwrap_ok push<u8> buf b2;
     
     // 要件: バイト単位のアクセス
     match get<u8> buf 0:

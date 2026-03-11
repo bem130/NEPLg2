@@ -434,7 +434,7 @@ fn line_clip_to_cols <(str,i32)*>str> (s, cols):
 //: [計算量/けいさんりょう]:
 //: - O(n)
 fn text_wrap_lines <(str,i32)*>Vec<str>> (text, cols):
-    let mut out <Vec<str>> new<str>;
+    let mut out <Vec<str>> unwrap_ok new<str>;
     if:
         lt cols 1
         then:
@@ -451,7 +451,7 @@ fn text_wrap_lines <(str,i32)*>Vec<str>> (text, cols):
                         eq b 10
                         then:
                             let ln <str> str_slice text line_start i;
-                            set out push<str> out ln;
+                            set out unwrap_ok push<str> out ln;
                             set i add i 1;
                             set line_start i;
                             set line_w 0;
@@ -481,20 +481,20 @@ fn text_wrap_lines <(str,i32)*>Vec<str>> (text, cols):
                                         eq i line_start
                                         then:
                                             let ln2 <str> str_slice text line_start add i ch_len;
-                                            set out push<str> out ln2;
+                                            set out unwrap_ok push<str> out ln2;
                                             set i add i ch_len;
                                             set line_start i;
                                             set line_w 0;
                                         else:
                                             let ln3 <str> str_slice text line_start i;
-                                            set out push<str> out ln3;
+                                            set out unwrap_ok push<str> out ln3;
                                             set line_start i;
                                             set line_w 0;
                                 else:
                                     set i add i ch_len;
                                     set line_w next_w;
             let tail <str> str_slice text line_start n;
-            set out push<str> out tail;
+            set out unwrap_ok push<str> out tail;
             out
 
 //: buffer_set_wrapped_text: 折り返し文字列を行バッファへ描画する

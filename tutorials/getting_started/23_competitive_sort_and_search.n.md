@@ -18,10 +18,10 @@ neplg2:test
 
 fn main <()*>i32> ():
     let v <Vec<i32>>:
-        new<i32>
-        |> push 5
-        |> push 1
-        |> push 3
+        unwrap_ok new<i32>
+        |> push 5 |> uwok
+        |> push 1 |> uwok
+        |> push 3 |> uwok
         |> sort_quick_ret
     let checks <Vec<Result<(),str>>>:
         checks_new
@@ -50,25 +50,25 @@ stdout: "1 3 2\n"
 
 fn main <()*>()> ():
     let v_lower <Vec<i32>>:
-        new<i32>
-        |> push 1
-        |> push 3
-        |> push 3
-        |> push 7
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 3 |> uwok
+        |> push 3 |> uwok
+        |> push 7 |> uwok
         |> sort_quick_ret
     let v_upper <Vec<i32>>:
-        new<i32>
-        |> push 1
-        |> push 3
-        |> push 3
-        |> push 7
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 3 |> uwok
+        |> push 3 |> uwok
+        |> push 7 |> uwok
         |> sort_quick_ret
     let v_count <Vec<i32>>:
-        new<i32>
-        |> push 1
-        |> push 3
-        |> push 3
-        |> push 7
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 3 |> uwok
+        |> push 3 |> uwok
+        |> push 7 |> uwok
         |> sort_quick_ret
     print_i32 lower_bound_vec_i32 v_lower 2;
     print " ";

@@ -307,7 +307,7 @@ struct StringBuilder:
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn string_builder_new <()->StringBuilder> ():
-    StringBuilder v::new<str>
+    StringBuilder unwrap_ok v::new<str>
 
 // sb_append: 文字列を追加する
 //
@@ -338,6 +338,7 @@ fn string_builder_new <()->StringBuilder> ():
 fn sb_append <(StringBuilder,str)->StringBuilder> (sb, s):
     get sb "parts"
     |> v::push<str> s
+    |> unwrap_ok
     |> StringBuilder
 
 // sb_append_i32: i32 を追加する
@@ -852,11 +853,11 @@ fn str_match_at <(str,str,i32,i32)->bool> (s, sep, pos, sep_len):
 //: - 本体処理に準じます。
 fn str_split <(str,str)->Vec<str>> (s, sep):
     let sep_len <i32> load_i32 sep;
-    let mut out <Vec<str>> v::new<str>;
+    let mut out <Vec<str>> unwrap_ok v::new<str>;
     if:
         eq sep_len 0
         then:
-            set out v::push<str> out s
+            set out unwrap_ok v::push<str> out s
             out
         else:
             let s_len <i32> load_i32 s;
@@ -868,13 +869,13 @@ fn str_split <(str,str)->Vec<str>> (s, sep):
                         str_match_at s sep i sep_len
                         then:
                             let part <str> str_slice s start i;
-                            set out v::push<str> out part;
+                            set out unwrap_ok v::push<str> out part;
                             set i <i32> add i sep_len;
                             set start i;
                         else:
                             set i <i32> add i 1;
             let tail <str> str_slice s start s_len;
-            set out v::push<str> out tail;
+            set out unwrap_ok v::push<str> out tail;
             out
 
 // from_bool: bool を文字列へ変換する

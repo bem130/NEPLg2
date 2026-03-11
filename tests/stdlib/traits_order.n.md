@@ -55,11 +55,11 @@ neplg2:test
 #import "core/option" as *
 
 fn main <()*>i32> ():
-    let v0 <Vec<i32>> new<i32>;
-    let v1 <Vec<i32>> push<i32> v0 4;
-    let v2 <Vec<i32>> push<i32> v1 1;
-    let v3 <Vec<i32>> push<i32> v2 3;
-    let v4 <Vec<i32>> push<i32> v3 2;
+    let v0 <Vec<i32>> unwrap_ok new<i32>;
+    let v1 <Vec<i32>> unwrap_ok push<i32> v0 4;
+    let v2 <Vec<i32>> unwrap_ok push<i32> v1 1;
+    let v3 <Vec<i32>> unwrap_ok push<i32> v2 3;
+    let v4 <Vec<i32>> unwrap_ok push<i32> v3 2;
     let s sort_quick_ret<i32> v4;
     let span <VecDataLen<i32>> data_len<i32> s;
     let data <i32> mem_ptr_addr get span "data";

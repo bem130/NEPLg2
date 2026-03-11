@@ -17,27 +17,33 @@ ret: 0
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let v0_empty <Vec<i32>> new<i32>;
+    let v0_empty <Vec<i32>> unwrap_ok new<i32>;
     set checks checks_push checks check is_empty<i32> v0_empty;
-    let v0_ptr <Vec<i32>> new<i32>;
+    let v0_ptr <Vec<i32>> unwrap_ok new<i32>;
     set checks checks_push checks check gt data_ptr<i32> v0_ptr 0;
 
     let v2:
-        new<i32>
+        unwrap_ok new<i32>
         |> push<i32> 10
+        |> unwrap_ok
     set checks checks_push checks check_eq_i32 1 len<i32> v2;
 
     let v6:
-        new<i32>
+        unwrap_ok new<i32>
         |> push<i32> 10
+        |> unwrap_ok
         |> push<i32> 20
+        |> unwrap_ok
         |> push<i32> 30
+        |> unwrap_ok
     set checks checks_push checks check_eq_i32 3 len<i32> v6;
 
     let g2:
-        new<i32>
+        unwrap_ok new<i32>
         |> push<i32> 10
+        |> unwrap_ok
         |> push<i32> 20
+        |> unwrap_ok
     match get<i32> g2 0:
         Option::Some x:
             set checks checks_push checks check_eq_i32 10 x
@@ -45,25 +51,30 @@ fn main <()*>i32> ():
             set checks checks_push checks Result<(),str>::Err "get 0 returned None";
 
     let s2:
-        new<i32>
+        unwrap_ok new<i32>
         |> push<i32> 10
+        |> unwrap_ok
         |> push<i32> 20
+        |> unwrap_ok
     replace<i32> s2 1 21;
 
     let o1:
-        new<i32>
+        unwrap_ok new<i32>
         |> push<i32> 10
+        |> unwrap_ok
     set checks checks_push checks check is_none<i32> get<i32> o1 2;
 
     let p1:
-        new<i32>
+        unwrap_ok new<i32>
         |> push<i32> 10
+        |> unwrap_ok
     set checks checks_push checks check is_none<i32> get<i32> p1 -1;
 
     let u8_65 <u8> cast 65;
     let b1:
-        new<u8>
+        unwrap_ok new<u8>
         |> push<u8> u8_65
+        |> unwrap_ok
     match get<u8> b1 0:
         Option::Some x:
             set checks checks_push checks check_eq_i32 65 cast x
