@@ -17,16 +17,14 @@ ret: 1
 
 fn main <()*>i32> ():
     let rb0 <RingBuffer<i32>>:
-        new<i32>
-        |> unwrap_ok<RingBuffer<i32>, Diag>
+        unwrap_ok<RingBuffer<i32>, Diag> new<i32>
         |> push<i32> 10
         |> unwrap_ok<RingBuffer<i32>, Diag>
         |> push<i32> 20
         |> unwrap_ok<RingBuffer<i32>, Diag>
     let ok0 <bool> eq len<i32> rb0 2;
     let rb1 <RingBuffer<i32>>:
-        new<i32>
-        |> unwrap_ok<RingBuffer<i32>, Diag>
+        unwrap_ok<RingBuffer<i32>, Diag> new<i32>
         |> push<i32> 10
         |> unwrap_ok<RingBuffer<i32>, Diag>
         |> push<i32> 20
@@ -37,8 +35,7 @@ fn main <()*>i32> ():
         Option::None:
             false
     let rb2 <RingBuffer<i32>>:
-        new<i32>
-        |> unwrap_ok<RingBuffer<i32>, Diag>
+        unwrap_ok<RingBuffer<i32>, Diag> new<i32>
         |> push<i32> 10
         |> unwrap_ok<RingBuffer<i32>, Diag>
     let ok2 <bool> match pop<i32> rb2:

@@ -1,0 +1,400 @@
+#indent 4
+
+//: # deque
+//: [両端/りょうたん] queue を[扱/あつか]う[循環/じゅんかん]バッファ
+//:
+//: ### [目的/もくてき]
+//: - `Deque<.T>` を[提供/ていきょう]し、[前後/ぜんご][両端/りょうたん]での push / pop / peek を[共通/きょうつう]の[所有権/しょゆうけん][流儀/りゅうぎ]で[扱/あつか]えるようにします。
+//: - `Queue` と `RingBuffer` の[中間/ちゅうかん]にある ADT として、[先頭/せんとう]・[末尾/まつび]の[両方/りょうほう]を O(1) [近傍/きんぼう]で[更新/こうしん]できる[構造/こうぞう]を[標準/ひょうじゅん]で[揃/そろ]えます。
+//:
+//: ### [実装/じっそう]
+//: - header は `[len, cap, head, data_ptr]` を 16 byte で[保持/ほじ]します。
+//: - [要素/ようそ]は[論理順/ろんりじゅん]を `head` と `len` から[計算/けいさん]する[循環/じゅんかん]バッファとして[管理/かんり]します。
+//: - [容量/ようりょう][不足/ぶそく][時/じ]は 2 [倍/ばい]へ[拡張/かくちょう]し、[前/まえ]から[順/じゅん]に[複写/ふくしゃ]して[整列/せいれつ]した[状態/じょうたい]へ[戻/もど]します。
+//:
+//: ### [注意/ちゅうい]
+//: - `push_front` / `push_back` は[更新後/こうしんご]の `Deque<.T>` を `Result` で[返/かえ]します。
+//: - `pop_front` / `pop_back` / `peek_front` / `peek_back` は[空/から] deque を `Option::None` として[返/かえ]します。
+//: - `free` [後/ご]の[再利用/さいりよう]は[禁止/きんし]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `len` / `cap` / `is_empty` / `peek_front` / `peek_back` / `pop_front` / `pop_back` は O(1) です。
+//: - `push_front` / `push_back` は[償却/しょうきゃく] O(1)、[拡張/かくちょう][発生時/はっせいじ]の[最悪/さいあく]は O(n) です。
+
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/option" as *
+#import "core/result" as *
+#import "core/field" as *
+#import "alloc/diag/error" as *
+
+//: ## Deque
+//: [前後/ぜんご][両端/りょうたん]を[更新/こうしん]できる[循環/じゅんかん]バッファの[所有者/しょゆうしゃ]
+//:
+//: ### [目的/もくてき]
+//: - header と data [領域/りょういき]を 1 [値/あたい]として[所有/しょゆう]し、[両端/りょうたん] queue の[状態/じょうたい]を[完結/かんけつ]に[受/う]け[渡/わた]しできるようにします。
+//:
+//: ### [注意/ちゅうい]
+//: - `Deque<.T>` は軽量 handle ではなく、[内部/ないぶ]メモリの[所有権/しょゆうけん]を[持/も]つ[本体/ほんたい]です。
+struct Deque<.T>:
+    hdr <MemPtr<u8>>
+
+fn deque_header_len_ptr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap mem_ptr_addr hdr
+
+fn deque_header_cap_ptr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 4
+
+fn deque_header_head_ptr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 8
+
+fn deque_header_data_ptr_ptr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 12
+
+fn deque_len_from_hdr <(MemPtr<u8>)->i32> (hdr):
+    match load_i32 deque_header_len_ptr hdr:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+fn deque_cap_from_hdr <(MemPtr<u8>)->i32> (hdr):
+    match load_i32 deque_header_cap_ptr hdr:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+fn deque_head_from_hdr <(MemPtr<u8>)->i32> (hdr):
+    match load_i32 deque_header_head_ptr hdr:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+fn deque_data_from_hdr <.T> <(MemPtr<u8>)->MemPtr<.T>> (hdr):
+    match load_i32 deque_header_data_ptr_ptr hdr:
+        Option::Some raw:
+            mem_ptr_wrap raw
+        Option::None:
+            mem_ptr_wrap 0
+
+//: ## new
+//: [既定/きてい][容量/ようりょう]の[空/から] deque を[作/つく]る
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/deque" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dq <Deque<i32>> unwrap_ok<Deque<i32>, Diag> new<i32>;
+//:     if eq len dq 0 1 0
+//: ```
+fn new <.T> <()*>Result<Deque<.T>, Diag>> ():
+    with_capacity<.T> 8
+
+//: ## with_capacity
+//: [初期/しょき][容量/ようりょう]を[指定/してい]して deque を[作/つく]る
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/deque" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dq <Deque<i32>> unwrap_ok<Deque<i32>, Diag> with_capacity<i32> 16;
+//:     if eq cap dq 16 1 0
+//: ```
+fn with_capacity <.T> <(i32)*>Result<Deque<.T>, Diag>> (cap):
+    let cap0 <i32> if lt cap 1 1 cap
+    match alloc_ptr<u8> 16:
+        Result::Err _e:
+            diag_err<Deque<.T>> diag_out_of_memory "deque_with_capacity(header)"
+        Result::Ok header:
+            match alloc_ptr<.T> mul cap0 size_of<.T>:
+                Result::Err _e:
+                    let _ <()> uwok dealloc_ptr<u8> header 16
+                    diag_err<Deque<.T>> diag_out_of_memory "deque_with_capacity(data)"
+                Result::Ok data:
+                    let _ <()> uwok store_i32 deque_header_len_ptr header 0
+                    let _ <()> uwok store_i32 deque_header_cap_ptr header cap0
+                    let _ <()> uwok store_i32 deque_header_head_ptr header 0
+                    let _ <()> uwok store_i32 deque_header_data_ptr_ptr header mem_ptr_addr data
+                    ok<Deque<.T>, Diag> Deque header
+
+//: ## len
+//: [要素数/ようそすう]を[返/かえ]す
+fn len <.T> <(Deque<.T>)->i32> (dq):
+    deque_len_from_hdr get dq "hdr"
+
+//: ## cap
+//: [容量/ようりょう]を[返/かえ]す
+fn cap <.T> <(Deque<.T>)->i32> (dq):
+    deque_cap_from_hdr get dq "hdr"
+
+//: ## is_empty
+//: [空/から]かどうかを[返/かえ]す
+fn is_empty <.T> <(Deque<.T>)->bool> (dq):
+    eq len<.T> dq 0
+
+fn deque_grow_front <.T> <(Deque<.T>, .T)*>Result<Deque<.T>, Diag>> (dq, item):
+    let hdr <MemPtr<u8>> get dq "hdr"
+    let len0 <i32> deque_len_from_hdr hdr
+    let cap0 <i32> deque_cap_from_hdr hdr
+    let head0 <i32> deque_head_from_hdr hdr
+    let data0 <MemPtr<.T>> deque_data_from_hdr<.T> hdr
+    let cap1 <i32> mul cap0 2
+    match alloc_ptr<.T> mul cap1 size_of<.T>:
+        Result::Err _e:
+            diag_err<Deque<.T>> diag_out_of_memory "push_front(grow)"
+        Result::Ok data1:
+            store<.T> mem_ptr_addr data1 item
+            let mut i <i32> 0
+            while lt i len0:
+                do:
+                    let src_idx <i32> mod_s add head0 i cap0
+                    let src_off <i32> mul src_idx size_of<.T>
+                    let dst_off <i32> mul add i 1 size_of<.T>
+                    store<.T> add mem_ptr_addr data1 dst_off load<.T> add mem_ptr_addr data0 src_off
+                    set i add i 1
+            let _ <()> uwok dealloc_ptr<.T> data0 mul cap0 size_of<.T>
+            let _ <()> uwok store_i32 deque_header_cap_ptr hdr cap1
+            let _ <()> uwok store_i32 deque_header_head_ptr hdr 0
+            let _ <()> uwok store_i32 deque_header_data_ptr_ptr hdr mem_ptr_addr data1
+            let _ <()> uwok store_i32 deque_header_len_ptr hdr add len0 1
+            ok<Deque<.T>, Diag> dq
+
+fn deque_grow_back <.T> <(Deque<.T>, .T)*>Result<Deque<.T>, Diag>> (dq, item):
+    let hdr <MemPtr<u8>> get dq "hdr"
+    let len0 <i32> deque_len_from_hdr hdr
+    let cap0 <i32> deque_cap_from_hdr hdr
+    let head0 <i32> deque_head_from_hdr hdr
+    let data0 <MemPtr<.T>> deque_data_from_hdr<.T> hdr
+    let cap1 <i32> mul cap0 2
+    match alloc_ptr<.T> mul cap1 size_of<.T>:
+        Result::Err _e:
+            diag_err<Deque<.T>> diag_out_of_memory "push_back(grow)"
+        Result::Ok data1:
+            let mut i <i32> 0
+            while lt i len0:
+                do:
+                    let src_idx <i32> mod_s add head0 i cap0
+                    let src_off <i32> mul src_idx size_of<.T>
+                    let dst_off <i32> mul i size_of<.T>
+                    store<.T> add mem_ptr_addr data1 dst_off load<.T> add mem_ptr_addr data0 src_off
+                    set i add i 1
+            store<.T> add mem_ptr_addr data1 mul len0 size_of<.T> item
+            let _ <()> uwok dealloc_ptr<.T> data0 mul cap0 size_of<.T>
+            let _ <()> uwok store_i32 deque_header_cap_ptr hdr cap1
+            let _ <()> uwok store_i32 deque_header_head_ptr hdr 0
+            let _ <()> uwok store_i32 deque_header_data_ptr_ptr hdr mem_ptr_addr data1
+            let _ <()> uwok store_i32 deque_header_len_ptr hdr add len0 1
+            ok<Deque<.T>, Diag> dq
+
+//: ## push_front
+//: [先頭/せんとう]へ[追加/ついか]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/deque" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dq <Deque<i32>>:
+//:         unwrap_ok<Deque<i32>, Diag> new<i32>
+//:         |> push_front 10 |> uwok
+//:         |> push_front 20 |> uwok
+//:     if eq len dq 2 1 0
+//: ```
+fn push_front <.T> <(Deque<.T>, .T)*>Result<Deque<.T>, Diag>> (dq, item):
+    let hdr <MemPtr<u8>> get dq "hdr"
+    let len0 <i32> deque_len_from_hdr hdr
+    let cap0 <i32> deque_cap_from_hdr hdr
+    let head0 <i32> deque_head_from_hdr hdr
+    let data0 <MemPtr<.T>> deque_data_from_hdr<.T> hdr
+    if:
+        eq len0 cap0
+        then deque_grow_front<.T> dq item
+        else:
+            let head1 <i32> mod_s add sub head0 1 cap0 cap0
+            let off <i32> mul head1 size_of<.T>
+            store<.T> add mem_ptr_addr data0 off item
+            let _ <()> uwok store_i32 deque_header_head_ptr hdr head1
+            let _ <()> uwok store_i32 deque_header_len_ptr hdr add len0 1
+            ok<Deque<.T>, Diag> dq
+
+//: ## push_back
+//: [末尾/まつび]へ[追加/ついか]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/deque" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dq <Deque<i32>>:
+//:         unwrap_ok<Deque<i32>, Diag> new<i32>
+//:         |> push_back 10 |> uwok
+//:         |> push_back 20 |> uwok
+//:     if eq len dq 2 1 0
+//: ```
+fn push_back <.T> <(Deque<.T>, .T)*>Result<Deque<.T>, Diag>> (dq, item):
+    let hdr <MemPtr<u8>> get dq "hdr"
+    let len0 <i32> deque_len_from_hdr hdr
+    let cap0 <i32> deque_cap_from_hdr hdr
+    let head0 <i32> deque_head_from_hdr hdr
+    let data0 <MemPtr<.T>> deque_data_from_hdr<.T> hdr
+    if:
+        eq len0 cap0
+        then deque_grow_back<.T> dq item
+        else:
+            let tail_idx <i32> mod_s add head0 len0 cap0
+            let off <i32> mul tail_idx size_of<.T>
+            store<.T> add mem_ptr_addr data0 off item
+            let _ <()> uwok store_i32 deque_header_len_ptr hdr add len0 1
+            ok<Deque<.T>, Diag> dq
+
+//: ## pop_front
+//: [先頭/せんとう]から[取/と]り[出/だ]す
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/deque" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/option" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dq <Deque<i32>>:
+//:         unwrap_ok<Deque<i32>, Diag> new<i32>
+//:         |> push_back 10 |> uwok
+//:     match pop_front dq:
+//:         Option::Some v:
+//:             if eq v 10 1 0
+//:         Option::None:
+//:             0
+//: ```
+fn pop_front <.T> <(Deque<.T>)*>Option<.T>> (dq):
+    let hdr <MemPtr<u8>> get dq "hdr"
+    let len0 <i32> deque_len_from_hdr hdr
+    if:
+        eq len0 0
+        then:
+            none<.T>
+        else:
+            let cap0 <i32> deque_cap_from_hdr hdr
+            let head0 <i32> deque_head_from_hdr hdr
+            let data0 <MemPtr<.T>> deque_data_from_hdr<.T> hdr
+            let off <i32> mul head0 size_of<.T>
+            let item0 <.T> load<.T> add mem_ptr_addr data0 off
+            let _ <()> uwok store_i32 deque_header_head_ptr hdr mod_s add head0 1 cap0
+            let _ <()> uwok store_i32 deque_header_len_ptr hdr sub len0 1
+            some<.T> item0
+
+//: ## pop_back
+//: [末尾/まつび]から[取/と]り[出/だ]す
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/deque" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/option" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dq <Deque<i32>>:
+//:         unwrap_ok<Deque<i32>, Diag> new<i32>
+//:         |> push_back 10 |> uwok
+//:     match pop_back dq:
+//:         Option::Some v:
+//:             if eq v 10 1 0
+//:         Option::None:
+//:             0
+//: ```
+fn pop_back <.T> <(Deque<.T>)*>Option<.T>> (dq):
+    let hdr <MemPtr<u8>> get dq "hdr"
+    let len0 <i32> deque_len_from_hdr hdr
+    if:
+        eq len0 0
+        then:
+            none<.T>
+        else:
+            let cap0 <i32> deque_cap_from_hdr hdr
+            let head0 <i32> deque_head_from_hdr hdr
+            let data0 <MemPtr<.T>> deque_data_from_hdr<.T> hdr
+            let tail_idx <i32> mod_s add head0 sub len0 1 cap0
+            let off <i32> mul tail_idx size_of<.T>
+            let item0 <.T> load<.T> add mem_ptr_addr data0 off
+            let _ <()> uwok store_i32 deque_header_len_ptr hdr sub len0 1
+            some<.T> item0
+
+//: ## peek_front
+//: [先頭/せんとう]を[参照/さんしょう]する
+fn peek_front <.T> <(Deque<.T>)->Option<.T>> (dq):
+    let hdr <MemPtr<u8>> get dq "hdr"
+    let len0 <i32> deque_len_from_hdr hdr
+    if:
+        eq len0 0
+        then:
+            none<.T>
+        else:
+            let head0 <i32> deque_head_from_hdr hdr
+            let data0 <MemPtr<.T>> deque_data_from_hdr<.T> hdr
+            some<.T> load<.T> add mem_ptr_addr data0 mul head0 size_of<.T>
+
+//: ## peek_back
+//: [末尾/まつび]を[参照/さんしょう]する
+fn peek_back <.T> <(Deque<.T>)->Option<.T>> (dq):
+    let hdr <MemPtr<u8>> get dq "hdr"
+    let len0 <i32> deque_len_from_hdr hdr
+    if:
+        eq len0 0
+        then:
+            none<.T>
+        else:
+            let cap0 <i32> deque_cap_from_hdr hdr
+            let head0 <i32> deque_head_from_hdr hdr
+            let data0 <MemPtr<.T>> deque_data_from_hdr<.T> hdr
+            let tail_idx <i32> mod_s add head0 sub len0 1 cap0
+            some<.T> load<.T> add mem_ptr_addr data0 mul tail_idx size_of<.T>
+
+//: ## clear
+//: [内容/ないよう]を[空/から]にする
+fn clear <.T> <(Deque<.T>)*>Deque<.T>> (dq):
+    let hdr <MemPtr<u8>> get dq "hdr"
+    let _ <()> uwok store_i32 deque_header_len_ptr hdr 0
+    let _ <()> uwok store_i32 deque_header_head_ptr hdr 0
+    dq
+
+//: ## free
+//: [内部/ないぶ]メモリを[解放/かいほう]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/deque" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dq <Deque<i32>> unwrap_ok<Deque<i32>, Diag> new<i32>;
+//:     free dq;
+//:     0
+//: ```
+fn free <.T> <(Deque<.T>)*>()> (dq):
+    let hdr <MemPtr<u8>> get dq "hdr"
+    let cap0 <i32> deque_cap_from_hdr hdr
+    let data0 <MemPtr<.T>> deque_data_from_hdr<.T> hdr
+    let _ <()> uwok dealloc_ptr<.T> data0 mul cap0 size_of<.T>
+    let _ <()> uwok dealloc_ptr<u8> hdr 16

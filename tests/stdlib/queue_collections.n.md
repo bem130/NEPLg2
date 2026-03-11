@@ -27,16 +27,14 @@ ret: 1
 
 fn main <()*>i32> ():
     let q <Queue<i32>>:
-        new<i32>
-        |> uwok
+        unwrap_ok<Queue<i32>, Diag> new<i32>
         |> push<i32> 7
         |> uwok
         |> push<i32> 8
         |> uwok
     let ok0 <bool> eq len<i32> q 2;
     let q2 <Queue<i32>>:
-        new<i32>
-        |> uwok
+        unwrap_ok<Queue<i32>, Diag> new<i32>
         |> push<i32> 7
         |> uwok
         |> push<i32> 8

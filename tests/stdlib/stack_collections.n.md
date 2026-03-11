@@ -39,8 +39,7 @@ ret: 1
 
 fn main <()*>i32> ():
     let s0 <Stack<i32>>:
-        new<i32>
-        |> unwrap_ok<Stack<i32>, Diag>
+        unwrap_ok<Stack<i32>, Diag> new<i32>
         |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> push<i32> 20
@@ -51,8 +50,7 @@ fn main <()*>i32> ():
         Option::None:
             false
     let s1 <Stack<i32>>:
-        new<i32>
-        |> unwrap_ok<Stack<i32>, Diag>
+        unwrap_ok<Stack<i32>, Diag> new<i32>
         |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> push<i32> 20
@@ -108,8 +106,7 @@ ret: 1
 
 fn main <()*>i32> ():
     let s <Stack<i32>>:
-        new<i32>
-        |> unwrap_ok<Stack<i32>, Diag>
+        unwrap_ok<Stack<i32>, Diag> new<i32>
         |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> push<i32> 20
@@ -135,8 +132,7 @@ ret: 1
 
 fn main <()*>i32> ():
     let s0 <Stack<i32>>:
-        new<i32>
-        |> unwrap_ok<Stack<i32>, Diag>
+        unwrap_ok<Stack<i32>, Diag> new<i32>
         |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> push<i32> 20
@@ -147,8 +143,7 @@ fn main <()*>i32> ():
         Option::None:
             false
     let s1 <Stack<i32>>:
-        new<i32>
-        |> unwrap_ok<Stack<i32>, Diag>
+        unwrap_ok<Stack<i32>, Diag> new<i32>
         |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
         |> push<i32> 20

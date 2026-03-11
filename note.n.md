@@ -11442,3 +11442,45 @@
     - [結果/けっか]: pass
   - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/btreeset.nepl -n 7`
     - [結果/けっか]: pass
+
+# 2026-03-12 作業メモ (`Deque` [追加/ついか]と nullary `new` [書式/しょしき]の[統一/とういつ])
+
+- [目的/もくてき]:
+  - `alloc/collections` に `Deque` を[追加/ついか]し、[前後/ぜんご][両端/りょうたん] queue の bare API を[標準/ひょうじゅん]で[揃/そろ]える。
+  - collection fixture に[残/のこ]っていた `new<i32> |> unwrap_ok ...` / `new<i32> |> uwok` を、current [推奨/すいしょう]の `unwrap_ok<..., Diag> new<i32>` [形/けい]へ[統一/とういつ]する。
+- [根本原因/こんぽんげんいん]:
+  - nullary overload の `new` は pipe [起点/きてん]に[置/お]くと expected type が[十分/じゅうぶん]に[伝播/でんぱ]せず、`D3005 ambiguous overload` を[起/お]こしていた。
+  - `Deque` [追加/ついか]後の fixture でもこの[書式/しょしき]をそのまま[使/つか]っていたため、`peek_*` / `pop_*` [以前/いぜん]に `new` の[段階/だんかい]で[失敗/しっぱい]していた。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/deque.nepl`
+    - `Deque<.T>` と `new` / `with_capacity` / `len` / `cap` / `is_empty` / `push_front` / `push_back` / `pop_front` / `pop_back` / `peek_front` / `peek_back` / `clear` / `free` を[追加/ついか]した。
+    - [内部/ないぶ]は ring buffer [由来/ゆらい]の `[len, cap, head, data_ptr]` header で[実装/じっそう]した。
+    - public API の doc comment は new policy に[従/したが]って usage doctest を[付与/ふよ]した。
+  - `stdlib/tests/deque.n.md`, `tests/stdlib/deque_collections.n.md`
+    - `Deque` fixture を[追加/ついか]し、`push_back` / `push_front` / `peek_front` / `peek_back` / `pop_front` / `pop_back` の[基本/きほん][利用例/りようれい]を[固定/こてい]した。
+  - `stdlib/tests/queue.n.md`, `stdlib/tests/ringbuffer.n.md`, `stdlib/tests/stack.n.md`
+    - pipe [起点/きてん]の `new` を `unwrap_ok<..., Diag> new<...>` に[統一/とういつ]した。
+  - `tests/stdlib/queue_collections.n.md`, `tests/stdlib/ringbuffer_collections.n.md`, `tests/stdlib/stack_collections.n.md`
+    - `new<i32> |> uwok` を `unwrap_ok<..., Diag> new<i32>` へ[置換/ちかん]し、`push ... |> uwok` は 1 [行/ぎょう]のまま[維持/いじ]した。
+- [設計/せっけい][判断/はんだん]:
+  - `new` の overload [曖昧/あいまい]さを fixture [側/がわ]で[避/さ]ける[書式/しょしき]へ[揃/そろ]え、`push ... |> uwok` のような result-based collection pipe [流儀/りゅうぎ]は[維持/いじ]した。
+  - `Deque` は `Queue` と `RingBuffer` の[中間/ちゅうかん] ADT として[置/お]き、`alloc/collections` に queue family を[揃/そろ]える[足場/あしば]とした。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/tests/deque.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/deque.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/deque_collections.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/queue.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/ringbuffer.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/stack.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/queue_collections.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/ringbuffer_collections.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/stack_collections.n.md -n 2`
+    - [結果/けっか]: pass

@@ -17,16 +17,14 @@ ret: 1
 
 fn main <()*>i32> ():
     let q0 <Queue<i32>>:
-        new<i32>
-        |> unwrap_ok<Queue<i32>, Diag>
+        unwrap_ok<Queue<i32>, Diag> new<i32>
         |> push<i32> 1
         |> unwrap_ok<Queue<i32>, Diag>
         |> push<i32> 2
         |> unwrap_ok<Queue<i32>, Diag>
     let ok0 <bool> eq len<i32> q0 2;
     let q1 <Queue<i32>>:
-        new<i32>
-        |> unwrap_ok<Queue<i32>, Diag>
+        unwrap_ok<Queue<i32>, Diag> new<i32>
         |> push<i32> 1
         |> unwrap_ok<Queue<i32>, Diag>
         |> push<i32> 2
@@ -37,8 +35,7 @@ fn main <()*>i32> ():
         Option::None:
             false
     let q2 <Queue<i32>>:
-        new<i32>
-        |> unwrap_ok<Queue<i32>, Diag>
+        unwrap_ok<Queue<i32>, Diag> new<i32>
         |> push<i32> 5
         |> unwrap_ok<Queue<i32>, Diag>
     let ok2 <bool> match pop<i32> q2:

@@ -27,16 +27,14 @@ ret: 1
 
 fn main <()*>i32> ():
     let rb <RingBuffer<i32>>:
-        new<i32>
-        |> uwok
+        unwrap_ok<RingBuffer<i32>, Diag> new<i32>
         |> push 4
         |> uwok
         |> push 9
         |> uwok
     let ok0 <bool> eq len<i32> rb 2;
     let rb2 <RingBuffer<i32>>:
-        new<i32>
-        |> uwok
+        unwrap_ok<RingBuffer<i32>, Diag> new<i32>
         |> push 4
         |> uwok
         |> push 9
