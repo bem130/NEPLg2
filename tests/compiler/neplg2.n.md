@@ -584,7 +584,7 @@ fn main <()* >i32> ():
 ## list_get_out_of_bounds_err
 
 以前はコンパイル確認のみでした。
-`list_get` が範囲外アクセスで `None` を返す（= match の None 側に落ち、0 になる）ことを実行結果で確認するため、`ret: 0` を追加しました。
+`get` が範囲外アクセスで `None` を返す（= match の None 側に落ち、0 になる）ことを実行結果で確認するため、`ret: 0` を追加しました。
 
 neplg2:test
 ret: 0
@@ -595,9 +595,9 @@ ret: 0
 #import "core/option" as *
 
 fn main <()* >i32> ():
-    let lst list_nil<i32>;
-    let lst list_cons<i32> 1 lst;
-    let r list_get<i32> lst 10;
+    let lst new<i32>;
+    let lst cons<i32> 1 lst;
+    let r get<i32> lst 10;
     match r:
         Some v:
             v

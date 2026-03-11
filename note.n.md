@@ -11261,3 +11261,16 @@
   - `node nodesrc/tests.js -i tests/stdlib/sort.n.md --no-stdlib --no-tree -o /tmp/tests-stdlib-sort.json -j 2`
     - [結果/けっか]: `22/22 pass`
     - output JSON: `/tmp/tests-stdlib-sort.json`
+
+# 2026-03-12 作業メモ (compiler fixture の bare List API 追従)
+
+- [目的/もくてき]:
+  - `tests/compiler/neplg2.n.md` に残っていた `list_nil` / `list_cons` / `list_get` を current bare API へ[揃/そろ]える。
+- [根本原因/こんぽんげんいん]:
+  - list 本体は actual def が `new` / `cons` / `get` へ[移行/いこう]したが、compiler regression 1 件だけが旧 public 名のまま[残/のこ]っていた。
+- [変更/へんこう]:
+  - `tests/compiler/neplg2.n.md`
+    - `list_get_out_of_bounds_err` の[説明/せつめい]と snippet を `new` / `cons` / `get` へ[更新/こうしん]した。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i tests/compiler/neplg2.n.md -n 33`
+    - [結果/けっか]: pass
