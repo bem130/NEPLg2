@@ -11588,3 +11588,45 @@
     - [結果/けっか]: pass
   - `node nodesrc/tests.js -i stdlib/tests/binary_heap.n.md -i tests/stdlib/binary_heap_collections.n.md -i stdlib/alloc/collections/binary_heap.nepl --no-stdlib --no-tree -o /tmp/tests-binary-heap.json -j 2`
     - [結果/けっか]: `9/9 pass`
+
+# 2026-03-12 作業メモ (`BloomFilter` [追加/ついか])
+
+- [目的/もくてき]:
+  - `alloc/collections` に[近似/きんじ] membership test [用途/ようと]の `BloomFilter<.T,.H>` を[追加/ついか]し、reboot [方針/ほうしん]どおり bare API で[提供/ていきょう]する。
+  - public doc comment と fixture の[両方/りょうほう]で `new` / `insert` / `contains` / `clear` / `free` の[使/つか]い[方/かた]を[固定/こてい]する。
+- [根本原因/こんぽんげんいん]:
+  - `alloc/collections` には[正確/せいかく]な `Set` / `Map` はあっても、[空間/くうかん][効率/こうりつ]を[優先/ゆうせん]する[近似/きんじ]集合がなく、membership-heavy な[用途/ようと]を stdlib [標準/ひょうじゅん]だけで[表現/ひょうげん]しにくかった。
+  - current web compiler / doctest path では、public doc comment の pipe [連鎖/れんさ] usage が `unwrap_ok new ... |> insert ...` の[形/かたち]で[不安定/ふあんてい]になる[箇所/かしょ]があり、[実装/じっそう]ではなく snippet layout [側/がわ]で compile fail を[起/お]こしていた。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/bloom_filter.nepl`
+    - `BloomFilter<.T,.H>` を `[bit 長/ちょう, byte 長/ちょう, bitset pointer, hasher]` を[持/も]つ owner collection として[追加/ついか]した。
+    - `new` / `len` / `insert` / `contains` / `clear` / `free` を bare API で[実装/じっそう]した。
+    - bitset は byte [配列/はいれつ]で[保持/ほじ]し、3 [本/ぼん]の probe index を[使/つか]う fixed-probe Bloom Filter とした。
+    - `insert` / `contains` / `clear` は temporary raw storage を[使/つか]って field の[多重/たじゅう][読/よ]みを[避/さ]け、current move model に[合/あ]わせた。
+    - public doc comment は current compiler で[安定/あんてい]して[通/とお]る explicit style に[揃/そろ]えた。
+  - `stdlib/tests/bloom_filter.n.md`
+    - `insert + contains` と `clear + invalid len` の focused fixture を[追加/ついか]した。
+    - `#2` は nested prefix / generic call の[組/く]み[合/あ]わせで `main` 末尾が unit [扱/あつか]いされる regression があったため、`contains` / `is_err` / invalid `new` を 1 step ずつ[値/あたい]へ[落/お]とす explicit style に[揃/そろ]えた。
+  - `tests/stdlib/bloom_filter_collections.n.md`
+    - pipe [記法/きほう]で `new |> insert ... |> clear` を[確認/かくにん]する collection-level usage fixture を[追加/ついか]した。
+- [設計/せっけい][判断/はんだん]:
+  - `BloomFilter` は[正確/せいかく]な[集合/しゅうごう]でなく「not contained を[高速/こうそく]に[判定/はんてい]する」[専用/せんよう][構造/こうぞう]として `alloc/collections` に[置/お]いた。
+  - hasher は `HashMap` / `HashSet` と[同/おな]じく `.H: Hasher<.T>` を[受/う]ける owner value にし、user-provided hasher をそのまま[流/なが]せる[形/かたち]にした。
+  - public doctest は「[確実/かくじつ]に[通/とお]る usage」を[優先/ゆうせん]し、pipe [連鎖/れんさ]は `tests/stdlib` [側/がわ] fixture で[保証/ほしょう]する[分担/ぶんたん]にした。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bloom_filter.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bloom_filter.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bloom_filter.nepl -n 3`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bloom_filter.nepl -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/bloom_filter.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/bloom_filter.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/bloom_filter_collections.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i stdlib/tests/bloom_filter.n.md -i tests/stdlib/bloom_filter_collections.n.md -i stdlib/alloc/collections/bloom_filter.nepl --no-stdlib --no-tree -o /tmp/tests-bloom-filter.json -j 2`
+    - [結果/けっか]: `9/9 pass`
