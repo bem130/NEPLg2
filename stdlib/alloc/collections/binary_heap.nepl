@@ -1,0 +1,410 @@
+#indent 4
+
+//: # binary_heap
+//: `Ord` を[用/もち]いた max-heap priority queue
+//:
+//: ### [目的/もくてき]
+//: - `BinaryHeap<.T>` を[提供/ていきょう]し、[最大値/さいだいち]の push / peek / pop を bare 名で[扱/あつか]えるようにします。
+//: - [優先度付き/ゆうせんどつき] queue を `alloc/collections` の[標準/ひょうじゅん]構造として[揃/そろ]え、graph / scheduling / best-first [探索/たんさく]の[土台/どだい]にします。
+//:
+//: ### [実装/じっそう]
+//: - [内部/ないぶ]は `[len, cap, data_ptr]` を[持/も]つ 12 byte header と[連続/れんぞく]メモリの[配列/はいれつ]です。
+//: - [配列/はいれつ]の 0 [番目/ばんめ]を root とする 0-indexed binary max-heap を[採用/さいよう]し、`push` では sift-up、`pop` では sift-down を[行/おこな]います。
+//:
+//: ### [注意/ちゅうい]
+//: - [順序/じゅんじょ]は `Ord::lt` に[従/したが]います。`ord_lt a b` が true なら `b` の[方/ほう]が[優先/ゆうせん]されます。
+//: - `new` / `with_capacity` / `push` は `Result` を[返/かえ]します。
+//: - `peek` / `pop` は[空/から] heap を `Option::None` として[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `len` / `cap` / `is_empty` / `peek` は O(1) です。
+//: - `push` / `pop` は O(log n) です。
+//: - `new` / `with_capacity` / `free` は O(1) です。
+
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/option" as *
+#import "core/result" as *
+#import "core/field" as *
+#import "core/traits/ord" as *
+
+//: ## BinaryHeap
+//: [最大値/さいだいち]を root に[保/たも]つ priority queue の[所有者/しょゆうしゃ]
+//:
+//: ### [目的/もくてき]
+//: - heap header と data [領域/りょういき]を 1 [値/あたい]として[所有/しょゆう]し、[更新後/こうしんご]も[同/おな]じ[型/かた]で[受/う]け[渡/わた]しできるようにします。
+//:
+//: ### [注意/ちゅうい]
+//: - `BinaryHeap<.T>` は 12 byte header の[所有権/しょゆうけん]を[持/も]ちます。
+//: - [再確保/さいかくほ]が[起/お]きると[内部/ないぶ]バッファ[番地/ばんち]は[変/か]わります。
+struct BinaryHeap<.T>:
+    hdr <MemPtr<u8>>
+
+fn heap_header_len_ptr <.T> <(BinaryHeap<.T>)->MemPtr<i32>> (hp):
+    mem_ptr_wrap mem_ptr_addr get hp "hdr"
+
+fn heap_header_cap_ptr <.T> <(BinaryHeap<.T>)->MemPtr<i32>> (hp):
+    mem_ptr_wrap add mem_ptr_addr get hp "hdr" 4
+
+fn heap_header_data_ptr_ptr <.T> <(BinaryHeap<.T>)->MemPtr<i32>> (hp):
+    mem_ptr_wrap add mem_ptr_addr get hp "hdr" 8
+
+fn heap_len_raw <.T> <(BinaryHeap<.T>)->i32> (hp):
+    load_i32 mem_ptr_addr heap_header_len_ptr<.T> hp
+
+fn heap_cap_raw <.T> <(BinaryHeap<.T>)->i32> (hp):
+    load_i32 mem_ptr_addr heap_header_cap_ptr<.T> hp
+
+fn heap_data_ptr <.T> <(BinaryHeap<.T>)->MemPtr<.T>> (hp):
+    mem_ptr_wrap load_i32 mem_ptr_addr heap_header_data_ptr_ptr<.T> hp
+
+fn heap_parent <(i32)->i32> (idx):
+    div_s sub idx 1 2
+
+fn heap_left <(i32)->i32> (idx):
+    add mul idx 2 1
+
+fn heap_right <(i32)->i32> (idx):
+    add mul idx 2 2
+
+fn heap_elem_ptr <.T> <(MemPtr<.T>,i32)->MemPtr<.T>> (data, idx):
+    mem_ptr_wrap add mem_ptr_addr data mul idx size_of<.T>
+
+fn heap_swap_ptrs <.T> <(MemPtr<.T>,MemPtr<.T>)->()> (pa, pb):
+    let a <.T> load<.T> mem_ptr_addr pa
+    let b <.T> load<.T> mem_ptr_addr pb
+    store<.T> mem_ptr_addr pa b
+    store<.T> mem_ptr_addr pb a
+
+fn heap_better_idx <.T: Ord> <(MemPtr<.T>,i32,i32)->i32> (data, a, b):
+    let ap <MemPtr<.T>> heap_elem_ptr<.T> data a
+    let bp <MemPtr<.T>> heap_elem_ptr<.T> data b
+    let av <.T> load<.T> mem_ptr_addr ap
+    let bv <.T> load<.T> mem_ptr_addr bp
+    if ord_lt av bv b a
+
+fn heap_sift_up_ptr <.T: Ord> <(MemPtr<.T>,i32)->()> (data, start):
+    let mut idx <i32> start
+    let mut done <bool> false
+    while and lt 0 idx not done:
+        do:
+            let parent <i32> heap_parent idx
+            let pptr <MemPtr<.T>> heap_elem_ptr<.T> data parent
+            let cptr <MemPtr<.T>> heap_elem_ptr<.T> data idx
+            let pv <.T> load<.T> mem_ptr_addr pptr
+            let cv <.T> load<.T> mem_ptr_addr cptr
+            if:
+                ord_lt pv cv
+                then:
+                    heap_swap_ptrs<.T> pptr cptr
+                    set idx parent
+                else:
+                    set done true
+
+fn heap_sift_down_ptr <.T: Ord> <(MemPtr<.T>,i32,i32)->()> (data, len0, start):
+    let mut idx <i32> start
+    let mut done <bool> false
+    while and lt idx len0 not done:
+        do:
+            let left <i32> heap_left idx
+            let right <i32> heap_right idx
+            if:
+                le len0 left
+                then:
+                    set done true
+                else:
+                    let best0 <i32> heap_better_idx<.T> data idx left
+                    let best1 <i32> if lt right len0 heap_better_idx<.T> data best0 right best0
+                    if:
+                        eq best1 idx
+                        then:
+                            set done true
+                        else:
+                            let ip <MemPtr<.T>> heap_elem_ptr<.T> data idx
+                            let bp <MemPtr<.T>> heap_elem_ptr<.T> data best1
+                            heap_swap_ptrs<.T> ip bp
+                            set idx best1
+
+//: ## new
+//: [空/から]の heap を[作/つく]る
+//:
+//: ### [目的/もくてき]
+//: - [既定/きてい][容量/ようりょう]の[空/から] `BinaryHeap<.T>` を[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/binary_heap" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hp <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> new<i32>;
+//:     if eq len hp 0 1 0
+//: ```
+fn new <.T> <()->Result<BinaryHeap<.T>, StdErrorKind>> ():
+    with_capacity<.T> 8
+
+//: ## with_capacity
+//: [初期/しょき][容量/ようりょう]を[指定/してい]して heap を[作/つく]る
+//:
+//: ### [目的/もくてき]
+//: - [事前/じぜん]に[要素数/ようそすう]が[見積/みつ]もれる[場面/ばめん]で、[再確保/さいかくほ]を[減/へ]らした heap を[作/つく]ります。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/binary_heap" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hp0 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> with_capacity<i32> 16;
+//:     let ok0 <bool> eq len hp0 0;
+//:     let hp1 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> with_capacity<i32> 16;
+//:     let ok1 <bool> eq cap hp1 16;
+//:     if and ok0 ok1 1 0
+//: ```
+fn with_capacity <.T> <(i32)->Result<BinaryHeap<.T>, StdErrorKind>> (cap):
+    let cap0 <i32> if lt cap 0 0 cap
+    match alloc_ptr<u8> 12:
+        Result::Err _e:
+            err<BinaryHeap<.T>, StdErrorKind> StdErrorKind::OutOfMemory
+        Result::Ok hdr:
+            if:
+                eq cap0 0
+                then:
+                    let _ <()> uwok store_i32 heap_header_len_ptr<.T> BinaryHeap<.T> hdr 0
+                    let _ <()> uwok store_i32 heap_header_cap_ptr<.T> BinaryHeap<.T> hdr 0
+                    let _ <()> uwok store_i32 heap_header_data_ptr_ptr<.T> BinaryHeap<.T> hdr 0
+                    ok<BinaryHeap<.T>, StdErrorKind> BinaryHeap<.T> hdr
+                else:
+                    match alloc_ptr<.T> mul cap0 size_of<.T>:
+                        Result::Err _e:
+                            let _ <()> uwok dealloc_ptr<u8> hdr 12
+                            err<BinaryHeap<.T>, StdErrorKind> StdErrorKind::OutOfMemory
+                        Result::Ok data:
+                            let _ <()> uwok store_i32 heap_header_len_ptr<.T> BinaryHeap<.T> hdr 0
+                            let _ <()> uwok store_i32 heap_header_cap_ptr<.T> BinaryHeap<.T> hdr cap0
+                            let _ <()> uwok store_i32 heap_header_data_ptr_ptr<.T> BinaryHeap<.T> hdr mem_ptr_addr data
+                            ok<BinaryHeap<.T>, StdErrorKind> BinaryHeap<.T> hdr
+
+//: ## len
+//: [要素数/ようそすう]を[返/かえ]す
+fn len <.T> <(BinaryHeap<.T>)->i32> (hp):
+    heap_len_raw<.T> hp
+
+//: ## cap
+//: [容量/ようりょう]を[返/かえ]す
+fn cap <.T> <(BinaryHeap<.T>)->i32> (hp):
+    heap_cap_raw<.T> hp
+
+//: ## is_empty
+//: [空/から]かどうかを[返/かえ]す
+fn is_empty <.T> <(BinaryHeap<.T>)->bool> (hp):
+    eq len<.T> hp 0
+
+//: ## push
+//: [要素/ようそ]を[追加/ついか]する
+//:
+//: ### [目的/もくてき]
+//: - `item` を[追加/ついか]し、heap [不変条件/ふへんじょうけん]を[回復/かいふく]した `BinaryHeap<.T>` を[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - [末尾/まつび]へ[追加/ついか]した[後/あと]、root [方向/ほうこう]へ sift-up します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(log n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/binary_heap" as *
+//:| #import "core/math" as *
+//:| #import "core/result" as *
+//:| #import "core/option" as *
+//: fn main <()*>i32> ():
+//:     let hp0 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> new<i32>;
+//:     let hp1 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> push<i32> hp0 2;
+//:     let hp2 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> push<i32> hp1 7;
+//:     let hp3 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> push<i32> hp2 5;
+//:     match peek<i32> hp3:
+//:         Option::Some v:
+//:             if eq v 7 1 0
+//:         Option::None:
+//:             0
+//: ```
+fn push <.T: Ord> <(BinaryHeap<.T>,.T)->Result<BinaryHeap<.T>, StdErrorKind>> (hp, item):
+    let hdr <MemPtr<u8>> get hp "hdr"
+    let len_ptr <MemPtr<i32>> mem_ptr_wrap mem_ptr_addr hdr
+    let cap_ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr hdr 4
+    let data_ptr_ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr hdr 8
+    let len0 <i32> load_i32 mem_ptr_addr len_ptr
+    let cap0 <i32> load_i32 mem_ptr_addr cap_ptr
+    let data0 <MemPtr<.T>> mem_ptr_wrap load_i32 mem_ptr_addr data_ptr_ptr
+    if:
+        eq len0 cap0
+        then:
+            let grown_cap <i32> if eq cap0 0 1 mul cap0 2
+            let old_bytes <i32> mul cap0 size_of<.T>
+            let new_bytes <i32> mul grown_cap size_of<.T>
+            let grow_result <Result<MemPtr<.T>, StdErrorKind>>:
+                if:
+                    eq cap0 0
+                    then:
+                        match alloc_ptr<.T> new_bytes:
+                            Result::Ok data1:
+                                ok<MemPtr<.T>, StdErrorKind> data1
+                            Result::Err _e:
+                                err<MemPtr<.T>, StdErrorKind> StdErrorKind::OutOfMemory
+                    else:
+                        match realloc_ptr<.T> data0 old_bytes new_bytes:
+                            Result::Ok data1:
+                                ok<MemPtr<.T>, StdErrorKind> data1
+                            Result::Err _e:
+                                err<MemPtr<.T>, StdErrorKind> StdErrorKind::OutOfMemory
+            match grow_result:
+                Result::Err e:
+                    err<BinaryHeap<.T>, StdErrorKind> e
+                Result::Ok data1:
+                    let _ <()> uwok store_i32 cap_ptr grown_cap
+                    let _ <()> uwok store_i32 data_ptr_ptr mem_ptr_addr data1
+                    store<.T> mem_ptr_addr heap_elem_ptr<.T> data1 len0 item
+                    let next_len <i32> add len0 1
+                    let _ <()> uwok store_i32 len_ptr next_len
+                    heap_sift_up_ptr<.T> data1 sub next_len 1
+                    ok<BinaryHeap<.T>, StdErrorKind> BinaryHeap<.T> hdr
+        else:
+            store<.T> mem_ptr_addr heap_elem_ptr<.T> data0 len0 item
+            let next_len <i32> add len0 1
+            let _ <()> uwok store_i32 len_ptr next_len
+            heap_sift_up_ptr<.T> data0 sub next_len 1
+            ok<BinaryHeap<.T>, StdErrorKind> BinaryHeap<.T> hdr
+
+//: ## peek
+//: [最大/さいだい][要素/ようそ]を[読/よ]み[取/と]る
+//:
+//: ### [目的/もくてき]
+//: - root にある[最大/さいだい][要素/ようそ]を[削除/さくじょ]せずに[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/binary_heap" as *
+//:| #import "core/math" as *
+//:| #import "core/result" as *
+//:| #import "core/option" as *
+//: fn main <()*>i32> ():
+//:     let hp0 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> new<i32>;
+//:     let hp1 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> push<i32> hp0 4;
+//:     let hp2 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> push<i32> hp1 9;
+//:     match peek<i32> hp2:
+//:         Option::Some v:
+//:             if eq v 9 1 0
+//:         Option::None:
+//:             0
+//: ```
+fn peek <.T> <(BinaryHeap<.T>)->Option<.T>> (hp):
+    let hdr <MemPtr<u8>> get hp "hdr"
+    let len_ptr <MemPtr<i32>> mem_ptr_wrap mem_ptr_addr hdr
+    let data_ptr_ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr hdr 8
+    let len0 <i32> load_i32 mem_ptr_addr len_ptr
+    if:
+        eq len0 0
+        then none<.T>
+        else:
+            let data0 <MemPtr<.T>> mem_ptr_wrap load_i32 mem_ptr_addr data_ptr_ptr
+            some<.T> load<.T> mem_ptr_addr data0
+
+//: ## pop
+//: [最大/さいだい][要素/ようそ]を[取/と]り[出/だ]す
+//:
+//: ### [目的/もくてき]
+//: - root にある[最大/さいだい][要素/ようそ]を[返/かえ]し、heap [不変条件/ふへんじょうけん]を[保/たも]ったまま[長/なが]さを 1 [減/へ]らします。
+//:
+//: ### [実装/じっそう]
+//: - [最後/さいご]の[要素/ようそ]を root へ[移/うつ]し、sift-down で[再配置/さいはいち]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(log n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/binary_heap" as *
+//:| #import "core/math" as *
+//:| #import "core/result" as *
+//:| #import "core/option" as *
+//: fn main <()*>i32> ():
+//:     let hp0 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> new<i32>;
+//:     let hp1 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> push<i32> hp0 4;
+//:     let hp2 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> push<i32> hp1 9;
+//:     let hp3 <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> push<i32> hp2 1;
+//:     match pop<i32> hp3:
+//:         Option::Some v:
+//:             if eq v 9 1 0
+//:         Option::None:
+//:             0
+//: ```
+fn pop <.T: Ord> <(BinaryHeap<.T>)->Option<.T>> (hp):
+    let hdr <MemPtr<u8>> get hp "hdr"
+    let len_ptr <MemPtr<i32>> mem_ptr_wrap mem_ptr_addr hdr
+    let data_ptr_ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr hdr 8
+    let n0 <i32> load_i32 mem_ptr_addr len_ptr
+    let data0 <MemPtr<.T>> mem_ptr_wrap load_i32 mem_ptr_addr data_ptr_ptr
+    if:
+        eq n0 0
+        then none<.T>
+        else:
+            let root <.T> load<.T> mem_ptr_addr data0
+            if:
+                eq n0 1
+                then:
+                    let _ <()> uwok store_i32 len_ptr 0
+                    some<.T> root
+                else:
+                    let last <.T> load<.T> mem_ptr_addr heap_elem_ptr<.T> data0 sub n0 1
+                    let n1 <i32> sub n0 1
+                    store<.T> mem_ptr_addr data0 last
+                    let _ <()> uwok store_i32 len_ptr n1
+                    heap_sift_down_ptr<.T> data0 n1 0
+                    some<.T> root
+
+//: ## free
+//: [内部/ないぶ]メモリを[解放/かいほう]する
+//:
+//: ### [目的/もくてき]
+//: - heap が[所有/しょゆう]する data [領域/りょういき]と header を[終端/しゅうたん][操作/そうさ]として[解放/かいほう]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/binary_heap" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hp <BinaryHeap<i32>> unwrap_ok<BinaryHeap<i32>, StdErrorKind> new<i32>;
+//:     free hp;
+//:     0
+//: ```
+fn free <.T> <(BinaryHeap<.T>)->()> (hp):
+    let hdr <MemPtr<u8>> get hp "hdr"
+    let cap_ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr hdr 4
+    let data_ptr_ptr <MemPtr<i32>> mem_ptr_wrap add mem_ptr_addr hdr 8
+    let cap0 <i32> load_i32 mem_ptr_addr cap_ptr
+    let data0 <MemPtr<.T>> mem_ptr_wrap load_i32 mem_ptr_addr data_ptr_ptr
+    let _ <()> uwok dealloc_ptr<.T> data0 mul cap0 size_of<.T>
+    let _ <()> uwok dealloc_ptr<u8> hdr 12

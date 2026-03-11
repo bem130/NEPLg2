@@ -11548,3 +11548,43 @@
     - [結果/けっか]: pass
   - `node nodesrc/tests.js -i stdlib/tests/fenwick.n.md -i tests/stdlib/fenwick_collections.n.md --no-stdlib --no-tree -o /tmp/tests-fenwick.json -j 2`
     - [結果/けっか]: `3/3 pass`
+
+# 2026-03-12 作業メモ (`BinaryHeap` [追加/ついか]と public doctest [整備/せいび])
+
+- [目的/もくてき]:
+  - `alloc/collections` に `BinaryHeap` を[追加/ついか]し、`Ord` を[用/もち]いる priority queue を bare API で[提供/ていきょう]する。
+  - public doc comment に reboot [方針/ほうしん]どおりの usage doctest を[追加/ついか]し、fixture と[整合/せいごう]する[形/かたち]で[固定/こてい]する。
+- [根本原因/こんぽんげんいん]:
+  - `Vec` wrapper [方式/ほうしき]では、`vec::Vec<.T>` の namespaced type [記法/きほう]と owner move model が current compiler / stdlib [方針/ほうしん]に[合/あ]わず、`BinaryHeap` の owner [表現/ひょうげん]として[不安定/ふあんてい]だった。
+  - `push` / `peek` / `pop` の doc comment usage を `let hp: ... |> push ... |> uwok` の[連鎖/れんさ]で[書/か]くと、web compile path の focused doctest では current overload / layout [処理/しょり]と[衝突/しょうとつ]し、file doctest だけが compile fail していた。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/binary_heap.nepl`
+    - `BinaryHeap<.T>` を 12 byte header `[len, cap, data_ptr]` の owner [構造/こうぞう]として[追加/ついか]した。
+    - `new` / `with_capacity` / `len` / `cap` / `is_empty` / `push` / `peek` / `pop` / `free` を bare API で[実装/じっそう]した。
+    - sift-up / sift-down を raw header / data pointer helper で[組/く]み、owner [値/あたい]の[多重/たじゅう][消費/しょうひ]を[避/さ]けた。
+    - public doc comment に usage doctest を[追加/ついか]し、file doctest は current compiler で[安定/あんてい]に[通/とお]る explicit `unwrap_ok push hp item` [流儀/りゅうぎ]へ[揃/そろ]えた。
+  - `stdlib/tests/binary_heap.n.md`
+    - `push` / `peek` / `pop` / `with_capacity` の focused fixture を[追加/ついか]した。
+  - `tests/stdlib/binary_heap_collections.n.md`
+    - pipe [記法/きほう]で `new |> push ... |> uwok` を[使/つか]う collection-level usage fixture を[追加/ついか]した。
+- [設計/せっけい][判断/はんだん]:
+  - `BinaryHeap` は `Vec` の alias ではなく、`Stack` と[同系統/どうけいとう]の owner collection として[独立/どくりつ] header を[持/も]つ[形/かたち]にした。
+  - public docs では「[必/かなら]ず[通/とお]る usage」を[優先/ゆうせん]し、pipe [連鎖/れんさ]は `stdlib/tests` / `tests/stdlib` [側/がわ]の fixture で[保証/ほしょう]する[分担/ぶんたん]にした。
+  - `let hp: ... |> push ... |> uwok` の file doctest compile fail は current web compiler の layout / overload [残件/ざんけん]として[認識/にんしき]し、[関数型/かんすうがた] style [拡張/かくちょう] batch で[再訪/さいほう]する。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/binary_heap.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/binary_heap.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/binary_heap.nepl -n 3`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/binary_heap.nepl -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/binary_heap.nepl -n 5`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/binary_heap.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/binary_heap_collections.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i stdlib/tests/binary_heap.n.md -i tests/stdlib/binary_heap_collections.n.md -i stdlib/alloc/collections/binary_heap.nepl --no-stdlib --no-tree -o /tmp/tests-binary-heap.json -j 2`
+    - [結果/けっか]: `9/9 pass`
