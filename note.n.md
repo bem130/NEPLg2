@@ -11274,3 +11274,41 @@
 - [検証/けんしょう]:
   - `node nodesrc/run_doctest.js -i tests/compiler/neplg2.n.md -n 33`
     - [結果/けっか]: pass
+
+# 2026-03-12 作業メモ (StdErrorKind の lower-layer 移設)
+
+- [目的/もくてき]:
+  - `Vec` を `Result` 化する[前提/ぜんてい]として、`StdErrorKind` を `Diag` [層/そう]から[切/き]り[離/はな]して lower layer へ[移/うつ]す。
+  - reboot [方針/ほうしん]どおり、[軽量/けいりょう] error kind と richer diagnostic を[分離/ぶんり]する。
+- [根本原因/こんぽんげんいん]:
+  - `StdErrorKind` が `stdlib/alloc/diag/error.nepl` に[置/お]かれていたため、`Vec -> StdErrorKind` を[導入/どうにゅう]すると `vec -> diag/error -> vec` の[循環/じゅんかん][依存/いぞん]になる。
+  - reboot doc の[意図/いと]は `Result<T, StdErrorKind>` を[軽量/けいりょう]な[制御/せいぎょ] error とし、`Diag` / `Outcome` は richer な[診断/しんだん][表現/ひょうげん]として[別/べつ][層/そう]に[置/お]くことだった。
+- [変更/へんこう]:
+  - `stdlib/core/result.nepl`
+    - `StdErrorKind` enum を[移設/いせつ]した。
+    - `std_error_kind_str` を[移設/いせつ]した。
+  - `stdlib/alloc/diag/error.nepl`
+    - `StdErrorKind` / `std_error_kind_str` の[定義/ていぎ]を[削除/さくじょ]し、`Diag` / `Diags` / `Outcome` [本体/ほんたい]に[集中/しゅうちゅう]させた。
+    - file header を current [責務/せきむ]へ[同期/どうき]した。
+  - `stdlib/alloc/diag/diag.nepl`
+    - `std_error_kind_str` を `core/result` から[見/み]るための import を[追加/ついか]した。
+  - `stdlib/tests/diag.n.md`
+    - `StdErrorKind` import [元/もと]の[変更/へんこう]に[追従/ついじゅう]した。
+    - old assert style を current safe test flow (`checks_print_report` / `checks_exit_code`) に[揃/そろ]えた。
+- [設計/せっけい][判断/はんだん]:
+  - 今回は `StdErrorKind` の[置/お]き[場/ば]だけを[整理/せいり]し、`Diag` helper の public 名や `Outcome` API は[変/か]えていない。
+  - これで `Vec` が `Result<..., StdErrorKind>` を[返/かえ]しても `Diag` [層/そう]への[逆流/ぎゃくりゅう]が[起/お]きない[土台/どだい]になった。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/tests/error.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/diag.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/diag.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/traits_serde.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/io.n.md -n 3`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i stdlib/tests/error.n.md -i stdlib/tests/diag.n.md -i tests/stdlib/traits_serde.n.md -i tests/stdlib/io.n.md --no-stdlib --no-tree -o /tmp/tests-std-error-kind-core.json -j 4`
+    - [結果/けっか]: `13/13 pass`
+    - output JSON: `/tmp/tests-std-error-kind-core.json`

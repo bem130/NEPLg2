@@ -67,6 +67,30 @@
 //: ```
 
 
+//: StdErrorKind: stdlib [全体/ぜんたい]で[共有/きょうゆう]する[軽量/けいりょう]な[失敗/しっぱい][分類/ぶんるい]
+//:
+//: 目的:
+//: - `Result<T, E>` の `E` として[使/つか]う[標準/ひょうじゅん] error kind を[定義/ていぎ]します。
+//: - richer な `Diag` とは[分離/ぶんり]し、`core` / `alloc` / `std` が[循環/じゅんかん]せずに[共有/きょうゆう]できるようにします。
+//:
+//: 注意(重要):
+//: - [詳細/しょうさい]な[背景/はいけい]や[位置/いち]は `alloc/diag/error` の `Diag` [側/がわ]で[補/おぎな]います。
+//: - reboot [方針/ほうしん]では、[通常/つうじょう]の stdlib API は `Result<T, StdErrorKind>` を[基本/きほん]にします。
+//:
+//: 計算量:
+//: - O(1)
+enum StdErrorKind:
+    Failure
+    OutOfMemory
+    EmptyCollection
+    IndexOutOfBounds
+    KeyNotFound
+    CapacityExceeded
+    InvalidOperation
+    InvalidUtf8
+    ParseError
+    IoError
+    Other
 
 //: Result: 成功(Ok)か失敗(Err)を表す
 //:
@@ -260,6 +284,41 @@ fn unwrap_or <.T, .E> <(Result<.T, .E>, .T)->.T> (r, default):
             v
         Result::Err e:
             default
+
+//: std_error_kind_str: `StdErrorKind` を[文字列/もじれつ]へ[変換/へんかん]する
+//:
+//: 目的:
+//: - [軽量/けいりょう] error kind を test / doc / `Diag` [表示/ひょうじ]で[比較/ひかく]しやすい[短/みじか]い[名前/なまえ]へ[変換/へんかん]します。
+//:
+//: 注意(重要):
+//: - [返/かえ]す[文字列/もじれつ]は stable な[識別子/しきべつし]であり、[人間/にんげん]向け[本文/ほんぶん]ではありません。
+//:
+//: 計算量:
+//: - O(1)
+fn std_error_kind_str <(StdErrorKind)->str> (kind):
+    match kind:
+        StdErrorKind::Failure:
+            "Failure"
+        StdErrorKind::OutOfMemory:
+            "OutOfMemory"
+        StdErrorKind::EmptyCollection:
+            "EmptyCollection"
+        StdErrorKind::IndexOutOfBounds:
+            "IndexOutOfBounds"
+        StdErrorKind::KeyNotFound:
+            "KeyNotFound"
+        StdErrorKind::CapacityExceeded:
+            "CapacityExceeded"
+        StdErrorKind::InvalidOperation:
+            "InvalidOperation"
+        StdErrorKind::InvalidUtf8:
+            "InvalidUtf8"
+        StdErrorKind::ParseError:
+            "ParseError"
+        StdErrorKind::IoError:
+            "IoError"
+        StdErrorKind::Other:
+            "Other"
 
 //: map: Ok の値に関数を適用する
 //:

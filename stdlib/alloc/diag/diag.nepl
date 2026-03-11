@@ -20,6 +20,7 @@
 #import "core/math" as *
 #import "core/mem" as *
 #import "core/option" as *
+#import "core/result" as *
 #import "alloc/string" as *
 #import "alloc/collections/vec" as *
 #if[target=std]

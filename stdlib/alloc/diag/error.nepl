@@ -1,7 +1,7 @@
 //: error: [診断/しんだん]の[値/あたい]モデルをまとめるライブラリ
 //:
 //: [目的/もくてき]:
-//: - stdlib [全体/ぜんたい]で[共通/きょうつう]に[使/つか]う `Diag` / `Diags` / `Outcome` / `StdErrorKind` を[定義/ていぎ]します。
+//: - stdlib [全体/ぜんたい]で[共通/きょうつう]に[使/つか]う `Diag` / `Diags` / `Outcome` を[定義/ていぎ]します。
 //: - `Result<T, E>` の[軽量/けいりょう]な[失敗/しっぱい][制御/せいぎょ]と、`Diag` による[構造化/こうぞうか][診断/しんだん]を[分離/ぶんり]します。
 //:
 //: [実装/じっそう]:
@@ -12,7 +12,7 @@
 //: [注意/ちゅうい]:
 //: - ここは[表示/ひょうじ]のためのライブラリではなく、[診断/しんだん][値/あたい]の[定義/ていぎ]を[担/にな]います。
 //: - `Result<T, Diag>` は[通常/つうじょう]のライブラリ API で、`Outcome<T, E>` は compiler や JSON/HTML [処理/しょり]のような richer な[処理/しょり]で[使/つか]うことを[想定/そうてい]します。
-//: - `StdErrorKind` は[軽量/けいりょう]な[失敗/しっぱい][分類/ぶんるい]であり、`Diag.kind` が[持/も]つ[詳細/しょうさい][情報/じょうほう]を[置/お]き[換/か]えるものではありません。
+//: - `StdErrorKind` は `core/result` から[参照/さんしょう]し、`Diag.kind` が[持/も]つ[詳細/しょうさい][情報/じょうほう]を[置/お]き[換/か]えるものではありません。
 //:
 //: [計算量/けいさんりょう]:
 //: - `Diag` / `DiagKind` / `Span` / `Outcome` の[構築/こうちく]は O(1) です。
@@ -42,30 +42,6 @@ enum DiagLevel:
     Info
     Warn
     Error
-
-//: StdErrorKind: stdlib [全体/ぜんたい]で[共有/きょうゆう]する[軽量/けいりょう]な[失敗/しっぱい][分類/ぶんるい]
-//:
-//: [目的/もくてき]:
-//: - `Result<T, E>` の `E` として[使/つか]う[標準/ひょうじゅん]の error kind を[定義/ていぎ]します。
-//: - stdlib [横断/おうだん]で[大/おお]まかな[失敗/しっぱい][要因/よういん]を[揃/そろ]えて[扱/あつか]えるようにします。
-//:
-//: [注意/ちゅうい]:
-//: - [詳細/しょうさい]な[背景/はいけい]や[位置/いち]は `Diag` [側/がわ]で[補/おぎな]います。
-//:
-//: [計算量/けいさんりょう]:
-//: - O(1)
-enum StdErrorKind:
-    Failure
-    OutOfMemory
-    EmptyCollection
-    IndexOutOfBounds
-    KeyNotFound
-    CapacityExceeded
-    InvalidOperation
-    InvalidUtf8
-    ParseError
-    IoError
-    Other
 
 //: Span: [診断/しんだん][位置/いち]
 //:
@@ -541,31 +517,6 @@ fn outcome_has_errors <.T, .E> <(Outcome<.T, .E>)->bool> (o):
         Option::None:
             false
 
-//: std_error_kind_str: `StdErrorKind` を[文字列/もじれつ]へ[変換/へんかん]する
-fn std_error_kind_str <(StdErrorKind)->str> (kind):
-    match kind:
-        StdErrorKind::Failure:
-            "Failure"
-        StdErrorKind::OutOfMemory:
-            "OutOfMemory"
-        StdErrorKind::EmptyCollection:
-            "EmptyCollection"
-        StdErrorKind::IndexOutOfBounds:
-            "IndexOutOfBounds"
-        StdErrorKind::KeyNotFound:
-            "KeyNotFound"
-        StdErrorKind::CapacityExceeded:
-            "CapacityExceeded"
-        StdErrorKind::InvalidOperation:
-            "InvalidOperation"
-        StdErrorKind::InvalidUtf8:
-            "InvalidUtf8"
-        StdErrorKind::ParseError:
-            "ParseError"
-        StdErrorKind::IoError:
-            "IoError"
-        StdErrorKind::Other:
-            "Other"
 
 //: diag_level_str: `DiagLevel` を[文字列/もじれつ]へ[変換/へんかん]する
 fn diag_level_str <(DiagLevel)->str> (level):
