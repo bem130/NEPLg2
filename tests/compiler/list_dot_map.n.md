@@ -31,7 +31,7 @@ fn inc <(i32)->i32> (x):
     add x 1
 
 fn main <()->i32> ():
-    let xs list.list_nil<i32>;
+    let xs list.new<i32>;
     list.map<i32, i32> xs inc;
     0
 ```

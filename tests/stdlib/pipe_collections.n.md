@@ -15,17 +15,17 @@ ret: 1
 
 fn main <()*>i32> ():
     let xs0 <List<i32>>:
-        list_nil<i32>
-        |> list_push_front<i32> 3
-        |> list_push_front<i32> 2
-        |> list_push_front<i32> 1
-    let ok0 <bool> eq list_len<i32> xs0 3;
+        new<i32>
+        |> push<i32> 3
+        |> push<i32> 2
+        |> push<i32> 1
+    let ok0 <bool> eq len<i32> xs0 3;
     let xs1 <List<i32>>:
-        list_nil<i32>
-        |> list_push_front<i32> 3
-        |> list_push_front<i32> 2
-        |> list_push_front<i32> 1
-    let ok1 <bool> match list_get<i32> xs1 1:
+        new<i32>
+        |> push<i32> 3
+        |> push<i32> 2
+        |> push<i32> 1
+    let ok1 <bool> match get<i32> xs1 1:
         Option::Some v:
             eq v 2
         Option::None:

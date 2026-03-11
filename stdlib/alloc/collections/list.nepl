@@ -9,13 +9,13 @@
 //: - 空リストは `0` ポインタで表現します。
 //:
 //: [注意/ちゅうい]:
-//: - `list_get` は範囲外や負 index で `Option::None` を返します。
-//: - `list_free` は循環リストを想定していません。
-//: - `list_reverse` は新しいノード列を構築するため、元リストと逆順リストは別管理です。
+//: - `get` は範囲外や負 index で `Option::None` を返します。
+//: - `free` は循環リストを想定していません。
+//: - `reverse` は新しいノード列を構築するため、元リストと逆順リストは別管理です。
 //:
 //: [計算量/けいさんりょう]:
-//: - `list_nil`/`list_cons`/`list_head`/`list_tail`/`list_is_empty` は O(1)。
-//: - `list_len`/`list_get`/`list_free`/`list_reverse` は O(n)。
+//: - `new`/`cons`/`head`/`tail`/`is_empty` は O(1)。
+//: - `len`/`get`/`free`/`reverse` は O(n)。
 //:
 //: 追加の使い方:
 //:
@@ -24,43 +24,43 @@
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
-//:| #import "alloc/string" as *
+//:| #import "core/traits/eq" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
 //:     let base0 <List<i32>>:
-//:         list_nil<i32>
-//:         |> list_push_front<i32> 3
-//:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1
-//:     let ok0 if eq list_len<i32> base0 3 1 0;
+//:         new<i32>
+//:         |> push<i32> 3
+//:         |> push<i32> 2
+//:         |> push<i32> 1
+//:     let ok0 if eq len<i32> base0 3 1 0;
 //:     let base1 <List<i32>>:
-//:         list_nil<i32>
-//:         |> list_push_front<i32> 3
-//:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1
-//:     let ok1 match list_head<i32> base1:
+//:         new<i32>
+//:         |> push<i32> 3
+//:         |> push<i32> 2
+//:         |> push<i32> 1
+//:     let ok1 match head<i32> base1:
 //:         Option::Some x:
 //:             if eq x 1 1 0
 //:         Option::None:
 //:             0
 //:     let base2 <List<i32>>:
-//:         list_nil<i32>
-//:         |> list_push_front<i32> 3
-//:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1
-//:     let ok2 match list_get<i32> base2 1:
+//:         new<i32>
+//:         |> push<i32> 3
+//:         |> push<i32> 2
+//:         |> push<i32> 1
+//:     let ok2 match get<i32> base2 1:
 //:         Option::Some x:
 //:             if eq x 2 1 0
 //:         Option::None:
 //:             0
 //:     let base3 <List<i32>>:
-//:         list_nil<i32>
-//:         |> list_push_front<i32> 3
-//:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1
-//:     let ok3 match list_tail<i32> base3:
+//:         new<i32>
+//:         |> push<i32> 3
+//:         |> push<i32> 2
+//:         |> push<i32> 1
+//:     let ok3 match tail<i32> base3:
 //:         Option::Some t:
-//:             if eq list_len<i32> t 2 1 0
+//:             if eq len<i32> t 2 1 0
 //:         Option::None:
 //:             0
 //:     let s01 <i32> add ok0 ok1;
@@ -75,38 +75,37 @@
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
-//:| #import "alloc/string" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
 //:     let src0 <List<str>>:
-//:         list_nil<str>
-//:         |> list_push_front<str> "c"
-//:         |> list_push_front<str> "b"
-//:         |> list_push_front<str> "a"
-//:     let ra list_reverse<str> src0;
-//:     let ok0 match list_head<str> ra:
+//:         new<str>
+//:         |> push<str> "c"
+//:         |> push<str> "b"
+//:         |> push<str> "a"
+//:     let ra reverse<str> src0;
+//:     let ok0 match head<str> ra:
 //:         Option::Some x:
-//:             if str_eq x "c" 1 0
+//:             if eq x "c" 1 0
 //:         Option::None:
 //:             0
 //:     let src1 <List<str>>:
-//:         list_nil<str>
-//:         |> list_push_front<str> "c"
-//:         |> list_push_front<str> "b"
-//:         |> list_push_front<str> "a"
-//:     let rb list_reverse<str> src1;
-//:     let ok1 match list_get<str> rb 2:
+//:         new<str>
+//:         |> push<str> "c"
+//:         |> push<str> "b"
+//:         |> push<str> "a"
+//:     let rb reverse<str> src1;
+//:     let ok1 match get<str> rb 2:
 //:         Option::Some x:
-//:             if str_eq x "a" 1 0
+//:             if eq x "a" 1 0
 //:         Option::None:
 //:             0
 //:     let src2 <List<str>>:
-//:         list_nil<str>
-//:         |> list_push_front<str> "c"
-//:         |> list_push_front<str> "b"
-//:         |> list_push_front<str> "a"
-//:     let rc list_reverse<str> src2;
-//:     let ok2 if is_none<str> list_get<str> rc 3 1 0;
+//:         new<str>
+//:         |> push<str> "c"
+//:         |> push<str> "b"
+//:         |> push<str> "a"
+//:     let rc reverse<str> src2;
+//:     let ok2 if is_none<str> get<str> rc 3 1 0;
 //:     let s01 <i32> add ok0 ok1;
 //:     add s01 ok2
 //: ```
@@ -134,7 +133,7 @@
 struct List<.T>:
     ptr <i32>
 
-//: list_nil: 空リストを表す値を返す
+//: new: 空リストを表す値を返す
 //:
 //: 目的:
 //: - 空リスト（null ポインタ）を返します。
@@ -156,12 +155,12 @@ struct List<.T>:
 //:| #target std
 //:| #import "alloc/collections/list" as *
 //: fn main <()*>i32> ():
-//:     if list_is_empty<i32> list_nil<i32> 0 1
+//:     if is_empty<i32> new<i32> 0 1
 //: ```
-fn list_nil <.T> <()->List<.T>> ():
+fn new <.T> <()->List<.T>> ():
     List 0
 
-//: list_cons: 先頭に要素を追加して新しいリストを作る
+//: cons: 先頭に要素を追加して新しいリストを作る
 //:
 //: 目的:
 //: - head を値として持つ新ノードを確保し、tail を next に接続します。
@@ -183,10 +182,10 @@ fn list_nil <.T> <()->List<.T>> ():
 //:| #target std
 //:| #import "alloc/collections/list" as *
 //: fn main <()*>i32> ():
-//:     let l list_cons<i32> 5 list_nil<i32>;
-//:     if list_is_empty<i32> l 1 0
+//:     let l cons<i32> 5 new<i32>;
+//:     if is_empty<i32> l 1 0
 //: ```
-fn list_cons <.T> <(.T,List<.T>)->List<.T>> (head, tail):
+fn cons <.T> <(.T,List<.T>)->List<.T>> (head, tail):
     let tail_ptr <i32> field::get tail "ptr"
     let node_size <i32> add size_of<.T> 4
     let node <i32> alloc_raw node_size
@@ -194,23 +193,23 @@ fn list_cons <.T> <(.T,List<.T>)->List<.T>> (head, tail):
     store_i32 add node size_of<.T> tail_ptr
     List node
 
-//: list_push_front: 既存リストの先頭に要素を追加する（pipe向け）
+//: push: 既存リストの先頭に要素を追加する（pipe向け）
 //:
 //: 目的:
-//: - `xs |> list_push_front v` の形で先頭追加を自然に書けるようにします。
+//: - `xs |> push v` の形で先頭追加を自然に書けるようにします。
 //:
 //: 実装(アルゴリズム):
-//: - 引数順だけを pipe 向けに並べ替えて `list_cons` を呼びます。
+//: - 引数順だけを pipe 向けに並べ替えて `cons` を呼びます。
 //:
 //: 注意(重要):
 //: - 返り値は新しい先頭ノードのポインタです。
 //:
 //: 計算量:
 //: - O(1)
-fn list_push_front <.T> <(List<.T>,.T)->List<.T>> (lst, head):
-    list_cons<.T> head lst
+fn push <.T> <(List<.T>,.T)->List<.T>> (lst, head):
+    cons<.T> head lst
 
-//: list_head: 先頭要素を取得する
+//: head: 先頭要素を取得する
 //:
 //: 目的:
 //: - 空なら None、非空なら先頭の値を Some で返します。
@@ -233,14 +232,14 @@ fn list_push_front <.T> <(List<.T>,.T)->List<.T>> (lst, head):
 //:| #import "alloc/collections/list" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
-//:     let l list_cons<i32> 8 list_nil<i32>;
-//:     match list_head<i32> l:
+//:     let l cons<i32> 8 new<i32>;
+//:     match head<i32> l:
 //:         Option::Some x:
 //:             if eq x 8 0 1
 //:         Option::None:
 //:             1
 //: ```
-fn list_head <.T> <(List<.T>)->Option<.T>> (lst):
+fn head <.T> <(List<.T>)->Option<.T>> (lst):
     let lst_ptr <i32> field::get lst "ptr"
     if:
         cond:
@@ -250,7 +249,7 @@ fn list_head <.T> <(List<.T>)->Option<.T>> (lst):
         else:
             some<.T> load<.T> lst_ptr
 
-//: list_tail: 末尾以外の部分（次のノード）を取得する
+//: tail: 末尾以外の部分（次のノード）を取得する
 //:
 //: 目的:
 //: - 空なら None、非空なら next ポインタを Some で返します。
@@ -274,16 +273,16 @@ fn list_head <.T> <(List<.T>)->Option<.T>> (lst):
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
 //:     let l2 <List<i32>>:
-//:         list_nil<i32>
-//:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1
-//:     match list_tail<i32> l2:
+//:         new<i32>
+//:         |> push<i32> 2
+//:         |> push<i32> 1
+//:     match tail<i32> l2:
 //:         Option::Some t:
-//:             if eq list_len<i32> t 1 0 1
+//:             if eq len<i32> t 1 0 1
 //:         Option::None:
 //:             1
 //: ```
-fn list_tail <.T> <(List<.T>)->Option<List<.T>>> (lst):
+fn tail <.T> <(List<.T>)->Option<List<.T>>> (lst):
     let lst_ptr <i32> field::get lst "ptr"
     if:
         cond:
@@ -293,7 +292,7 @@ fn list_tail <.T> <(List<.T>)->Option<List<.T>>> (lst):
         else:
             some<List<.T>> List load_i32 add lst_ptr size_of<.T>
 
-//: list_is_empty: 空リストか判定する
+//: is_empty: 空リストか判定する
 //:
 //: 目的:
 //: - lst が空なら true を返します。
@@ -315,12 +314,12 @@ fn list_tail <.T> <(List<.T>)->Option<List<.T>>> (lst):
 //:| #target std
 //:| #import "alloc/collections/list" as *
 //: fn main <()*>i32> ():
-//:     if list_is_empty<i32> list_nil<i32> 0 1
+//:     if is_empty<i32> new<i32> 0 1
 //: ```
-fn list_is_empty <.T> <(List<.T>)->bool> (lst):
+fn is_empty <.T> <(List<.T>)->bool> (lst):
     eq field::get lst "ptr" 0
 
-//: list_len: 長さを数える
+//: len: 長さを数える
 //:
 //: 目的:
 //: - リストの要素数を返します。
@@ -343,13 +342,13 @@ fn list_is_empty <.T> <(List<.T>)->bool> (lst):
 //:| #import "alloc/collections/list" as *
 //: fn main <()*>i32> ():
 //:     let l3 <List<i32>>:
-//:         list_nil<i32>
-//:         |> list_push_front<i32> 3
-//:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1
-//:     if eq list_len<i32> l3 3 0 1
+//:         new<i32>
+//:         |> push<i32> 3
+//:         |> push<i32> 2
+//:         |> push<i32> 1
+//:     if eq len<i32> l3 3 0 1
 //: ```
-fn list_len <.T> <(List<.T>)->i32> (lst):
+fn len <.T> <(List<.T>)->i32> (lst):
     let lst_ptr <i32> field::get lst "ptr"
     if:
         cond:
@@ -357,9 +356,9 @@ fn list_len <.T> <(List<.T>)->i32> (lst):
         then:
             0
         else:
-            add 1 list_len<.T> List load_i32 add lst_ptr size_of<.T>
+            add 1 len<.T> List load_i32 add lst_ptr size_of<.T>
 
-//: list_get: 指定位置の要素を取得する
+//: get: 指定位置の要素を取得する
 //:
 //: 目的:
 //: - idx が範囲内なら Some(value)、範囲外なら None を返します。
@@ -384,17 +383,17 @@ fn list_len <.T> <(List<.T>)->i32> (lst):
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
 //:     let l3 <List<i32>>:
-//:         list_nil<i32>
-//:         |> list_push_front<i32> 3
-//:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1
-//:     match list_get<i32> l3 1:
+//:         new<i32>
+//:         |> push<i32> 3
+//:         |> push<i32> 2
+//:         |> push<i32> 1
+//:     match get<i32> l3 1:
 //:         Option::Some x:
 //:             if eq x 2 0 1
 //:         Option::None:
 //:             1
 //: ```
-fn list_get <.T> <(List<.T>,i32)->Option<.T>> (lst, idx):
+fn get <.T> <(List<.T>,i32)->Option<.T>> (lst, idx):
     let lst_ptr <i32> field::get lst "ptr"
     if:
         cond:
@@ -414,9 +413,9 @@ fn list_get <.T> <(List<.T>,i32)->Option<.T>> (lst, idx):
                         then:
                             some<.T> load<.T> lst_ptr
                         else:
-                            list_get<.T> List load_i32 add lst_ptr size_of<.T> sub idx 1
+                            get<.T> List load_i32 add lst_ptr size_of<.T> sub idx 1
 
-//: list_free: リスト全体を解放する
+//: free: リスト全体を解放する
 //:
 //: 目的:
 //: - 連結リストの全ノードを解放します。
@@ -438,12 +437,12 @@ fn list_get <.T> <(List<.T>,i32)->Option<.T>> (lst, idx):
 //:| #target std
 //:| #import "alloc/collections/list" as *
 //: fn main <()*>i32> ():
-//:     let l0 list_nil<i32>;
-//:     let l1 list_cons<i32> 1 l0;
-//:     list_free<i32> l1;
+//:     let l0 new<i32>;
+//:     let l1 cons<i32> 1 l0;
+//:     free<i32> l1;
 //:     0
 //: ```
-fn list_free <.T> <(List<.T>)->()> (lst):
+fn free <.T> <(List<.T>)->()> (lst):
     let node_size <i32> add size_of<.T> 4
     let mut cur <i32> field::get lst "ptr"
     while ne cur 0:
@@ -453,13 +452,13 @@ fn list_free <.T> <(List<.T>)->()> (lst):
                 dealloc_raw cur node_size;
                 next
 
-//: list_reverse: リストを逆順にする
+//: reverse: リストを逆順にする
 //:
 //: 目的:
 //: - 逆順の新しいリストを作って返します。
 //:
 //: 実装(アルゴリズム):
-//: - 先頭から走査し、list_cons で新しい先頭へ積み直します。
+//: - 先頭から走査し、cons で新しい先頭へ積み直します。
 //:
 //: 注意(重要):
 //: - 返り値は新しいリストで、元のノードは再利用しません。
@@ -477,22 +476,22 @@ fn list_free <.T> <(List<.T>)->()> (lst):
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
 //:     let l3 <List<i32>>:
-//:         list_nil<i32>
-//:         |> list_push_front<i32> 3
-//:         |> list_push_front<i32> 2
-//:         |> list_push_front<i32> 1
-//:     let r list_reverse<i32> l3;
-//:     match list_head<i32> r:
+//:         new<i32>
+//:         |> push<i32> 3
+//:         |> push<i32> 2
+//:         |> push<i32> 1
+//:     let r reverse<i32> l3;
+//:     match head<i32> r:
 //:         Option::Some x:
 //:             if eq x 3 0 1
 //:         Option::None:
 //:             1
 //: ```
-fn list_reverse <.T> <(List<.T>)->List<.T>> (lst):
-    let mut new_list <List<.T>> list_nil<.T>;
+fn reverse <.T> <(List<.T>)->List<.T>> (lst):
+    let mut new_list <List<.T>> new<.T>;
     let mut cur <i32> field::get lst "ptr";
     while ne cur 0:
         do:
-            set new_list list_cons<.T> load<.T> cur new_list;
+            set new_list cons<.T> load<.T> cur new_list;
             set cur load_i32 add cur size_of<.T>;
     new_list

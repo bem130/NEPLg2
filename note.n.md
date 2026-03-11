@@ -11172,3 +11172,33 @@
   - `node nodesrc/tests.js -i tests/compiler/overload.n.md -i tests/compiler/overload_nested_generic_push.n.md --no-stdlib --no-tree -o /tmp/tests-overload-vec.json -j 2`
     - [結果/けっか]: `46/46 pass`
     - output JSON: `/tmp/tests-overload-vec.json`
+
+# 2026-03-12 作業メモ (list bare API 統一)
+
+- [目的/もくてき]:
+  - `list_nil` / `list_cons` / `list_push_front` / `list_head` / `list_tail` / `list_len` / `list_get` / `list_free` / `list_reverse` を alias ではなく actual def ごと bare 名へ[統一/とういつ]する。
+  - list fixture / pipe fixture / compiler fixture を current collection reboot [方針/ほうしん]へ[追従/ついじゅう]させる。
+- [根本原因/こんぽんげんいん]:
+  - `list.nepl` は public API も doctest も旧 prefix 名のままで、reboot の「関数名では区別しない」[原則/げんそく]から最も[外/はず]れていた。
+  - list doctest の 2 件目は string helper を star import したまま bare `new/head/get/len` へ[寄/よ]せると ambiguity を[起/お]こしやすく、比較だけに必要な API を trait 側 bare `eq` へ[置/お]き[換/か]える必要があった。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/list.nepl`
+    - actual def を `new` / `cons` / `push` / `head` / `tail` / `is_empty` / `len` / `get` / `free` / `reverse` へ[改名/かいめい]した。
+    - file header と doctest 内の public 名も current bare API へ[揃/そろ]えた。
+    - string doctest は `alloc/string` helper ではなく `core/traits/eq` の bare `eq` を[使/つか]うように[変更/へんこう]した。
+  - `stdlib/tests/list.n.md`
+    - mk helper と全 check case を bare list API へ[更新/こうしん]した。
+  - `tests/stdlib/pipe_collections.n.md`
+    - list chain example を `new |> push |> push ...` と `len/get` の current bare API へ[更新/こうしん]した。
+  - `tests/compiler/list_dot_map.n.md`
+    - compile_fail fixture の `list.list_nil` を `list.new` へ[変更/へんこう]した。
+- [設計/せっけい][判断/はんだん]:
+  - list は allocation failure を `Result` で[表/あらわ]す方針へまだ[乗/の]っていないが、この batch では naming reboot を[優先/ゆうせん]した。
+  - 文字列比較は string module helper 名に[依存/いぞん]するより、trait 経由の bare `eq` に[寄/よ]せたほうが reboot 全体の naming [方針/ほうしん]と[整合/せいごう]する。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/list.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/list.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/list.n.md -n 1`
+    - [結果/けっか]: pass
