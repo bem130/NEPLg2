@@ -10,21 +10,23 @@ ret: 1
 #target std
 
 #import "alloc/collections/list" as *
+#import "alloc/diag/error" as *
 #import "core/math" as *
 #import "core/option" as *
+#import "core/result" as *
 
 fn main <()*>i32> ():
     let xs0 <List<i32>>:
-        new<i32>
-        |> push<i32> 3
-        |> push<i32> 2
-        |> push<i32> 1
+        unwrap_ok<List<i32>, Diag> new<i32>
+        |> push<i32> 3 |> uwok
+        |> push<i32> 2 |> uwok
+        |> push<i32> 1 |> uwok
     let ok0 <bool> eq len<i32> xs0 3;
     let xs1 <List<i32>>:
-        new<i32>
-        |> push<i32> 3
-        |> push<i32> 2
-        |> push<i32> 1
+        unwrap_ok<List<i32>, Diag> new<i32>
+        |> push<i32> 3 |> uwok
+        |> push<i32> 2 |> uwok
+        |> push<i32> 1 |> uwok
     let ok1 <bool> match get<i32> xs1 1:
         Option::Some v:
             eq v 2
@@ -51,20 +53,14 @@ ret: 1
 
 fn main <()*>i32> ():
     let s0 <Stack<i32>>:
-        new<i32>
-        |> unwrap_ok<Stack<i32>, Diag>
-        |> push<i32> 10
-        |> unwrap_ok<Stack<i32>, Diag>
-        |> push<i32> 20
-        |> unwrap_ok<Stack<i32>, Diag>
+        unwrap_ok<Stack<i32>, Diag> new<i32>
+        |> push<i32> 10 |> unwrap_ok<Stack<i32>, Diag>
+        |> push<i32> 20 |> unwrap_ok<Stack<i32>, Diag>
     let ok0 <bool> eq len<i32> s0 2;
     let s1 <Stack<i32>>:
-        new<i32>
-        |> unwrap_ok<Stack<i32>, Diag>
-        |> push<i32> 10
-        |> unwrap_ok<Stack<i32>, Diag>
-        |> push<i32> 20
-        |> unwrap_ok<Stack<i32>, Diag>
+        unwrap_ok<Stack<i32>, Diag> new<i32>
+        |> push<i32> 10 |> unwrap_ok<Stack<i32>, Diag>
+        |> push<i32> 20 |> unwrap_ok<Stack<i32>, Diag>
     let p pop<i32> s1;
     let ok1 <bool> match p:
         Option::Some v:
@@ -152,24 +148,21 @@ fn must_set <(Result<BTreeSet<i32>, Diag>)*>BTreeSet<i32>> (r):
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
     let s0 <BTreeSet<i32>>:
-        new<i32>
-        |> must_set
+        unwrap_ok<BTreeSet<i32>, Diag> new<i32>
         |> insert<i32> 5
         |> must_set
         |> insert<i32> 2
         |> must_set
     set checks checks_push checks check contains<i32> s0 5;
     let s1 <BTreeSet<i32>>:
-        new<i32>
-        |> must_set
+        unwrap_ok<BTreeSet<i32>, Diag> new<i32>
         |> insert<i32> 5
         |> must_set
         |> insert<i32> 2
         |> must_set
     set checks checks_push checks check_eq_i32 2 len<i32> s1;
     let s2 <BTreeSet<i32>>:
-        new<i32>
-        |> must_set
+        unwrap_ok<BTreeSet<i32>, Diag> new<i32>
         |> insert<i32> 5
         |> must_set
         |> insert<i32> 2
@@ -205,16 +198,14 @@ fn must_hm <(Result<HashMap<i32,i32,DefaultHash32>, Diag>)*>HashMap<i32,i32,Defa
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
     let hm0 <HashMap<i32,i32,DefaultHash32>>:
-        new DefaultHash32
-        |> must_hm
+        must_hm new DefaultHash32
         |> insert 7 70
         |> must_hm
         |> insert 9 90
         |> must_hm
     set checks checks_push checks check_eq_i32 2 len hm0;
     let hm1 <HashMap<i32,i32,DefaultHash32>>:
-        new DefaultHash32
-        |> must_hm
+        must_hm new DefaultHash32
         |> insert 7 70
         |> must_hm
         |> insert 9 90
@@ -225,8 +216,7 @@ fn main <()*>i32> ():
         Option::None:
             set checks checks_push checks Result<(),str>::Err "pipe hashmap get failed";
     let hm2 <HashMap<i32,i32,DefaultHash32>>:
-        new DefaultHash32
-        |> must_hm
+        must_hm new DefaultHash32
         |> insert 7 70
         |> must_hm
         |> insert 9 90
@@ -299,20 +289,14 @@ ret: 1
 
 fn main <()*>i32> ():
     let rb <RingBuffer<i32>>:
-        new<i32>
-        |> uwok
-        |> push 11
-        |> uwok
-        |> push 22
-        |> uwok
+        unwrap_ok<RingBuffer<i32>, Diag> new<i32>
+        |> push 11 |> uwok
+        |> push 22 |> uwok
     let ok0 <bool> eq len<i32> rb 2;
     let rb2 <RingBuffer<i32>>:
-        new<i32>
-        |> uwok
-        |> push 11
-        |> uwok
-        |> push 22
-        |> uwok
+        unwrap_ok<RingBuffer<i32>, Diag> new<i32>
+        |> push 11 |> uwok
+        |> push 22 |> uwok
     let ok1 <bool> match rb2 |> peek:
         Option::Some v:
             eq v 11
@@ -338,20 +322,14 @@ ret: 1
 
 fn main <()*>i32> ():
     let q <Queue<i32>>:
-        new<i32>
-        |> uwok
-        |> push 3
-        |> uwok
-        |> push 4
-        |> uwok
+        unwrap_ok<Queue<i32>, Diag> new<i32>
+        |> push 3 |> uwok
+        |> push 4 |> uwok
     let ok0 <bool> eq len<i32> q 2;
     let q2 <Queue<i32>>:
-        new<i32>
-        |> uwok
-        |> push 3
-        |> uwok
-        |> push 4
-        |> uwok
+        unwrap_ok<Queue<i32>, Diag> new<i32>
+        |> push 3 |> uwok
+        |> push 4 |> uwok
     let ok1 <bool> match q2 |> peek:
         Option::Some v:
             eq v 3

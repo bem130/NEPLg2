@@ -157,7 +157,7 @@ fn noshadow test_fail <(str)*>Result<(),str>> (msg):
 //: - `push` の型引数を毎回書かずに collectable な検査列を組み立てる入口として使います。
 //:
 //: ### [実装/じっそう]
-//: - `new<Result<(),str>>` を呼び、検査結果専用の空ベクタを返します。
+//: - `unwrap_ok<Vec<Result<(),str>>, StdErrorKind> new<Result<(),str>>` を呼び、検査結果専用の空ベクタを返します。
 //:
 //: ### [注意/ちゅうい]
 //: - 返り値は `Result<(),str>` 専用です。
@@ -179,7 +179,7 @@ fn noshadow test_fail <(str)*>Result<(),str>> (msg):
 //:     checks_exit_code checks
 //: ```
 fn checks_new <()*>Vec<Result<(),str>>> ():
-    unwrap_ok new<Result<(),str>>
+    unwrap_ok<Vec<Result<(),str>>, StdErrorKind> new<Result<(),str>>
 
 //: ## checks_push
 //: [集約/しゅうやく][検査/けんさ][列/れつ]に 1 [件/けん][追加/ついか]する

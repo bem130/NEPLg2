@@ -26,6 +26,12 @@
 
 //: ## BTreeSet
 //: [順序付き/じゅんじょつき] key [配列/はいれつ]の[本体/ほんたい]
+//:
+//: ### [目的/もくてき]
+//: - key [配列/はいれつ]と[長/なが]さ header を 1 [値/あたい]として[所有/しょゆう]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [本物/ほんもの]の B-tree node [分割/ぶんかつ]は[持/も]たず、lower_bound と shift による[単純/たんじゅん][実装/じっそう]です。
 struct BTreeSet<.T>:
     hdr <i32>
 
@@ -76,6 +82,18 @@ fn btreeset_grow <.T> <(BTreeSet<.T>)*>Result<BTreeSet<.T>, Diag>> (set0):
 
 //: ## new
 //: [空/から]の `BTreeSet<.T>` を[作/つく]る
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreeset" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let s <BTreeSet<i32>> unwrap_ok<BTreeSet<i32>, Diag> new<i32>;
+//:     if eq len s 0 1 0
+//: ```
 fn new <.T> <()*>Result<BTreeSet<.T>, Diag>> ():
     let cap <i32> 8
     let keys <i32> alloc_raw mul cap size_of<.T>
@@ -97,11 +115,40 @@ fn new <.T> <()*>Result<BTreeSet<.T>, Diag>> ():
 
 //: ## len
 //: [要素数/ようそすう]を[返/かえ]す
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreeset" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let s <BTreeSet<i32>>:
+//:         unwrap_ok<BTreeSet<i32>, Diag> new<i32>
+//:         |> insert 3 |> uwok
+//:         |> insert 7 |> uwok;
+//:     if eq len s 2 1 0
+//: ```
 fn len <.T> <(BTreeSet<.T>)->i32> (set0):
     load_i32 field::get set0 "hdr"
 
 //: ## contains
 //: key の[存在/そんざい]を[確/たし]かめる
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreeset" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let s <BTreeSet<i32>>:
+//:         unwrap_ok<BTreeSet<i32>, Diag> new<i32>
+//:         |> insert 7 |> uwok;
+//:     if contains s 7 1 0
+//: ```
 fn contains <.T: Ord> <(BTreeSet<.T>,.T)->bool> (set0, key):
     let hdr <i32> field::get set0 "hdr"
     let len0 <i32> load_i32 hdr
@@ -111,6 +158,21 @@ fn contains <.T: Ord> <(BTreeSet<.T>,.T)->bool> (set0, key):
 
 //: ## insert
 //: key を[集合/しゅうごう]へ[挿入/そうにゅう]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreeset" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let s <BTreeSet<i32>>:
+//:         unwrap_ok<BTreeSet<i32>, Diag> new<i32>
+//:         |> insert 7 |> uwok
+//:         |> insert 3 |> uwok;
+//:     if eq len s 2 1 0
+//: ```
 fn insert <.T: Ord> <(BTreeSet<.T>,.T)*>Result<BTreeSet<.T>, Diag>> (set0, key):
     let hdr0 <i32> field::get set0 "hdr"
     let len_init <i32> load_i32 hdr0
@@ -140,6 +202,21 @@ fn insert <.T: Ord> <(BTreeSet<.T>,.T)*>Result<BTreeSet<.T>, Diag>> (set0, key):
 
 //: ## remove
 //: key を[集合/しゅうごう]から[削除/さくじょ]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreeset" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let s <BTreeSet<i32>>:
+//:         unwrap_ok<BTreeSet<i32>, Diag> new<i32>
+//:         |> insert 7 |> uwok
+//:         |> remove 7;
+//:     if eq len s 0 1 0
+//: ```
 fn remove <.T: Ord> <(BTreeSet<.T>,.T)*>BTreeSet<.T>> (set0, key):
     let hdr <i32> field::get set0 "hdr"
     let len0 <i32> load_i32 hdr
@@ -160,6 +237,21 @@ fn remove <.T: Ord> <(BTreeSet<.T>,.T)*>BTreeSet<.T>> (set0, key):
 
 //: ## clear
 //: [全要素/ぜんようそ]を[削除/さくじょ]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreeset" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let s <BTreeSet<i32>>:
+//:         unwrap_ok<BTreeSet<i32>, Diag> new<i32>
+//:         |> insert 7 |> uwok
+//:         |> clear;
+//:     if eq len s 0 1 0
+//: ```
 fn clear <.T> <(BTreeSet<.T>)*>BTreeSet<.T>> (set0):
     let hdr <i32> field::get set0 "hdr"
     store_i32 hdr 0
@@ -167,6 +259,19 @@ fn clear <.T> <(BTreeSet<.T>)*>BTreeSet<.T>> (set0):
 
 //: ## free
 //: [内部/ないぶ]メモリを[解放/かいほう]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreeset" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let s <BTreeSet<i32>> unwrap_ok<BTreeSet<i32>, Diag> new<i32>;
+//:     free s;
+//:     0
+//: ```
 fn free <.T> <(BTreeSet<.T>)*>()> (set0):
     let hdr <i32> field::get set0 "hdr"
     let cap <i32> load_i32 add hdr 4

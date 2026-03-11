@@ -29,34 +29,26 @@
 //:| #import "core/option" as *
 //:| #import "core/field" as *
 //:| #import "core/result" as *
+//:| #import "core/math" as *
 //: fn main <()*>i32> ():
 //:     let st0 <Stack<i32>>:
-//:         <Stack<i32>> new
-//:         |> uwok
-//:         |> push 10
-//:         |> uwok
-//:         |> push 20
-//:         |> uwok
+//:         unwrap_ok<Stack<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok
+//:         |> push 20 |> uwok
 //:     let ok0 if eq len st0 2 1 0;
 //:     let st1 <Stack<i32>>:
-//:         <Stack<i32>> new
-//:         |> uwok
-//:         |> push 10
-//:         |> uwok
-//:         |> push 20
-//:         |> uwok
+//:         unwrap_ok<Stack<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok
+//:         |> push 20 |> uwok
 //:     let ok1 match peek st1:
 //:         Option::Some x:
 //:             if eq x 20 1 0
 //:         Option::None:
 //:             0
 //:     let st2 <Stack<i32>>:
-//:         <Stack<i32>> new
-//:         |> uwok
-//:         |> push 10
-//:         |> uwok
-//:         |> push 20
-//:         |> uwok
+//:         unwrap_ok<Stack<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok
+//:         |> push 20 |> uwok
 //:     let p pop st2;
 //:     let ok2 match p:
 //:         Option::Some x:
@@ -81,12 +73,9 @@
 //:| #import "core/result" as *
 //: fn main <()*>i32> ():
 //:     let st <Stack<str>>:
-//:         <Stack<str>> new
-//:         |> uwok
-//:         |> push "a"
-//:         |> uwok
-//:         |> push "b"
-//:         |> uwok
+//:         unwrap_ok<Stack<str>, Diag> new<str>
+//:         |> push "a" |> uwok
+//:         |> push "b" |> uwok
 //:     let p pop st;
 //:     let ok0 match p:
 //:         Option::Some x:
@@ -230,8 +219,7 @@ fn stack_data_ptr <.T> <(Stack<.T>)->MemPtr<.T>> (stk):
 //:| #import "core/result" as *
 //: fn main <()*>i32> ():
 //:     let st <Stack<i32>>:
-//:         new<i32>
-//:         |> uwok
+//:         unwrap_ok<Stack<i32>, Diag> new<i32>
 //:     if is_empty<i32> st 0 1
 //: ```
 fn new <.T> <()*>Result<Stack<.T>, Diag>> ():
@@ -278,13 +266,12 @@ fn new <.T> <()*>Result<Stack<.T>, Diag>> ():
 //:| #import "alloc/collections/stack" as *
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
+//:| #import "core/math" as *
 //: fn main <()*>i32> ():
 //:     let mut st <Stack<i32>>:
-//:         new<i32>
-//:         |> uwok
+//:         unwrap_ok<Stack<i32>, Diag> new<i32>
 //:     set st:
-//:         push<i32> st 10
-//:         |> uwok
+//:         push<i32> st 10 |> uwok
 //:     if eq len<i32> st 1 0 1
 //: ```
 fn push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
@@ -341,12 +328,11 @@ fn push <.T> <(Stack<.T>,.T)*>Result<Stack<.T>, Diag>> (stk, item):
 //:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
 //:| #import "core/result" as *
+//:| #import "core/math" as *
 //: fn main <()*>i32> ():
 //:     let st <Stack<i32>>:
-//:         new<i32>
-//:         |> uwok
-//:         |> push<i32> 10
-//:         |> uwok
+//:         unwrap_ok<Stack<i32>, Diag> new<i32>
+//:         |> push<i32> 10 |> uwok
 //:     let p pop<i32> st;
 //:     match p:
 //:         Option::Some x:
@@ -396,12 +382,11 @@ fn pop <.T> <(Stack<.T>)->Option<.T>> (stk):
 //:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
 //:| #import "core/result" as *
+//:| #import "core/math" as *
 //: fn main <()*>i32> ():
 //:     let st <Stack<i32>>:
-//:         new<i32>
-//:         |> uwok
-//:         |> push<i32> 20
-//:         |> uwok
+//:         unwrap_ok<Stack<i32>, Diag> new<i32>
+//:         |> push<i32> 20 |> uwok
 //:     match peek<i32> st:
 //:         Option::Some x:
 //:             if eq x 20 0 1
@@ -447,8 +432,9 @@ fn peek <.T> <(Stack<.T>)->Option<.T>> (stk):
 //:| #import "alloc/collections/stack" as *
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
+//:| #import "core/math" as *
 //: fn main <()*>i32> ():
-//:     let mut st <Stack<i32>> uwok new<i32>;
+//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> new<i32>;
 //:     set st uwok push<i32> st 1;
 //:     set st uwok push<i32> st 2;
 //:     if eq len<i32> st 2 0 1
@@ -480,7 +466,7 @@ fn len <.T> <(Stack<.T>)->i32> (stk):
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
 //: fn main <()*>i32> ():
-//:     let st <Stack<i32>> uwok new<i32>;
+//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> new<i32>;
 //:     if is_empty<i32> st 0 1
 //: ```
 fn is_empty <.T> <(Stack<.T>)->bool> (stk):
@@ -511,7 +497,7 @@ fn is_empty <.T> <(Stack<.T>)->bool> (stk):
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
 //: fn main <()*>i32> ():
-//:     let mut st <Stack<i32>> uwok new<i32>;
+//:     let mut st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> new<i32>;
 //:     set st uwok push<i32> st 9;
 //:     set st clear<i32> st;
 //:     if is_empty<i32> st 0 1
@@ -547,7 +533,7 @@ fn clear <.T> <(Stack<.T>)->Stack<.T>> (stk):
 //:| #import "alloc/diag/error" as *
 //:| #import "core/result" as *
 //: fn main <()*>i32> ():
-//:     let st <Stack<i32>> uwok new<i32>;
+//:     let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> new<i32>;
 //:     free<i32> st;
 //:     0
 //: ```

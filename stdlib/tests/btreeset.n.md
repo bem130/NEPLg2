@@ -24,8 +24,7 @@ fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
 
     let s0 <BTreeSet<i32>>:
-        new<i32>
-        |> must_set
+        unwrap_ok<BTreeSet<i32>, Diag> new<i32>
         |> insert<i32> 5
         |> must_set
         |> insert<i32> 1
@@ -62,8 +61,7 @@ fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
 
     let s0 <BTreeSet<i32>>:
-        new<i32>
-        |> must_set
+        unwrap_ok<BTreeSet<i32>, Diag> new<i32>
         |> insert<i32> 5
         |> must_set
         |> insert<i32> 1
@@ -71,8 +69,7 @@ fn main <()*>i32> ():
     set checks checks_push checks check contains<i32> s0 1;
 
     let s1 <BTreeSet<i32>>:
-        new<i32>
-        |> must_set
+        unwrap_ok<BTreeSet<i32>, Diag> new<i32>
         |> insert<i32> 5
         |> must_set
         |> insert<i32> 1
@@ -81,8 +78,7 @@ fn main <()*>i32> ():
     set checks checks_push checks check not contains<i32> s1 1;
 
     let s2 <BTreeSet<i32>>:
-        new<i32>
-        |> must_set
+        unwrap_ok<BTreeSet<i32>, Diag> new<i32>
         |> insert<i32> 5
         |> must_set
         |> insert<i32> 1
@@ -118,8 +114,7 @@ fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
 
     let s0 <BTreeSet<i32>>:
-        new<i32>
-        |> must_set
+        unwrap_ok<BTreeSet<i32>, Diag> new<i32>
         |> insert<i32> 3
         |> must_set
         |> insert<i32> 3

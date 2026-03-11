@@ -1,21 +1,24 @@
-//: list: [単方向/たんほうこう][連結/れんけつ]リストを扱うライブラリ
+//: # list
+//: [単方向/たんほうこう][連結/れんけつ]リストを[扱/あつか]うライブラリ
 //:
-//: [目的/もくてき]:
-//: - `cons/head/tail/get/len/reverse` など、リスト処理の基本 API を提供します。
-//: - 空リスト・範囲外アクセスを `Option` で安全に扱える形で提供します。
+//: ### [目的/もくてき]
+//: - `new` / `cons` / `push` / `head` / `tail` / `get` / `reverse` など、[単方向/たんほうこう][連結/れんけつ]リストの[基本/きほん] API を[提供/ていきょう]します。
+//: - [範囲外/はんいがい][参照/さんしょう]は `Option`、[確保/かくほ][失敗/しっぱい]は `Result` として[分離/ぶんり]し、[値/あたい]で[安全/あんぜん]に[扱/あつか]います。
 //:
-//: [実装/じっそう]:
-//: - ノードは `[value:.T][next:i32]` レイアウトでヒープ確保します。
-//: - 空リストは `0` ポインタで表現します。
+//: ### [実装/じっそう]
+//: - ノードは `[value:.T][next:i32]` レイアウトでヒープ[確保/かくほ]します。
+//: - [空/から]リストは `ptr = 0` で[表現/ひょうげん]し、`new` はこの[空/から]リストを `Result::Ok` で[返/かえ]します。
+//: - `reverse` は[元/もと]のノードを[再利用/さいりよう]せず、新しいノード[列/れつ]を[逆順/ぎゃくじゅん]に[積/つ]み[直/なお]します。
 //:
-//: [注意/ちゅうい]:
-//: - `get` は範囲外や負 index で `Option::None` を返します。
-//: - `free` は循環リストを想定していません。
-//: - `reverse` は新しいノード列を構築するため、元リストと逆順リストは別管理です。
+//: ### [注意/ちゅうい]
+//: - `cons` / `push` / `reverse` は[内部/ないぶ]でノード[確保/かくほ]を[行/おこな]うため、`Result<..., Diag>` を[返/かえ]します。
+//: - `get` は[範囲外/はんいがい]や[負/ふ] index で `Option::None` を[返/かえ]します。
+//: - `free` は[循環/じゅんかん]リストを[想定/そうてい]していません。
 //:
-//: [計算量/けいさんりょう]:
-//: - `new`/`cons`/`head`/`tail`/`is_empty` は O(1)。
-//: - `len`/`get`/`free`/`reverse` は O(n)。
+//: ### [計算量/けいさんりょう]
+//: - `new` / `head` / `tail` / `is_empty` は O(1) です。
+//: - `cons` / `push` は O(1) です。
+//: - `len` / `get` / `free` / `reverse` は O(n) です。
 //:
 //: 追加の使い方:
 //:
@@ -24,40 +27,42 @@
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //:| #import "core/traits/eq" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
 //:     let base0 <List<i32>>:
-//:         new<i32>
-//:         |> push<i32> 3
-//:         |> push<i32> 2
-//:         |> push<i32> 1
+//:         unwrap_ok<List<i32>, Diag> new<i32>
+//:         |> push<i32> 3 |> uwok
+//:         |> push<i32> 2 |> uwok
+//:         |> push<i32> 1 |> uwok
 //:     let ok0 if eq len<i32> base0 3 1 0;
 //:     let base1 <List<i32>>:
-//:         new<i32>
-//:         |> push<i32> 3
-//:         |> push<i32> 2
-//:         |> push<i32> 1
+//:         unwrap_ok<List<i32>, Diag> new<i32>
+//:         |> push<i32> 3 |> uwok
+//:         |> push<i32> 2 |> uwok
+//:         |> push<i32> 1 |> uwok
 //:     let ok1 match head<i32> base1:
 //:         Option::Some x:
 //:             if eq x 1 1 0
 //:         Option::None:
 //:             0
 //:     let base2 <List<i32>>:
-//:         new<i32>
-//:         |> push<i32> 3
-//:         |> push<i32> 2
-//:         |> push<i32> 1
+//:         unwrap_ok<List<i32>, Diag> new<i32>
+//:         |> push<i32> 3 |> uwok
+//:         |> push<i32> 2 |> uwok
+//:         |> push<i32> 1 |> uwok
 //:     let ok2 match get<i32> base2 1:
 //:         Option::Some x:
 //:             if eq x 2 1 0
 //:         Option::None:
 //:             0
 //:     let base3 <List<i32>>:
-//:         new<i32>
-//:         |> push<i32> 3
-//:         |> push<i32> 2
-//:         |> push<i32> 1
+//:         unwrap_ok<List<i32>, Diag> new<i32>
+//:         |> push<i32> 3 |> uwok
+//:         |> push<i32> 2 |> uwok
+//:         |> push<i32> 1 |> uwok
 //:     let ok3 match tail<i32> base3:
 //:         Option::Some t:
 //:             if eq len<i32> t 2 1 0
@@ -75,36 +80,39 @@
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//:| #import "core/traits/eq" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
 //:     let src0 <List<str>>:
-//:         new<str>
-//:         |> push<str> "c"
-//:         |> push<str> "b"
-//:         |> push<str> "a"
-//:     let ra reverse<str> src0;
+//:         unwrap_ok<List<str>, Diag> new<str>
+//:         |> push<str> "c" |> uwok
+//:         |> push<str> "b" |> uwok
+//:         |> push<str> "a" |> uwok
+//:     let ra <List<str>> uwok reverse<str> src0;
 //:     let ok0 match head<str> ra:
 //:         Option::Some x:
 //:             if eq x "c" 1 0
 //:         Option::None:
 //:             0
 //:     let src1 <List<str>>:
-//:         new<str>
-//:         |> push<str> "c"
-//:         |> push<str> "b"
-//:         |> push<str> "a"
-//:     let rb reverse<str> src1;
+//:         unwrap_ok<List<str>, Diag> new<str>
+//:         |> push<str> "c" |> uwok
+//:         |> push<str> "b" |> uwok
+//:         |> push<str> "a" |> uwok
+//:     let rb <List<str>> uwok reverse<str> src1;
 //:     let ok1 match get<str> rb 2:
 //:         Option::Some x:
 //:             if eq x "a" 1 0
 //:         Option::None:
 //:             0
 //:     let src2 <List<str>>:
-//:         new<str>
-//:         |> push<str> "c"
-//:         |> push<str> "b"
-//:         |> push<str> "a"
-//:     let rc reverse<str> src2;
+//:         unwrap_ok<List<str>, Diag> new<str>
+//:         |> push<str> "c" |> uwok
+//:         |> push<str> "b" |> uwok
+//:         |> push<str> "a" |> uwok
+//:     let rc <List<str>> uwok reverse<str> src2;
 //:     let ok2 if is_none<str> get<str> rc 3 1 0;
 //:     let s01 <i32> add ok0 ok1;
 //:     add s01 ok2
@@ -115,36 +123,35 @@
 #import "core/mem" as *
 #import "core/math" as *
 #import "core/option" as *
+#import "core/result" as *
 #import "core/field" as field
+#import "alloc/diag/error" as *
 
-//: List: 単方向連結リストの先頭ポインタを隠蔽する構造体
+//: ## List
+//: [単方向/たんほうこう][連結/れんけつ]リストの[先頭/せんとう]ポインタを[隠蔽/いんぺい]する[所有者/しょゆうしゃ]
 //:
-//: 目的:
-//: - ノード先頭ポインタ (`i32`) を公開 API から隠蔽します。
+//: ### [目的/もくてき]
+//: - ノード[列/れつ]の[先頭/せんとう]アドレスを `ptr` field に[保持/ほじ]し、[公開/こうかい] API から raw pointer を[隠/かく]します。
 //:
-//: 実装(アルゴリズム):
-//: - `ptr` フィールドに先頭ノードアドレスを保持します。
-//:
-//: 注意(重要):
-//: - `ptr == 0` は空リストを表します。
-//:
-//: 計算量:
-//: - O(1)
+//: ### [注意/ちゅうい]
+//: - `ptr == 0` は[空/から]リストを[表/あらわ]します。
+//: - [値/あたい]を move すると[所有権/しょゆうけん]も move します。
 struct List<.T>:
     ptr <i32>
 
-//: new: 空リストを表す値を返す
+//: ## new
+//: [空/から]リストを `Result::Ok` で[返/かえ]す
 //:
-//: 目的:
-//: - 空リスト（null ポインタ）を返します。
+//: ### [目的/もくてき]
+//: - [他/ほか]の collection と[同/おな]じ `Result` [方針/ほうしん]に[揃/そろ]えつつ、[空/から]リストを[作成/さくせい]します。
 //:
-//: 実装(アルゴリズム):
-//: - 定数 0 を返すだけです。
+//: ### [実装/じっそう]
+//: - [空/から]リストは `ptr = 0` で[表現/ひょうげん]できるため、[追加/ついか]の[確保/かくほ]は[行/おこな]わず `ok` を[返/かえ]します。
 //:
-//: 注意(重要):
-//: - 0 は「空」を表す特別な値です。
+//: ### [注意/ちゅうい]
+//: - [確保/かくほ]は[行/おこな]いませんが、API [一貫性/いっかんせい]のため `Result<List<.T>, Diag>` を[返/かえ]します。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
 //: 使い方:
@@ -154,24 +161,26 @@ struct List<.T>:
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "core/result" as *
 //: fn main <()*>i32> ():
-//:     if is_empty<i32> new<i32> 0 1
+//:     if is_empty<i32> unwrap_ok<List<i32>, Diag> new<i32> 0 1
 //: ```
-fn new <.T> <()->List<.T>> ():
-    List 0
+fn new <.T> <()*>Result<List<.T>, Diag>> ():
+    ok<List<.T>, Diag> List 0
 
-//: cons: 先頭に要素を追加して新しいリストを作る
+//: ## cons
+//: [先頭/せんとう]に[要素/ようそ]を[追加/ついか]して[新/あたら]しいリストを[作/つく]る
 //:
-//: 目的:
-//: - head を値として持つ新ノードを確保し、tail を next に接続します。
+//: ### [目的/もくてき]
+//: - `head` を[値/あたい]として[保持/ほじ]する[新/あたら]しいノードを[確保/かくほ]し、`tail` を next に[接続/せつぞく]したリストを[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - size_of<.T> + 4 の領域を確保し、[value][next] を格納します。
+//: ### [実装/じっそう]
+//: - `size_of<.T> + 4` byte のノード[領域/りょういき]を[確保/かくほ]し、`[value][next]` を[順番/じゅんばん]に[格納/かくのう]します。
 //:
-//: 注意(重要):
-//: - 返り値は新しい先頭ノードのポインタです。
+//: ### [注意/ちゅうい]
+//: - [確保/かくほ][失敗/しっぱい]では `diag_out_of_memory "list_cons(node)"` を[返/かえ]します。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
 //: 使い方:
@@ -181,46 +190,55 @@ fn new <.T> <()->List<.T>> ():
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()*>i32> ():
-//:     let l cons<i32> 5 new<i32>;
+//:     let l0 <List<i32>> unwrap_ok<List<i32>, Diag> new<i32>;
+//:     let l <List<i32>> uwok cons<i32> 5 l0;
 //:     if is_empty<i32> l 1 0
 //: ```
-fn cons <.T> <(.T,List<.T>)->List<.T>> (head, tail):
+fn cons <.T> <(.T,List<.T>)*>Result<List<.T>, Diag>> (head, tail):
     let tail_ptr <i32> field::get tail "ptr"
     let node_size <i32> add size_of<.T> 4
-    let node <i32> alloc_raw node_size
-    store<.T> node head
-    store_i32 add node size_of<.T> tail_ptr
-    List node
+    match alloc_ptr<u8> node_size:
+        Result::Err _e:
+            diag_err<List<.T>> diag_out_of_memory "list_cons(node)"
+        Result::Ok node_ptr:
+            let node <i32> mem_ptr_addr node_ptr
+            store<.T> node head
+            store_i32 add node size_of<.T> tail_ptr
+            ok<List<.T>, Diag> List node
 
-//: push: 既存リストの先頭に要素を追加する（pipe向け）
+//: ## push
+//: pipe [向/む]けに[先頭/せんとう][追加/ついか]する
 //:
-//: 目的:
-//: - `xs |> push v` の形で先頭追加を自然に書けるようにします。
+//: ### [目的/もくてき]
+//: - `xs |> push v |> uwok` の[形/かたち]で、[先頭/せんとう][追加/ついか]を[自然/しぜん]に[書/か]けるようにします。
 //:
-//: 実装(アルゴリズム):
-//: - 引数順だけを pipe 向けに並べ替えて `cons` を呼びます。
+//: ### [実装/じっそう]
+//: - [引数順/ひきすうじゅん]だけを pipe [向/む]けに[並/なら]べ[替/か]え、`cons` を[呼/よ]びます。
 //:
-//: 注意(重要):
-//: - 返り値は新しい先頭ノードのポインタです。
+//: ### [注意/ちゅうい]
+//: - [結果/けっか]は `Result<List<.T>, Diag>` です。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
-fn push <.T> <(List<.T>,.T)->List<.T>> (lst, head):
+fn push <.T> <(List<.T>,.T)*>Result<List<.T>, Diag>> (lst, head):
     cons<.T> head lst
 
-//: head: 先頭要素を取得する
+//: ## head
+//: [先頭/せんとう][要素/ようそ]を[取得/しゅとく]する
 //:
-//: 目的:
-//: - 空なら None、非空なら先頭の値を Some で返します。
+//: ### [目的/もくてき]
+//: - [空/から]なら `None`、[非空/ひくう]なら[先頭/せんとう]の[値/あたい]を `Some` で[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - lst が 0 かを判定し、非空なら value を load します。
+//: ### [実装/じっそう]
+//: - `ptr == 0` を[判定/はんてい]し、[非空/ひくう]ならノード[先頭/せんとう]の value を `load` します。
 //:
-//: 注意(重要):
-//: - 空リストでは None を返します。
+//: ### [注意/ちゅうい]
+//: - [空/から]リストでは `None` を[返/かえ]します。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
 //: 使い方:
@@ -230,9 +248,11 @@ fn push <.T> <(List<.T>,.T)->List<.T>> (lst, head):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "core/result" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
-//:     let l cons<i32> 8 new<i32>;
+//:     let l0 <List<i32>> unwrap_ok<List<i32>, Diag> new<i32>;
+//:     let l <List<i32>> uwok cons<i32> 8 l0;
 //:     match head<i32> l:
 //:         Option::Some x:
 //:             if eq x 8 0 1
@@ -249,18 +269,19 @@ fn head <.T> <(List<.T>)->Option<.T>> (lst):
         else:
             some<.T> load<.T> lst_ptr
 
-//: tail: 末尾以外の部分（次のノード）を取得する
+//: ## tail
+//: [先頭/せんとう]を[除/のぞ]いた[残/のこ]りを[取得/しゅとく]する
 //:
-//: 目的:
-//: - 空なら None、非空なら next ポインタを Some で返します。
+//: ### [目的/もくてき]
+//: - [空/から]なら `None`、[非空/ひくう]なら next ポインタを[包/つつ]んだ `List<.T>` を `Some` で[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - lst が 0 かを判定し、非空なら next を load します。
+//: ### [実装/じっそう]
+//: - `ptr == 0` を[判定/はんてい]し、[非空/ひくう]なら next [欄/らん]を `load_i32` して `List` に[包/つつ]みます。
 //:
-//: 注意(重要):
-//: - 戻り値の Some は i32 のポインタです。
+//: ### [注意/ちゅうい]
+//: - [返/かえ]る `List<.T>` は[元/もと]のノード[列/れつ]を[共有/きょうゆう]します。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
 //: 使い方:
@@ -270,12 +291,14 @@ fn head <.T> <(List<.T>)->Option<.T>> (lst):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "alloc/diag/error" as *
 //:| #import "core/option" as *
+//:| #import "core/traits/eq" as *
 //: fn main <()*>i32> ():
 //:     let l2 <List<i32>>:
-//:         new<i32>
-//:         |> push<i32> 2
-//:         |> push<i32> 1
+//:         unwrap_ok<List<i32>, Diag> new<i32>
+//:         |> push<i32> 2 |> uwok
+//:         |> push<i32> 1 |> uwok
 //:     match tail<i32> l2:
 //:         Option::Some t:
 //:             if eq len<i32> t 1 0 1
@@ -292,18 +315,19 @@ fn tail <.T> <(List<.T>)->Option<List<.T>>> (lst):
         else:
             some<List<.T>> List load_i32 add lst_ptr size_of<.T>
 
-//: is_empty: 空リストか判定する
+//: ## is_empty
+//: [空/から]リストか[判定/はんてい]する
 //:
-//: 目的:
-//: - lst が空なら true を返します。
+//: ### [目的/もくてき]
+//: - `lst` が[空/から]なら `true` を[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - lst == 0 を判定します。
+//: ### [実装/じっそう]
+//: - `ptr == 0` を[判定/はんてい]します。
 //:
-//: 注意(重要):
-//: - 空リストは 0 で表します。
+//: ### [注意/ちゅうい]
+//: - [空/から]リストは `ptr = 0` で[表現/ひょうげん]します。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
 //: 使い方:
@@ -313,24 +337,26 @@ fn tail <.T> <(List<.T>)->Option<List<.T>>> (lst):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "core/result" as *
 //: fn main <()*>i32> ():
-//:     if is_empty<i32> new<i32> 0 1
+//:     if is_empty<i32> unwrap_ok<List<i32>, Diag> new<i32> 0 1
 //: ```
 fn is_empty <.T> <(List<.T>)->bool> (lst):
     eq field::get lst "ptr" 0
 
-//: len: 長さを数える
+//: ## len
+//: [要素数/ようそすう]を[数/かぞ]える
 //:
-//: 目的:
-//: - リストの要素数を返します。
+//: ### [目的/もくてき]
+//: - リストの[要素数/ようそすう]を `i32` で[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - next をたどりながらカウントを増やします。
+//: ### [実装/じっそう]
+//: - next を[再帰的/さいきてき]にたどりながら[個数/こすう]を[足/た]します。
 //:
-//: 注意(重要):
-//: - 循環リストに対しては無限ループします。
+//: ### [注意/ちゅうい]
+//: - [循環/じゅんかん]リストに[対/たい]しては[停止/ていし]しません。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(n)
 //:
 //: 使い方:
@@ -340,12 +366,15 @@ fn is_empty <.T> <(List<.T>)->bool> (lst):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//:| #import "core/traits/eq" as *
 //: fn main <()*>i32> ():
 //:     let l3 <List<i32>>:
-//:         new<i32>
-//:         |> push<i32> 3
-//:         |> push<i32> 2
-//:         |> push<i32> 1
+//:         unwrap_ok<List<i32>, Diag> new<i32>
+//:         |> push<i32> 3 |> uwok
+//:         |> push<i32> 2 |> uwok
+//:         |> push<i32> 1 |> uwok
 //:     if eq len<i32> l3 3 0 1
 //: ```
 fn len <.T> <(List<.T>)->i32> (lst):
@@ -358,19 +387,20 @@ fn len <.T> <(List<.T>)->i32> (lst):
         else:
             add 1 len<.T> List load_i32 add lst_ptr size_of<.T>
 
-//: get: 指定位置の要素を取得する
+//: ## get
+//: [指定位置/していいち]の[要素/ようそ]を[取得/しゅとく]する
 //:
-//: 目的:
-//: - idx が範囲内なら Some(value)、範囲外なら None を返します。
+//: ### [目的/もくてき]
+//: - `idx` が[範囲内/はんいない]なら `Some(value)`、[範囲外/はんいがい]なら `None` を[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - 先頭から idx 回 next をたどり、到達したノードの value を返します。
-//: - 途中で null に到達したら None を返します。
+//: ### [実装/じっそう]
+//: - [先頭/せんとう]から `idx` [回/かい] next をたどり、[到達/とうたつ]したノードの value を[返/かえ]します。
+//: - [途中/とちゅう]で `null` に[到達/とうたつ]したら `None` を[返/かえ]します。
 //:
-//: 注意(重要):
-//: - idx が負のときは None です。
+//: ### [注意/ちゅうい]
+//: - `idx` が[負/ふ]のときも `None` です。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(n)
 //:
 //: 使い方:
@@ -380,13 +410,16 @@ fn len <.T> <(List<.T>)->i32> (lst):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //:| #import "core/option" as *
+//:| #import "core/traits/eq" as *
 //: fn main <()*>i32> ():
 //:     let l3 <List<i32>>:
-//:         new<i32>
-//:         |> push<i32> 3
-//:         |> push<i32> 2
-//:         |> push<i32> 1
+//:         unwrap_ok<List<i32>, Diag> new<i32>
+//:         |> push<i32> 3 |> uwok
+//:         |> push<i32> 2 |> uwok
+//:         |> push<i32> 1 |> uwok
 //:     match get<i32> l3 1:
 //:         Option::Some x:
 //:             if eq x 2 0 1
@@ -415,18 +448,19 @@ fn get <.T> <(List<.T>,i32)->Option<.T>> (lst, idx):
                         else:
                             get<.T> List load_i32 add lst_ptr size_of<.T> sub idx 1
 
-//: free: リスト全体を解放する
+//: ## free
+//: リスト[全体/ぜんたい]を[解放/かいほう]する
 //:
-//: 目的:
-//: - 連結リストの全ノードを解放します。
+//: ### [目的/もくてき]
+//: - [単方向/たんほうこう][連結/れんけつ]リストの[全/すべ]てのノードを[順番/じゅんばん]に[解放/かいほう]します。
 //:
-//: 実装(アルゴリズム):
-//: - next を保存しながら現在ノードを順に dealloc します。
+//: ### [実装/じっそう]
+//: - next を[退避/たいひ]してから[現在/げんざい]ノードを `dealloc_raw` し、[順/じゅん]に[進/すす]みます。
 //:
-//: 注意(重要):
-//: - 循環リストには対応していません。
+//: ### [注意/ちゅうい]
+//: - [循環/じゅんかん]リストには[対応/たいおう]していません。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(n)
 //:
 //: 使い方:
@@ -436,9 +470,11 @@ fn get <.T> <(List<.T>,i32)->Option<.T>> (lst, idx):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //: fn main <()*>i32> ():
-//:     let l0 new<i32>;
-//:     let l1 cons<i32> 1 l0;
+//:     let l0 <List<i32>> unwrap_ok<List<i32>, Diag> new<i32>;
+//:     let l1 <List<i32>> uwok cons<i32> 1 l0;
 //:     free<i32> l1;
 //:     0
 //: ```
@@ -452,18 +488,20 @@ fn free <.T> <(List<.T>)->()> (lst):
                 dealloc_raw cur node_size;
                 next
 
-//: reverse: リストを逆順にする
+//: ## reverse
+//: [逆順/ぎゃくじゅん]の[新/あたら]しいリストを[作/つく]る
 //:
-//: 目的:
-//: - 逆順の新しいリストを作って返します。
+//: ### [目的/もくてき]
+//: - [元/もと]の[順序/じゅんじょ]を[逆/さか]さまにした[新/あたら]しいリストを[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - 先頭から走査し、cons で新しい先頭へ積み直します。
+//: ### [実装/じっそう]
+//: - [先頭/せんとう]から[走査/そうさ]しながら、`cons` で[新/あたら]しい[先頭/せんとう]へ[積/つ]み[直/なお]します。
 //:
-//: 注意(重要):
-//: - 返り値は新しいリストで、元のノードは再利用しません。
+//: ### [注意/ちゅうい]
+//: - [元/もと]のノードは[再利用/さいりよう]せず、[新/あたら]しいノード[列/れつ]を[確保/かくほ]します。
+//: - [途中/とちゅう]の[確保/かくほ]に[失敗/しっぱい]した[場合/ばあい]は `Result::Err Diag` を[返/かえ]します。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(n)
 //:
 //: 使い方:
@@ -473,25 +511,28 @@ fn free <.T> <(List<.T>)->()> (lst):
 //:| #entry main
 //:| #target std
 //:| #import "alloc/collections/list" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
 //:| #import "core/option" as *
+//:| #import "core/traits/eq" as *
 //: fn main <()*>i32> ():
 //:     let l3 <List<i32>>:
-//:         new<i32>
-//:         |> push<i32> 3
-//:         |> push<i32> 2
-//:         |> push<i32> 1
-//:     let r reverse<i32> l3;
+//:         unwrap_ok<List<i32>, Diag> new<i32>
+//:         |> push<i32> 3 |> uwok
+//:         |> push<i32> 2 |> uwok
+//:         |> push<i32> 1 |> uwok
+//:     let r <List<i32>> uwok reverse<i32> l3;
 //:     match head<i32> r:
 //:         Option::Some x:
 //:             if eq x 3 0 1
 //:         Option::None:
 //:             1
 //: ```
-fn reverse <.T> <(List<.T>)->List<.T>> (lst):
-    let mut new_list <List<.T>> new<.T>;
+fn reverse <.T> <(List<.T>)*>Result<List<.T>, Diag>> (lst):
+    let mut new_list <List<.T>> unwrap_ok<List<.T>, Diag> new<.T>;
     let mut cur <i32> field::get lst "ptr";
     while ne cur 0:
         do:
-            set new_list cons<.T> load<.T> cur new_list;
+            set new_list uwok cons<.T> load<.T> cur new_list;
             set cur load_i32 add cur size_of<.T>;
-    new_list
+    ok<List<.T>, Diag> new_list

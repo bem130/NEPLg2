@@ -177,6 +177,18 @@ fn ringbuffer_data_ptr <.T> <(RingBuffer<.T>)->MemPtr<.T>> (rb):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/ringbuffer" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let rb <RingBuffer<i32>> unwrap_ok<RingBuffer<i32>, Diag> new<i32>;
+//:     if eq len rb 0 1 0
+//: ```
 fn new <.T> <()*>Result<RingBuffer<.T>, Diag>> ():
     with_capacity<.T> 8
 
@@ -196,6 +208,18 @@ fn new <.T> <()*>Result<RingBuffer<.T>, Diag>> ():
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/ringbuffer" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let rb <RingBuffer<i32>> unwrap_ok<RingBuffer<i32>, Diag> with_capacity<i32> 16;
+//:     if eq cap rb 16 1 0
+//: ```
 fn with_capacity <.T> <(i32)*>Result<RingBuffer<.T>, Diag>> (initial_cap):
     let cap <i32> if lt initial_cap 1 1 initial_cap
     match alloc_ptr<u8> 16:
@@ -229,12 +253,67 @@ fn with_capacity <.T> <(i32)*>Result<RingBuffer<.T>, Diag>> (initial_cap):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/ringbuffer" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let rb <RingBuffer<i32>>:
+//:         unwrap_ok<RingBuffer<i32>, Diag> new<i32>
+//:         |> push 4 |> uwok
+//:         |> push 8 |> uwok;
+//:     if eq len rb 2 1 0
+//: ```
 fn len <.T> <(RingBuffer<.T>)->i32> (rb):
     ringbuffer_len_raw<.T> rb
 
+//: ## cap
+//: [容量/ようりょう]を[返/かえ]す
+//:
+//: ### [目的/もくてき]
+//: - [現在/げんざい][確保/かくほ]している[総容量/そうようりょう]を[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/ringbuffer" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let rb <RingBuffer<i32>> unwrap_ok<RingBuffer<i32>, Diag> with_capacity<i32> 12;
+//:     if eq cap rb 12 1 0
+//: ```
 fn cap <.T> <(RingBuffer<.T>)->i32> (rb):
     ringbuffer_cap_raw<.T> rb
 
+//: ## is_empty
+//: [空/から]かどうかを[返/かえ]す
+//:
+//: ### [目的/もくてき]
+//: - [要素/ようそ]が 0 [個/こ]なら `true` を[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/ringbuffer" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let rb <RingBuffer<i32>> unwrap_ok<RingBuffer<i32>, Diag> new<i32>;
+//:     if is_empty rb 1 0
+//: ```
 fn is_empty <.T> <(RingBuffer<.T>)->bool> (rb):
     eq len<.T> rb 0
 
@@ -254,6 +333,21 @@ fn is_empty <.T> <(RingBuffer<.T>)->bool> (rb):
 //:
 //: ### [計算量/けいさんりょう]
 //: - [償却/しょうきゃく] O(1)、[拡張/かくちょう][発生時/はっせいじ]の[最悪/さいあく][時間/じかん][計算量/けいさんりょう]は O(n) です。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/ringbuffer" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let rb <RingBuffer<i32>>:
+//:         unwrap_ok<RingBuffer<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok
+//:         |> push 20 |> uwok;
+//:     if eq len rb 2 1 0
+//: ```
 fn push <.T> <(RingBuffer<.T>, .T)*>Result<RingBuffer<.T>, Diag>> (rb, item):
     let hdr <MemPtr<u8>> get rb "hdr"
     let len <i32> ringbuffer_len_from_hdr hdr
@@ -306,6 +400,25 @@ fn push <.T> <(RingBuffer<.T>, .T)*>Result<RingBuffer<.T>, Diag>> (rb, item):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/ringbuffer" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/option" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let rb <RingBuffer<i32>>:
+//:         unwrap_ok<RingBuffer<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok;
+//:     match pop rb:
+//:         Option::Some v:
+//:             if eq v 10 1 0
+//:         Option::None:
+//:             0
+//: ```
 fn pop <.T> <(RingBuffer<.T>)*>Option<.T>> (rb):
     let hdr <MemPtr<u8>> get rb "hdr"
     let len <i32> ringbuffer_len_from_hdr hdr
@@ -337,6 +450,25 @@ fn pop <.T> <(RingBuffer<.T>)*>Option<.T>> (rb):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/ringbuffer" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/option" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let rb <RingBuffer<i32>>:
+//:         unwrap_ok<RingBuffer<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok;
+//:     match peek rb:
+//:         Option::Some v:
+//:             if eq v 10 1 0
+//:         Option::None:
+//:             0
+//: ```
 fn peek <.T> <(RingBuffer<.T>)->Option<.T>> (rb):
     let hdr <MemPtr<u8>> get rb "hdr"
     let len <i32> ringbuffer_len_from_hdr hdr
@@ -364,6 +496,21 @@ fn peek <.T> <(RingBuffer<.T>)->Option<.T>> (rb):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/ringbuffer" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let rb <RingBuffer<i32>>:
+//:         unwrap_ok<RingBuffer<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok
+//:         |> clear;
+//:     if is_empty rb 1 0
+//: ```
 fn clear <.T> <(RingBuffer<.T>)*>RingBuffer<.T>> (rb):
     let hdr <MemPtr<u8>> get rb "hdr"
     let _ <()> uwok store_i32 ringbuffer_header_len_ptr_from_hdr hdr 0
@@ -384,6 +531,19 @@ fn clear <.T> <(RingBuffer<.T>)*>RingBuffer<.T>> (rb):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/ringbuffer" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let rb <RingBuffer<i32>> unwrap_ok<RingBuffer<i32>, Diag> new<i32>;
+//:     free rb;
+//:     0
+//: ```
 fn free <.T> <(RingBuffer<.T>)*>()> (rb):
     let hdr <MemPtr<u8>> get rb "hdr"
     let cap <i32> ringbuffer_cap_from_hdr hdr

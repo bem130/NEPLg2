@@ -27,6 +27,12 @@
 
 //: ## BTreeMap
 //: [順序付き/じゅんじょつき] key/value [配列/はいれつ]の[本体/ほんたい]
+//:
+//: ### [目的/もくてき]
+//: - key と value の[整列済/せいれつず]み[配列/はいれつ]を 1 [値/あたい]として[保持/ほじ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [本物/ほんもの]の B-tree node [分割/ぶんかつ]は[持/も]たず、lower_bound と shift で[動/うご]く[単純/たんじゅん][実装/じっそう]です。
 struct BTreeMap<.K,.V>:
     hdr <i32>
 
@@ -91,6 +97,18 @@ fn grow <.K,.V> <(BTreeMap<.K,.V>)*>Result<BTreeMap<.K,.V>, Diag>> (hm):
 
 //: ## new
 //: [空/から]の `BTreeMap<.K, .V>` を[作/つく]る
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreemap" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hm <BTreeMap<i32, i32>> unwrap_ok<BTreeMap<i32, i32>, Diag> new<i32, i32>;
+//:     if eq len hm 0 1 0
+//: ```
 fn new <.K,.V> <()*>Result<BTreeMap<.K,.V>, Diag>> ():
     let cap <i32> 8
     let keys <i32> alloc_raw mul cap size_of<.K>
@@ -121,12 +139,41 @@ fn new <.K,.V> <()*>Result<BTreeMap<.K,.V>, Diag>> ():
 
 //: ## len
 //: [要素数/ようそすう]を[返/かえ]す
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreemap" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hm <BTreeMap<i32, i32>>:
+//:         unwrap_ok<BTreeMap<i32, i32>, Diag> new<i32, i32>
+//:         |> insert 3 30 |> uwok
+//:         |> insert 7 70 |> uwok;
+//:     if eq len hm 2 1 0
+//: ```
 fn len <.K,.V> <(BTreeMap<.K,.V>)->i32> (hm):
     let hdr <i32> field::get hm "hdr"
     load_i32 hdr
 
 //: ## contains
 //: key の[存在/そんざい]を[確/たし]かめる
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreemap" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hm <BTreeMap<i32, i32>>:
+//:         unwrap_ok<BTreeMap<i32, i32>, Diag> new<i32, i32>
+//:         |> insert 7 70 |> uwok;
+//:     if contains hm 7 1 0
+//: ```
 fn contains <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)->bool> (hm, key):
     let hdr <i32> field::get hm "hdr"
     let len0 <i32> load_i32 hdr
@@ -136,6 +183,25 @@ fn contains <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)->bool> (hm, key):
 
 //: ## get
 //: key に[対応/たいおう]する value を[返/かえ]す
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreemap" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/option" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hm <BTreeMap<i32, i32>>:
+//:         unwrap_ok<BTreeMap<i32, i32>, Diag> new<i32, i32>
+//:         |> insert 7 70 |> uwok;
+//:     match get hm 7:
+//:         Option::Some v:
+//:             if eq v 70 1 0
+//:         Option::None:
+//:             0
+//: ```
 fn get <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)->Option<.V>> (hm, key):
     let hdr <i32> field::get hm "hdr"
     let len0 <i32> load_i32 hdr
@@ -149,6 +215,21 @@ fn get <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)->Option<.V>> (hm, key):
 
 //: ## insert
 //: key/value を[挿入/そうにゅう]または[更新/こうしん]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreemap" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hm <BTreeMap<i32, i32>>:
+//:         unwrap_ok<BTreeMap<i32, i32>, Diag> new<i32, i32>
+//:         |> insert 7 70 |> uwok
+//:         |> insert 3 30 |> uwok;
+//:     if eq len hm 2 1 0
+//: ```
 fn insert <.K: Ord,.V> <(BTreeMap<.K,.V>,.K,.V)*>Result<BTreeMap<.K,.V>, Diag>> (hm, key, value):
     let hdr0 <i32> field::get hm "hdr"
     let len_init <i32> load_i32 hdr0
@@ -183,6 +264,21 @@ fn insert <.K: Ord,.V> <(BTreeMap<.K,.V>,.K,.V)*>Result<BTreeMap<.K,.V>, Diag>> 
 
 //: ## remove
 //: key を[削除/さくじょ]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreemap" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hm <BTreeMap<i32, i32>>:
+//:         unwrap_ok<BTreeMap<i32, i32>, Diag> new<i32, i32>
+//:         |> insert 7 70 |> uwok
+//:         |> remove 7;
+//:     if eq len hm 0 1 0
+//: ```
 fn remove <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)*>BTreeMap<.K,.V>> (hm, key):
     let hdr <i32> field::get hm "hdr"
     let len0 <i32> load_i32 hdr
@@ -205,6 +301,21 @@ fn remove <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)*>BTreeMap<.K,.V>> (hm, key):
 
 //: ## clear
 //: [全要素/ぜんようそ]を[削除/さくじょ]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreemap" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hm <BTreeMap<i32, i32>>:
+//:         unwrap_ok<BTreeMap<i32, i32>, Diag> new<i32, i32>
+//:         |> insert 7 70 |> uwok
+//:         |> clear;
+//:     if eq len hm 0 1 0
+//: ```
 fn clear <.K,.V> <(BTreeMap<.K,.V>)*>BTreeMap<.K,.V>> (hm):
     let hdr <i32> field::get hm "hdr"
     store_i32 hdr 0
@@ -212,6 +323,19 @@ fn clear <.K,.V> <(BTreeMap<.K,.V>)*>BTreeMap<.K,.V>> (hm):
 
 //: ## free
 //: [内部/ないぶ]メモリを[解放/かいほう]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/btreemap" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hm <BTreeMap<i32, i32>> unwrap_ok<BTreeMap<i32, i32>, Diag> new<i32, i32>;
+//:     free hm;
+//:     0
+//: ```
 fn free <.K,.V> <(BTreeMap<.K,.V>)*>()> (hm):
     let hdr <i32> field::get hm "hdr"
     let cap <i32> load_i32 add hdr 4

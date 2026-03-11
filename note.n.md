@@ -11382,3 +11382,63 @@
   - `node nodesrc/tests.js -i stdlib/tests/error.n.md -i stdlib/tests/diag.n.md -i tests/stdlib/traits_serde.n.md -i tests/stdlib/io.n.md --no-stdlib --no-tree -o /tmp/tests-std-error-kind-core.json -j 4`
     - [結果/けっか]: `13/13 pass`
     - output JSON: `/tmp/tests-std-error-kind-core.json`
+- 2026-03-12: `List` を collection reboot 方針へ寄せるため、`stdlib/alloc/collections/list.nepl` の `new/cons/push/reverse` を `Result<..., Diag>` 返却へ変更した。空リスト自体は追加確保をしないが、公開面は `stack` / `ringbuffer` / `queue` / `btree` と同じ `Result` 方針へ揃えた。
+- 2026-03-12: `stdlib/tests/list.n.md`, `tests/stdlib/pipe_collections.n.md`, `tests/compiler/list_dot_map.n.md`, `tests/compiler/neplg2.n.md` を current API へ追従した。`new ... |> uwok |> push ... |> uwok` の一行連鎖へ統一し、`reverse` も `uwok` 経由で受ける形に揃えた。
+- 2026-03-12: collection の doc test / fixture を current reboot API に同期した。
+  - `stdlib/alloc/collections/stack.nepl`
+    - doc test に残っていた旧 `new |> uwok` を `unwrap_ok<Stack<...>, Diag> new<...>` へ統一し、`push ... |> uwok` を 1 行に揃えた。
+    - `node nodesrc/tests.js -i stdlib/alloc/collections/stack.nepl --no-stdlib --no-tree -o /tmp/tests-stack-docs.json -j 2` で `10/10 pass`。
+  - `stdlib/alloc/collections/hashmap.nepl`, `stdlib/alloc/collections/hashset.nepl`
+    - public API (`new/insert/get/contains/remove/len/free`) の comment を新 format に寄せ、各関数の usage doctest を追加した。
+    - hasher 付き `new` の例は、既存通過例に合わせて `unwrap_ok<HashMap<...>, Diag> new DefaultHash32` / `unwrap_ok<HashSet<...>, Diag> new DefaultHash32` へ揃えた。
+    - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/hashmap.nepl -n 1` pass。
+    - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/hashset.nepl -n 1` pass。
+  - `stdlib/tests/btreeset.n.md`, `tests/stdlib/pipe_collections.n.md`
+    - `BTreeSet` / `Stack` / `RingBuffer` / `Queue` / `HashMap` / `HashSet` の fixture に残っていた曖昧な bare `new<i32>` や旧 pipe 書法を current style に更新した。
+  - `tests/compiler/list_dot_map.n.md`
+    - `namespace_pathsep_map_with_result` は stale `compile_fail` だったので normal test (`ret: 2`) に直した。
+  - focused 検証
+    - `node nodesrc/tests.js -i stdlib/tests/btreeset.n.md -i tests/stdlib/pipe_collections.n.md -i tests/compiler/list_dot_map.n.md --no-stdlib --no-tree -o /tmp/tests-collections-regression-slice.json -j 4` で `14/14 pass`。
+
+# 2026-03-12 作業メモ (collection public API の doc comment / doctest 追加)
+
+- [目的/もくてき]:
+  - reboot [方針/ほうしん]どおり、`alloc/collections` の public API に current bare 名と `Result` / `Option` [流儀/りゅうぎ]を[示/しめ]す usage doctest を[増/ふ]やす。
+  - old comment のまま「[何/なに]を[返/かえ]すか」だけで[終/お]わっている関数へ、current [使/つか]い[方/かた]を[追記/ついき]する。
+- [根本原因/こんぽんげんいん]:
+  - collection reboot で public 名と return [方針/ほうしん]は[変/か]わったが、`queue` / `ringbuffer` / `btreemap` / `btreeset` の comment には current style の最小例が[十分/じゅうぶん]に[無/な]かった。
+  - `queue.clear` の doctest では let [本体/ほんたい]の[末尾/まつび]に `;` が[残/のこ]っており、[式/しき]が unit に[崩/くず]れていた。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/queue.nepl`
+    - `new` / `with_capacity` / `len` / `is_empty` / `push` / `pop` / `peek` / `clear` / `free` に current style の usage doctest を[追加/ついか]した。
+    - `clear` の snippet は `let q0 ...` と `let q clear q0` に[分離/ぶんり]し、let [本体/ほんたい]の unit 化を[避/さ]けた。
+  - `stdlib/alloc/collections/ringbuffer.nepl`
+    - `new` / `with_capacity` / `len` / `cap` / `is_empty` / `push` / `pop` / `peek` / `clear` / `free` に usage doctest を[追加/ついか]した。
+  - `stdlib/alloc/collections/btreemap.nepl`
+    - `BTreeMap` struct comment を current format に[補強/ほきょう]し、`new` / `len` / `contains` / `get` / `insert` / `remove` / `clear` / `free` の usage doctest を[追加/ついか]した。
+  - `stdlib/alloc/collections/btreeset.nepl`
+    - `BTreeSet` struct comment を current format に[補強/ほきょう]し、`new` / `len` / `contains` / `insert` / `remove` / `clear` / `free` の usage doctest を[追加/ついか]した。
+- [設計/せっけい][判断/はんだん]:
+  - doctest は reboot doc の[方針/ほうしん]に[従/したが]い、API の[最小/さいしょう][使用例/しようれい]と current ownership / error [流儀/りゅうぎ]を[示/しめ]す[用途/ようと]に[限定/げんてい]した。
+  - fixture [代替/だいたい]ではなく、public 関数[直前/ちょくぜん]に置いて「[見/み]た[通/とお]りに[使/つか]える」ことを[保証/ほしょう]する comment へ[寄/よ]せた。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/queue.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/queue.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/queue.nepl -n 8`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/ringbuffer.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/ringbuffer.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/ringbuffer.nepl -n 10`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/btreemap.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/btreemap.nepl -n 8`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/btreeset.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/btreeset.nepl -n 7`
+    - [結果/けっか]: pass

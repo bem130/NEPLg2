@@ -92,6 +92,18 @@ fn queue_data_from_hdr <.T> <(MemPtr<u8>)->MemPtr<.T>> (hdr):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/queue" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let q <Queue<i32>> unwrap_ok<Queue<i32>, Diag> new<i32>;
+//:     if eq len q 0 1 0
+//: ```
 fn new <.T> <()*>Result<Queue<.T>, Diag>> ():
     with_capacity<.T> 8
 
@@ -110,6 +122,18 @@ fn new <.T> <()*>Result<Queue<.T>, Diag>> ():
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/queue" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let q <Queue<i32>> unwrap_ok<Queue<i32>, Diag> with_capacity<i32> 16;
+//:     if eq len q 0 1 0
+//: ```
 fn with_capacity <.T> <(i32)*>Result<Queue<.T>, Diag>> (cap):
     let cap0 <i32> if lt cap 1 1 cap
     match alloc_ptr<u8> 16:
@@ -135,6 +159,21 @@ fn with_capacity <.T> <(i32)*>Result<Queue<.T>, Diag>> (cap):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/queue" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let q <Queue<i32>>:
+//:         unwrap_ok<Queue<i32>, Diag> new<i32>
+//:         |> push 4 |> uwok
+//:         |> push 8 |> uwok;
+//:     if eq len q 2 1 0
+//: ```
 fn len <.T> <(Queue<.T>)->i32> (q):
     queue_len_from_hdr get q "hdr"
 
@@ -146,6 +185,18 @@ fn len <.T> <(Queue<.T>)->i32> (q):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/queue" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let q <Queue<i32>> unwrap_ok<Queue<i32>, Diag> new<i32>;
+//:     if is_empty q 1 0
+//: ```
 fn is_empty <.T> <(Queue<.T>)->bool> (q):
     eq len<.T> q 0
 
@@ -164,6 +215,21 @@ fn is_empty <.T> <(Queue<.T>)->bool> (q):
 //:
 //: ### [計算量/けいさんりょう]
 //: - [償却/しょうきゃく] O(1)、[拡張/かくちょう][発生時/はっせいじ]の[最悪/さいあく][時間/じかん][計算量/けいさんりょう]は O(n) です。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/queue" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let q <Queue<i32>>:
+//:         unwrap_ok<Queue<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok
+//:         |> push 20 |> uwok;
+//:     if eq len q 2 1 0
+//: ```
 fn push <.T> <(Queue<.T>, .T)*>Result<Queue<.T>, Diag>> (q, item):
     let hdr <MemPtr<u8>> get q "hdr"
     let len0 <i32> queue_len_from_hdr hdr
@@ -212,6 +278,25 @@ fn push <.T> <(Queue<.T>, .T)*>Result<Queue<.T>, Diag>> (q, item):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/queue" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/option" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let q <Queue<i32>>:
+//:         unwrap_ok<Queue<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok;
+//:     match pop q:
+//:         Option::Some v:
+//:             if eq v 10 1 0
+//:         Option::None:
+//:             0
+//: ```
 fn pop <.T> <(Queue<.T>)*>Option<.T>> (q):
     let hdr <MemPtr<u8>> get q "hdr"
     let len0 <i32> queue_len_from_hdr hdr
@@ -240,6 +325,25 @@ fn pop <.T> <(Queue<.T>)*>Option<.T>> (q):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/queue" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/option" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let q <Queue<i32>>:
+//:         unwrap_ok<Queue<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok;
+//:     match peek q:
+//:         Option::Some v:
+//:             if eq v 10 1 0
+//:         Option::None:
+//:             0
+//: ```
 fn peek <.T> <(Queue<.T>)->Option<.T>> (q):
     let hdr <MemPtr<u8>> get q "hdr"
     let len0 <i32> queue_len_from_hdr hdr
@@ -261,6 +365,21 @@ fn peek <.T> <(Queue<.T>)->Option<.T>> (q):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/queue" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let q0 <Queue<i32>>:
+//:         unwrap_ok<Queue<i32>, Diag> new<i32>
+//:         |> push 10 |> uwok
+//:     let q <Queue<i32>> clear q0;
+//:     if is_empty q 1 0
+//: ```
 fn clear <.T> <(Queue<.T>)*>Queue<.T>> (q):
     let hdr <MemPtr<u8>> get q "hdr"
     let _ <()> uwok store_i32 queue_header_len_ptr hdr 0
@@ -278,6 +397,19 @@ fn clear <.T> <(Queue<.T>)*>Queue<.T>> (q):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/queue" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let q <Queue<i32>> unwrap_ok<Queue<i32>, Diag> new<i32>;
+//:     free q;
+//:     0
+//: ```
 fn free <.T> <(Queue<.T>)*>()> (q):
     let hdr <MemPtr<u8>> get q "hdr"
     let cap0 <i32> queue_cap_from_hdr hdr

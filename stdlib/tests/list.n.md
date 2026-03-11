@@ -11,28 +11,29 @@ ret: 0
 #target std
 
 #import "alloc/collections/list" as *
+#import "alloc/diag/error" as *
 #import "core/option" as *
 #import "core/result" as *
 #import "std/test" as *
 
 fn mk <()*>List<i32>> ():
-    let l0 <List<i32>> new<i32>;
-    let l1 <List<i32>> cons<i32> 10 l0;
-    let l2 <List<i32>> cons<i32> 20 l1;
-    cons<i32> 30 l2
+    let l0 <List<i32>> unwrap_ok<List<i32>, Diag> new<i32>;
+    let l1 <List<i32>> uwok cons<i32> 10 l0;
+    let l2 <List<i32>> uwok cons<i32> 20 l1;
+    uwok cons<i32> 30 l2
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let l0 <List<i32>> new<i32>;
+    let l0 <List<i32>> unwrap_ok<List<i32>, Diag> new<i32>;
     set checks checks_push checks check_eq_i32 0 len<i32> l0;
 
-    let l0a <List<i32>> new<i32>;
-    let l1 <List<i32>> cons<i32> 10 l0a;
+    let l0a <List<i32>> unwrap_ok<List<i32>, Diag> new<i32>;
+    let l1 <List<i32>> uwok cons<i32> 10 l0a;
     set checks checks_push checks check_eq_i32 1 len<i32> l1;
 
-    let l0b <List<i32>> new<i32>;
-    let l1b <List<i32>> cons<i32> 10 l0b;
-    let l2 <List<i32>> cons<i32> 20 l1b;
+    let l0b <List<i32>> unwrap_ok<List<i32>, Diag> new<i32>;
+    let l1b <List<i32>> uwok cons<i32> 10 l0b;
+    let l2 <List<i32>> uwok cons<i32> 20 l1b;
     set checks checks_push checks check_eq_i32 2 len<i32> l2;
 
     let l3 <List<i32>> mk;
@@ -86,7 +87,7 @@ fn main <()*>i32> ():
             set checks checks_push checks Result<(),str>::Err "tail returned None";
 
     let l3r0 <List<i32>> mk;
-    let l_rev <List<i32>> reverse<i32> l3r0;
+    let l_rev <List<i32>> uwok reverse<i32> l3r0;
     match get<i32> l_rev 0:
         Option::Some x:
             set checks checks_push checks check_eq_i32 10 x
@@ -94,7 +95,7 @@ fn main <()*>i32> ():
             set checks checks_push checks Result<(),str>::Err "get reverse 0 returned None";
 
     let l3r1 <List<i32>> mk;
-    let l_rev2 <List<i32>> reverse<i32> l3r1;
+    let l_rev2 <List<i32>> uwok reverse<i32> l3r1;
     match get<i32> l_rev2 2:
         Option::Some x:
             set checks checks_push checks check_eq_i32 30 x

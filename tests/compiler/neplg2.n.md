@@ -593,10 +593,11 @@ ret: 0
 #indent 4
 #import "alloc/collections/list" as *
 #import "core/option" as *
+#import "core/result" as *
 
 fn main <()* >i32> ():
-    let lst new<i32>;
-    let lst cons<i32> 1 lst;
+    let lst <List<i32>> unwrap_ok<List<i32>, Diag> new<i32>;
+    let lst uwok cons<i32> 1 lst;
     let r get<i32> lst 10;
     match r:
         Some v:

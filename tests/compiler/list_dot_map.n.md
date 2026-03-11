@@ -2,7 +2,8 @@
 
 ## namespace_pathsep_map_with_result
 
-neplg2:test[compile_fail]
+neplg2:test
+ret: 2
 ```neplg2
 #entry main
 #indent 4
@@ -25,13 +26,14 @@ neplg2:test[compile_fail]
 #entry main
 #indent 4
 #import "alloc/collections/list" as list
+#import "core/result" as result
 #import "core/math" as *
 
 fn inc <(i32)->i32> (x):
     add x 1
 
 fn main <()->i32> ():
-    let xs list.new<i32>;
+    let xs result::unwrap_ok list.new<i32>;
     list.map<i32, i32> xs inc;
     0
 ```

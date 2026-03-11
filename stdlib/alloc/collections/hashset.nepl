@@ -29,6 +29,12 @@
 
 //: ## HashSet
 //: hash table [本体/ほんたい]
+//:
+//: ### [目的/もくてき]
+//: - header と hasher [値/あたい]を[保持/ほじ]し、set [操作/そうさ]を 1 [値/あたい]で[完結/かんけつ]させます。
+//:
+//: ### [注意/ちゅうい]
+//: - `hdr` の[中/なか]には [要素数/ようそすう]・[容量/ようりょう]・entries [領域/りょういき]が[格納/かくのう]されています。
 struct HashSet<.T,.H>:
     hdr <i32>
     hasher <.H>
@@ -83,6 +89,31 @@ fn hashset_find_present <.T: HashKey,.H: Hasher<.T>> <(i32,i32,i32,.H,.T)->i32> 
 
 //: ## new
 //: [空/から]の `HashSet<.T, .H>` を[作/つく]る
+//:
+//: ### [目的/もくてき]
+//: - hasher [値/あたい]を[保持/ほじ]した[空/から]の集合を[作成/さくせい]します。
+//:
+//: ### [実装/じっそう]
+//: - [初期容量/しょきようりょう] 16 の entries [領域/りょういき]と header を[確保/かくほ]し、status を 0 に[初期化/しょきか]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [確保/かくほ][失敗/しっぱい]では `Diag::OutOfMemory` を[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(cap)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/hashset" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hs <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> new DefaultHash32;
+//:     if eq len hs 0 1 0
+//: ```
 fn new <.T: HashKey,.H: Hasher<.T>> <(.H)*>Result<HashSet<.T,.H>, Diag>> (hasher):
     let cap <i32> 16
     let size <i32> hashset_entry_size<.T>
@@ -111,6 +142,32 @@ fn new <.T: HashKey,.H: Hasher<.T>> <(.H)*>Result<HashSet<.T,.H>, Diag>> (hasher
 
 //: ## insert
 //: [要素/ようそ]を[追加/ついか]する
+//:
+//: ### [目的/もくてき]
+//: - key を[集合/しゅうごう]へ[追加/ついか]し、[既存/きそん]なら[状態/じょうたい]を[保/たも]ったまま[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - linear probing で slot を[探索/たんさく]し、empty または tombstone を[利用/りよう]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [満杯/まんぱい]では `Diag::CapacityExceeded` を[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [平均/へいきん] O(1)、[最悪/さいあく] O(n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/hashset" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hs0 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> new DefaultHash32;
+//:     let hs1 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> insert hs0 7;
+//:     if contains hs1 7 1 0
+//: ```
 fn insert <.T: HashKey,.H: Hasher<.T>> <(HashSet<.T,.H>,.T)*>Result<HashSet<.T,.H>, Diag>> (hs, key):
     let hdr <i32> field::get hs "hdr"
     let hasher <.H> field::get hs "hasher"
@@ -197,6 +254,26 @@ fn insert <.T: HashKey,.H: Hasher<.T>> <(HashSet<.T,.H>,.T)*>Result<HashSet<.T,.
 
 //: ## contains
 //: [要素/ようそ]の[存在/そんざい]を[確/たし]かめる
+//:
+//: ### [目的/もくてき]
+//: - key が[集合/しゅうごう]に[含/ふく]まれるかどうかだけを[判定/はんてい]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [平均/へいきん] O(1)、[最悪/さいあく] O(n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/hashset" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hs0 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> new DefaultHash32;
+//:     let hs1 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> insert hs0 9;
+//:     if contains hs1 9 1 0
+//: ```
 fn contains <.T: HashKey,.H: Hasher<.T>> <(HashSet<.T,.H>,.T)->bool> (hs, key):
     let hdr <i32> field::get hs "hdr"
     let hasher <.H> field::get hs "hasher"
@@ -208,6 +285,30 @@ fn contains <.T: HashKey,.H: Hasher<.T>> <(HashSet<.T,.H>,.T)->bool> (hs, key):
 
 //: ## remove
 //: [要素/ようそ]を[削除/さくじょ]する
+//:
+//: ### [目的/もくてき]
+//: - key を tombstone に[変/か]え、probe chain を[保/たも]ったまま[削除/さくじょ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - key が[存在/そんざい]しない[場合/ばあい]は `Diag::KeyNotFound` です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - [平均/へいきん] O(1)、[最悪/さいあく] O(n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/hashset" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hs0 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> new DefaultHash32;
+//:     let hs1 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> insert hs0 5;
+//:     let hs2 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> remove hs1 5;
+//:     if contains hs2 5 0 1
+//: ```
 fn remove <.T: HashKey,.H: Hasher<.T>> <(HashSet<.T,.H>,.T)*>Result<HashSet<.T,.H>, Diag>> (hs, key):
     let hdr <i32> field::get hs "hdr"
     let hasher <.H> field::get hs "hasher"
@@ -226,12 +327,60 @@ fn remove <.T: HashKey,.H: Hasher<.T>> <(HashSet<.T,.H>,.T)*>Result<HashSet<.T,.
 
 //: ## len
 //: [要素数/ようそすう]を[返/かえ]す
+//:
+//: ### [目的/もくてき]
+//: - [現在/げんざい][登録/とうろく]されている[要素数/ようそすう]を[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - header [先頭/せんとう]の count をそのまま[読/よ]みます。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/hashset" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hs0 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> new DefaultHash32;
+//:     let hs1 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> insert hs0 1;
+//:     let hs2 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> insert hs1 2;
+//:     if eq len hs2 2 1 0
+//: ```
 fn len <.T,.H> <(HashSet<.T,.H>)->i32> (hs):
     let hdr <i32> field::get hs "hdr"
     load_i32 hdr
 
 //: ## free
 //: [内部/ないぶ]メモリを[解放/かいほう]する
+//:
+//: ### [目的/もくてき]
+//: - entries [領域/りょういき]と header を[解放/かいほう]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [要素/ようそ]の[深/ふか]い[解放/かいほう]は[呼/よ]び[出/だ]し[側/がわ]の[責務/せきむ]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(1)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/hashset" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let hs0 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> new DefaultHash32;
+//:     let hs1 <HashSet<i32, DefaultHash32>> unwrap_ok<HashSet<i32, DefaultHash32>, Diag> insert hs0 1;
+//:     free hs1;
+//:     0
+//: ```
 fn free <.T,.H> <(HashSet<.T,.H>)*>()> (hs):
     let hdr <i32> field::get hs "hdr"
     let cap <i32> load_i32 add hdr 4
