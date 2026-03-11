@@ -27,16 +27,16 @@
 //:| #import "std/test" as *
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 0 len new<i32>;
+//:     assert_eq_i32 0 len unwrap_ok new<i32>;
 //:     let a2 <Vec<i32>>:
-//:         new<i32>
-//:         |> push 10
-//:         |> push 20
+//:         unwrap_ok new<i32>
+//:         |> push 10 |> uwok
+//:         |> push 20 |> uwok
 //:     assert_eq_i32 2 len a2;
 //:     let b2 <Vec<i32>>:
-//:         new<i32>
-//:         |> push 10
-//:         |> push 20
+//:         unwrap_ok new<i32>
+//:         |> push 10 |> uwok
+//:         |> push 20 |> uwok
 //:     match get<i32> b2 1:
 //:         Option::Some x:
 //:             assert_eq_i32 20 x;
@@ -52,9 +52,9 @@
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
 //:     let v2 <Vec<i32>>:
-//:         with_capacity<i32> 2
-//:         |> push 1
-//:         |> push 2
+//:         unwrap_ok with_capacity<i32> 2
+//:         |> push 1 |> uwok
+//:         |> push 2 |> uwok
 //:     let ok0 <i32>:
 //:         match get<i32> v2 0:
 //:             Option::Some x:
@@ -62,9 +62,9 @@
 //:             Option::None:
 //:                 1
 //:     let w2 <Vec<i32>>:
-//:         with_capacity<i32> 2
-//:         |> push 1
-//:         |> push 2
+//:         unwrap_ok with_capacity<i32> 2
+//:         |> push 1 |> uwok
+//:         |> push 2 |> uwok
 //:     if and eq ok0 0 is_none<i32> get<i32> w2 3 0 1
 //: ```
 //:
@@ -75,9 +75,9 @@
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
 //:     let cleared <Vec<i32>>:
-//:         new<i32>
-//:         |> push 11
-//:         |> push 22
+//:         unwrap_ok new<i32>
+//:         |> push 11 |> uwok
+//:         |> push 22 |> uwok
 //:         |> clear<i32>
 //:     if eq len cleared 0 0 1
 //: ```
@@ -156,7 +156,7 @@ struct VecDataLen<.T>:
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v <Vec<i32>> new<i32>;
+//:     let v <Vec<i32>> unwrap_ok new<i32>;
 //:     if eq len<i32> v 0 0 1
 //: ```
 fn new <.T> <()->Result<Vec<.T>, StdErrorKind>> ():
@@ -191,7 +191,7 @@ fn new <.T> <()->Result<Vec<.T>, StdErrorKind>> ():
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v <Vec<i32>> with_capacity<i32> 16;
+//:     let v <Vec<i32>> unwrap_ok with_capacity<i32> 16;
 //:     if eq cap<i32> v 16 0 1
 //: ```
 fn with_capacity <.T> <(i32)->Result<Vec<.T>, StdErrorKind>> (cap):
@@ -229,8 +229,8 @@ fn with_capacity <.T> <(i32)->Result<Vec<.T>, StdErrorKind>> (cap):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v0 <Vec<i32>> new<i32>;
-//:     let v1 <Vec<i32>> push v0 3;
+//:     let v0 <Vec<i32>> unwrap_ok new<i32>;
+//:     let v1 <Vec<i32>> unwrap_ok push v0 3;
 //:     if eq len<i32> v1 1 0 1
 //: ```
 fn len <.T> <(Vec<.T>)->i32> (v):
@@ -259,7 +259,7 @@ fn len <.T> <(Vec<.T>)->i32> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v <Vec<i32>> new<i32>;
+//:     let v <Vec<i32>> unwrap_ok new<i32>;
 //:     if gt cap<i32> v 0 0 1
 //: ```
 fn cap <.T> <(Vec<.T>)->i32> (v):
@@ -327,8 +327,8 @@ fn data_mem_ptr <.T> <(Vec<.T>)->MemPtr<.T>> (v):
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/field" as *
 //: fn main <()*>i32> ():
-//:     let v0 <Vec<i32>> new<i32>;
-//:     let v1 <Vec<i32>> push v0 7;
+//:     let v0 <Vec<i32>> unwrap_ok new<i32>;
+//:     let v1 <Vec<i32>> unwrap_ok push v0 7;
 //:     let s data_len<i32> v1;
 //:     if and gt mem_ptr_addr get s "data" 0 eq get s "len" 1 0 1
 //: ```
@@ -347,21 +347,21 @@ fn data_len <.T> <(Vec<.T>)->VecDataLen<.T>> (v):
     VecDataLen<.T> v_data v_len
 
 //: ## is_empty
-//: 空か判定する
+//: [空/から]かどうかを[判定/はんてい]する
 //:
-//: 目的:
-//: - len が 0 なら true を返します。
+//: ### [目的/もくてき]
+//: - `len == 0` なら true を[返/かえ]し、[要素/ようそ]が[存在/そんざい]しないことを[判定/はんてい]します。
 //:
-//: 実装(アルゴリズム):
-//: - len == 0 を判定します。
+//: ### [実装/じっそう]
+//: - field `len` を[読/よ]み、0 と[比較/ひかく]します。
 //:
-//: 注意(重要):
-//: - 変更操作ではありません。
+//: ### [注意/ちゅうい]
+//: - [変更/へんこう]を[伴/ともな]わない[読/よ]み[取/と]り API です。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
-//: 使い方:
+//: ### [使用例/しようれい]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -369,7 +369,7 @@ fn data_len <.T> <(Vec<.T>)->VecDataLen<.T>> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v new<i32>;
+//:     let v <Vec<i32>> unwrap_ok new<i32>;
 //:     if is_empty<i32> v 0 1
 //: ```
 fn is_empty <.T> <(Vec<.T>)->bool> (v):
@@ -377,21 +377,24 @@ fn is_empty <.T> <(Vec<.T>)->bool> (v):
     eq n 0
 
 //: ## push
-//: 末尾に要素を追加する
+//: [末尾/まつび]に[要素/ようそ]を[追加/ついか]する
 //:
-//: 目的:
-//: - item を末尾に追加し、新しい Vec を返します。
+//: ### [目的/もくてき]
+//: - `item` を[末尾/まつび]へ[追加/ついか]し、[必要/ひつよう]なら[再確保/さいかくほ]した `Vec<.T>` を[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - 容量不足なら 2 倍に拡張して realloc します。
+//: ### [実装/じっそう]
+//: - [容量/ようりょう][不足/ぶそく]なら 2 [倍/ばい]へ[拡張/かくちょう]し、typed `realloc_ptr<.T>` を[用/もち]います。
+//: - [空/から][容量/ようりょう] 0 の `Vec` に対しては 1 [要素分/ようそぶん]から[開始/かいし]します。
 //:
-//: 注意(重要):
-//: - 返り値の `Result` を[受/う]け[取/と]り[直/なお]してください。
+//: ### [注意/ちゅうい]
+//: - [返/かえ]り[値/あたい]は `Result<Vec<.T>, StdErrorKind>` です。`unwrap_ok` や `match` で[受/う]け[取/と]り[直/なお]してください。
+//: - [再確保/さいかくほ]が[起/お]きると[内部/ないぶ]バッファ[番地/ばんち]は[変/か]わります。
 //:
-//: 計算量:
-//: - ならし O(1)
+//: ### [計算量/けいさんりょう]
+//: - [償却/しょうきゃく] O(1)
+//: - [最悪/さいあく] O(n)（[再確保/さいかくほ]が[起/お]きる[場合/ばあい]）
 //:
-//: 使い方:
+//: ### [使用例/しようれい]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -399,8 +402,8 @@ fn is_empty <.T> <(Vec<.T>)->bool> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v0 <Vec<i32>> new<i32>;
-//:     let v1 <Vec<i32>> push v0 7;
+//:     let v0 <Vec<i32>> unwrap_ok new<i32>;
+//:     let v1 <Vec<i32>> unwrap_ok push v0 7;
 //:     if eq len<i32> v1 1 0 1
 //: ```
 fn push <.T> <(Vec<.T>,.T)->Result<Vec<.T>, StdErrorKind>> (v, item):
@@ -424,21 +427,22 @@ fn push <.T> <(Vec<.T>,.T)->Result<Vec<.T>, StdErrorKind>> (v, item):
             Result::Ok<Vec<.T>, StdErrorKind> Vec<.T> add v_len 1 v_cap v_data
 
 //: ## get
-//: 要素を取得する
+//: [要素/ようそ]を[取得/しゅとく]する
 //:
-//: 目的:
-//: - idx が範囲内なら Some、範囲外なら None を返します。
+//: ### [目的/もくてき]
+//: - `idx` が[範囲内/はんいない]なら `Option::Some`、[範囲外/はんいがい]なら `Option::None` を[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - idx の範囲を判定し、要素を load します。
+//: ### [実装/じっそう]
+//: - `idx` の[範囲/はんい]を[判定/はんてい]し、[妥当/だとう]な[場合/ばあい]だけ typed `load` を[行/おこな]います。
 //:
-//: 注意(重要):
-//: - idx が負のときも None です。
+//: ### [注意/ちゅうい]
+//: - `idx` が[負/ふ]でも `Option::None` です。
+//: - [失敗/しっぱい]を trap ではなく `Option` で[返/かえ]す[設計/せっけい]です。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
-//: 使い方:
+//: ### [使用例/しようれい]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -447,8 +451,8 @@ fn push <.T> <(Vec<.T>,.T)->Result<Vec<.T>, StdErrorKind>> (v, item):
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
-//:     let v0 <Vec<i32>> new<i32>;
-//:     let v1 <Vec<i32>> push v0 9;
+//:     let v0 <Vec<i32>> unwrap_ok new<i32>;
+//:     let v1 <Vec<i32>> unwrap_ok push v0 9;
 //:     match get<i32> v1 0:
 //:         Option::Some x:
 //:             if eq x 9 0 1
@@ -470,21 +474,21 @@ fn get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
                     some<.T> load<.T> add mem_ptr_addr v_data read_off
 
 //: ## replace
-//: 要素を上書きする（範囲外は無視）
+//: [要素/ようそ]を[上書/うわが]きする（[範囲外/はんいがい]は[無視/むし]）
 //:
-//: 目的:
-//: - idx が範囲内なら値を上書きします。
+//: ### [目的/もくてき]
+//: - `idx` が[範囲内/はんいない]なら[指定/してい]した[要素/ようそ]へ[置/お]き[換/か]えます。
 //:
-//: 実装(アルゴリズム):
-//: - idx の範囲を判定し、範囲内のみ store します。
+//: ### [実装/じっそう]
+//: - `idx` を[検査/けんさ]し、[妥当/だとう]な[場合/ばあい]だけ typed `store` を[行/おこな]います。
 //:
-//: 注意(重要):
-//: - 範囲外は何もしません。
+//: ### [注意/ちゅうい]
+//: - [範囲外/はんいがい]では[失敗/しっぱい]を[返/かえ]さず、[何/なに]も[変更/へんこう]しません。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
-//: 使い方:
+//: ### [使用例/しようれい]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -493,8 +497,8 @@ fn get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
-//:     let v0 <Vec<i32>> new<i32>;
-//:     let v1 <Vec<i32>> push v0 1;
+//:     let v0 <Vec<i32>> unwrap_ok new<i32>;
+//:     let v1 <Vec<i32>> unwrap_ok push v0 1;
 //:     replace<i32> v1 0 5;
 //:     0
 //: ```
@@ -513,21 +517,23 @@ fn replace <.T> <(Vec<.T>,i32,.T)->()> (v, idx, item):
                     store<.T> add mem_ptr_addr v_data write_off item
 
 //: ## pop
-//: 末尾要素を取り出す
+//: [末尾/まつび][要素/ようそ]を[取/と]り[出/だ]す
 //:
-//: 目的:
-//: - 末尾要素を返し、長さを 1 減らします。
+//: ### [目的/もくてき]
+//: - [末尾/まつび][要素/ようそ]を `Option` で[返/かえ]し、[長/なが]さを 1 [減/へ]らした `Vec` を[同時/どうじ]に[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - len==0 なら None、そうでなければ最後の要素を load します。
+//: ### [実装/じっそう]
+//: - `len == 0` なら `Option::None` です。
+//: - [要素/ようそ]がある[場合/ばあい]は[最後/さいご]の 1 [件/けん]を typed `load` し、`len - 1` の `Vec` と[組/く]にして[返/かえ]します。
 //:
-//: 注意(重要):
-//: - 返り値は (Vec, Option) のタプルです。
+//: ### [注意/ちゅうい]
+//: - [返/かえ]り[値/あたい]は `(Vec, Option)` の 2 [要素/ようそ][組/ぐみ]です。
+//: - [確保/かくほ]も[解放/かいほう]も[行/おこな]わないため O(1) です。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
-//: 使い方:
+//: ### [使用例/しようれい]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -536,8 +542,8 @@ fn replace <.T> <(Vec<.T>,i32,.T)->()> (v, idx, item):
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
-//:     let v0 <Vec<i32>> new<i32>;
-//:     let v1 <Vec<i32>> push v0 4;
+//:     let v0 <Vec<i32>> unwrap_ok new<i32>;
+//:     let v1 <Vec<i32>> unwrap_ok push v0 4;
 //:     let p pop<i32> v1;
 //:     0
 //: ```
@@ -560,21 +566,21 @@ fn pop <.T> <(Vec<.T>)->.Pair> (v):
                 some<.T> item
 
 //: ## clear
-//: すべての要素を削除する
+//: [要素/ようそ]をすべて[削除/さくじょ]する
 //:
-//: 目的:
-//: - len を 0 にして空にします。
+//: ### [目的/もくてき]
+//: - `len` を 0 にして、[確保済/かくほず]み[領域/りょういき]を[再利用/さいりよう]できる[空/から]ベクタを[返/かえ]します。
 //:
-//: 実装(アルゴリズム):
-//: - data はそのままに len だけを 0 にします。
+//: ### [実装/じっそう]
+//: - `data` と `cap` はそのままに、`len` だけを 0 にします。
 //:
-//: 注意(重要):
-//: - メモリは解放されません。
+//: ### [注意/ちゅうい]
+//: - [内部/ないぶ]メモリは[解放/かいほう]しません。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
-//: 使い方:
+//: ### [使用例/しようれい]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -582,8 +588,8 @@ fn pop <.T> <(Vec<.T>)->.Pair> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v0 <Vec<i32>> new<i32>;
-//:     let v1 <Vec<i32>> push v0 1;
+//:     let v0 <Vec<i32>> unwrap_ok new<i32>;
+//:     let v1 <Vec<i32>> unwrap_ok push v0 1;
 //:     let v2 clear<i32> v1;
 //:     if eq len<i32> v2 0 0 1
 //: ```
@@ -593,21 +599,22 @@ fn clear <.T> <(Vec<.T>)->Vec<.T>> (v):
     Vec<.T> 0 v_cap v_data
 
 //: ## free
-//: メモリを解放する
+//: [内部/ないぶ]メモリを[解放/かいほう]する
 //:
-//: 目的:
-//: - data を解放します。
+//: ### [目的/もくてき]
+//: - `Vec<.T>` が[所有/しょゆう]する `data` [領域/りょういき]を[明示的/めいじてき]に[解放/かいほう]します。
 //:
-//: 実装(アルゴリズム):
-//: - cap サイズ分の領域を dealloc します。
+//: ### [実装/じっそう]
+//: - `cap * size_of<.T>` byte を `dealloc_ptr<.T>` へ[渡/わた]します。
 //:
-//: 注意(重要):
-//: - Vec 自体は値なので解放不要です。
+//: ### [注意/ちゅうい]
+//: - `Vec` [自体/じたい]は[値/あたい]なので[追加/ついか]の[解放/かいほう]は[不要/ふよう]です。
+//: - `cap = 0` の[空/から]ベクタでも[呼/よ]べます。
 //:
-//: 計算量:
+//: ### [計算量/けいさんりょう]
 //: - O(1)
 //:
-//: 使い方:
+//: ### [使用例/しようれい]
 //:
 //: neplg2:test
 //: ```neplg2
@@ -615,7 +622,7 @@ fn clear <.T> <(Vec<.T>)->Vec<.T>> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v <Vec<i32>> new<i32>;
+//:     let v <Vec<i32>> unwrap_ok new<i32>;
 //:     free<i32> v;
 //:     0
 //: ```

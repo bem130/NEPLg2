@@ -222,6 +222,21 @@
   - `Vec` の public API Result 化は進んだが、`vec.nepl` 本体の doc comment / doctest には旧書式・旧 pure 前提の説明がまだ残る。
   - `replace` を `set` へ改名する案は parser / keyword 制約の切り分け後に再検討する。
 
+# 2026-03-12 作業メモ (docs(vec): doc comment と doctest を current Result API へ同期)
+
+- 目的:
+  - `Vec` 本体を `Result` 化した後も、[stdlib/alloc/collections/vec.nepl](/mnt/d/project/NEPLg2/stdlib/alloc/collections/vec.nepl) の説明と埋め込み doctest が旧 pure API 前提のまま残っていた差分を解消する。
+  - あわせて、旧節見出し形式を減らし、新しい doc comment policy に寄せる。
+- 変更:
+  - `vec.nepl`
+    - file header の doctest を `unwrap_ok new` と `|> push ... |> uwok` 前提へ更新。
+    - `new` / `with_capacity` / `len` / `cap` / `data_len` / `is_empty` / `push` / `get` / `replace` / `pop` / `clear` / `free` の comment 例を current API に同期。
+    - `is_empty` / `push` / `get` / `replace` / `pop` / `clear` / `free` の節見出しを `### [目的/もくてき]` 形式へ更新。
+- 検証:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 3` -> pass
+
 # 2026-03-06 作業メモ (フェーズD: llvm codegen 内の precheck 後診断返却を除去)
 
 - 目的:
