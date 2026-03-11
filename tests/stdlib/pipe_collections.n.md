@@ -83,21 +83,35 @@ neplg2:test
 #target std
 
 #import "alloc/collections/btreemap" as *
+#import "alloc/diag/error" as *
 #import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
 #import "core/option" as *
 #import "core/result" as *
+
+fn must_map <(Result<BTreeMap<i32,i32>, Diag>)*>BTreeMap<i32,i32>> (r):
+    match r:
+        Result::Ok m:
+            m
+        Result::Err _d:
+            #intrinsic "unreachable" <> ()
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
     let m0 <BTreeMap<i32,i32>>:
         new<i32,i32>
+        |> must_map
         |> insert<i32,i32> 3 30
+        |> must_map
         |> insert<i32,i32> 1 10
+        |> must_map
     set checks checks_push checks check_eq_i32 2 len<i32,i32> m0;
     let m1 <BTreeMap<i32,i32>>:
         new<i32,i32>
+        |> must_map
         |> insert<i32,i32> 3 30
+        |> must_map
         |> insert<i32,i32> 1 10
+        |> must_map
     match get<i32,i32> m1 3:
         Option::Some v:
             set checks checks_push checks check_eq_i32 30 v
@@ -105,8 +119,11 @@ fn main <()*>i32> ():
             set checks checks_push checks Result<(),str>::Err "pipe btreemap get failed";
     let m2 <BTreeMap<i32,i32>>:
         new<i32,i32>
+        |> must_map
         |> insert<i32,i32> 3 30
+        |> must_map
         |> insert<i32,i32> 1 10
+        |> must_map
     set checks checks_push checks check contains<i32,i32> m2 1;
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
@@ -121,28 +138,42 @@ neplg2:test
 #target std
 
 #import "alloc/collections/btreeset" as *
+#import "alloc/diag/error" as *
 #import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
 #import "core/result" as *
 
-fn new_set <()*>BTreeSet<i32>> ():
-    new<i32>
+fn must_set <(Result<BTreeSet<i32>, Diag>)*>BTreeSet<i32>> (r):
+    match r:
+        Result::Ok s:
+            s
+        Result::Err _d:
+            #intrinsic "unreachable" <> ()
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
     let s0 <BTreeSet<i32>>:
-        new_set
+        new<i32>
+        |> must_set
         |> insert<i32> 5
+        |> must_set
         |> insert<i32> 2
+        |> must_set
     set checks checks_push checks check contains<i32> s0 5;
     let s1 <BTreeSet<i32>>:
-        new_set
+        new<i32>
+        |> must_set
         |> insert<i32> 5
+        |> must_set
         |> insert<i32> 2
+        |> must_set
     set checks checks_push checks check_eq_i32 2 len<i32> s1;
     let s2 <BTreeSet<i32>>:
-        new_set
+        new<i32>
+        |> must_set
         |> insert<i32> 5
+        |> must_set
         |> insert<i32> 2
+        |> must_set
         |> remove<i32> 5
     set checks checks_push checks check not contains<i32> s2 5;
     let shown <Vec<Result<(),str>>> checks_print_report checks;

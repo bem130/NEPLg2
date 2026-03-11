@@ -19,8 +19,10 @@
 #indent 4
 
 #import "core/mem" as *
+#import "core/result" as *
 #import "core/field" as field
 #import "core/traits/ord" as *
+#import "alloc/diag/error" as *
 
 //: ## BTreeSet
 //: [順序付き/じゅんじょつき] key [配列/はいれつ]の[本体/ほんたい]
@@ -51,33 +53,47 @@ fn btreeset_is_at <.T: Ord> <(i32,i32,i32,.T)->bool> (keys, len0, idx, key):
         then btreeset_key_eq<.T> load<.T> add keys mul idx size_of<.T> key
         else false
 
-fn btreeset_grow <.T> <(BTreeSet<.T>)*>BTreeSet<.T>> (set0):
+fn btreeset_grow <.T> <(BTreeSet<.T>)*>Result<BTreeSet<.T>, Diag>> (set0):
     let hdr <i32> field::get set0 "hdr"
     let len0 <i32> load_i32 hdr
     let cap0 <i32> load_i32 add hdr 4
     let keys0 <i32> btreeset_keys_ptr hdr
     let cap1 <i32> mul cap0 2
     let keys1 <i32> alloc_raw mul cap1 size_of<.T>
-    let mut i <i32> 0
-    while lt i len0:
-        do:
-            store<.T> add keys1 mul i size_of<.T> load<.T> add keys0 mul i size_of<.T>
-            set i add i 1
-    dealloc_raw keys0 mul cap0 size_of<.T>
-    store_i32 add hdr 4 cap1
-    store_i32 add hdr 8 keys1
-    set0
+    if:
+        eq keys1 0
+        then diag_err<BTreeSet<.T>> diag_out_of_memory "btreeset_grow(keys)"
+        else:
+            let mut i <i32> 0
+            while lt i len0:
+                do:
+                    store<.T> add keys1 mul i size_of<.T> load<.T> add keys0 mul i size_of<.T>
+                    set i add i 1
+            dealloc_raw keys0 mul cap0 size_of<.T>
+            store_i32 add hdr 4 cap1
+            store_i32 add hdr 8 keys1
+            ok<BTreeSet<.T>, Diag> set0
 
 //: ## new
 //: [空/から]の `BTreeSet<.T>` を[作/つく]る
-fn new <.T> <()*>BTreeSet<.T>> ():
+fn new <.T> <()*>Result<BTreeSet<.T>, Diag>> ():
     let cap <i32> 8
     let keys <i32> alloc_raw mul cap size_of<.T>
-    let hdr <i32> alloc_raw 12
-    store_i32 hdr 0
-    store_i32 add hdr 4 cap
-    store_i32 add hdr 8 keys
-    BTreeSet hdr
+    if:
+        eq keys 0
+        then diag_err<BTreeSet<.T>> diag_out_of_memory "btreeset_new(keys)"
+        else:
+            let hdr <i32> alloc_raw 12
+            if:
+                eq hdr 0
+                then:
+                    dealloc_raw keys mul cap size_of<.T>
+                    diag_err<BTreeSet<.T>> diag_out_of_memory "btreeset_new(header)"
+                else:
+                    store_i32 hdr 0
+                    store_i32 add hdr 4 cap
+                    store_i32 add hdr 8 keys
+                    ok<BTreeSet<.T>, Diag> BTreeSet hdr
 
 //: ## len
 //: [要素数/ようそすう]を[返/かえ]す
@@ -95,14 +111,14 @@ fn contains <.T: Ord> <(BTreeSet<.T>,.T)->bool> (set0, key):
 
 //: ## insert
 //: key を[集合/しゅうごう]へ[挿入/そうにゅう]する
-fn insert <.T: Ord> <(BTreeSet<.T>,.T)*>BTreeSet<.T>> (set0, key):
+fn insert <.T: Ord> <(BTreeSet<.T>,.T)*>Result<BTreeSet<.T>, Diag>> (set0, key):
     let hdr0 <i32> field::get set0 "hdr"
     let len_init <i32> load_i32 hdr0
     let cap_init <i32> load_i32 add hdr0 4
     let set1 <BTreeSet<.T>>:
         if:
             eq len_init cap_init
-            then btreeset_grow<.T> set0
+            then unwrap_ok<BTreeSet<.T>, Diag> btreeset_grow<.T> set0
             else set0
     let hdr <i32> field::get set1 "hdr"
     let len0 <i32> load_i32 hdr
@@ -110,7 +126,7 @@ fn insert <.T: Ord> <(BTreeSet<.T>,.T)*>BTreeSet<.T>> (set0, key):
     let idx <i32> btreeset_lower_bound<.T> keys key 0 len0
     if:
         btreeset_is_at<.T> keys len0 idx key
-        then set1
+        then ok<BTreeSet<.T>, Diag> set1
         else:
             let mut i <i32> len0
             while gt i idx:
@@ -120,7 +136,7 @@ fn insert <.T: Ord> <(BTreeSet<.T>,.T)*>BTreeSet<.T>> (set0, key):
                     set i from
             store<.T> add keys mul idx size_of<.T> key
             store_i32 hdr add len0 1
-            set1
+            ok<BTreeSet<.T>, Diag> set1
 
 //: ## remove
 //: key を[集合/しゅうごう]から[削除/さくじょ]する

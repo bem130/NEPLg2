@@ -11202,3 +11202,34 @@
     - [結果/けっか]: pass
   - `node nodesrc/run_doctest.js -i stdlib/tests/list.n.md -n 1`
     - [結果/けっか]: pass
+
+# 2026-03-12 作業メモ (btreemap / btreeset の new/insert Result 化)
+
+- [目的/もくてき]:
+  - `btreemap` / `btreeset` の allocation path を stack 系と[揃/そろ]え、`new` と grow を[伴/ともな]う `insert` を `Result<..., Diag>` で[返/かえ]すようにする。
+  - reboot 後の collection [方針/ほうしん]に[合/あ]わせて pipe fixture と stdlib tests を[追従/ついじゅう]させる。
+- [根本原因/こんぽんげんいん]:
+  - `btreemap` / `btreeset` は bare API 化こそ進んでいたが、`alloc_raw` [失敗/しっぱい]を[値/あたい]で[表現/ひょうげん]せず pure value を[返/かえ]しており、OOM を[扱/あつか]う collection [方針/ほうしん]から[外/はず]れていた。
+  - `btreemap` は `core/field` を bare import したまま collection 自身の `get` を[定義/ていぎ]しており、`len` / `insert` [内部/ないぶ]の `get hm "hdr"` が `BTreeMap::get` と `field::get` で[衝突/しょうとつ]していた。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/btreemap.nepl`
+    - `new` を `Result<BTreeMap<.K,.V>, Diag>` へ[変更/へんこう]し、keys / values / header [確保/かくほ]の[失敗/しっぱい]を `diag_out_of_memory` へ[変換/へんかん]した。
+    - `grow` を `Result` 化し、keys / values [再確保/さいかくほ]の[失敗/しっぱい]で[途中/とちゅう][解放/かいほう]を[行/おこな]ってから `Diag` を[返/かえ]すようにした。
+    - `insert` は grow path を `unwrap_ok ... grow` で[受/う]け、public return を `Result` へ[変更/へんこう]した。
+    - `core/field` import を `field` namespace に[切/き]り[替/か]え、header [参照/さんしょう]を `field::get` に[統一/とういつ]した。
+  - `stdlib/alloc/collections/btreeset.nepl`
+    - `new` と internal `btreeset_grow`、および public `insert` を `Result<BTreeSet<.T>, Diag>` へ[変更/へんこう]した。
+  - `stdlib/tests/btreemap.n.md`, `stdlib/tests/btreeset.n.md`, `tests/stdlib/pipe_collections.n.md`
+    - `must_map` / `must_set` helper を[導入/どうにゅう]し、pipe 連鎖で `Result` を[明示的/めいじてき]に[解包/かいほう]する current style へ[揃/そろ]えた。
+- [設計/せっけい][判断/はんだん]:
+  - `remove` / `contains` / `get` / `len` / `clear` / `free` は allocation を[伴/ともな]わないため、この batch では pure API のままとした。
+  - `insert` だけを `Result` 化したのは、grow による OOM が[起/お]こりうる[経路/けいろ]を[正確/せいかく]に[値/あたい]で[表現/ひょうげん]するため。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/tests/btreemap.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/btreeset.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/pipe_collections.n.md -n 3`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/pipe_collections.n.md -n 4`
+    - [結果/けっか]: pass

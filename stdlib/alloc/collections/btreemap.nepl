@@ -20,8 +20,10 @@
 
 #import "core/mem" as *
 #import "core/option" as *
-#import "core/field" as *
+#import "core/result" as *
+#import "core/field" as field
 #import "core/traits/ord" as *
+#import "alloc/diag/error" as *
 
 //: ## BTreeMap
 //: [順序付き/じゅんじょつき] key/value [配列/はいれつ]の[本体/ほんたい]
@@ -55,50 +57,78 @@ fn is_at <.K: Ord> <(i32,i32,i32,.K)->bool> (keys, len, idx, key):
         then key_eq<.K> load<.K> add keys mul idx size_of<.K> key
         else false
 
-fn grow <.K,.V> <(BTreeMap<.K,.V>)*>BTreeMap<.K,.V>> (hm):
-    let hdr <i32> get hm "hdr"
+fn grow <.K,.V> <(BTreeMap<.K,.V>)*>Result<BTreeMap<.K,.V>, Diag>> (hm):
+    let hdr <i32> field::get hm "hdr"
     let len0 <i32> load_i32 hdr
     let cap0 <i32> load_i32 add hdr 4
     let keys0 <i32> keys_ptr hdr
     let vals0 <i32> values_ptr hdr
     let cap1 <i32> mul cap0 2
     let keys1 <i32> alloc_raw mul cap1 size_of<.K>
-    let vals1 <i32> alloc_raw mul cap1 size_of<.V>
-    let mut i <i32> 0
-    while lt i len0:
-        do:
-            store<.K> add keys1 mul i size_of<.K> load<.K> add keys0 mul i size_of<.K>
-            store<.V> add vals1 mul i size_of<.V> load<.V> add vals0 mul i size_of<.V>
-            set i add i 1
-    dealloc_raw keys0 mul cap0 size_of<.K>
-    dealloc_raw vals0 mul cap0 size_of<.V>
-    store_i32 add hdr 4 cap1
-    store_i32 add hdr 8 keys1
-    store_i32 add hdr 12 vals1
-    hm
+    if:
+        eq keys1 0
+        then diag_err<BTreeMap<.K,.V>> diag_out_of_memory "btreemap_grow(keys)"
+        else:
+            let vals1 <i32> alloc_raw mul cap1 size_of<.V>
+            if:
+                eq vals1 0
+                then:
+                    dealloc_raw keys1 mul cap1 size_of<.K>
+                    diag_err<BTreeMap<.K,.V>> diag_out_of_memory "btreemap_grow(values)"
+                else:
+                    let mut i <i32> 0
+                    while lt i len0:
+                        do:
+                            store<.K> add keys1 mul i size_of<.K> load<.K> add keys0 mul i size_of<.K>
+                            store<.V> add vals1 mul i size_of<.V> load<.V> add vals0 mul i size_of<.V>
+                            set i add i 1
+                    dealloc_raw keys0 mul cap0 size_of<.K>
+                    dealloc_raw vals0 mul cap0 size_of<.V>
+                    store_i32 add hdr 4 cap1
+                    store_i32 add hdr 8 keys1
+                    store_i32 add hdr 12 vals1
+                    ok<BTreeMap<.K,.V>, Diag> hm
 
 //: ## new
 //: [空/から]の `BTreeMap<.K, .V>` を[作/つく]る
-fn new <.K,.V> <()*>BTreeMap<.K,.V>> ():
+fn new <.K,.V> <()*>Result<BTreeMap<.K,.V>, Diag>> ():
     let cap <i32> 8
     let keys <i32> alloc_raw mul cap size_of<.K>
-    let vals <i32> alloc_raw mul cap size_of<.V>
-    let hdr <i32> alloc_raw 16
-    store_i32 hdr 0
-    store_i32 add hdr 4 cap
-    store_i32 add hdr 8 keys
-    store_i32 add hdr 12 vals
-    BTreeMap hdr
+    if:
+        eq keys 0
+        then diag_err<BTreeMap<.K,.V>> diag_out_of_memory "btreemap_new(keys)"
+        else:
+            let vals <i32> alloc_raw mul cap size_of<.V>
+            if:
+                eq vals 0
+                then:
+                    dealloc_raw keys mul cap size_of<.K>
+                    diag_err<BTreeMap<.K,.V>> diag_out_of_memory "btreemap_new(values)"
+                else:
+                    let hdr <i32> alloc_raw 16
+                    if:
+                        eq hdr 0
+                        then:
+                            dealloc_raw keys mul cap size_of<.K>
+                            dealloc_raw vals mul cap size_of<.V>
+                            diag_err<BTreeMap<.K,.V>> diag_out_of_memory "btreemap_new(header)"
+                        else:
+                            store_i32 hdr 0
+                            store_i32 add hdr 4 cap
+                            store_i32 add hdr 8 keys
+                            store_i32 add hdr 12 vals
+                            ok<BTreeMap<.K,.V>, Diag> BTreeMap hdr
 
 //: ## len
 //: [要素数/ようそすう]を[返/かえ]す
 fn len <.K,.V> <(BTreeMap<.K,.V>)->i32> (hm):
-    load_i32 get hm "hdr"
+    let hdr <i32> field::get hm "hdr"
+    load_i32 hdr
 
 //: ## contains
 //: key の[存在/そんざい]を[確/たし]かめる
 fn contains <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)->bool> (hm, key):
-    let hdr <i32> get hm "hdr"
+    let hdr <i32> field::get hm "hdr"
     let len0 <i32> load_i32 hdr
     let keys <i32> keys_ptr hdr
     let idx <i32> lower_bound<.K> keys key 0 len0
@@ -107,7 +137,7 @@ fn contains <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)->bool> (hm, key):
 //: ## get
 //: key に[対応/たいおう]する value を[返/かえ]す
 fn get <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)->Option<.V>> (hm, key):
-    let hdr <i32> get hm "hdr"
+    let hdr <i32> field::get hm "hdr"
     let len0 <i32> load_i32 hdr
     let keys <i32> keys_ptr hdr
     let vals <i32> values_ptr hdr
@@ -119,16 +149,16 @@ fn get <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)->Option<.V>> (hm, key):
 
 //: ## insert
 //: key/value を[挿入/そうにゅう]または[更新/こうしん]する
-fn insert <.K: Ord,.V> <(BTreeMap<.K,.V>,.K,.V)*>BTreeMap<.K,.V>> (hm, key, value):
-    let hdr0 <i32> get hm "hdr"
+fn insert <.K: Ord,.V> <(BTreeMap<.K,.V>,.K,.V)*>Result<BTreeMap<.K,.V>, Diag>> (hm, key, value):
+    let hdr0 <i32> field::get hm "hdr"
     let len_init <i32> load_i32 hdr0
     let cap_init <i32> load_i32 add hdr0 4
     let hm1 <BTreeMap<.K,.V>>:
         if:
             eq len_init cap_init
-            then grow<.K,.V> hm
+            then unwrap_ok<BTreeMap<.K,.V>, Diag> grow<.K,.V> hm
             else hm
-    let hdr <i32> get hm1 "hdr"
+    let hdr <i32> field::get hm1 "hdr"
     let len0 <i32> load_i32 hdr
     let keys <i32> keys_ptr hdr
     let vals <i32> values_ptr hdr
@@ -137,7 +167,7 @@ fn insert <.K: Ord,.V> <(BTreeMap<.K,.V>,.K,.V)*>BTreeMap<.K,.V>> (hm, key, valu
         is_at<.K> keys len0 idx key
         then:
             store<.V> add vals mul idx size_of<.V> value
-            hm1
+            ok<BTreeMap<.K,.V>, Diag> hm1
         else:
             let mut i <i32> len0
             while gt i idx:
@@ -149,12 +179,12 @@ fn insert <.K: Ord,.V> <(BTreeMap<.K,.V>,.K,.V)*>BTreeMap<.K,.V>> (hm, key, valu
             store<.K> add keys mul idx size_of<.K> key
             store<.V> add vals mul idx size_of<.V> value
             store_i32 hdr add len0 1
-            hm1
+            ok<BTreeMap<.K,.V>, Diag> hm1
 
 //: ## remove
 //: key を[削除/さくじょ]する
 fn remove <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)*>BTreeMap<.K,.V>> (hm, key):
-    let hdr <i32> get hm "hdr"
+    let hdr <i32> field::get hm "hdr"
     let len0 <i32> load_i32 hdr
     let keys <i32> keys_ptr hdr
     let vals <i32> values_ptr hdr
@@ -176,14 +206,14 @@ fn remove <.K: Ord,.V> <(BTreeMap<.K,.V>,.K)*>BTreeMap<.K,.V>> (hm, key):
 //: ## clear
 //: [全要素/ぜんようそ]を[削除/さくじょ]する
 fn clear <.K,.V> <(BTreeMap<.K,.V>)*>BTreeMap<.K,.V>> (hm):
-    let hdr <i32> get hm "hdr"
+    let hdr <i32> field::get hm "hdr"
     store_i32 hdr 0
     hm
 
 //: ## free
 //: [内部/ないぶ]メモリを[解放/かいほう]する
 fn free <.K,.V> <(BTreeMap<.K,.V>)*>()> (hm):
-    let hdr <i32> get hm "hdr"
+    let hdr <i32> field::get hm "hdr"
     let cap <i32> load_i32 add hdr 4
     dealloc_raw keys_ptr hdr mul cap size_of<.K>
     dealloc_raw values_ptr hdr mul cap size_of<.V>

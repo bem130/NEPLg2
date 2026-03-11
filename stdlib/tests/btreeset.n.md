@@ -9,20 +9,29 @@ neplg2:test
 #target std
 
 #import "alloc/collections/btreeset" as *
+#import "alloc/diag/error" as *
 #import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
 #import "core/result" as *
 
-fn new_set <()*>BTreeSet<i32>> ():
-    new<i32>
+fn must_set <(Result<BTreeSet<i32>, Diag>)*>BTreeSet<i32>> (r):
+    match r:
+        Result::Ok s:
+            s
+        Result::Err _d:
+            #intrinsic "unreachable" <> ()
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
 
     let s0 <BTreeSet<i32>>:
-        new_set
+        new<i32>
+        |> must_set
         |> insert<i32> 5
+        |> must_set
         |> insert<i32> 1
+        |> must_set
         |> insert<i32> 3
+        |> must_set
     set checks checks_push checks check_eq_i32 3 len<i32> s0;
 
     let shown <Vec<Result<(),str>>> checks_print_report checks;
@@ -38,32 +47,46 @@ neplg2:test
 #target std
 
 #import "alloc/collections/btreeset" as *
+#import "alloc/diag/error" as *
 #import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32, check }
 #import "core/result" as *
 
-fn new_set <()*>BTreeSet<i32>> ():
-    new<i32>
+fn must_set <(Result<BTreeSet<i32>, Diag>)*>BTreeSet<i32>> (r):
+    match r:
+        Result::Ok s:
+            s
+        Result::Err _d:
+            #intrinsic "unreachable" <> ()
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
 
     let s0 <BTreeSet<i32>>:
-        new_set
+        new<i32>
+        |> must_set
         |> insert<i32> 5
+        |> must_set
         |> insert<i32> 1
+        |> must_set
     set checks checks_push checks check contains<i32> s0 1;
 
     let s1 <BTreeSet<i32>>:
-        new_set
+        new<i32>
+        |> must_set
         |> insert<i32> 5
+        |> must_set
         |> insert<i32> 1
+        |> must_set
         |> remove<i32> 1
     set checks checks_push checks check not contains<i32> s1 1;
 
     let s2 <BTreeSet<i32>>:
-        new_set
+        new<i32>
+        |> must_set
         |> insert<i32> 5
+        |> must_set
         |> insert<i32> 1
+        |> must_set
         |> remove<i32> 1
     set checks checks_push checks check_eq_i32 1 len<i32> s2;
 
@@ -80,19 +103,27 @@ neplg2:test
 #target std
 
 #import "alloc/collections/btreeset" as *
+#import "alloc/diag/error" as *
 #import "std/test" as { checks_new, checks_push, checks_print_report, checks_exit_code, check_eq_i32 }
 #import "core/result" as *
 
-fn new_set <()*>BTreeSet<i32>> ():
-    new<i32>
+fn must_set <(Result<BTreeSet<i32>, Diag>)*>BTreeSet<i32>> (r):
+    match r:
+        Result::Ok s:
+            s
+        Result::Err _d:
+            #intrinsic "unreachable" <> ()
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
 
     let s0 <BTreeSet<i32>>:
-        new_set
+        new<i32>
+        |> must_set
         |> insert<i32> 3
+        |> must_set
         |> insert<i32> 3
+        |> must_set
     set checks checks_push checks check_eq_i32 1 len<i32> s0;
 
     let shown <Vec<Result<(),str>>> checks_print_report checks;
