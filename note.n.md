@@ -11053,3 +11053,70 @@
     - [結果/けっか]: pass
   - `cargo test -p nepl-core --test overload annotated_let_prefers_specific_get_over_generic_field_get -- --nocapture`
     - [結果/けっか]: pass
+
+# 2026-03-12 作業メモ (stack / ringbuffer / queue の bare API 統一)
+
+- [目的/もくてき]:
+  - `stack_` / `ringbuffer_` prefix を public API から[除去/じょきょ]し、collection reboot [方針/ほうしん]どおり `new` / `push` / `pop` / `peek` / `len` / `is_empty` / `clear` / `free` の bare 名へ[統一/とういつ]する。
+  - `queue` は `ringbuffer` の public API を[再輸入/さいゆにゅう]せずに current bare API と[衝突/しょうとつ]しない[形/かたち]へ[作/つく]り[替/か]える。
+  - reboot [後/ご]の collection API に[合/あ]わせて examples / parser / fixtures / compiler doctest を[追従/ついじゅう]させる。
+- [根本原因/こんぽんげんいん]:
+  - `stack` / `ringbuffer` は bare 名 wrapper alias を[後付/あとづ]けした[過渡期/かとき]のままで、actual public defs が `stack_new` / `ringbuffer_push_back` など旧 prefix 名を[保持/ほじ]していた。
+  - `queue` は bare API へ[寄/よ]せる[途中/とちゅう]で `ringbuffer` module を alias import しており、`new` / `push` などの symbol 集合が queue module 内で[汚染/おせん]されて `new<i32>` が ambiguous になっていた。
+  - `stack` pipe fixture に[残/のこ]っていた `let p s |> pop` は current parser / reduction では `let` [直後/ちょくご]の pipe left-hand side を 1 [値/あたい]へ[畳/たた]めず、`D3013` を[起/お]こしていた。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/stack.nepl`
+    - `stack_new` / `stack_push` / `stack_pop` / `stack_peek` / `stack_len` / `stack_is_empty` / `stack_clear` / `stack_free` を actual def ごと bare 名 `new` / `push` / `pop` / `peek` / `len` / `is_empty` / `clear` / `free` へ[改名/かいめい]した。
+    - `stack_pop_keep` / `stack_peek_keep` も `pop_keep` / `peek_keep` へ[揃/そろ]え、旧 alias block は[削除/さくじょ]した。
+  - `stdlib/alloc/collections/ringbuffer.nepl`
+    - `ringbuffer_new` / `ringbuffer_with_capacity` / `ringbuffer_push_back` / `ringbuffer_pop_front` / `ringbuffer_peek_front` / `ringbuffer_len` / `ringbuffer_cap` / `ringbuffer_is_empty` / `ringbuffer_clear` / `ringbuffer_free` を bare 名へ[改名/かいめい]した。
+    - public wrapper alias は[撤去/てっきょ]し、helper 名だけを ringbuffer internal [用/よう]に[残/のこ]した。
+  - `stdlib/alloc/collections/queue.nepl`
+    - `RingBuffer<.T>` handle を[内包/ないほう]して委譲する[形/かたち]をやめ、queue 自身が ringbuffer と[同/おな]じ `[len, cap, head, data_ptr]` header / data layout を[直接/ちょくせつ][所有/しょゆう]する[実装/じっそう]へ[切/き]り[替/か]えた。
+    - これにより `ringbuffer` module import による public symbol [汚染/おせん]を[断/た]ち、`queue::new` / `queue::push` の ambiguity を root fix した。
+  - `stdlib/nm/parser.nepl`, `examples/bf.nepl`, `examples/rpn.nepl`
+    - stack API を current bare 名へ[追従/ついじゅう]した。
+  - `stdlib/tests/stack.n.md`, `stdlib/tests/ringbuffer.n.md`, `stdlib/tests/queue.n.md`
+    - current bare API + `Result` [前提/ぜんてい]へ[更新/こうしん]した。
+    - stack fixture の `let p s |> pop` は current reduction で stable な `let p <Option<i32>> pop s;` へ[書/か]き[換/か]えた。
+  - `tests/stdlib/stack_collections.n.md`, `tests/stdlib/ringbuffer_collections.n.md`, `tests/stdlib/queue_collections.n.md`, `tests/stdlib/pipe_collections.n.md`, `tests/stdlib/collections_diag.n.md`
+    - bare collection API へ[統一/とういつ]した。
+  - `tests/compiler/overload.n.md`
+    - stack `new` を[使/つか]う overload case は current collection [仕様/しよう]どおり impure main + bare `new` へ[追従/ついじゅう]した。
+- [設計/せっけい][判断/はんだん]:
+  - `queue` の問題は `ringbuffer` alias import の[上/うえ]に wrapper を[重/かさ]ねると[再発/さいはつ]するため、public bare API を[共有/きょうゆう]しつつ internal layout だけを[共有/きょうゆう]する[形/かたち]へ[変/か]えた。
+  - bare API 化は alias 追加でなく actual def の rename として[行/おこな]い、reboot の「後方互換を[残/のこ]さない」[原則/げんそく]を[守/まも]った。
+  - stack fixture の `let p s |> pop` は parser / reduction の別課題として[切/き]り[分/わ]け、collection reboot batch では current stable syntax へ fixture を[寄/よ]せた。
+- [検証/けんしょう]:
+  - `target/debug/nepl-cli -i /tmp/queue_test.nepl --target std --output /tmp/queue-test-out`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/queue.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/queue.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/stack.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/ringbuffer.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/stack.n.md -n 5`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/stack.n.md -n 6`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/stack_collections.n.md -n 5`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/stack_collections.n.md -n 6`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/pipe_collections.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/pipe_collections.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/collections_diag.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/collections_diag.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/compiler/overload.n.md -n 14`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/compiler/overload.n.md -n 18`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/compiler/overload.n.md -n 19`
+    - [結果/けっか]: pass

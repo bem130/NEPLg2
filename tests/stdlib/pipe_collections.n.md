@@ -51,21 +51,21 @@ ret: 1
 
 fn main <()*>i32> ():
     let s0 <Stack<i32>>:
-        stack_new<i32>
+        new<i32>
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 10
+        |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 20
+        |> push<i32> 20
         |> unwrap_ok<Stack<i32>, Diag>
-    let ok0 <bool> eq stack_len<i32> s0 2;
+    let ok0 <bool> eq len<i32> s0 2;
     let s1 <Stack<i32>>:
-        stack_new<i32>
+        new<i32>
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 10
+        |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 20
+        |> push<i32> 20
         |> unwrap_ok<Stack<i32>, Diag>
-    let p stack_pop<i32> s1;
+    let p pop<i32> s1;
     let ok1 <bool> match p:
         Option::Some v:
             eq v 20
@@ -268,21 +268,21 @@ ret: 1
 
 fn main <()*>i32> ():
     let rb <RingBuffer<i32>>:
-        ringbuffer_new<i32>
+        new<i32>
         |> uwok
-        |> ringbuffer_push_back 11
+        |> push 11
         |> uwok
-        |> ringbuffer_push_back 22
+        |> push 22
         |> uwok
-    let ok0 <bool> eq ringbuffer_len<i32> rb 2;
+    let ok0 <bool> eq len<i32> rb 2;
     let rb2 <RingBuffer<i32>>:
-        ringbuffer_new<i32>
+        new<i32>
         |> uwok
-        |> ringbuffer_push_back 11
+        |> push 11
         |> uwok
-        |> ringbuffer_push_back 22
+        |> push 22
         |> uwok
-    let ok1 <bool> match rb2 |> ringbuffer_peek_front:
+    let ok1 <bool> match rb2 |> peek:
         Option::Some v:
             eq v 11
         Option::None:
@@ -307,21 +307,21 @@ ret: 1
 
 fn main <()*>i32> ():
     let q <Queue<i32>>:
-        queue_new<i32>
+        new<i32>
         |> uwok
-        |> queue_push 3
+        |> push 3
         |> uwok
-        |> queue_push 4
+        |> push 4
         |> uwok
-    let ok0 <bool> eq queue_len<i32> q 2;
+    let ok0 <bool> eq len<i32> q 2;
     let q2 <Queue<i32>>:
-        queue_new<i32>
+        new<i32>
         |> uwok
-        |> queue_push 3
+        |> push 3
         |> uwok
-        |> queue_push 4
+        |> push 4
         |> uwok
-    let ok1 <bool> match q2 |> queue_peek:
+    let ok1 <bool> match q2 |> peek:
         Option::Some v:
             eq v 3
         Option::None:

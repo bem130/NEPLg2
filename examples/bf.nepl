@@ -50,7 +50,7 @@ fn compile_jumps <(i32,i32)*>Result<i32,str>> (code_ptr, code_len):
     let jump_table <i32> alloc_raw mul code_len 4;
     fill_i32 jump_table code_len 0;
     
-    let mut stk <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>
+    let mut stk <Stack<i32>> unwrap_ok<Stack<i32>, Diag> new<i32>
 
     let mut pc <i32> 0;
     let mut error <bool> false;
@@ -61,12 +61,12 @@ fn compile_jumps <(i32,i32)*>Result<i32,str>> (code_ptr, code_len):
             if:
                 eq ch 91 // '['
                 then:
-                    set stk unwrap_ok<Stack<i32>, Diag> stack_push<i32> stk pc
+                    set stk unwrap_ok<Stack<i32>, Diag> push<i32> stk pc
                 else: 
                     if:
                         eq ch 93 // ']'
                         then:
-                            let pop_res <Option<i32>> stack_pop<i32> stk
+                            let pop_res <Option<i32>> pop<i32> stk
                             match pop_res:
                                 Option::Some start_pc:
                                     store_i32 add jump_table mul start_pc 4 pc;
@@ -77,8 +77,8 @@ fn compile_jumps <(i32,i32)*>Result<i32,str>> (code_ptr, code_len):
                             ();
             set pc add pc 1;
 
-    let empty <bool> stack_is_empty<i32> stk
-    stack_free<i32> stk;
+    let empty <bool> is_empty<i32> stk
+    free<i32> stk;
 
     if:
         error

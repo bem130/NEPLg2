@@ -346,9 +346,9 @@ ret: 1
 #import "core/math" as *
 #import "core/result" as *
 
-fn main <()->i32> ():
+fn main <()*>i32> ():
     let s <str> "abc";
-    let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
+    let st <Stack<i32>> unwrap_ok<Stack<i32>, Diag> new;
     let n1 <i32> len s;
     let n2 <i32> len st;
     if and eq n1 3 eq n2 0 1 0
@@ -417,7 +417,7 @@ ret: 1
 #import "core/result" as *
 #import "core/math" as *
 
-fn main <()->i32> ():
+fn main <()*>i32> ():
     let st <Stack<i32>>:
         new
         |> unwrap_ok<Stack<i32>, Diag>
@@ -440,7 +440,7 @@ ret: 1
 #import "core/result" as *
 #import "core/math" as *
 
-fn main <()->i32> ():
+fn main <()*>i32> ():
     let st <Stack<i32>>:
         new
         |> unwrap_ok<Stack<i32>, Diag>

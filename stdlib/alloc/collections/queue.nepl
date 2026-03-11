@@ -1,17 +1,17 @@
 //: # queue
-//: `RingBuffer` を[使/つか]った FIFO queue
+//: ringbuffer layout を[使/つか]った FIFO queue
 //:
 //: ### [目的/もくてき]
 //: - [末尾/まつび]へ[追加/ついか]し、[先頭/せんとう]から[取/と]り[出/だ]す queue API を[提供/ていきょう]します。
-//: - `RingBuffer<.T>` の[所有権/しょゆうけん]と[容量管理/ようりょうかんり]をそのまま[利用/りよう]しつつ、queue [向/む]けの[名前/なまえ]で[公開/こうかい]します。
+//: - ringbuffer と[同/おな]じ header / data layout を[利用/りよう]しつつ、queue [向/む]けの[名前/なまえ]で[公開/こうかい]します。
 //:
 //: ### [実装/じっそう]
-//: - [内部/ないぶ]には `RingBuffer<.T>` を 1 [個/こ][保持/ほじ]し、queue helper は対応する ringbuffer helper へ[委譲/いじょう]します。
+//: - [内部/ないぶ]には ringbuffer と[同/おな]じ `[len, cap, head, data_ptr]` header を[保持/ほじ]します。
 //:
 //: ### [注意/ちゅうい]
-//: - `queue_push` は[更新後/こうしんご]の `Queue<.T>` を `Result` で[返/かえ]すため、pipe [記法/きほう]では `|> queue_push ... |> uwok` の[形/かたち]で[受/う]け[直/なお]します。
-//: - `queue_pop` / `queue_peek` は[空/から] queue を[失敗/しっぱい]ではなく `Option::None` として[返/かえ]します。
-//: - `queue_free` [後/ご]の[再利用/さいりよう]は[禁止/きんし]です。
+//: - `push` は[更新後/こうしんご]の `Queue<.T>` を `Result` で[返/かえ]すため、pipe [記法/きほう]では `|> push ... |> uwok` の[形/かたち]で[受/う]け[直/なお]します。
+//: - `pop` / `peek` は[空/から] queue を[失敗/しっぱい]ではなく `Option::None` として[返/かえ]します。
+//: - `free` [後/ご]の[再利用/さいりよう]は[禁止/きんし]です。
 //:
 //: ### [計算量/けいさんりょう]
 //: - `len` / `is_empty` / `peek` / `pop` は O(1) です。
@@ -19,67 +19,115 @@
 
 #indent 4
 
+#import "core/mem" as *
+#import "core/math" as *
 #import "core/option" as *
 #import "core/result" as *
 #import "core/field" as *
 #import "alloc/diag/error" as *
-#import "alloc/collections/ringbuffer" as *
 
 //: ## Queue
-//: `RingBuffer<.T>` を[所有/しょゆう]する queue handle
+//: ringbuffer layout を[所有/しょゆう]する queue handle
 //:
 //: ### [目的/もくてき]
 //: - queue API の[内部状態/ないぶじょうたい]を 1 [値/あたい]にまとめ、push / pop [後/ご]も[同/おな]じ[型/かた]で[受/う]け[渡/わた]しできるようにします。
 //:
 //: ### [注意/ちゅうい]
-//: - `rb` は[所有権/しょゆうけん]を[持/も]つ `RingBuffer<.T>` です。
+//: - `hdr` は ringbuffer と[同/おな]じ 16 byte header の[所有権/しょゆうけん]を[持/も]ちます。
 //: - `Queue<.T>` は `Copy` / `Clone` [前提/ぜんてい]ではありません。
 struct Queue<.T>:
-    rb <RingBuffer<.T>>
+    hdr <MemPtr<u8>>
 
-//: ## queue_new
+fn queue_header_len_ptr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap mem_ptr_addr hdr
+
+fn queue_header_cap_ptr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 4
+
+fn queue_header_head_ptr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 8
+
+fn queue_header_data_ptr_ptr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 12
+
+fn queue_len_from_hdr <(MemPtr<u8>)->i32> (hdr):
+    match load_i32 queue_header_len_ptr hdr:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+fn queue_cap_from_hdr <(MemPtr<u8>)->i32> (hdr):
+    match load_i32 queue_header_cap_ptr hdr:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+fn queue_head_from_hdr <(MemPtr<u8>)->i32> (hdr):
+    match load_i32 queue_header_head_ptr hdr:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+fn queue_data_from_hdr <.T> <(MemPtr<u8>)->MemPtr<.T>> (hdr):
+    match load_i32 queue_header_data_ptr_ptr hdr:
+        Option::Some raw:
+            mem_ptr_wrap raw
+        Option::None:
+            mem_ptr_wrap 0
+
+//: ## new
 //: [空/から]の queue を[作/つく]る
 //:
 //: ### [目的/もくてき]
 //: - [既定/きてい][容量/ようりょう]の[空/から] `Queue<.T>` を[作成/さくせい]します。
 //:
 //: ### [実装/じっそう]
-//: - `ringbuffer_new<.T>` を[呼/よ]び、[成功時/せいこうじ]に `Queue` へ[包/つつ]み[直/なお]します。
+//: - [既定/きてい][容量/ようりょう] 8 の queue header / data [領域/りょういき]を[内部/ないぶ]で[組/く]み[立/た]てます。
 //:
 //: ### [注意/ちゅうい]
 //: - [確保/かくほ][失敗/しっぱい]は `Result::Err Diag` として[返/かえ]ります。
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
-fn queue_new <.T> <()*>Result<Queue<.T>, Diag>> ():
-    match ringbuffer_new<.T>:
-        Result::Ok rb:
-            ok<Queue<.T>, Diag> Queue rb
-        Result::Err d:
-            err<Queue<.T>, Diag> d
+fn new <.T> <()*>Result<Queue<.T>, Diag>> ():
+    with_capacity<.T> 8
 
-//: ## queue_with_capacity
+//: ## with_capacity
 //: [初期/しょき][容量/ようりょう]を[指定/してい]して queue を[作/つく]る
 //:
 //: ### [目的/もくてき]
 //: - [少/すく]なくとも `cap` [個/こ]を[保持/ほじ]できる queue を[作成/さくせい]します。
 //:
 //: ### [実装/じっそう]
-//: - `ringbuffer_with_capacity<.T>` を[呼/よ]び、[成功時/せいこうじ]に `Queue` へ[包/つつ]み[直/なお]します。
+//: - 16 byte の ringbuffer ヘッダと `cap * size_of<.T>` byte の[要素/ようそ][領域/りょういき]を[確保/かくほ]します。
+//: - [内部/ないぶ]の ringbuffer [状態/じょうたい]を `[len, cap, head, data_ptr]` で[初期化/しょきか]して queue に[包/つつ]みます。
 //:
 //: ### [注意/ちゅうい]
 //: - [実際/じっさい]の[容量/ようりょう]は ringbuffer [側/がわ]の[切/き]り[上/あ]げ[規則/きそく]に[従/したが]います。
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
-fn queue_with_capacity <.T> <(i32)*>Result<Queue<.T>, Diag>> (cap):
-    match ringbuffer_with_capacity<.T> cap:
-        Result::Ok rb:
-            ok<Queue<.T>, Diag> Queue rb
-        Result::Err d:
-            err<Queue<.T>, Diag> d
+fn with_capacity <.T> <(i32)*>Result<Queue<.T>, Diag>> (cap):
+    let cap0 <i32> if lt cap 1 1 cap
+    match alloc_ptr<u8> 16:
+        Result::Err _e:
+            diag_err<Queue<.T>> diag_out_of_memory "with_capacity(header)"
+        Result::Ok header:
+            match alloc_ptr<.T> mul cap0 size_of<.T>:
+                Result::Err _e:
+                    let _ <()> uwok dealloc_ptr<u8> header 16
+                    diag_err<Queue<.T>> diag_out_of_memory "with_capacity(data)"
+                Result::Ok data:
+                    let _ <()> uwok store_i32 queue_header_len_ptr header 0
+                    let _ <()> uwok store_i32 queue_header_cap_ptr header cap0
+                    let _ <()> uwok store_i32 queue_header_head_ptr header 0
+                    let _ <()> uwok store_i32 queue_header_data_ptr_ptr header mem_ptr_addr data
+                    ok<Queue<.T>, Diag> Queue header
 
-//: ## queue_len
+//: ## len
 //: [要素数/ようそすう]を[返/かえ]す
 //:
 //: ### [目的/もくてき]
@@ -87,10 +135,10 @@ fn queue_with_capacity <.T> <(i32)*>Result<Queue<.T>, Diag>> (cap):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
-fn queue_len <.T> <(Queue<.T>)->i32> (q):
-    ringbuffer_len<.T> get q "rb"
+fn len <.T> <(Queue<.T>)->i32> (q):
+    queue_len_from_hdr get q "hdr"
 
-//: ## queue_is_empty
+//: ## is_empty
 //: [空/から]かどうかを[調/しら]べる
 //:
 //: ### [目的/もくてき]
@@ -98,31 +146,62 @@ fn queue_len <.T> <(Queue<.T>)->i32> (q):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
-fn queue_is_empty <.T> <(Queue<.T>)->bool> (q):
-    ringbuffer_is_empty<.T> get q "rb"
+fn is_empty <.T> <(Queue<.T>)->bool> (q):
+    eq len<.T> q 0
 
-//: ## queue_push
+//: ## push
 //: [末尾/まつび]へ[追加/ついか]する
 //:
 //: ### [目的/もくてき]
 //: - `item` を queue の[末尾/まつび]へ[追加/ついか]し、[更新後/こうしんご]の `Queue<.T>` を[返/かえ]します。
 //:
 //: ### [実装/じっそう]
-//: - `RingBuffer` の `push_back` に[委譲/いじょう]し、[返/かえ]ってきた ringbuffer を[新/あたら]しい `Queue` に[包/つつ]み[直/なお]します。
+//: - [空/あ]きがあれば `tail = (head + len) mod cap` へ[直接/ちょくせつ][書/か]き[込/こ]みます。
+//: - [満杯/まんぱい]なら 2 [倍/ばい]へ[拡張/かくちょう]し、[論理順/ろんりじゅん]どおりに[並/なら]べ[替/か]えてから[追加/ついか]します。
 //:
 //: ### [注意/ちゅうい]
 //: - [更新後/こうしんご]の queue を[受/う]け[取/と]る API なので、`set` または pipe で[束縛/そくばく]し[直/なお]してください。
 //:
 //: ### [計算量/けいさんりょう]
 //: - [償却/しょうきゃく] O(1)、[拡張/かくちょう][発生時/はっせいじ]の[最悪/さいあく][時間/じかん][計算量/けいさんりょう]は O(n) です。
-fn queue_push <.T> <(Queue<.T>, .T)*>Result<Queue<.T>, Diag>> (q, item):
-    match ringbuffer_push_back<.T> get q "rb" item:
-        Result::Ok rb2:
-            ok<Queue<.T>, Diag> Queue rb2
-        Result::Err d:
-            err<Queue<.T>, Diag> d
+fn push <.T> <(Queue<.T>, .T)*>Result<Queue<.T>, Diag>> (q, item):
+    let hdr <MemPtr<u8>> get q "hdr"
+    let len0 <i32> queue_len_from_hdr hdr
+    let cap0 <i32> queue_cap_from_hdr hdr
+    let head0 <i32> queue_head_from_hdr hdr
+    let data0 <MemPtr<.T>> queue_data_from_hdr<.T> hdr
+    if:
+        eq len0 cap0
+        then:
+            let new_cap <i32> mul cap0 2
+            match alloc_ptr<.T> mul new_cap size_of<.T>:
+                Result::Err _e:
+                    diag_err<Queue<.T>> diag_out_of_memory "push(grow)"
+                Result::Ok new_data:
+                    let mut i <i32> 0
+                    while lt i len0:
+                        do:
+                            let src_idx <i32> mod_s add head0 i cap0
+                            let src_off <i32> mul src_idx size_of<.T>
+                            let dst_off <i32> mul i size_of<.T>
+                            store<.T> add mem_ptr_addr new_data dst_off load<.T> add mem_ptr_addr data0 src_off
+                            set i add i 1
+                    let _ <()> uwok dealloc_ptr<.T> data0 mul cap0 size_of<.T>
+                    let _ <()> uwok store_i32 queue_header_cap_ptr hdr new_cap
+                    let _ <()> uwok store_i32 queue_header_head_ptr hdr 0
+                    let _ <()> uwok store_i32 queue_header_data_ptr_ptr hdr mem_ptr_addr new_data
+                    let tail_off <i32> mul len0 size_of<.T>
+                    store<.T> add mem_ptr_addr new_data tail_off item
+                    let _ <()> uwok store_i32 queue_header_len_ptr hdr add len0 1
+                    ok<Queue<.T>, Diag> q
+        else:
+            let tail_idx <i32> mod_s add head0 len0 cap0
+            let tail_off <i32> mul tail_idx size_of<.T>
+            store<.T> add mem_ptr_addr data0 tail_off item
+            let _ <()> uwok store_i32 queue_header_len_ptr hdr add len0 1
+            ok<Queue<.T>, Diag> q
 
-//: ## queue_pop
+//: ## pop
 //: [先頭/せんとう]から[取/と]り[出/だ]す
 //:
 //: ### [目的/もくてき]
@@ -133,10 +212,24 @@ fn queue_push <.T> <(Queue<.T>, .T)*>Result<Queue<.T>, Diag>> (q, item):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
-fn queue_pop <.T> <(Queue<.T>)*>Option<.T>> (q):
-    ringbuffer_pop_front<.T> get q "rb"
+fn pop <.T> <(Queue<.T>)*>Option<.T>> (q):
+    let hdr <MemPtr<u8>> get q "hdr"
+    let len0 <i32> queue_len_from_hdr hdr
+    if:
+        eq len0 0
+        then:
+            none<.T>
+        else:
+            let cap0 <i32> queue_cap_from_hdr hdr
+            let head0 <i32> queue_head_from_hdr hdr
+            let data0 <MemPtr<.T>> queue_data_from_hdr<.T> hdr
+            let off <i32> mul head0 size_of<.T>
+            let item0 <.T> load<.T> add mem_ptr_addr data0 off
+            let _ <()> uwok store_i32 queue_header_head_ptr hdr mod_s add head0 1 cap0
+            let _ <()> uwok store_i32 queue_header_len_ptr hdr sub len0 1
+            some<.T> item0
 
-//: ## queue_peek
+//: ## peek
 //: [先頭/せんとう]を[参照/さんしょう]する
 //:
 //: ### [目的/もくてき]
@@ -147,10 +240,20 @@ fn queue_pop <.T> <(Queue<.T>)*>Option<.T>> (q):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
-fn queue_peek <.T> <(Queue<.T>)->Option<.T>> (q):
-    ringbuffer_peek_front<.T> get q "rb"
+fn peek <.T> <(Queue<.T>)->Option<.T>> (q):
+    let hdr <MemPtr<u8>> get q "hdr"
+    let len0 <i32> queue_len_from_hdr hdr
+    if:
+        eq len0 0
+        then:
+            none<.T>
+        else:
+            let head0 <i32> queue_head_from_hdr hdr
+            let data0 <MemPtr<.T>> queue_data_from_hdr<.T> hdr
+            let off <i32> mul head0 size_of<.T>
+            some<.T> load<.T> add mem_ptr_addr data0 off
 
-//: ## queue_clear
+//: ## clear
 //: [内容/ないよう]を[空/から]にする
 //:
 //: ### [目的/もくてき]
@@ -158,38 +261,26 @@ fn queue_peek <.T> <(Queue<.T>)->Option<.T>> (q):
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
-fn queue_clear <.T> <(Queue<.T>)*>Queue<.T>> (q):
-    let rb2 <RingBuffer<.T>> ringbuffer_clear<.T> get q "rb"
-    Queue rb2
+fn clear <.T> <(Queue<.T>)*>Queue<.T>> (q):
+    let hdr <MemPtr<u8>> get q "hdr"
+    let _ <()> uwok store_i32 queue_header_len_ptr hdr 0
+    let _ <()> uwok store_i32 queue_header_head_ptr hdr 0
+    q
 
-//: ## queue_free
+//: ## free
 //: [内部/ないぶ]メモリを[解放/かいほう]する
 //:
 //: ### [目的/もくてき]
-//: - queue が[保持/ほじ]する ringbuffer header と[要素/ようそ][領域/りょういき]を[解放/かいほう]します。
+//: - queue が[保持/ほじ]する header と[要素/ようそ][領域/りょういき]を[解放/かいほう]します。
 //:
 //: ### [注意/ちゅうい]
 //: - `free` [後/ご]の queue を[再利用/さいりよう]してはいけません。
 //:
 //: ### [計算量/けいさんりょう]
 //: - O(1)
-fn queue_free <.T> <(Queue<.T>)*>()> (q):
-    ringbuffer_free<.T> get q "rb"
-
-fn push <.T> <(Queue<.T>, .T)*>Result<Queue<.T>, Diag>> (q, item):
-    queue_push<.T> q item
-
-fn pop <.T> <(Queue<.T>)*>Option<.T>> (q):
-    queue_pop<.T> q
-
-fn peek <.T> <(Queue<.T>)->Option<.T>> (q):
-    queue_peek<.T> q
-
-fn len <.T> <(Queue<.T>)->i32> (q):
-    queue_len<.T> q
-
-fn clear <.T> <(Queue<.T>)*>Queue<.T>> (q):
-    queue_clear<.T> q
-
 fn free <.T> <(Queue<.T>)*>()> (q):
-    queue_free<.T> q
+    let hdr <MemPtr<u8>> get q "hdr"
+    let cap0 <i32> queue_cap_from_hdr hdr
+    let data0 <MemPtr<.T>> queue_data_from_hdr<.T> hdr
+    let _ <()> uwok dealloc_ptr<.T> data0 mul cap0 size_of<.T>
+    let _ <()> uwok dealloc_ptr<u8> hdr 16

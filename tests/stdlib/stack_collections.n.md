@@ -15,10 +15,10 @@ ret: 1
 #import "core/result" as *
 
 fn main <()*>i32> ():
-    let mut s <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
-    set s unwrap_ok<Stack<i32>, Diag> stack_push<i32> s 10;
-    set s unwrap_ok<Stack<i32>, Diag> stack_push<i32> s 20;
-    if eq stack_len<i32> s 2 1 0
+    let mut s <Stack<i32>> unwrap_ok<Stack<i32>, Diag> new<i32>;
+    set s unwrap_ok<Stack<i32>, Diag> push<i32> s 10;
+    set s unwrap_ok<Stack<i32>, Diag> push<i32> s 20;
+    if eq len<i32> s 2 1 0
 ```
 
 ## stack_peek_and_pop
@@ -39,25 +39,25 @@ ret: 1
 
 fn main <()*>i32> ():
     let s0 <Stack<i32>>:
-        stack_new<i32>
+        new<i32>
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 10
+        |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 20
+        |> push<i32> 20
         |> unwrap_ok<Stack<i32>, Diag>
-    let ok0 <bool> match stack_peek<i32> s0:
+    let ok0 <bool> match peek<i32> s0:
         Option::Some v:
             eq v 20
         Option::None:
             false
     let s1 <Stack<i32>>:
-        stack_new<i32>
+        new<i32>
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 10
+        |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 20
+        |> push<i32> 20
         |> unwrap_ok<Stack<i32>, Diag>
-    let p stack_pop<i32> s1;
+    let p pop<i32> s1;
     let ok1 <bool> match p:
         Option::Some v:
             eq v 20
@@ -83,8 +83,8 @@ ret: 1
 #import "core/result" as *
 
 fn main <()*>i32> ():
-    let s <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
-    let p stack_pop<i32> s;
+    let s <Stack<i32>> unwrap_ok<Stack<i32>, Diag> new<i32>;
+    let p pop<i32> s;
     match p:
         Option::Some _:
             0
@@ -108,13 +108,13 @@ ret: 1
 
 fn main <()*>i32> ():
     let s <Stack<i32>>:
-        stack_new<i32>
+        new<i32>
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 10
+        |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 20
+        |> push<i32> 20
         |> unwrap_ok<Stack<i32>, Diag>
-    if eq stack_len<i32> s 2 1 0
+    if eq len<i32> s 2 1 0
 ```
 
 ## stack_peek_and_pop_pipe
@@ -135,25 +135,25 @@ ret: 1
 
 fn main <()*>i32> ():
     let s0 <Stack<i32>>:
-        stack_new<i32>
+        new<i32>
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 10
+        |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 20
+        |> push<i32> 20
         |> unwrap_ok<Stack<i32>, Diag>
-    let ok0 <bool> match s0 |> stack_peek<i32>:
+    let ok0 <bool> match s0 |> peek<i32>:
         Option::Some v:
             eq v 20
         Option::None:
             false
     let s1 <Stack<i32>>:
-        stack_new<i32>
+        new<i32>
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 10
+        |> push<i32> 10
         |> unwrap_ok<Stack<i32>, Diag>
-        |> stack_push<i32> 20
+        |> push<i32> 20
         |> unwrap_ok<Stack<i32>, Diag>
-    let p s1 |> stack_pop<i32>
+    let p <Option<i32>> pop<i32> s1;
     let ok1 <bool> match p:
         Option::Some v:
             eq v 20
@@ -179,8 +179,8 @@ ret: 1
 #import "core/result" as *
 
 fn main <()*>i32> ():
-    let s <Stack<i32>> unwrap_ok<Stack<i32>, Diag> stack_new<i32>;
-    let p s |> stack_pop<i32>
+    let s <Stack<i32>> unwrap_ok<Stack<i32>, Diag> new<i32>;
+    let p <Option<i32>> pop<i32> s;
     match p:
         Option::Some _:
             0

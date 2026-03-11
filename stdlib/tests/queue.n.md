@@ -17,31 +17,31 @@ ret: 1
 
 fn main <()*>i32> ():
     let q0 <Queue<i32>>:
-        queue_new<i32>
+        new<i32>
         |> unwrap_ok<Queue<i32>, Diag>
-        |> queue_push<i32> 1
+        |> push<i32> 1
         |> unwrap_ok<Queue<i32>, Diag>
-        |> queue_push<i32> 2
+        |> push<i32> 2
         |> unwrap_ok<Queue<i32>, Diag>
-    let ok0 <bool> eq queue_len<i32> q0 2;
+    let ok0 <bool> eq len<i32> q0 2;
     let q1 <Queue<i32>>:
-        queue_new<i32>
+        new<i32>
         |> unwrap_ok<Queue<i32>, Diag>
-        |> queue_push<i32> 1
+        |> push<i32> 1
         |> unwrap_ok<Queue<i32>, Diag>
-        |> queue_push<i32> 2
+        |> push<i32> 2
         |> unwrap_ok<Queue<i32>, Diag>
-    let ok1 <bool> match queue_peek<i32> q1:
+    let ok1 <bool> match peek<i32> q1:
         Option::Some v:
             eq v 1
         Option::None:
             false
     let q2 <Queue<i32>>:
-        queue_new<i32>
+        new<i32>
         |> unwrap_ok<Queue<i32>, Diag>
-        |> queue_push<i32> 5
+        |> push<i32> 5
         |> unwrap_ok<Queue<i32>, Diag>
-    let ok2 <bool> match queue_pop<i32> q2:
+    let ok2 <bool> match pop<i32> q2:
         Option::Some v:
             eq v 5
         Option::None:
@@ -64,8 +64,8 @@ ret: 1
 #import "core/result" as *
 
 fn main <()*>i32> ():
-    let q <Queue<i32>> unwrap_ok<Queue<i32>, Diag> queue_new<i32>;
-    match queue_pop<i32> q:
+    let q <Queue<i32>> unwrap_ok<Queue<i32>, Diag> new<i32>;
+    match pop<i32> q:
         Option::Some _:
             0
         Option::None:

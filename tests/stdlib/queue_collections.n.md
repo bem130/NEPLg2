@@ -6,10 +6,10 @@
 - `Queue` が `RingBuffer` の[上/うえ]に[構築/こうちく]された FIFO として、pipe [記法/きほう]で[自然/しぜん]に[使/つか]えることを[確認/かくにん]します。
 
 [何/なに]を[確/たし]かめるか:
-- `queue_new`
-- `queue_push`
-- `queue_len`
-- `queue_pop`
+- `new`
+- `push`
+- `len`
+- `pop`
 - `uwok`
 
 neplg2:test
@@ -27,21 +27,21 @@ ret: 1
 
 fn main <()*>i32> ():
     let q <Queue<i32>>:
-        queue_new<i32>
+        new<i32>
         |> uwok
-        |> queue_push<i32> 7
+        |> push<i32> 7
         |> uwok
-        |> queue_push<i32> 8
+        |> push<i32> 8
         |> uwok
-    let ok0 <bool> eq queue_len<i32> q 2;
+    let ok0 <bool> eq len<i32> q 2;
     let q2 <Queue<i32>>:
-        queue_new<i32>
+        new<i32>
         |> uwok
-        |> queue_push<i32> 7
+        |> push<i32> 7
         |> uwok
-        |> queue_push<i32> 8
+        |> push<i32> 8
         |> uwok
-    let ok1 <bool> match q2 |> queue_pop<i32>:
+    let ok1 <bool> match q2 |> pop<i32>:
         Option::Some v:
             eq v 7
         Option::None:

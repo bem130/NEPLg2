@@ -146,7 +146,7 @@ fn main <()*>i32> ():
 ## queue_pop_empty_returns_none
 
 [目的/もくてき]:
-- `queue_pop` は、[空/から] queue を[失敗/しっぱい]とせず `Option::None` で[返/かえ]すことを[確/たし]かめます。
+- `pop` は、[空/から] queue を[失敗/しっぱい]とせず `Option::None` で[返/かえ]すことを[確/たし]かめます。
 
 [何/なに]を[確/たし]かめるか:
 - [想定内/そうていない]の[不在/ふざい]は `Diag` ではなく `Option` で[表現/ひょうげん]される。
@@ -164,8 +164,8 @@ neplg2:test
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let q <Queue<i32>> unwrap_ok<Queue<i32>, Diag> queue_new<i32>;
-    match queue_pop<i32> q:
+    let q <Queue<i32>> unwrap_ok<Queue<i32>, Diag> new<i32>;
+    match pop<i32> q:
         Option::Some _v:
             set checks checks_push checks Result<(),str>::Err "expected none";
         Option::None:
@@ -177,7 +177,7 @@ fn main <()*>i32> ():
 ## ringbuffer_pop_empty_returns_none
 
 [目的/もくてき]:
-- `ringbuffer_pop_front` は、[空/から] ring buffer を[失敗/しっぱい]とせず `Option::None` で[返/かえ]すことを[確/たし]かめます。
+- `pop` は、[空/から] ring buffer を[失敗/しっぱい]とせず `Option::None` で[返/かえ]すことを[確/たし]かめます。
 
 [何/なに]を[確/たし]かめるか:
 - [想定内/そうていない]の[不在/ふざい]は `Diag` ではなく `Option` で[表現/ひょうげん]される。
@@ -195,8 +195,8 @@ neplg2:test
 
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
-    let rb <RingBuffer<i32>> unwrap_ok<RingBuffer<i32>, Diag> ringbuffer_new<i32>;
-    match ringbuffer_pop_front<i32> rb:
+    let rb <RingBuffer<i32>> unwrap_ok<RingBuffer<i32>, Diag> new<i32>;
+    match pop<i32> rb:
         Option::Some _v:
             set checks checks_push checks Result<(),str>::Err "expected none";
         Option::None:

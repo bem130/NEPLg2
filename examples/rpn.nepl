@@ -181,13 +181,13 @@ fn print_step_after <(Stack<i32>,i32,Vec<str>,i32)*>()> (stack, res, tokens, i):
 //: - 適用前と適用後の状態をそれぞれ強調表示します。
 fn apply_op <(Stack<i32>,str,Vec<str>,i32)*>Stack<i32>> (stack, token, tokens, i):
     if:
-        lt stk::stack_len<i32> stack 2
+        lt stk::len<i32> stack 2
         then:
             print_error "stack underflow";
             stack
         else:
-            let b <i32> unwrap stk::stack_pop<i32> stack;
-            let a <i32> unwrap stk::stack_pop<i32> stack;
+            let b <i32> unwrap stk::pop<i32> stack;
+            let a <i32> unwrap stk::pop<i32> stack;
             
             print_step_before stack a b token tokens i;
             
@@ -209,7 +209,7 @@ fn apply_op <(Stack<i32>,str,Vec<str>,i32)*>Stack<i32>> (stack, token, tokens, i
                                         
             print_step_after stack res tokens i;
             
-            stk::stack_push<i32> stack res
+            stk::push<i32> stack res
             |> unwrap_ok<Stack<i32>, Diag>
 
 //: process_token: 1 つのトークンを分類して処理する
@@ -231,7 +231,7 @@ fn process_token <(Stack<i32>,str,Vec<str>,i32)*>Stack<i32>> (stack, token, toke
                     else:
                         match s::to_i32 token:
                             Result::Ok val:
-                                stk::stack_push<i32> stack val
+                                stk::push<i32> stack val
                                 |> unwrap_ok<Stack<i32>, Diag>
                             Result::Err _:
                                 print_error "unknown token";
@@ -257,7 +257,7 @@ fn eval_line <(str)*>()> (line):
     let n <i32> v::vec_len<str> tokens;
 
     let mut stack <Stack<i32>>:
-        stk::stack_new<i32>
+        stk::new<i32>
         |> unwrap_ok<Stack<i32>, Diag>
 
     let mut i <i32> 0;
@@ -270,11 +270,11 @@ fn eval_line <(str)*>()> (line):
                     ()
             set i add i 1;
 
-    let sp <i32> stk::stack_len<i32> stack;
+    let sp <i32> stk::len<i32> stack;
     if:
         eq sp 1
         then:
-            match stk::stack_pop<i32> stack:
+            match stk::pop<i32> stack:
                 Option::Some val:
                     print_result val;
                 Option::None:
@@ -302,7 +302,7 @@ fn eval_line <(str)*>()> (line):
                     print "\n";
                     print_error s::concat3 "stack has " s::from_i32 sp " values";
     
-    stk::stack_free<i32> stack;
+    stk::free<i32> stack;
     v::vec_free<str> tokens;
 
 //: main: RPN TUI REPL のエントリーポイント
