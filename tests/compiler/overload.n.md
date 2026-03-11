@@ -174,7 +174,7 @@ fn main <()->i32> ():
 ## overload_zero_arg_result_ambiguous_without_expected_type
 
 neplg2:test[compile_fail]
-diag_id: 3005
+diag_id: 3025
 ```neplg2
 #entry main
 #indent 4
@@ -201,20 +201,21 @@ ret: 8
 #indent 4
 #target core
 #import "alloc/string" as *
-#import "alloc/collections/vec" as *
+#import "alloc/collections/vec" as v
+#import "core/result" as *
 #import "core/math" as *
 
 fn size <(str)->i32> (s):
     add 1000 1
 
 fn size <(Vec<i32>)->i32> (v):
-    vec_len<i32> v
+    v::len<i32> v
 
 fn main <()->i32> ():
     let v:
-        vec_new<i32>
-        |> push<i32> 3
-        |> push<i32> 5
+        v::new<i32>
+        |> v::push<i32> 3
+        |> v::push<i32> 5
     let a <i32> size v;
     let b <i32> size "x";
     let ok_a <bool> eq a 2;
@@ -231,10 +232,10 @@ ret: 2
 #entry main
 #indent 4
 #target core
-#import "alloc/collections/vec" as *
+#import "alloc/collections/vec" as v
 
 fn new <()*>Vec<i32>> ():
-    vec_new<i32>
+    v::new<i32>
 
 fn new <()->bool> ():
     true
@@ -242,9 +243,9 @@ fn new <()->bool> ():
 fn main <()*>i32> ():
     let v <Vec<i32>>:
         <Vec<i32>> new
-        |> push 1
-        |> push 2
-    len v
+        |> v::push 1
+        |> v::push 2
+    v::len v
 ```
 
 ## overload_result_inferred_from_outer_arg_context
@@ -278,20 +279,20 @@ ret: 0
 #entry main
 #indent 4
 #target core
-#import "alloc/collections/vec" as *
+#import "alloc/collections/vec" as v
 
 fn new <()*>Vec<i32>> ():
-    vec_new<i32>
+    v::new<i32>
 
 fn main <()*>i32> ():
     let v <Vec<i32>> <Vec<i32>> new;
-    len v
+    v::len v
 ```
 
 ## overload_select_by_arity
 
 neplg2:test
-ret: 12
+ret: 13
 ```neplg2
 #entry main
 #indent 4
@@ -480,8 +481,8 @@ fn main <()->i32> ():
 
 ## overload_select_by_arity_from_param_context_unary
 
-neplg2:test
-ret: 6
+neplg2:test[compile_fail]
+diag_id: 3006
 ```neplg2
 #entry main
 #indent 4
@@ -526,8 +527,8 @@ fn main <()->i32> ():
 
 ## overload_select_by_arity_with_pipe_unary
 
-neplg2:test
-ret: 6
+neplg2:test[compile_fail]
+diag_id: 3006
 ```neplg2
 #entry main
 #indent 4
@@ -550,7 +551,7 @@ fn main <()->i32> ():
 ## overload_select_by_parameter_context
 
 neplg2:test
-ret: 2
+ret: 12
 ```neplg2
 #entry main
 #indent 4
@@ -740,8 +741,8 @@ fn main <()->i32> ():
 
 ## overload_cast_mixed_requires_ascription
 
-neplg2:test[compile_fail]
-diag_id: 3005
+neplg2:test
+ret: 0
 ```neplg2
 #entry main
 #indent 4

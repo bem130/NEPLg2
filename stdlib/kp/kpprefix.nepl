@@ -82,9 +82,9 @@ impl Clone for PrefixI32:
 //: prefix_build_vec_i32: Vec<i32> から累積和ハンドルを作る
 //:
 //: [実装/じっそう]:
-//: - `vec_data_len` で data pointer と長さを 1 回で[取/と]り[出/だ]してから、raw prefix builder へ[委譲/いじょう]します。
+//: - `data_len` で data pointer と長さを 1 回で[取/と]り[出/だ]してから、raw prefix builder へ[委譲/いじょう]します。
 fn prefix_build_vec_i32 <(Vec<i32>)*>PrefixI32> (v):
-    let info <VecDataLen<i32>> vec_data_len<i32> v
+    let info <VecDataLen<i32>> data_len<i32> v
     let n <i32> get info "len"
     let data <i32> mem_ptr_addr get info "data"
     let pref_ptr <i32> prefix_build_i32 data n

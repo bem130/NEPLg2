@@ -11120,3 +11120,55 @@
     - [結果/けっか]: pass
   - `node nodesrc/run_doctest.js -i tests/compiler/overload.n.md -n 19`
     - [結果/けっか]: pass
+
+# 2026-03-12 作業メモ (vec bare API 整理と move model 追従)
+
+- [目的/もくてき]:
+  - `Vec` の public API を alias ではなく actual def として bare 名へ[揃/そろ]える。
+  - vec reboot の[影響先/えいきょうさき]である sort / string / parser / tutorial / overload fixture を current move model に[合/あ]わせて[整合/せいごう]させる。
+  - compiler / web compile path を[含/ふく]む前 batch の Rust 差分を trunk build で[再確認/さいかくにん]したうえで、focused suite を[緑化/りょくか]する。
+- [根本原因/こんぽんげんいん]:
+  - `vec.nepl` は bare 名 wrapper を[持/も]っていたが、actual def が `vec_new` / `vec_push` [系/けい]のまま[残/のこ]っており、reboot の「alias ではなく唯一の public 名」[原則/げんそく]に[反/はん]していた。
+  - `set` は collection bare API の[候補/こうほ]として[自然/しぜん]だが、current parser/compiler では[予約語/よやくご]として[扱/あつか]われるため public 名にできず、vec の write API は `replace` を[維持/いじ]する[必要/ひつよう]があった。
+  - `Vec` を stack に[合/あ]わせて即座に `Result` 化すると、`string` / `diag` / `parser` / `std/test` まで impure 化が[連鎖/れんさ]し、この batch の[責務/せきむ]を[超/こ]える。ここでは bare API と move fix を[優先/ゆうせん]し、`Result` 方針の[統一/とういつ]は collection reboot の後続 batch に[送/おく]った。
+  - tutorial 25 / 26 と `traits_order` は `Vec` owner を `len/get/get/...` のように[複数回/ふくすうかい][読/よ]んでおり、current move model では[不安定/ふあんてい]だった。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/vec.nepl`
+    - actual def を `new` / `with_capacity` / `len` / `cap` / `data_ptr` / `data_mem_ptr` / `data_len` / `is_empty` / `push` / `get` / `replace` / `pop` / `clear` / `free` へ[統一/とういつ]した。
+    - 旧 alias block は[削除/さくじょ]した。
+    - `push` の[再確保/さいかくほ]で `cap = 0` の[時/とき]に `0 * 2 = 0` となっていた[欠陥/けっかん]を[修正/しゅうせい]し、0 [容量/ようりょう]からでも 1 へ[拡張/かくちょう]するようにした。
+    - doctest#2 は `match` arm の unit/i32 [混在/こんざい]を[解消/かいしょう]し、current API [形/けい]へ[更新/こうしん]した。
+  - `stdlib/alloc/string.nepl`
+    - `sb_append` に[残/のこ]っていた stale `uwok` を[除去/じょきょ]し、pure vec API へ[追従/ついじゅう]した。
+  - `stdlib/nm/parser.nepl`
+    - `Stack<NestSection>` と `Vec` の owner を[繰/く]り[返/かえ]し[読/よ]んでいた helper を[整理/せいり]し、header / data+len を 1 [回/かい]だけ[取/と]り[出/だ]して raw helper へ[渡/わた]す[実装/じっそう]に[変更/へんこう]した。
+    - これにより close-one / close-all / inline/json [周辺/しゅうへん]の move error を[除去/じょきょ]した。
+  - `tests/stdlib/traits_order.n.md`
+    - sort [結果/けっか]の[検証/けんしょう]を `get` [反復/はんぷく]から `data_len + raw load` へ[切/き]り[替/か]え、owner を 1 [回/かい]だけ[読/よ]む[形/かたち]へ[揃/そろ]えた。
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+    - `VecDataLen` と raw load を[使/つか]って[窓/まど]の[左右端/さゆうたん]を[読/よ]む[形/かたち]へ[変更/へんこう]し、prefixsum tutorial の move error を[解消/かいしょう]した。
+  - `tutorials/getting_started/26_competitive_graph_bfs.n.md`
+    - `print_dist` を `len/get/get/...` から `data_len + raw load` へ[変更/へんこう]し、stdout が[空/から]になる[不安定/ふあんてい]な[挙動/きょどう]を[解消/かいしょう]した。
+  - `tests/compiler/overload.n.md`, `tests/compiler/overload_nested_generic_push.n.md`
+    - vec pure API [前提/ぜんてい]へ[戻/もど]し、stale `unwrap_ok` を[除去/じょきょ]した。
+    - current compiler [挙動/きょどう]に[合/あ]わせて ret / compile_fail [期待値/きたいち]を[更新/こうしん]した。
+  - `nepl-core/src/lib.rs`
+    - `compile_module_with_source_map` の re-export を[戻/もど]し、前 batch で[導入/どうにゅう]した web/CLI path [統一/とういつ]を trunk build [可能/かのう]な[状態/じょうたい]へ[保/たも]った。
+- [設計/せっけい][判断/はんだん]:
+  - `replace` は妥協ではなく current parser/compiler の[制約/せいやく]を[踏/ふ]まえた public 名である。`set` を[使/つか]うには keyword / parser [設計/せっけい]の reboot が[別途/べっと]必要。
+  - `Vec` の `Result` 化は[必要/ひつよう]だが、今 batch で[押/お]し[込/こ]むと pure/impure [境界/きょうかい]の[整理/せいり]なしに library [全域/ぜんいき]へ[波及/はきゅう]するため、root-cause を[分離/ぶんり]して後続の collection reboot batch へ[送/おく]った。
+  - tutorial / trait fixture の move fix は `Copy` [前提/ぜんてい]へ[戻/もど]すのではなく、`VecDataLen` や raw load で owner を 1 [回/かい]だけ[観測/かんそく]する current ownership model に[寄/よ]せた。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/traits_order.n.md -n 3`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/26_competitive_graph_bfs.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i tests/compiler/overload.n.md -i tests/compiler/overload_nested_generic_push.n.md --no-stdlib --no-tree -o /tmp/tests-overload-vec.json -j 2`
+    - [結果/けっか]: `46/46 pass`
+    - output JSON: `/tmp/tests-overload-vec.json`

@@ -2,7 +2,7 @@
 //: [連続/れんぞく]メモリを[用/もち]いる[可変長/かへんちょう][配列/はいれつ]
 //:
 //: ### [目的/もくてき]
-//: - `Vec<.T>` を[提供/ていきょう]し、`push` / `get` / `pop` / `set` などの[基本/きほん][操作/そうさ]を[共通/きょうつう] API として[使/つか]えるようにします。
+//: - `Vec<.T>` を[提供/ていきょう]し、`push` / `get` / `pop` / `replace` などの[基本/きほん][操作/そうさ]を[共通/きょうつう] API として[使/つか]えるようにします。
 //: - `alloc/collections` の[他/ほか]の[構造/こうぞう]が[依存/いそん]する[基礎/きそ][配列/はいれつ]として[機能/きのう]します。
 //:
 //: ### [実装/じっそう]
@@ -11,11 +11,11 @@
 //:
 //: ### [注意/ちゅうい]
 //: - `get` / `pop` は[存在/そんざい]しない[位置/いち]を `Option::None` で[返/かえ]します。
-//: - `set` は[範囲外/はんいがい]では[失敗/しっぱい]にせず、そのままの `Vec<.T>` を[返/かえ]します。
+//: - `replace` は[範囲外/はんいがい]では[失敗/しっぱい]にせず、[何/なに]も[変更/へんこう]しません。
 //: - [再確保/さいかくほ]が[起/お]きると[内部/ないぶ]バッファの[番地/ばんち]は[変/か]わりえます。
 //:
 //: ### [計算量/けいさんりょう]
-//: - `get` / `set` / `len` / `cap` / `is_empty` は O(1) です。
+//: - `get` / `replace` / `len` / `cap` / `is_empty` は O(1) です。
 //: - `push` は[償却/しょうきゃく] O(1)、[拡張/かくちょう][発生時/はっせいじ]の[最悪/さいあく][時間/じかん][計算量/けいさんりょう]は O(n) です。
 //:
 //: ### [使用例/しようれい]
@@ -27,17 +27,17 @@
 //:| #import "std/test" as *
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>()> ():
-//:     assert_eq_i32 0 vec_len new<i32>;
+//:     assert_eq_i32 0 len new<i32>;
 //:     let a2 <Vec<i32>>:
 //:         new<i32>
 //:         |> push 10
 //:         |> push 20
-//:     assert_eq_i32 2 vec_len a2;
+//:     assert_eq_i32 2 len a2;
 //:     let b2 <Vec<i32>>:
 //:         new<i32>
 //:         |> push 10
 //:         |> push 20
-//:     match vec_get<i32> b2 1:
+//:     match get<i32> b2 1:
 //:         Option::Some x:
 //:             assert_eq_i32 20 x;
 //:         Option::None:
@@ -50,21 +50,22 @@
 //:| #target std
 //:| #import "std/test" as *
 //:| #import "alloc/collections/vec" as *
-//: fn main <()*>()> ():
+//: fn main <()*>i32> ():
 //:     let v2 <Vec<i32>>:
-//:         vec_with_capacity<i32> 2
+//:         with_capacity<i32> 2
 //:         |> push 1
 //:         |> push 2
-//:     match vec_get<i32> v2 0:
-//:         Option::Some x:
-//:             assert_eq_i32 1 x;
-//:         Option::None:
-//:             assert false;
+//:     let ok0 <i32>:
+//:         match get<i32> v2 0:
+//:             Option::Some x:
+//:                 if ne x 1 then 1 else 0
+//:             Option::None:
+//:                 1
 //:     let w2 <Vec<i32>>:
-//:         vec_with_capacity<i32> 2
+//:         with_capacity<i32> 2
 //:         |> push 1
 //:         |> push 2
-//:     assert is_none<i32> vec_get<i32> w2 3;
+//:     if and eq ok0 0 is_none<i32> get<i32> w2 3 0 1
 //: ```
 //:
 //: neplg2:test
@@ -77,8 +78,8 @@
 //:         new<i32>
 //:         |> push 11
 //:         |> push 22
-//:         |> vec_clear<i32>
-//:     if eq vec_len cleared 0 0 1
+//:         |> clear<i32>
+//:     if eq len cleared 0 0 1
 //: ```
 
 #indent 4
@@ -87,7 +88,7 @@
 #import "core/math" as *
 #import "core/option" as *
 #import "core/result" as *
-#import "core/field" as *
+#import "core/field" as field
 
 //: ## Vec
 //: [可変長/かへんちょう][配列/はいれつ]の[本体/ほんたい]
@@ -130,7 +131,7 @@ struct VecDataLen<.T>:
     data <MemPtr<.T>>
     len <i32>
 
-//: ## vec_new
+//: ## new
 //: [既定/きてい][容量/ようりょう]の[空/から] `Vec<.T>` を[作/つく]る
 //:
 //: ### [目的/もくてき]
@@ -155,15 +156,15 @@ struct VecDataLen<.T>:
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v new<i32>;
-//:     if eq vec_len<i32> v 0 0 1
+//:     let v <Vec<i32>> new<i32>;
+//:     if eq len<i32> v 0 0 1
 //: ```
-fn vec_new <.T> <()->Vec<.T>> ():
+fn new <.T> <()->Vec<.T>> ():
     let cap <i32> 8
     let data <MemPtr<.T>> unwrap_ok alloc_ptr<.T> mul cap size_of<.T>
     Vec<.T> 0 cap data
 
-//: ## vec_with_capacity
+//: ## with_capacity
 //: [初期/しょき][容量/ようりょう]を[指定/してい]して `Vec<.T>` を[作/つく]る
 //:
 //: ### [目的/もくてき]
@@ -187,14 +188,14 @@ fn vec_new <.T> <()->Vec<.T>> ():
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v vec_with_capacity<i32> 16;
-//:     if eq vec_cap<i32> v 16 0 1
+//:     let v <Vec<i32>> with_capacity<i32> 16;
+//:     if eq cap<i32> v 16 0 1
 //: ```
-fn vec_with_capacity <.T> <(i32)->Vec<.T>> (cap):
+fn with_capacity <.T> <(i32)->Vec<.T>> (cap):
     let data <MemPtr<.T>> unwrap_ok alloc_ptr<.T> mul cap size_of<.T>
     Vec<.T> 0 cap data
 
-//: ## vec_len
+//: ## len
 //: [要素数/ようそすう]を[返/かえ]す
 //:
 //: ### [目的/もくてき]
@@ -217,14 +218,14 @@ fn vec_with_capacity <.T> <(i32)->Vec<.T>> (cap):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v0 new<i32>;
-//:     let v1 push v0 3;
-//:     if eq vec_len<i32> v1 1 0 1
+//:     let v0 <Vec<i32>> new<i32>;
+//:     let v1 <Vec<i32>> push v0 3;
+//:     if eq len<i32> v1 1 0 1
 //: ```
-fn vec_len <.T> <(Vec<.T>)->i32> (v):
-    get v "len"
+fn len <.T> <(Vec<.T>)->i32> (v):
+    field::get v "len"
 
-//: ## vec_cap
+//: ## cap
 //: [容量/ようりょう]を[返/かえ]す
 //:
 //: ### [目的/もくてき]
@@ -247,13 +248,13 @@ fn vec_len <.T> <(Vec<.T>)->i32> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v new<i32>;
-//:     if gt vec_cap<i32> v 0 0 1
+//:     let v <Vec<i32>> new<i32>;
+//:     if gt cap<i32> v 0 0 1
 //: ```
-fn vec_cap <.T> <(Vec<.T>)->i32> (v):
-    get v "cap"
+fn cap <.T> <(Vec<.T>)->i32> (v):
+    field::get v "cap"
 
-//: ## vec_data_ptr
+//: ## data_ptr
 //: [内部/ないぶ]データ[領域/りょういき]の raw address を[返/かえ]す
 //:
 //: ### [目的/もくてき]
@@ -264,7 +265,7 @@ fn vec_cap <.T> <(Vec<.T>)->i32> (v):
 //:
 //: ### [注意/ちゅうい]
 //: - [返/かえ]り[値/あたい]は[生/なま]アドレスなので、[範囲/はんい]・[寿命/じゅみょう]・[再確保/さいかくほ]を[呼/よ]び[出/だ]し[側/がわ]で[管理/かんり]する[必要/ひつよう]があります。
-//: - [新規/しんき]コードでは、できるだけ `vec_data_mem_ptr` を[優先/ゆうせん]します。
+//: - [新規/しんき]コードでは、できるだけ `data_mem_ptr` を[優先/ゆうせん]します。
 //:
 //: ### [計算量/けいさんりょう]
 //: - [時間/じかん][計算量/けいさんりょう]は O(1) です。
@@ -277,13 +278,13 @@ fn vec_cap <.T> <(Vec<.T>)->i32> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v new<i32>;
-//:     if gt vec_data_ptr<i32> v 0 0 1
+//:     let v <Vec<i32>> new<i32>;
+//:     if gt data_ptr<i32> v 0 0 1
 //: ```
-fn vec_data_ptr <.T> <(Vec<.T>)->i32> (v):
-    mem_ptr_addr get v "data"
+fn data_ptr <.T> <(Vec<.T>)->i32> (v):
+    mem_ptr_addr field::get v "data"
 
-//: ## vec_data_mem_ptr
+//: ## data_mem_ptr
 //: [内部/ないぶ]データ[領域/りょういき]を `MemPtr<.T>` として[返/かえ]す
 //:
 //: ### [目的/もくてき]
@@ -298,10 +299,10 @@ fn vec_data_ptr <.T> <(Vec<.T>)->i32> (v):
 //:
 //: ### [計算量/けいさんりょう]
 //: - [時間/じかん][計算量/けいさんりょう]は O(1) です。
-fn vec_data_mem_ptr <.T> <(Vec<.T>)->MemPtr<.T>> (v):
-    get v "data"
+fn data_mem_ptr <.T> <(Vec<.T>)->MemPtr<.T>> (v):
+    field::get v "data"
 
-//: ## vec_data_len
+//: ## data_len
 //: [内部/ないぶ]バッファ[先頭/せんとう]と[要素数/ようそすう]を[同時/どうじ]に[返/かえ]す
 //:
 //: ### [目的/もくてき]
@@ -315,9 +316,9 @@ fn vec_data_mem_ptr <.T> <(Vec<.T>)->MemPtr<.T>> (v):
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/field" as *
 //: fn main <()*>i32> ():
-//:     let v0 new<i32>;
-//:     let v1 push v0 7;
-//:     let s vec_data_len<i32> v1;
+//:     let v0 <Vec<i32>> new<i32>;
+//:     let v1 <Vec<i32>> push v0 7;
+//:     let s data_len<i32> v1;
 //:     if and gt mem_ptr_addr get s "data" 0 eq get s "len" 1 0 1
 //: ```
 //:
@@ -329,12 +330,13 @@ fn vec_data_mem_ptr <.T> <(Vec<.T>)->MemPtr<.T>> (v):
 //:
 //: ### [計算量/けいさんりょう]
 //: - [時間/じかん][計算量/けいさんりょう]は O(1) です。
-fn vec_data_len <.T> <(Vec<.T>)->VecDataLen<.T>> (v):
-    let v_len <i32> get v "len"
-    let v_data <MemPtr<.T>> get v "data"
+fn data_len <.T> <(Vec<.T>)->VecDataLen<.T>> (v):
+    let v_len <i32> field::get v "len"
+    let v_data <MemPtr<.T>> field::get v "data"
     VecDataLen<.T> v_data v_len
 
-//: vec_is_empty: 空か判定する
+//: ## is_empty
+//: 空か判定する
 //:
 //: 目的:
 //: - len が 0 なら true を返します。
@@ -357,12 +359,14 @@ fn vec_data_len <.T> <(Vec<.T>)->VecDataLen<.T>> (v):
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
 //:     let v new<i32>;
-//:     if vec_is_empty<i32> v 0 1
+//:     if is_empty<i32> v 0 1
 //: ```
-fn vec_is_empty <.T> <(Vec<.T>)->bool> (v):
-    eq get v "len" 0
+fn is_empty <.T> <(Vec<.T>)->bool> (v):
+    let n <i32> field::get v "len"
+    eq n 0
 
-//: vec_push: 末尾に要素を追加する
+//: ## push
+//: 末尾に要素を追加する
 //:
 //: 目的:
 //: - item を末尾に追加し、新しい Vec を返します。
@@ -384,18 +388,18 @@ fn vec_is_empty <.T> <(Vec<.T>)->bool> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v0 new<i32>;
-//:     let v1 push v0 7;
-//:     if eq vec_len<i32> v1 1 0 1
+//:     let v0 <Vec<i32>> new<i32>;
+//:     let v1 <Vec<i32>> push v0 7;
+//:     if eq len<i32> v1 1 0 1
 //: ```
-fn vec_push <.T> <(Vec<.T>,.T)->Vec<.T>> (v, item):
-    let v_len <i32> get v "len"
-    let v_cap <i32> get v "cap"
-    let v_data <MemPtr<.T>> get v "data"
+fn push <.T> <(Vec<.T>,.T)->Vec<.T>> (v, item):
+    let v_len <i32> field::get v "len"
+    let v_cap <i32> field::get v "cap"
+    let v_data <MemPtr<.T>> field::get v "data"
     if:
         eq v_len v_cap
         then:
-            let grown_cap <i32> mul v_cap 2
+            let grown_cap <i32> if eq v_cap 0 1 mul v_cap 2
             let grown_data <MemPtr<.T>> unwrap_ok realloc_ptr<.T> v_data mul v_cap size_of<.T> mul grown_cap size_of<.T>
             let write_off <i32> mul v_len size_of<.T>
             store<.T> add mem_ptr_addr grown_data write_off item
@@ -405,7 +409,8 @@ fn vec_push <.T> <(Vec<.T>,.T)->Vec<.T>> (v, item):
             store<.T> add mem_ptr_addr v_data write_off item
             Vec<.T> add v_len 1 v_cap v_data
 
-//: vec_get: 要素を取得する
+//: ## get
+//: 要素を取得する
 //:
 //: 目的:
 //: - idx が範囲内なら Some、範囲外なら None を返します。
@@ -428,17 +433,17 @@ fn vec_push <.T> <(Vec<.T>,.T)->Vec<.T>> (v, item):
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
-//:     let v0 new<i32>;
-//:     let v1 push v0 9;
-//:     match vec_get<i32> v1 0:
+//:     let v0 <Vec<i32>> new<i32>;
+//:     let v1 <Vec<i32>> push v0 9;
+//:     match get<i32> v1 0:
 //:         Option::Some x:
 //:             if eq x 9 0 1
 //:         Option::None:
 //:             1
 //: ```
-fn vec_get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
-    let v_len <i32> get v "len"
-    let v_data <MemPtr<.T>> get v "data"
+fn get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
+    let v_len <i32> field::get v "len"
+    let v_data <MemPtr<.T>> field::get v "data"
     if:
         lt idx 0
         then none<.T>
@@ -450,7 +455,8 @@ fn vec_get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
                     let read_off <i32> mul idx size_of<.T>
                     some<.T> load<.T> add mem_ptr_addr v_data read_off
 
-//: vec_set: 要素を上書きする（範囲外は無視）
+//: ## replace
+//: 要素を上書きする（範囲外は無視）
 //:
 //: 目的:
 //: - idx が範囲内なら値を上書きします。
@@ -473,14 +479,14 @@ fn vec_get <.T> <(Vec<.T>,i32)->Option<.T>> (v, idx):
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
-//:     let v0 new<i32>;
-//:     let v1 push v0 1;
-//:     vec_set<i32> v1 0 5;
+//:     let v0 <Vec<i32>> new<i32>;
+//:     let v1 <Vec<i32>> push v0 1;
+//:     replace<i32> v1 0 5;
 //:     0
 //: ```
-fn vec_set <.T> <(Vec<.T>,i32,.T)->()> (v, idx, item):
-    let v_len <i32> get v "len"
-    let v_data <MemPtr<.T>> get v "data"
+fn replace <.T> <(Vec<.T>,i32,.T)->()> (v, idx, item):
+    let v_len <i32> field::get v "len"
+    let v_data <MemPtr<.T>> field::get v "data"
     if:
         lt idx 0
         then ()
@@ -492,7 +498,8 @@ fn vec_set <.T> <(Vec<.T>,i32,.T)->()> (v, idx, item):
                     let write_off <i32> mul idx size_of<.T>
                     store<.T> add mem_ptr_addr v_data write_off item
 
-//: vec_pop: 末尾要素を取り出す
+//: ## pop
+//: 末尾要素を取り出す
 //:
 //: 目的:
 //: - 末尾要素を返し、長さを 1 減らします。
@@ -515,15 +522,15 @@ fn vec_set <.T> <(Vec<.T>,i32,.T)->()> (v, idx, item):
 //:| #import "alloc/collections/vec" as *
 //:| #import "core/option" as *
 //: fn main <()*>i32> ():
-//:     let v0 new<i32>;
-//:     let v1 push v0 4;
-//:     let p vec_pop<i32> v1;
+//:     let v0 <Vec<i32>> new<i32>;
+//:     let v1 <Vec<i32>> push v0 4;
+//:     let p pop<i32> v1;
 //:     0
 //: ```
-fn vec_pop <.T> <(Vec<.T>)->.Pair> (v):
-    let v_len <i32> get v "len"
-    let v_cap <i32> get v "cap"
-    let v_data <MemPtr<.T>> get v "data"
+fn pop <.T> <(Vec<.T>)->.Pair> (v):
+    let v_len <i32> field::get v "len"
+    let v_cap <i32> field::get v "cap"
+    let v_data <MemPtr<.T>> field::get v "data"
     if:
         eq v_len 0
         then:
@@ -538,7 +545,8 @@ fn vec_pop <.T> <(Vec<.T>)->.Pair> (v):
                 Vec<.T> next_len v_cap v_data
                 some<.T> item
 
-//: vec_clear: すべての要素を削除する
+//: ## clear
+//: すべての要素を削除する
 //:
 //: 目的:
 //: - len を 0 にして空にします。
@@ -560,17 +568,18 @@ fn vec_pop <.T> <(Vec<.T>)->.Pair> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v0 new<i32>;
-//:     let v1 push v0 1;
-//:     let v2 vec_clear<i32> v1;
-//:     if eq vec_len<i32> v2 0 0 1
+//:     let v0 <Vec<i32>> new<i32>;
+//:     let v1 <Vec<i32>> push v0 1;
+//:     let v2 clear<i32> v1;
+//:     if eq len<i32> v2 0 0 1
 //: ```
-fn vec_clear <.T> <(Vec<.T>)->Vec<.T>> (v):
-    let v_cap <i32> get v "cap"
-    let v_data <MemPtr<.T>> get v "data"
+fn clear <.T> <(Vec<.T>)->Vec<.T>> (v):
+    let v_cap <i32> field::get v "cap"
+    let v_data <MemPtr<.T>> field::get v "data"
     Vec<.T> 0 v_cap v_data
 
-//: vec_free: メモリを解放する
+//: ## free
+//: メモリを解放する
 //:
 //: 目的:
 //: - data を解放します。
@@ -592,52 +601,15 @@ fn vec_clear <.T> <(Vec<.T>)->Vec<.T>> (v):
 //:| #target std
 //:| #import "alloc/collections/vec" as *
 //: fn main <()*>i32> ():
-//:     let v new<i32>;
-//:     vec_free<i32> v;
+//:     let v <Vec<i32>> new<i32>;
+//:     free<i32> v;
 //:     0
 //: ```
-fn vec_free <.T> <(Vec<.T>)->()> (v):
-    let v_cap <i32> get v "cap"
-    let v_data <MemPtr<.T>> get v "data"
+fn free <.T> <(Vec<.T>)->()> (v):
+    let v_cap <i32> field::get v "cap"
+    let v_data <MemPtr<.T>> field::get v "data"
     match dealloc_ptr<.T> v_data mul v_cap size_of<.T>:
         Result::Ok _:
             ()
         Result::Err _e:
             #intrinsic "unreachable" <> ()
-
-//: new: vec_new の短縮エイリアス
-fn new vec_new;
-//: len: vec_len の短縮エイリアス
-fn len vec_len;
-//: cap: vec_cap の短縮エイリアス
-fn cap vec_cap;
-
-//: push: vec_push の短縮エイリアス
-//:
-//: 目的:
-//: - パイプ演算子と組み合わせた記述を簡潔にします。
-//:
-//: 実装(アルゴリズム):
-//: - vec_push をそのまま再公開します。
-//:
-//: 注意(重要):
-//: - シグネチャは vec_push と同じです。
-//:
-//: 計算量:
-//: - ならし O(1)
-//:
-//: 使い方:
-//:
-//: neplg2:test
-//: ```neplg2
-//:| #entry main
-//:| #target std
-//:| #import "alloc/collections/vec" as *
-//: fn main <()*>i32> ():
-//:     let v:
-//:         new<i32>
-//:         |> push 1
-//:         |> push 2
-//:     if eq len<i32> v 2 0 1
-//: ```
-fn push vec_push;

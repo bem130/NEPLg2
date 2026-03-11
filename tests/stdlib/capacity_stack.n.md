@@ -52,15 +52,17 @@ ret: 4096
 #target core
 #import "core/math" as *
 #import "alloc/collections/vec" as *
+#import "alloc/diag/error" as *
+#import "core/result" as *
 
 fn main <()->i32> ():
-    let mut v vec_new<i32>;
+    let mut v <Vec<i32>> new<i32>;
     let mut i <i32> 0;
     while lt i 4096:
         do:
-            set v vec_push<i32> v i;
+            set v push<i32> v i;
             set i add i 1;
-    vec_len<i32> v
+    len<i32> v
 ```
 
 ## stage4_mem_block_store_load
@@ -138,12 +140,12 @@ fn depth <(i32)->i32> (n):
         add 1 depth sub n 1
 
 fn main <()->i32> ():
-    let mut v vec_new<Kind>;
-    set v vec_push<Kind> v Kind::A;
-    set v vec_push<Kind> v Kind::B;
-    set v vec_push<Kind> v Kind::A;
-    set v vec_push<Kind> v Kind::B;
-    set v vec_push<Kind> v Kind::A;
-    let n <i32> vec_len<Kind> v;
+    let mut v <Vec<Kind>> new<Kind>;
+    set v push<Kind> v Kind::A;
+    set v push<Kind> v Kind::B;
+    set v push<Kind> v Kind::A;
+    set v push<Kind> v Kind::B;
+    set v push<Kind> v Kind::A;
+    let n <i32> len<Kind> v;
     add n depth 10
 ```

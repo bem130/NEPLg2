@@ -40,6 +40,7 @@ pub mod typecheck;
 pub mod types;
 
 pub use compiler::{
-    compile_module, compile_wasm, BuildProfile, CompilationArtifact, CompileOptions, CompileTarget,
+    compile_module, compile_module_with_source_map, compile_wasm, BuildProfile,
+    CompilationArtifact, CompileOptions, CompileTarget,
 };
 pub use error::CoreError;

@@ -19,12 +19,13 @@
 #indent 4
 
 #import "alloc/string" as *
-#import "alloc/collections/vec" as *
+#import "alloc/collections/vec" as v
 #import "core/option" as *
 #import "core/mem" as *
 #import "core/math" as *
 #import "alloc/collections/stack" as *
 #import "core/field" as *
+#import "core/result" as *
 
 // -----------------------------
 // AST
@@ -104,6 +105,65 @@ struct ParaRes:
 // -----------------------------
 // Small helpers
 // -----------------------------
+
+fn nest_stack_len_from_hdr <(MemPtr<u8>)->i32> (hdr):
+    load_i32 mem_ptr_addr hdr
+
+fn nest_stack_cap_ptr_from_hdr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 4
+
+fn nest_stack_data_ptr_ptr_from_hdr <(MemPtr<u8>)->MemPtr<i32>> (hdr):
+    mem_ptr_wrap add mem_ptr_addr hdr 8
+
+fn nest_stack_data_from_hdr <(MemPtr<u8>)->MemPtr<NestSection>> (hdr):
+    mem_ptr_wrap load_i32 mem_ptr_addr nest_stack_data_ptr_ptr_from_hdr hdr
+
+fn nest_stack_peek_from_hdr <(MemPtr<u8>)->Option<NestSection>> (hdr):
+    let len <i32> nest_stack_len_from_hdr hdr;
+    if:
+        eq len 0
+        then none<NestSection>
+        else:
+            let data <MemPtr<NestSection>> nest_stack_data_from_hdr hdr;
+            let off <i32> mul sub len 1 size_of<NestSection>;
+            some<NestSection> load<NestSection> add mem_ptr_addr data off
+
+fn nest_stack_pop_from_hdr <(MemPtr<u8>)->Option<NestSection>> (hdr):
+    let len <i32> nest_stack_len_from_hdr hdr;
+    if:
+        eq len 0
+        then none<NestSection>
+        else:
+            let new_len <i32> sub len 1;
+            let data <MemPtr<NestSection>> nest_stack_data_from_hdr hdr;
+            let off <i32> mul new_len size_of<NestSection>;
+            let item <NestSection> load<NestSection> add mem_ptr_addr data off;
+            store_i32 mem_ptr_addr hdr new_len;
+            some<NestSection> item
+
+fn nest_stack_push_from_hdr <(MemPtr<u8>,NestSection)->()> (hdr, item):
+    let len_ptr <MemPtr<i32>> mem_ptr_wrap mem_ptr_addr hdr;
+    let cap_ptr <MemPtr<i32>> nest_stack_cap_ptr_from_hdr hdr;
+    let data_ptr_ptr <MemPtr<i32>> nest_stack_data_ptr_ptr_from_hdr hdr;
+    let len <i32> load_i32 mem_ptr_addr len_ptr;
+    let cap <i32> load_i32 mem_ptr_addr cap_ptr;
+    let data <MemPtr<NestSection>> mem_ptr_wrap load_i32 mem_ptr_addr data_ptr_ptr;
+    if:
+        eq len cap
+        then:
+            let new_cap <i32> if eq cap 0 1 mul cap 2;
+            let new_data <MemPtr<NestSection>> unwrap_ok realloc_ptr<NestSection> data mul cap size_of<NestSection> mul new_cap size_of<NestSection>;
+            let off <i32> mul len size_of<NestSection>;
+            store<NestSection> add mem_ptr_addr new_data off item;
+            store_i32 mem_ptr_addr cap_ptr new_cap;
+            store_i32 mem_ptr_addr data_ptr_ptr mem_ptr_addr new_data;
+            store_i32 mem_ptr_addr len_ptr add len 1;
+            ()
+        else:
+            let off <i32> mul len size_of<NestSection>;
+            store<NestSection> add mem_ptr_addr data off item;
+            store_i32 mem_ptr_addr len_ptr add len 1;
+            ()
 
 //: is_empty_line: 主な用途
 //:
@@ -230,7 +290,7 @@ fn trim_cr <(str)->str> (s):
 //: - 本体処理に準じます。
 fn safe_line <(i32, i32)->str> (lines_mem, i):
     let lines <Vec<str>> load<Vec<str>> lines_mem;
-    match vec_get<str> lines i:
+    match v::get<str> lines i:
         Option::Some s:
             trim_cr s
         Option::None:
@@ -250,23 +310,24 @@ fn safe_line <(i32, i32)->str> (lines_mem, i):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn close_one_section <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
-    match pop_keep<NestSection> stk:
+    let hdr <MemPtr<u8>> get stk "hdr";
+    match nest_stack_pop_from_hdr hdr:
         Option::Some sec:
             let node <Node> Node::Section sec;
-            match peek_keep<NestSection> stk:
+            match nest_stack_peek_from_hdr hdr:
                 Option::Some top:
                     let parent_level <i32> get top "level";
                     let parent_heading <Heading> get top "heading";
-                    match pop_keep<NestSection> stk:
+                    match nest_stack_pop_from_hdr hdr:
                         Option::Some parent:
-                            let kids <Vec<Node>> vec_push<Node> get parent "children" node;
+                            let kids <Vec<Node>> v::push<Node> get parent "children" node;
                             let parent2 <NestSection> NestSection parent_level parent_heading kids;
-                            push<NestSection> stk parent2;
+                            nest_stack_push_from_hdr hdr parent2;
                             root
                         Option::None:
-                            vec_push<Node> root node
+                            v::push<Node> root node
                 Option::None:
-                    vec_push<Node> root node
+                    v::push<Node> root node
         Option::None:
             root
 
@@ -285,16 +346,17 @@ fn close_one_section <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
 //: - 本体処理に準じます。
 fn close_to_level <(Stack<NestSection>, Vec<Node>, i32)*>Vec<Node>> (stk, root, new_level):
     // Close while top.level >= new_level
+    let hdr <MemPtr<u8>> get stk "hdr";
     let mut r <Vec<Node>> root;
     let mut done <bool> false;
     while not done:
         do:
-            match peek_keep<NestSection> stk:
+            match nest_stack_peek_from_hdr hdr:
                 Option::Some top:
                     if:
                         ge get top "level" new_level
                         then:
-                            set r close_one_section stk r;
+                            set r close_one_section (Stack hdr) r;
                             ()
                         else:
                             set done true;
@@ -318,13 +380,14 @@ fn close_to_level <(Stack<NestSection>, Vec<Node>, i32)*>Vec<Node>> (stk, root, 
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn close_all_sections <(Stack<NestSection>, Vec<Node>)*>Vec<Node>> (stk, root):
+    let hdr <MemPtr<u8>> get stk "hdr";
     let mut r <Vec<Node>> root;
     let mut done <bool> false;
     while not done:
         do:
-            match peek_keep<NestSection> stk:
+            match nest_stack_peek_from_hdr hdr:
                 Option::Some _:
-                    set r close_one_section stk r;
+                    set r close_one_section (Stack hdr) r;
                     ()
                 Option::None:
                     set done true;
@@ -498,7 +561,7 @@ fn parse_paragraph <(i32, i32, i32)->ParaRes> (lines_mem, nlines, i0):
 //: [計算量/けいさんりょう]:
 //: - 本体処理に準じます。
 fn parse_inlines <(str)->Vec<Inline>> (s):
-    let mut out <Vec<Inline>> vec_new<Inline>;
+    let mut out <Vec<Inline>> v::new<Inline>;
     let n <i32> len s;
     let mut i <i32> 0;
     let mut text_start <i32> 0;
@@ -515,7 +578,7 @@ fn parse_inlines <(str)->Vec<Inline>> (s):
                     let seg <str> str_slice s text_start i;
                     if:
                         gt len seg 0
-                        then set out vec_push<Inline> out Inline::Text seg
+                        then set out v::push<Inline> out Inline::Text seg
                         else ()
 
                     let mut delim <i32> 1;
@@ -559,7 +622,7 @@ fn parse_inlines <(str)->Vec<Inline>> (s):
                         then:
                             let endpos <i32> add j delim;
                             let m <str> str_slice s i endpos;
-                            set out vec_push<Inline> out Inline::Math m;
+                            set out v::push<Inline> out Inline::Math m;
                             set i endpos;
                             set text_start endpos;
                             ()
@@ -611,13 +674,13 @@ fn parse_inlines <(str)->Vec<Inline>> (s):
                                             let seg <str> str_slice s text_start i;
                                             if:
                                                 gt len seg 0
-                                                then set out vec_push<Inline> out Inline::Text seg
+                                                then set out v::push<Inline> out Inline::Text seg
                                                 else ()
 
                                             let base <str> str_slice s add i 1 slash;
                                             let rub <str> str_slice s add slash 1 j;
                                             let r <RubyInfo> RubyInfo base rub;
-                                            set out vec_push<Inline> out Inline::Ruby r;
+                                            set out v::push<Inline> out Inline::Ruby r;
 
                                             set i add j 1;
                                             set text_start i;
@@ -646,11 +709,11 @@ fn parse_inlines <(str)->Vec<Inline>> (s):
                                             let seg <str> str_slice s text_start i;
                                             if:
                                                 gt len seg 0
-                                                then set out vec_push<Inline> out Inline::Text seg
+                                                then set out v::push<Inline> out Inline::Text seg
                                                 else ()
 
                                             // Collect parts
-                                            let mut parts <Vec<str>> vec_new<str>;
+                                            let mut parts <Vec<str>> v::new<str>;
                                             let mut k <i32> add i 1;
                                             let mut start <i32> k;
                                             let mut depth <i32> 0;
@@ -670,7 +733,7 @@ fn parse_inlines <(str)->Vec<Inline>> (s):
                                                         and eq ck 47 eq depth 0
                                                         then:
                                                             let p <str> str_slice s start k;
-                                                            set parts vec_push<str> parts p;
+                                                            set parts v::push<str> parts p;
                                                             set start add k 1;
                                                             set k add k 1;
                                                             ()
@@ -678,23 +741,24 @@ fn parse_inlines <(str)->Vec<Inline>> (s):
                                                             set k add k 1;
                                                             ()
                                             let plast <str> str_slice s start j;
-                                            set parts vec_push<str> parts plast;
+                                            set parts v::push<str> parts plast;
 
-                                            let parts_len <i32> get parts "len";
+                                            let parts_span <VecDataLen<str>> v::data_len<str> parts;
+                                            let parts_len <i32> get parts_span "len";
                                             if:
                                                 ge parts_len 2
                                                 then:
-                                                    let parts_data <i32> mem_ptr_addr get parts "data";
+                                                    let parts_data <i32> mem_ptr_addr get parts_span "data";
                                                     let main <str> load<str> parts_data;
-                                                    let mut subs <Vec<str>> vec_new<str>;
+                                                    let mut subs <Vec<str>> v::new<str>;
                                                     let mut idx <i32> 1;
                                                     while lt idx parts_len:
                                                         do:
                                                             let p <str> load<str> add parts_data mul idx size_of<str>;
-                                                            set subs vec_push<str> subs p;
+                                                            set subs v::push<str> subs p;
                                                             set idx add idx 1;
                                                     let g <GlossInfo> GlossInfo main subs;
-                                                    set out vec_push<Inline> out Inline::Gloss g;
+                                                    set out v::push<Inline> out Inline::Gloss g;
                                                     set i add j 1;
                                                     set text_start i;
                                                     ()
@@ -713,7 +777,7 @@ fn parse_inlines <(str)->Vec<Inline>> (s):
     let tail <str> str_slice s text_start n;
     if:
         gt len tail 0
-        then vec_push<Inline> out Inline::Text tail
+        then v::push<Inline> out Inline::Text tail
         else out
 
 // -----------------------------
@@ -753,7 +817,7 @@ pub fn parse_markdown <(str)->Document> (input):
     store<Vec<str>> lines_mem lines;
     let nlines <i32> get load<Vec<str>> lines_mem "len";
 
-    let mut root <Vec<Node>> vec_new<Node>;
+    let mut root <Vec<Node>> v::new<Node>;
     let mut i <i32> 0;
 
     while lt i nlines:
@@ -774,7 +838,7 @@ pub fn parse_markdown <(str)->Document> (input):
                             if:
                                 is_hr_line t
                                 then:
-                                    set root vec_push<Node> root Node::Hr;
+                                    set root v::push<Node> root Node::Hr;
                                     set i add i 1;
                                     ()
                                 else:
@@ -785,13 +849,13 @@ pub fn parse_markdown <(str)->Document> (input):
                                             let fr_next_i <i32> get fr "next_i";
                                             let fr_cb <CodeBlockInfo> get fr "cb";
                                             let node <Node> Node::CodeBlock fr_cb;
-                                            set root vec_push<Node> root node;
+                                            set root v::push<Node> root node;
                                             set i fr_next_i;
                                             ()
                                         else:
                                             match parse_heading t:
                                                 Option::Some h:
-                                                    let mut kids <Vec<Node>> vec_new<Node>;
+                                                    let mut kids <Vec<Node>> v::new<Node>;
                                                     let mut j <i32> add i 1;
                                                     let mut done <bool> false;
                                                     while not done:
@@ -821,11 +885,11 @@ pub fn parse_markdown <(str)->Document> (input):
                                                                                     store<ParaRes> pr_mem pr;
                                                                                     let pr_inlines <Vec<Inline>> get load<ParaRes> pr_mem "inlines";
                                                                                     let pr_next_i <i32> get load<ParaRes> pr_mem "next_i";
-                                                                                    set kids vec_push<Node> kids Node::Paragraph pr_inlines;
+                                                                                    set kids v::push<Node> kids Node::Paragraph pr_inlines;
                                                                                     set j pr_next_i;
                                                                                     ()
                                                     let sec <NestSection> NestSection get h "level" h kids;
-                                                    set root vec_push<Node> root Node::Section sec;
+                                                    set root v::push<Node> root Node::Section sec;
                                                     set i j;
                                                     ()
                                                 Option::None:
@@ -836,7 +900,7 @@ pub fn parse_markdown <(str)->Document> (input):
                                                     let pr_inlines <Vec<Inline>> get load<ParaRes> pr_mem "inlines";
                                                     let pr_next_i <i32> get load<ParaRes> pr_mem "next_i";
                                                     let pnode <Node> Node::Paragraph pr_inlines;
-                                                    set root vec_push<Node> root pnode;
+                                                    set root v::push<Node> root pnode;
                                                     set i pr_next_i;
                                                     ()
 
@@ -899,8 +963,9 @@ fn json_escape <(str)->str> (s):
 fn inlines_to_json <(Vec<Inline>)->str> (v):
     let mut sb <StringBuilder> string_builder_new;
     set sb sb_append sb "[";
-    let n <i32> get v "len";
-    let v_data <i32> mem_ptr_addr get v "data";
+    let span <VecDataLen<Inline>> v::data_len<Inline> v;
+    let n <i32> get span "len";
+    let v_data <i32> mem_ptr_addr get span "data";
     let mut i <i32> 0;
     while lt i n:
         do:
@@ -929,8 +994,9 @@ fn inlines_to_json <(Vec<Inline>)->str> (v):
                     set sb sb_append sb json_escape get g "main";
                     set sb sb_append sb "\",\"subs\":[";
                     let subs <Vec<str>> get g "subs";
-                    let m <i32> get subs "len";
-                    let subs_data <i32> mem_ptr_addr get subs "data";
+                    let subs_span <VecDataLen<str>> v::data_len<str> subs;
+                    let m <i32> get subs_span "len";
+                    let subs_data <i32> mem_ptr_addr get subs_span "data";
                     let mut j <i32> 0;
                     while lt j m:
                         do:
@@ -1019,8 +1085,9 @@ fn node_to_json <(Node)->str> (node):
 fn nodes_to_json <(Vec<Node>)->str> (nodes):
     let mut sb <StringBuilder> string_builder_new;
     set sb sb_append sb "[";
-    let n <i32> get nodes "len";
-    let nodes_data <i32> mem_ptr_addr get nodes "data";
+    let nodes_span <VecDataLen<Node>> v::data_len<Node> nodes;
+    let n <i32> get nodes_span "len";
+    let nodes_data <i32> mem_ptr_addr get nodes_span "data";
     let mut i <i32> 0;
     while lt i n:
         do:

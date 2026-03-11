@@ -30,7 +30,7 @@ fn main <()*> ()> ():
             set a push a read sc;
             set i add i 1;
     let mut sum <i32> 0;
-    let s <VecDataLen<i32>> vec_data_len<i32> a;
+    let s <VecDataLen<i32>> data_len<i32> a;
     let p <i32> mem_ptr_addr get s "data";
     let len <i32> get s "len";
     let mut j <i32> 0;
@@ -54,7 +54,7 @@ fn main <()*> ()> ():
 
 ### 配列・ソート・探索
 
-- 配列構築: `alloc/collections/vec` の `new`, `push`, `len`, `vec_get`
+- 配列構築: `alloc/collections/vec` の `new`, `push`, `len`, `get`
 - ソート: `alloc/collections/vec/sort` の `sort_quick_ret`
 - 二分探索: `kp/kpsearch` の `lower_bound_vec_i32`, `upper_bound_vec_i32`, `count_equal_range_vec_i32`
 

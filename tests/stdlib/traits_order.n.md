@@ -54,15 +54,18 @@ neplg2:test
 #import "alloc/collections/vec/sort" as *
 #import "core/option" as *
 
-fn main <()*>()> ():
-    let v0 vec_new<i32>;
-    let v1 vec_push<i32> v0 4;
-    let v2 vec_push<i32> v1 1;
-    let v3 vec_push<i32> v2 3;
-    let v4 vec_push<i32> v3 2;
+fn main <()*>i32> ():
+    let v0 <Vec<i32>> new<i32>;
+    let v1 <Vec<i32>> push<i32> v0 4;
+    let v2 <Vec<i32>> push<i32> v1 1;
+    let v3 <Vec<i32>> push<i32> v2 3;
+    let v4 <Vec<i32>> push<i32> v3 2;
     let s sort_quick_ret<i32> v4;
-    assert_eq_i32 1 unwrap vec_get<i32> s 0;
-    assert_eq_i32 2 unwrap vec_get<i32> s 1;
-    assert_eq_i32 3 unwrap vec_get<i32> s 2;
-    assert_eq_i32 4 unwrap vec_get<i32> s 3;
+    let span <VecDataLen<i32>> data_len<i32> s;
+    let data <i32> mem_ptr_addr get span "data";
+    let a0 <i32> load_i32 data;
+    let a1 <i32> load_i32 add data 4;
+    let a2 <i32> load_i32 add data 8;
+    let a3 <i32> load_i32 add data 12;
+    if and and eq a0 1 eq a1 2 and eq a2 3 eq a3 4 1 0
 ```

@@ -65,7 +65,7 @@ fn main <()*>i32> ():
         |> sb_append_i32 404
         |> sb_append " Not Found"
         |> sb_build
-    let ok0 eq vec_len<str> parts 3;
+    let ok0 eq len<str> parts 3;
     let ok1 eq len msg 20;
     if and ok0 ok1 1 0
 ```

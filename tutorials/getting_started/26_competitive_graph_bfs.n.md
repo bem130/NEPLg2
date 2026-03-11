@@ -21,25 +21,31 @@ stdout: "0 1 2 3\n"
 #import "std/stdio" as *
 
 fn print_dist <(Vec<i32>)*>()> (dist):
-    let n <i32> vec_len<i32> dist;
+    let span <VecDataLen<i32>> data_len<i32> dist;
+    let n <i32> get span "len";
+    let data <i32> mem_ptr_addr get span "data";
     let mut i <i32> 0;
     while lt i n:
         do:
             if lt 0 i:
                 then print " "
                 else ()
-            print_i32 unwrap<i32> vec_get<i32> dist i;
+            print_i32 load_i32 add data mul i 4;
             set i add i 1;
     println ""
 |
 fn main <()*> ()> ():
     let g <DenseGraph> dense_graph_new 4;
-    dense_graph_add_undirected g 0 1;
-    dense_graph_add_undirected g 1 2;
-    dense_graph_add_undirected g 2 3;
-    let dist <Vec<i32>> dense_graph_bfs_dist_raw get g "n" get g "mat" 0;
+    let g_mem <i32> alloc_raw size_of<DenseGraph>;
+    store<DenseGraph> g_mem g;
+    let n <i32> get load<DenseGraph> g_mem "n";
+    let mat <i32> get load<DenseGraph> g_mem "mat";
+    dense_graph_add_undirected DenseGraph n mat 0 1;
+    dense_graph_add_undirected DenseGraph n mat 1 2;
+    dense_graph_add_undirected DenseGraph n mat 2 3;
+    let dist <Vec<i32>> dense_graph_bfs_dist_raw n mat 0;
     print_dist dist;
-    dense_graph_free g
+    dense_graph_free DenseGraph n mat
 ```
 
 ## 実戦での使い分け

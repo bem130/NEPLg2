@@ -39,6 +39,7 @@ ret: 222
 #entry main
 #indent 4
 #import "alloc/collections/vec" as *
+#import "alloc/diag/error" as *
 #import "core/cast" as *
 #import "core/option" as *
 
@@ -48,12 +49,12 @@ fn main <()*>i32> ():
     let b2 <u8> cast 0xAD;
     
     // 要件: Vec<u8> (バイトバッファ)
-    let mut buf <Vec<u8>> vec_new<u8>;
-    set buf vec_push<u8> buf b1;
-    set buf vec_push<u8> buf b2;
+    let mut buf <Vec<u8>> new<u8>;
+    set buf push<u8> buf b1;
+    set buf push<u8> buf b2;
     
     // 要件: バイト単位のアクセス
-    match vec_get<u8> buf 0:
+    match get<u8> buf 0:
         Option::Some val:
             // i32へのキャスト等
             cast val
@@ -86,7 +87,7 @@ fn main <()*>i32> ():
         then:
             // 要件: split (区切り文字での分割)
             let parts <Vec<str>> str_split trimmed "(";
-            let name_part <str> unwrap<str> vec_get<str> parts 0; // "fn main"
+            let name_part <str> unwrap<str> get<str> parts 0; // "fn main"
             
             // 要件: substring / slice
             let func_name <str> str_slice name_part 3 len name_part; // "main"

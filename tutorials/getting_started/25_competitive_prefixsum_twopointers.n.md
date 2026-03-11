@@ -65,7 +65,9 @@ stdout: "6\n"
 #import "std/stdio" as *
 
 fn count_subarrays_leq_s <(Vec<i32>,i32)->i32> (a, s):
-    let n <i32> vec_len<i32> a;
+    let span <VecDataLen<i32>> data_len<i32> a;
+    let n <i32> get span "len";
+    let data <i32> mem_ptr_addr get span "data";
     let mut l <i32> 0;
     let mut r <i32> 0;
     let mut sum <i32> 0;
@@ -77,7 +79,7 @@ fn count_subarrays_leq_s <(Vec<i32>,i32)->i32> (a, s):
                 do:
                     if lt r n:
                         then:
-                            let rv <i32> unwrap<i32> vec_get<i32> a r;
+                            let rv <i32> load<i32> add data mul r size_of<i32>;
                             if le add sum rv s:
                                 then:
                                     set sum add sum rv;
@@ -86,7 +88,7 @@ fn count_subarrays_leq_s <(Vec<i32>,i32)->i32> (a, s):
                         else set can_extend 0
             set ans add ans sub r l;
             if lt l r:
-                then set sum sub sum unwrap<i32> vec_get<i32> a l
+                then set sum sub sum load<i32> add data mul l size_of<i32>
                 else set r add l 1
             set l add l 1;
     ans

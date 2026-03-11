@@ -206,8 +206,8 @@ fn unique_sorted_i32 <(i32,i32)*>i32> (data, len):
 fn lower_bound_vec_i32 <(Vec<i32>,i32)*>i32> (v, x):
     let v_mem <i32> alloc_raw size_of<Vec<i32>>;
     store<Vec<i32>> v_mem v;
-    let data <i32> vec_data_ptr<i32> load<Vec<i32>> v_mem;
-    let len <i32> vec_len<i32> load<Vec<i32>> v_mem;
+    let data <i32> data_ptr<i32> load<Vec<i32>> v_mem;
+    let len <i32> len<i32> load<Vec<i32>> v_mem;
     let out <i32> lower_bound_i32 data len x;
     dealloc_raw v_mem size_of<Vec<i32>>;
     out
@@ -216,8 +216,8 @@ fn lower_bound_vec_i32 <(Vec<i32>,i32)*>i32> (v, x):
 fn upper_bound_vec_i32 <(Vec<i32>,i32)*>i32> (v, x):
     let v_mem <i32> alloc_raw size_of<Vec<i32>>;
     store<Vec<i32>> v_mem v;
-    let data <i32> vec_data_ptr<i32> load<Vec<i32>> v_mem;
-    let len <i32> vec_len<i32> load<Vec<i32>> v_mem;
+    let data <i32> data_ptr<i32> load<Vec<i32>> v_mem;
+    let len <i32> len<i32> load<Vec<i32>> v_mem;
     let out <i32> upper_bound_i32 data len x;
     dealloc_raw v_mem size_of<Vec<i32>>;
     out
@@ -226,8 +226,8 @@ fn upper_bound_vec_i32 <(Vec<i32>,i32)*>i32> (v, x):
 fn contains_vec_i32 <(Vec<i32>,i32)*>bool> (v, x):
     let v_mem <i32> alloc_raw size_of<Vec<i32>>;
     store<Vec<i32>> v_mem v;
-    let data <i32> vec_data_ptr<i32> load<Vec<i32>> v_mem;
-    let len <i32> vec_len<i32> load<Vec<i32>> v_mem;
+    let data <i32> data_ptr<i32> load<Vec<i32>> v_mem;
+    let len <i32> len<i32> load<Vec<i32>> v_mem;
     let out <bool> contains_i32 data len x;
     dealloc_raw v_mem size_of<Vec<i32>>;
     out
@@ -236,8 +236,8 @@ fn contains_vec_i32 <(Vec<i32>,i32)*>bool> (v, x):
 fn count_equal_range_vec_i32 <(Vec<i32>,i32)*>i32> (v, x):
     let v_mem <i32> alloc_raw size_of<Vec<i32>>;
     store<Vec<i32>> v_mem v;
-    let data <i32> vec_data_ptr<i32> load<Vec<i32>> v_mem;
-    let len <i32> vec_len<i32> load<Vec<i32>> v_mem;
+    let data <i32> data_ptr<i32> load<Vec<i32>> v_mem;
+    let len <i32> len<i32> load<Vec<i32>> v_mem;
     let out <i32> count_equal_range_i32 data len x;
     dealloc_raw v_mem size_of<Vec<i32>>;
     out

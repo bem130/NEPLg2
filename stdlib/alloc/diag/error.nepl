@@ -25,7 +25,7 @@
 #import "core/option" as *
 #import "core/result" as *
 #import "alloc/string" as *
-#import "alloc/collections/vec" as *
+#import "alloc/collections/vec" as v
 
 //: DiagLevel: [診断/しんだん]の[大分類/だいぶんるい]
 //:
@@ -170,8 +170,8 @@ fn warn_diag_kind <(str)->DiagKind> (local_kind):
 
 //: diag_new: [診断/しんだん] 1 [件/けん]を[構築/こうちく]する
 fn diag_new <(DiagKind,str)*>Diag> (kind, message):
-    let notes <Vec<str>> vec_new<str>;
-    let help <Vec<str>> vec_new<str>;
+    let notes <Vec<str>> v::new<str>;
+    let help <Vec<str>> v::new<str>;
     Diag kind message none<Span> notes help none<str>
 
 //: diag_log: log [診断/しんだん]を[作/つく]る
@@ -214,7 +214,7 @@ fn diag_with_source <(Diag,str)->Diag> (d, src):
 fn diag_add_note <(Diag,str)*>Diag> (d, note):
     let d_mem <i32> alloc_raw size_of<Diag>;
     store<Diag> d_mem d;
-    let notes1 <Vec<str>> vec_push<str> get load<Diag> d_mem "notes" note;
+    let notes1 <Vec<str>> v::push<str> get load<Diag> d_mem "notes" note;
     let out <Diag> Diag get load<Diag> d_mem "kind" get load<Diag> d_mem "message" get load<Diag> d_mem "span" notes1 get load<Diag> d_mem "help" get load<Diag> d_mem "source";
     dealloc_raw d_mem size_of<Diag>;
     out
@@ -223,7 +223,7 @@ fn diag_add_note <(Diag,str)*>Diag> (d, note):
 fn diag_add_help <(Diag,str)*>Diag> (d, help_item):
     let d_mem <i32> alloc_raw size_of<Diag>;
     store<Diag> d_mem d;
-    let help1 <Vec<str>> vec_push<str> get load<Diag> d_mem "help" help_item;
+    let help1 <Vec<str>> v::push<str> get load<Diag> d_mem "help" help_item;
     let out <Diag> Diag get load<Diag> d_mem "kind" get load<Diag> d_mem "message" get load<Diag> d_mem "span" get load<Diag> d_mem "notes" help1 get load<Diag> d_mem "source";
     dealloc_raw d_mem size_of<Diag>;
     out
@@ -270,22 +270,22 @@ fn diag_key_not_found <(str)*>Diag> (op):
 
 //: diags_new: [空/から]の `Diags` を[作/つく]る
 fn diags_new <()*>Diags> ():
-    let items <Vec<Diag>> vec_new<Diag>;
+    let items <Vec<Diag>> v::new<Diag>;
     Diags items
 
 //: diags_one: `Diag` 1 [件/けん]から `Diags` を[作/つく]る
 fn diags_one <(Diag)*>Diags> (d):
-    let items0 <Vec<Diag>> vec_new<Diag>;
-    let items1 <Vec<Diag>> vec_push<Diag> items0 d;
+    let items0 <Vec<Diag>> v::new<Diag>;
+    let items1 <Vec<Diag>> v::push<Diag> items0 d;
     Diags items1
 
 //: diags_push: `Diags` に `Diag` を 1 [件/けん][追加/ついか]する
 fn diags_push <(Diags,Diag)*>Diags> (ds, d):
-    Diags vec_push<Diag> get ds "items" d
+    Diags v::push<Diag> get ds "items" d
 
 //: diags_len: [診断/しんだん][件数/けんすう]を[返/かえ]す
 fn diags_len <(Diags)->i32> (ds):
-    vec_len<Diag> get ds "items"
+    v::len<Diag> get ds "items"
 
 //: diags_has_errors: error level の[診断/しんだん]を 1 [件/けん]でも[含/ふく]むか[判定/はんてい]する
 fn diags_has_errors <(Diags)->bool> (ds):

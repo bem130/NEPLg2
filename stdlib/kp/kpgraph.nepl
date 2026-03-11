@@ -197,11 +197,11 @@ fn dense_graph_bfs_dist_raw <(i32,i32,i32)*>Vec<i32>> (n, mat, start):
                         else ()
                     set to add to 1;
 
-    let mut out <Vec<i32>> vec_new<i32>;
+    let mut out <Vec<i32>> new<i32>;
     let mut i1 <i32> 0;
     while lt i1 n:
         do:
-            set out vec_push<i32> out load_i32 add dist mul i1 4;
+            set out push<i32> out load_i32 add dist mul i1 4;
             set i1 add i1 1;
 
     dealloc_raw q mul n 4;

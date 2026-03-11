@@ -32,7 +32,7 @@
 #import "core/math" as *
 #import "core/option" as *
 #import "core/result" as *
-#import "core/field" as *
+#import "core/field" as field
 #import "std/stdio" as *
 #import "alloc/string" as s
 #import "alloc/collections/stack" as stk
@@ -101,7 +101,7 @@ fn print_result <(i32)*>()> (val):
 //: [目的/もくてき]:
 //: - `[stack] [a b op] [tokens]` の形式で演算子適用前の状態・ハイライトを出力します。
 fn print_step_before <(Stack<i32>,i32,i32,str,Vec<str>,i32)*>()> (stack, a, b, op, tokens, i):
-    let hdr <i32> get stack "hdr";
+    let hdr <i32> field::get stack "hdr";
     let len <i32> load_i32 hdr;
     let data <i32> load_i32 add hdr 8;
 
@@ -121,12 +121,12 @@ fn print_step_before <(Stack<i32>,i32,i32,str,Vec<str>,i32)*>()> (stack, a, b, o
     print op;
     print ansi_reset;
 
-    let n <i32> v::vec_len<str> tokens;
+    let n <i32> v::len<str> tokens;
     let mut k <i32> add i 1;
     while lt k n:
         do:
             print " ";
-            match v::vec_get<str> tokens k:
+            match v::get<str> tokens k:
                 Option::Some tok:
                     print tok;
                 Option::None:
@@ -140,7 +140,7 @@ fn print_step_before <(Stack<i32>,i32,i32,str,Vec<str>,i32)*>()> (stack, a, b, o
 //: [目的/もくてき]:
 //: - `[stack] [res] [tokens]` の形式で演算子適用後の状態・ハイライトを出力します。
 fn print_step_after <(Stack<i32>,i32,Vec<str>,i32)*>()> (stack, res, tokens, i):
-    let hdr <i32> get stack "hdr";
+    let hdr <i32> field::get stack "hdr";
     let len <i32> load_i32 hdr;
     let data <i32> load_i32 add hdr 8;
 
@@ -156,12 +156,12 @@ fn print_step_after <(Stack<i32>,i32,Vec<str>,i32)*>()> (stack, res, tokens, i):
     print_i32 res;
     print ansi_reset;
 
-    let n <i32> v::vec_len<str> tokens;
+    let n <i32> v::len<str> tokens;
     let mut k <i32> add i 1;
     while lt k n:
         do:
             print " ";
-            match v::vec_get<str> tokens k:
+            match v::get<str> tokens k:
                 Option::Some tok:
                     print tok;
                 Option::None:
@@ -254,7 +254,7 @@ fn process_token <(Stack<i32>,str,Vec<str>,i32)*>Stack<i32>> (stack, token, toke
 fn eval_line <(str)*>()> (line):
     let trimmed <str> s::str_trim line;
     let tokens <Vec<str>> s::str_split trimmed " ";
-    let n <i32> v::vec_len<str> tokens;
+    let n <i32> v::len<str> tokens;
 
     let mut stack <Stack<i32>>:
         stk::new<i32>
@@ -263,7 +263,7 @@ fn eval_line <(str)*>()> (line):
     let mut i <i32> 0;
     while lt i n:
         do:
-            match v::vec_get<str> tokens i:
+            match v::get<str> tokens i:
                 Option::Some tok:
                     set stack process_token stack tok tokens i;
                 Option::None:
@@ -285,7 +285,7 @@ fn eval_line <(str)*>()> (line):
                 then: ()
                 else:
                     // エラー前にスタックの全要素を出力
-                    let hdr <i32> get stack "hdr";
+                    let hdr <i32> field::get stack "hdr";
                     let len <i32> load_i32 hdr;
                     let data <i32> load_i32 add hdr 8;
                     let mut j <i32> 0;
@@ -303,7 +303,7 @@ fn eval_line <(str)*>()> (line):
                     print_error s::concat3 "stack has " s::from_i32 sp " values";
     
     stk::free<i32> stack;
-    v::vec_free<str> tokens;
+    v::free<str> tokens;
 
 //: main: RPN TUI REPL のエントリーポイント
 //:

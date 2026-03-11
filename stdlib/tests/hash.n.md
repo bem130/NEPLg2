@@ -31,7 +31,7 @@ fn main <()*>i32> ():
         |> checks_push check_eq_i32 -468965076 result
         |> checks_push check_eq_i32 hash32_by_trait 123456 hash32_by_trait 123456
         |> checks_push check ne hash32_by_trait 123456 hash32_by_trait 123457
-        |> checks_push check_eq_i32 2 vec_len<i32> res_vec
+        |> checks_push check_eq_i32 2 len<i32> res_vec
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
 ```
