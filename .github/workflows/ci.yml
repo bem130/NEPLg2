@@ -329,10 +329,9 @@ jobs:
                   }
                   EOF
 
-            - name: Upload pending site artifact
-              uses: actions/upload-artifact@v4
+            - name: Upload pending Pages artifact
+              uses: actions/upload-pages-artifact@v3
               with:
-                  name: site-fast
                   path: dist
 
     pages-fast-deploy:
@@ -348,17 +347,6 @@ jobs:
         steps:
             - name: Configure Pages
               uses: actions/configure-pages@v5
-
-            - name: Download pending site artifact
-              uses: actions/download-artifact@v4
-              with:
-                  name: site-fast
-                  path: .
-
-            - name: Upload Pages artifact
-              uses: actions/upload-pages-artifact@v3
-              with:
-                  path: dist
 
             - name: Deploy pending site
               id: deployment
@@ -428,10 +416,9 @@ jobs:
                   }
                   EOF
 
-            - name: Upload final site artifact
-              uses: actions/upload-artifact@v4
+            - name: Upload final Pages artifact
+              uses: actions/upload-pages-artifact@v3
               with:
-                  name: site-final
                   path: dist
 
     pages-final-deploy:
@@ -449,17 +436,6 @@ jobs:
         steps:
             - name: Configure Pages
               uses: actions/configure-pages@v5
-
-            - name: Download final site artifact
-              uses: actions/download-artifact@v4
-              with:
-                  name: site-final
-                  path: .
-
-            - name: Upload Pages artifact
-              uses: actions/upload-pages-artifact@v3
-              with:
-                  path: dist
 
             - name: Deploy final site
               id: deployment

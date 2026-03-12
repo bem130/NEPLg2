@@ -68,6 +68,8 @@
 - 差異メモ:
   - Pages final deploy は `build` artifact の `dist` を再利用し、site を作るために `trunk build` を再実行しない。
   - pending/final の 2 回 deploy は Pages への publish を早めるためのもので、tests 自体は 1 回しか実行しない。
+  - 初版では `site-fast` / `site-final` を通常の `upload-artifact` で中継してから `upload-pages-artifact` に渡していたが、download 時に `dist` directory の階層前提が崩れて `tar: dist: Cannot open` になった。
+  - そのため Pages 用 bundle job は直接 `upload-pages-artifact` を行い、deploy job は `deploy-pages` だけを行う構造へ修正した。
 
 - 目的:
   - `rpn.nepl` を参考にして `examples/bf.nepl` に Brainfuck の実行ツールを実装する。
