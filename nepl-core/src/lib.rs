@@ -30,6 +30,7 @@ pub mod loader;
 pub mod log;
 pub mod monomorphize;
 pub mod module_graph;
+pub mod nm;
 pub mod parser;
 pub mod passes;
 pub mod resolve;

@@ -178,12 +178,17 @@ impl LexState {
     fn process_line(&mut self, line: &str, line_start: usize) {
         // Handle DocComments before stripping them
         let mut doc_comment: Option<String> = None;
+        let mut doc_comment_start: Option<usize> = None;
         let content_owned = match line.find("//") {
             Some(idx) => {
                 let text_after = &line[idx..];
-                if text_after.starts_with("///") && !text_after.starts_with("////") {
-                    let doc_text = text_after[3..].trim().to_string();
-                    doc_comment = Some(doc_text);
+                if let Some(prefix_len) = doc_comment_prefix_len(text_after) {
+                    let mut doc_text = &text_after[prefix_len..];
+                    if let Some(rest) = doc_text.strip_prefix(' ') {
+                        doc_text = rest;
+                    }
+                    doc_comment = Some(doc_text.to_string());
+                    doc_comment_start = Some(idx);
                 }
                 line[..idx].to_string()
             }
@@ -191,14 +196,43 @@ impl LexState {
         };
         let content = content_owned.as_str();
 
-        // Skip empty lines (do not affect indent stack)
+        // Comment-only doc lines still participate in indentation so they can
+        // attach to the following item at the correct block depth.
         if content.trim().is_empty() {
             if let Some(doc) = doc_comment {
-                let start = line_start + line.find("///").unwrap();
+                let mut width = 0usize;
+                let mut idx = 0usize;
+                for ch in content.as_bytes() {
+                    match ch {
+                        b' ' => {
+                            width += 1;
+                            idx += 1;
+                        }
+                        b'\t' => {
+                            let span = Span::new(
+                                self.file_id,
+                                (line_start + idx) as u32,
+                                (line_start + idx + 1) as u32,
+                            );
+                            self.diagnostics.push(Diagnostic::error(
+                                "tabs are not allowed for indentation",
+                                span,
+                            ).with_id(DiagnosticId::LexerIndentTabsNotAllowed));
+                            width += self.indent_unit;
+                            idx += 1;
+                        }
+                        _ => break,
+                    }
+                }
+                self.adjust_indent(width, line_start, false);
+                let start = line_start + doc_comment_start.unwrap_or(0);
                 let end = line_start + line.len();
-                // Treat doc comment on otherwise empty line as a token and indent it according to normal rules
-                // But to align it easily, we just output it without changing indent state
                 self.push_token(TokenKind::DocComment(doc), start, end);
+                let newline_pos = line_start + content.len();
+                self.tokens.push(Token {
+                    kind: TokenKind::Newline,
+                    span: Span::new(self.file_id, newline_pos as u32, newline_pos as u32),
+                });
             }
             return;
         }
@@ -345,7 +379,7 @@ impl LexState {
         let line_offset = line_start + (content.len() - rest.len());
 
         if let Some(doc) = doc_comment {
-            let start = line_start + line.find("///").unwrap();
+            let start = line_start + doc_comment_start.unwrap_or(0);
             let end = line_start + line.len();
             self.push_token(TokenKind::DocComment(doc), start, end);
         }
@@ -933,6 +967,16 @@ impl LexState {
             self.indent_stack.pop();
             self.push_token(TokenKind::Dedent, pos, pos);
         }
+    }
+}
+
+fn doc_comment_prefix_len(text_after: &str) -> Option<usize> {
+    if text_after.starts_with("///") && !text_after.starts_with("////") {
+        Some(3)
+    } else if text_after.starts_with("//:") {
+        Some(3)
+    } else {
+        None
     }
 }
 

@@ -219,12 +219,59 @@ impl Parser {
         }
     }
     fn parse_module(&mut self) -> Option<Module> {
+        let doc = self.parse_leading_module_doc();
         let root = self.parse_block_until(TokenEnd::Eof)?;
         Some(Module {
+            doc,
             indent_width: self.indent_width,
             directives: self.directives.clone(),
             root,
         })
+    }
+
+    fn parse_leading_module_doc(&mut self) -> Option<String> {
+        let saved_pos = self.pos;
+        let mut buf = String::new();
+
+        while let Some(TokenKind::DocComment(text)) = self.peek_kind() {
+            if !buf.is_empty() {
+                buf.push('\n');
+            }
+            buf.push_str(&text);
+            self.next();
+            while self.consume_if(&TokenKind::Newline) {}
+        }
+
+        if buf.is_empty() {
+            self.pos = saved_pos;
+            return None;
+        }
+
+        let is_module_doc = matches!(
+            self.peek_kind(),
+            Some(TokenKind::DirEntry(_))
+                | Some(TokenKind::DirImport(_))
+                | Some(TokenKind::DirTarget(_))
+                | Some(TokenKind::DirUse(_))
+                | Some(TokenKind::DirIfTarget(_))
+                | Some(TokenKind::DirIfProfile(_))
+                | Some(TokenKind::DirCapability(_))
+                | Some(TokenKind::DirIndentWidth(_))
+                | Some(TokenKind::DirExtern { .. })
+                | Some(TokenKind::DirWasm)
+                | Some(TokenKind::DirLlvmIr)
+                | Some(TokenKind::DirInclude(_))
+                | Some(TokenKind::DirPrelude(_))
+                | Some(TokenKind::DirNoPrelude)
+                | Some(TokenKind::Eof)
+        );
+
+        if is_module_doc {
+            Some(buf)
+        } else {
+            self.pos = saved_pos;
+            None
+        }
     }
 
     fn parse_block_until(&mut self, end: TokenEnd) -> Option<Block> {

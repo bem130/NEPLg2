@@ -1,0 +1,9 @@
+(comment) @comment
+(doc_comment) @comment.doc
+(string) @string
+(number) @number
+(directive) @keyword
+(keyword) @keyword
+(type_identifier) @type
+(identifier) @variable
+(operator) @operator

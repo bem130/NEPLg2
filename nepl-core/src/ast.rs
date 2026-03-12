@@ -265,6 +265,7 @@ pub enum Stmt {
 /// Parsed module.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
+    pub doc: Option<String>,
     pub indent_width: usize,
     pub directives: Vec<Directive>,
     pub root: Block,

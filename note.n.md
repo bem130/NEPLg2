@@ -1,3 +1,1294 @@
+# 2026-03-12 作業メモ (editor extensions: doc comment を compiler/nm 経由で LSP hover へ接続)
+
+- 目的:
+  - stdlib で既に使われている `//:` 形式の document comment を compiler が正しく認識し、editor extension / LSP が JavaScript 側の再実装に依存せず Rust 側だけで利用できるようにする。
+  - `nodesrc/parser.js` / `nodesrc/html_gen.js` にしか無かった `nm` の責務を、拡張機能向けの compiler 実装へ持ち込む。
+- 根本原因:
+  - Rust compiler 側の lexer は `///` を doc comment として扱っていたが、stdlib 実運用の `//:` を認識していなかった。
+  - parser には item 直前 doc comment の紐づけ処理が既にあったため、token 化できていないことが主因だった。
+  - LSP hover 側も raw 文字列をそのまま表示しており、`nm` として構造化された document comment を利用していなかった。
+- 変更:
+  - `nepl-core/src/lexer.rs`
+    - `///` に加えて `//:` も `DocComment` token として扱うよう修正した。
+  - `nepl-core/src/parser.rs`
+    - module 先頭の `//:` を module doc として分離取得する処理を追加した。
+  - `nepl-core/src/ast.rs`
+    - `Module.doc` を追加した。
+  - `nepl-core/src/nm.rs`
+    - editor/LSP 向けの Rust 実装 `nm` parser を追加した。
+    - heading / list / code block / gloss / ruby などを構造化し、Markdown へ戻す renderer `render_document_markdown` を追加した。
+  - `nepl-language/src/lib.rs`
+    - 定義情報に `doc_ast` を追加し、compiler が取得した document comment を `nm` AST として保持できるようにした。
+  - `nepl-lsp/src/main.rs`
+    - hover が raw 文字列ではなく `doc_ast` を Markdown へ render した結果を優先して返すようにした。
+  - `nepl-core/tests/doc_comments.rs`
+    - `//:` の item 紐づけ、stdlib 実ファイルの doc comment、module doc と item doc の分離を確認する test を追加した。
+- 実装状況:
+  - compiler で `//:` document comment を token 化し、定義情報へ紐づける経路は追加済み。
+  - `nm` parser / renderer を Rust 側へ追加し、LSP hover から利用する経路も追加済み。
+  - まだ Zed/VSCode 側の package 実装と、hover 表示内容の詳細整形は未完了。
+- plan.md との差異:
+  - plan.md の editor extension 共通基盤に向けて、LSP hover 用の doc comment 取得経路を先行で実装した。
+  - まだ WASIp1 server 配布形態、Zed package からの実行導線、VSCode shell は未実装。
+- 検証:
+  - `cargo test -p nepl-language` は既存の範囲で pass 済み。
+  - pull 後の再検証として `cargo test -p nepl-language semantics_analysis_reports_hover_doc_and_type -- --nocapture` を再実行中。
+  - `cargo test -p nepl-core --test doc_comments -- --nocapture` は lock 競合を避けるため単独で再実行する前提。
+
+# 2026-03-12 作業メモ (editor extensions: `nepl-language` 追加)
+
+- 目的:
+  - `nepl-web` とは別に、editor extension 向けの共通 Rust lib を追加する。
+  - Zed / VSCode / 将来の WASIp1 Language Server が同じ compiler 実装を再利用できる境界を作る。
+  - extension 側は薄く保ち、将来的に Rust 実装を NEPLg2 へ置き換えやすい構成にする。
+- 根本方針:
+  - 以前の `nepl-web` 解析 API は Web 向け wasm-bindgen 出力に寄っており、editor extension の共通基盤としては不適切だった。
+  - そのまま extension が `nepl-web` へ依存すると、Web 向け JS/wasm API と editor 向け Rust API が密結合し、Zed / VSCode / 将来の selfhost 置換の境界が曖昧になる。
+  - そのため、compiler 本体 (`nepl-core`) の上に editor 専用 lib `nepl-language` を追加し、Web 向け API とは分離した。
+- 変更:
+  - `Cargo.toml`
+    - workspace member に `nepl-language` を追加した。
+  - `nepl-language/Cargo.toml`
+    - 新規 crate を追加した。
+  - `nepl-language/src/lib.rs`
+    - lexer / diagnostics / name resolution / semantics を Rust struct で返す API を追加した。
+    - `LoadResult` を受け取る複数ファイル解析 API を追加し、hover / 定義ジャンプ用に path 付き range を返すようにした。
+    - `nepl-web` に閉じていた名前解決 trace / semantic token 組み立てを editor 共通 lib として切り出した。
+    - cross-file resolution を含む unit test を追加した。
+  - `doc/editor_extensions.md`
+    - `nepl-web` と editor extension 用 lib の責務分離、Zed / VSCode / 将来の LSP の構成方針を記述した。
+  - `editors/zed/README.md`
+    - Zed extension の構成方針と次段階の作業項目を追加した。
+- 実装状況:
+  - `nepl-language` は追加済みで、token / diagnostic / hover / semantic token / definition 用データを返せる。
+  - 単一ファイル解析と、`Loader` を介した複数ファイル解析の両方を扱える。
+  - まだ Zed extension package 本体、tree-sitter grammar、WASIp1 Language Server binary は未実装。
+- plan.md との差異:
+  - `plan.md` の LSP / Zed / VSCode 方針に対し、今回は editor 共通解析 lib の土台までを先行実装した。
+  - 実際の Zed package と VSCode package は未着手であり、次段階で `nepl-language` の上に Rust 製 Language Server を追加する必要がある。
+- 検証:
+  - `cargo test -p nepl-language`
+    - 結果: pass
+  - `node nodesrc/run_doctest.js -i tests/compiler/typeannot.n.md -n 2`
+    - 結果: pass
+  - 参考:
+    - `node nodesrc/run_doctest.js -i stdlib/core/result.nepl -n 1`
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/11_testing_workflow.n.md -n 1`
+    - 上記 2 件は `return value mismatch` と runtime trap で fail。今回の変更対象は集計スクリプトであり、repo_metrics 変更の有無に関係なく既存の doctest 側問題として残っている。
+- 差異メモ:
+  - `node nodesrc/tests.js -i tests -i tutorials -i stdlib ...` は長時間継続したため、確認は `run_doctest.js` による focused 実行へ切り替えた。
+- 今回の変更は build/test 系ロジックではなく、集計スクリプト単体の改善である。
+
+# 2026-03-12 作業メモ (fix: aggregate struct packing を修正して SparseSet invalid-path を復旧)
+
+- [目的/もくてき]:
+  - `alloc/collections/sparse_set` の invalid index path が web/native test path で trap していた根因を特定し、stdlib 側の回避ではなく compiler 側から修正する。
+- [根本原因/こんぽんげんいん]:
+  - [当初/とうしょ]は `SparseSet` 自体の owner 表現や `alloc/string` の concat を疑って切り分けたが、最終的には `U128DivRem` のような aggregate 値を `StructConstruct` / `TupleConstruct` で組み立てる codegen が、field ごとの real storage size ではなく wasm/llvm の scalar `ValType` / `LlTy` サイズで pack していたことが原因だった。
+  - その結果、aggregate field を[含/ふく]む struct/tuple が inline byte copy ではなく pointer 相当で[詰/つ]められ、`field::get` と後続の integer-to-string / diag message 生成で[壊/こわ]れた値を読み、`SparseSet` invalid index path の message build が `memory access out of bounds` に崩れていた。
+- [変更/へんこう]:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `StructConstruct` / `TupleConstruct` の total size を `type_storage_size_bytes` 基準へ修正。
+    - aggregate field/item は source pointer から destination へ byte copy する lowering に変更。
+  - `nepl-core/src/codegen_llvm.rs`
+    - wasm 側と同じく aggregate field/item を real storage size ぶん byte copy するよう修正。
+  - `stdlib/alloc/string.nepl`
+    - `string_finish_base` を追加し、region/token を二重に読み直さず base pointer を 1 回だけ確定して finish する形へ整理。
+    - `concat`, `sb_build`, `str_slice`, `from_u128_radix`, `from_f64` の finish 経路を同 helper に揃えた。
+  - `alloc/collections/sparse_set`
+    - header owner は `MemPtr<u8>` field ではなく raw `i32` header pointer を public struct に保持し、内部 helper でだけ `MemPtr` に包み直す形へ整理した。
+- [結果/けっか]:
+  - `stdlib/alloc/string.nepl::doctest#4` が pass に戻った。
+  - `stdlib/tests/sparse_set.n.md::doctest#2` と `tests/stdlib/sparse_set_collections.n.md::doctest#1` が web path でも pass に戻った。
+  - `node nodesrc/tests.js -i stdlib/tests/sparse_set.n.md -i tests/stdlib/sparse_set_collections.n.md -i stdlib/alloc/collections/sparse_set.nepl --no-stdlib --no-tree -o /tmp/tests-sparse-set.json -j 2` は `10/10 pass` を確認した。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/string.nepl -n 4`
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/sparse_set.nepl -n 1`
+  - `node nodesrc/run_doctest.js -i stdlib/tests/sparse_set.n.md -n 2`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/sparse_set_collections.n.md -n 1`
+  - `node nodesrc/tests.js -i stdlib/tests/sparse_set.n.md -i tests/stdlib/sparse_set_collections.n.md -i stdlib/alloc/collections/sparse_set.nepl --no-stdlib --no-tree -o /tmp/tests-sparse-set.json -j 2`
+
+# 2026-03-06 作業メモ (feat: examples/bf.nepl に Brainfuck Runner を実装)
+
+# 2026-03-12 作業メモ (alloc/collections/sparse_set 調査継続・未 commit)
+
+- [目的/もくてき]:
+  - `alloc/collections` に `SparseSet` を[追加/ついか]し、`[0, n)` [範囲/はんい]の integer set を O(1) membership / insert / remove で[扱/あつか]えるようにする。
+- [進捗/しんちょく]:
+  - `SparseSet` の public API (`new` / `len` / `universe_len` / `contains` / `insert` / `remove` / `clear` / `free`) と public doctest / fixture は[一通/ひととお]り[作成/さくせい]済み。
+  - normal path は focused 実行で[通過/つうか]している。
+    - `stdlib/alloc/collections/sparse_set.nepl::doctest#1/#2`
+    - `stdlib/tests/sparse_set.n.md::doctest#1`
+    - `tests/stdlib/sparse_set_collections.n.md::doctest#1`
+- [根本原因/こんぽんげんいん]の[切/き]り[分/わ]け:
+  - [当初/とうしょ]は `SparseSet` owner [内部/ないぶ]の field [読/よ]み[出/だ]しが[壊/こわ]れているように[見/み]えたが、header を `MemPtr<u8>` field で[持/も]つ設計から raw `i32` pointer [保持/ほじ]へ[落/お]とすことで normal path は[安定/あんてい]した。
+  - その[後/あと]に[残/のこ]った failure は invalid index path だけで、`contains s 8` の[最小例/さいしょうれい]まで[縮小/しゅくしょう]できた。
+  - さらに[追跡/ついせき]すると、`SparseSet` [固有/こゆう]ではなく `sparse_set_diag_index` の[中/なか]で[作/つく]る message string が web compile path で `RuntimeError: memory access out of bounds` を[起/お]こしていることが[分/わ]かった。
+  - `diag_error StdErrorKind::IndexOutOfBounds "abc"` は pass する一方、`concat "sparse_set_contains" ": index out of bounds "` を[含/ふく]む chain だけが trap する。
+  - `stdlib/alloc/string.nepl::doctest#4` も[同系統/どうけいとう]の web path OOB を[持/も]っており、`SparseSet` invalid path failure は[既存/きぞん]の `alloc/string` regression に[乗/の]っていると[判断/はんだん]した。
+  - native compiler では `SparseSet invalid index` の[最小例/さいしょうれい]は pass し、web compile path だけが trap するので、[直接/ちょくせつ]の blocker は stdlib API 設計でなく web compiler/runtime path [側/がわ]にある。
+- [判断/はんだん]:
+  - `SparseSet` normal path の library 実装は[成立/せいりつ]しているが、invalid index の `Result::Err` path を[含/ふく]む focused suite が web compile path で[未収束/みしゅうそく]のため、現時点では commit しない。
+  - [次/つぎ]は `alloc/string` の concat / integer-to-string [経路/けいろ]を root cause ベースで[直/なお]し、その[後/あと]に `SparseSet` batch を[再開/さいかい]する。
+
+# 2026-03-12 作業メモ (ci: rust install -> cargo build -> trunk build を共通 action 化)
+
+- 目的:
+  - GitHub Actions に散っていた `Node setup` / `Rust toolchain` / `wasm32 target` / `wasm-bindgen-cli` / `cargo build` / `trunk build` の重複を 1 箇所へ集約する。
+  - 各 workflow は「共通 build artifact を作る job」と「その artifact を受けて test / deploy を行う job」に分け、build 済み成果物を再利用する形へ寄せる。
+- 根本原因:
+  - `compile-test.yml` / `nepl-test-wasi.yml` / `nepl-test-llvm.yml` / `nmd-doctest.yml` / `nm-compile.yml` / `rust-test..yml` / `gh-pages.yml` が、それぞれ別に toolchain install と `trunk build` を持っていた。
+  - そのため手順の更新漏れが起きやすく、`trunk` や `wasm-bindgen-cli` の更新、`Trunk.toml` Linux 補正、examples 配置などを毎回多重管理する構造になっていた。
+- 変更:
+  - `.github/actions/bootstrap-build/action.yml`
+    - CI 共通の local composite action を追加。
+    - `actions/setup-node`、`npm install`、`actions-rs/toolchain`、`rustup target add wasm32-unknown-unknown`、`jetli/trunk-action`、`wasm-bindgen-cli` install、`Swatinem/rust-cache`、`cargo build --locked`、`trunk build --release` を集約。
+  - `.github/workflows/compile-test.yml`
+  - `.github/workflows/rust-test..yml`
+  - `.github/workflows/nm-compile.yml`
+  - `.github/workflows/nmd-doctest.yml`
+  - `.github/workflows/nepl-test-wasi.yml`
+  - `.github/workflows/nepl-test-llvm.yml`
+    - それぞれ `build` job で共通 action を使って `dist` / `target/debug` / `target/wasm32-unknown-unknown` を artifact 化。
+    - test job 側は `actions/download-artifact` で取得してから、各 workflow 固有の `cargo test` / `nodesrc/tests.js` / `cargo run -p nepl-cli` / LLVM runner を実行する形へ変更。
+  - `.github/workflows/gh-pages.yml`
+    - pages 固有の deploy/doctest/doc build は残しつつ、toolchain install と build 本体は共通 action へ移動。
+- 検証:
+  - 一時 directory `/tmp/gha-yaml-check` を作って `npm install yaml` を行い、全 workflow と composite action を `yaml` parser で構文確認。
+    - 対象:
+      - `.github/workflows/*.yml`
+      - `.github/actions/bootstrap-build/action.yml`
+    - 結果: 全件 `OK`
+- 差異メモ:
+  - workflow 実行そのものは GitHub Actions 上での実行が必要なので、ローカルでは YAML 構文と依存関係の整合までを確認した。
+  - 現時点では artifact の粒度を `dist` / `target/debug` / `target/wasm32-unknown-unknown` にしている。さらに絞る余地はあるが、まずは共通化と再利用の成立を優先した。
+
+# 2026-03-12 作業メモ (ci: build 1 回 + pages/test 統合 + per-case timeout)
+
+- 目的:
+  - workflow ごとに `bootstrap-build` を繰り返していた構成をやめ、`trunk build` を含む build を 1 workflow 内で 1 回だけ実行し、その成果物を全 test job と Pages deploy に再利用する。
+  - `gh-pages.yml` が別 workflow で test を再実行していた構造を解消し、site への publish を test workflow の一部へ統合する。
+  - 無限ループ系の hang で CI 全体が止まらないよう、1 ケース 20 秒、test job 全体 10 分の上限を入れる。
+- 根本原因:
+  - 前段の共通 action 化だけでは、workflow が分かれている限り `cargo build` / `trunk build` / `npm install` / `cargo install wasm-bindgen-cli` が workflow 数だけ繰り返される。
+  - `gh-pages.yml` は site 生成のために tests を再度回しており、同じ commit に対して test が 2 重実行されていた。
+  - `nodesrc/tests.js` は suite 全体の実行はできても、WASM worker / LLVM child process に per-case timeout が無く、1 ケースの hang が suite 全体を引きずる余地があった。
+- 変更:
+  - `.github/actions/bootstrap-build/action.yml`
+    - `actions/setup-node` に npm cache を追加。
+    - `web/package-lock.json` ベースで `npm ci` を使う形に変更。
+    - `wasm-bindgen-cli` を `actions/cache` で再利用するよう変更。
+    - `wasm-bindgen` の verify step を追加。
+  - `.github/workflows/ci.yml`
+    - 旧 test workflow 群と Pages deploy を 1 workflow に統合。
+    - `build` job で `bootstrap-build` を 1 回だけ実行し、さらに tutorial / stdlib HTML も `dist` 配下へ生成して artifact 化。
+    - `compile-test` / `rust-test` / `nm-compile` / `wasi-test` / `nmd-doctest` / `llvm-test` はすべて `needs: build` で artifact を再利用。
+    - `pages-fast-*` と `pages-final-*` の 2 段 deploy を追加し、`trunk build` 後の pending site を先に publish し、test 完了後に test JSON / summary を載せた final site で上書きする形にした。
+    - `gh-pages.yml` は削除。
+    - test job には `timeout-minutes: 10` を追加し、`node nodesrc/tests.js` / `cargo test` / `cargo run` は `timeout --signal=KILL 10m ...` で包んだ。
+    - test 実行環境に `NEPL_TEST_CASE_TIMEOUT_MS=20000` / `NEPL_WASIX_TIMEOUT_MS=20000` を共通指定。
+  - `nodesrc/tests.js`
+    - WASM thread pool worker に per-case timer を追加し、20 秒で応答しない case は worker を terminate して error として回収する形へ変更。
+    - LLVM / native 実行に使う `runCommand` に child process timeout を追加し、同じく 20 秒で kill するよう変更。
+- 検証:
+  - `node --check nodesrc/tests.js`
+  - 一時 directory `/tmp/gha-yaml-check` を作って `npm install yaml` を行い、
+    - `.github/workflows/*.yml`
+    - `.github/actions/bootstrap-build/action.yml`
+    を parser で検証。
+- 差異メモ:
+  - Pages final deploy は `build` artifact の `dist` を再利用し、site を作るために `trunk build` を再実行しない。
+  - pending/final の 2 回 deploy は Pages への publish を早めるためのもので、tests 自体は 1 回しか実行しない。
+  - 初版では `site-fast` / `site-final` を通常の `upload-artifact` で中継してから `upload-pages-artifact` に渡していたが、download 時に `dist` directory の階層前提が崩れて `tar: dist: Cannot open` になった。
+  - そのため Pages 用 bundle job は直接 `upload-pages-artifact` を行い、deploy job は `deploy-pages` だけを行う構造へ修正した。
+
+- 目的:
+  - `rpn.nepl` を参考にして `examples/bf.nepl` に Brainfuck の実行ツールを実装する。
+  - 毎行入力を受け付け、入力ごとにメモリをリセットして独立実行する。
+- 変更:
+  - `examples/bf.nepl`
+    - `alloc/collections/stack` を使って `[` と `]` のジャンプ先を事前計算する `compile_jumps` を実装。
+    - `eval_line` で 30,000 バイトのメモリ上で BF 命令（`+` `-` `>` `<` `.` `,` `[` `]`）を実行。
+    - `,` は現状 0 を書き込む簡略実装。
+    - メインループは入力ごとにメモリバッファを確保・解放し、状態を引き継がない。
+    - 表示名は "Brainfuck REPL" から "Brainfuck Runner" に変更（毎行リセットのため）。
+    - `neplg2:test[bf_hello_world]` doctest を追加（Hello World プログラムの実行）。
+- 検証:
+  - `target/debug/nepl-cli -i examples/bf.nepl -o tmp/wasm.wasm && wasmer run tmp/wasm.wasm`
+    - `+++++++++[>++++++++>+++++++++++>+++>+<<<<-]>.>++.+++++++..+++.>+++++.<<+++++++++++++++.>.+++.------.--------.>+.>+.` を入力して `Hello World!` の出力を確認。
+
+# 2026-03-06 作業メモ (TUI改善: rpnの途中計算可視化とstdioの負数出力修正)
+
+- 目的:
+  - `examples/rpn.nepl` において、`>` プロンプトの動作をレガシー版に合わせ、計算過程を「計算前」「計算後」としてANSIカラーで可視化する。
+  - 途中計算や出力で負数を含む式が正しく表示されるよう、`stdlib/std/stdio.nepl` の `print_i32` に存在する負数出力バグを修正する。
+- 変更:
+  - `examples/rpn.nepl`
+    - REPLプロンプト出力前にトークン行を二重に出力しないよう冗長なループを削除。
+    - `print_step_before` を追加し、計算前の状態をシアン (`ansi_cyan`) で強調表示。
+    - `print_step_after` を追加し、計算結果を緑色 (`ansi_green`) で強調表示。
+  - `stdlib/std/stdio.nepl`
+    - `print_i32` 関数で負の数への計算が不足して `0` となるバグを修正。絶対値の各桁を逆順展開したのち、負数であれば `-` 符号を付与するよう改修。
+    - コンパイルエラーを塞ぐため `mod_u` を `rem_u` に修正。
+- 結果:
+  - `1 2 + 3 + 4 5 + 6 +` などの連続入力に対して、処理ごとの計算箇所 (`[1 2 +]` など) と結果が色付きで分かりやすく表示されるようになった。
+  - `-5` などの負の数を出力した際に正常に表示されるようになった。
+- 検証:
+  - `target/debug/nepl-cli -i examples/rpn.nepl -o tmp/wasm.wasm && wasmer run tmp/wasm.wasm`
+    - 途中計算のトレースおよび負数 (`1 2 3 4 + - 5 +` -> `-5`) の正しいフォーマットと出力を直接確認。
+
+# 2026-03-06 作業メモ (型安全化: `alloc/string` の主要 raw 確保を `RegionToken<u8>` 化)
+
+- 目的:
+  - `alloc/string` の主要生成経路から `alloc_raw` を取り除き、`core/mem` の型付き領域 API に寄せる。
+  - 文字列生成処理で長さヘッダと本文ポインタを `MemPtr<T>` / `RegionToken<T>` で扱い、内部の生ポインタ露出を減らす。
+- 変更:
+  - `stdlib/alloc/string.nepl`
+    - `string_alloc_region`
+    - `string_region_len_ptr`
+    - `string_region_data_ptr`
+    - `string_data_ptr`
+    - `string_finish`
+    を追加し、文字列レイアウト専用の内部ヘルパとして整理。
+  - `concat`
+    - 出力文字列の確保を `string_alloc_region` に変更。
+    - 出力先コピーを `MemPtr<u8>` ベースへ変更。
+  - `sb_build`
+    - 連結先バッファの確保を `RegionToken<u8>` 化。
+    - 各 part の読み出しと出力先書き込みを型付きポインタへ変更。
+  - `str_slice`
+    - 切り出し先の確保を `RegionToken<u8>` 化。
+  - `from_u128_radix`
+    - 逆順桁積みの scratch を `RegionToken<u8>` 化。
+    - 一時 scratch は `dealloc_region` で解放。
+  - `from_f64`
+    - 小数部 scratch を `RegionToken<u8>` 化。
+    - scratch 解放を追加。
+- 結果:
+  - `stdlib/alloc/string.nepl` から `alloc_raw/realloc_raw/dealloc_raw` の直接呼び出しは消えた。
+  - `str` の内部表現自体はまだ raw address だが、主要な生成経路では `RegionToken<u8>` から `string_finish` で確定する流れに整理できた。
+- 検証:
+  - `node nodesrc/tests.js -i tests/stdlib.n.md -i tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md --no-stdlib --no-tree -o /tmp/tests-string-type-safety-v1.json -j 15`
+    - 結果: `26/26 pass`
+  - `rg -n "alloc_raw|realloc_raw|dealloc_raw" stdlib/alloc/string.nepl`
+    - 結果: 該当なし
+
+# 2026-03-06 作業メモ (alloc/string: i128/u128 と基数付き文字列変換の整備)
+
+- 目的:
+  - `alloc/string` に整数の文字列表現変換を集約し、`core/cast` との責務を分離する。
+  - `i128` / `u128` を含む 2/8/10/16 進の変換を提供する。
+  - tutorial に、数値 cast と文字列変換の違いを明示した導線を追加する。
+- 変更:
+  - `stdlib/alloc/string.nepl`
+    - `from_bool`
+    - `to_bool`
+    - `from_u128` / `from_u128_radix`
+    - `to_u128` / `to_u128_radix`
+    - `from_i128` / `from_i128_radix`
+    - `to_i128` / `to_i128_radix`
+    - `u128_divrem_small` など 128-bit 整数の補助関数群
+    - `to_i32` の説明を現実装に合わせて更新
+  - `tests/stdlib.n.md`
+    - `i128/u128` と負数16進の focused case を追加
+  - `tutorials/getting_started/02b_type_conversion_and_textual_conversion.n.md`
+    - `core/cast` と `alloc/string` の使い分け
+    - `Result` を返す解析関数
+    - 2/8/10/16 進変換
+    - `i128/u128` の大きい値の例
+  - `tutorials/getting_started/00_index.n.md`
+    - 新規 tutorial への導線を追加
+- 検証:
+  - `node nodesrc/tests.js -i tests/stdlib.n.md --no-stdlib --no-tree -o /tmp/tests-stdlib-conversions-i128-v3.json -j 15`
+    - 結果: `19/19 pass`
+
+# 2026-03-06 作業メモ (型安全化: `ptr_cast` 公開廃止)
+
+- 目的:
+  - ポインタ再解釈のような unsafe な公開 API を減らし、`MemPtr<T>` / `RegionToken<T>` モデルへ寄せる。
+- 変更:
+  - `stdlib/core/cast.nepl`
+    - 未使用だった `ptr_cast` を削除。
+    - モジュール先頭コメントを、数値 cast と bitcast のみに責務を限定する説明へ更新。
+- 判断:
+  - `ptr_cast` は型だけを付け替える操作で、`MemPtr<T>` による型安全化方針と矛盾する。
+  - repo 内参照は無く、現時点で公開面に残す合理性は無かった。
+  - `MemPtr<T>` は「型付きアドレス」、`RegionToken<T>` は「その領域のサイズと所有権」を伴う線形トークンとして使い分ける。
+
+# 2026-03-06 作業メモ (フェーズF: tutorials Part6 拡充 + library-first 化)
+
+- 目的:
+  - `tutorials/getting_started` Part6（22〜27）の説明誤り・不足を監査し、短く簡潔で安全な書き方へ更新する。
+  - 生ポインタ露出を減らすため、`kp` 側に `Vec<i32>` 直受け補助を追加する。
+- 変更:
+  - `tutorials/getting_started/22_competitive_io_and_arith.n.md`
+    - `Scanner/Writer` の基本パターンを pipe 中心に簡潔化。
+    - i32/i64/空白区切り出力の 3 ケースを安全 API 前提で整理。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+    - `Vec + sort + lower/upper_bound` を library-first で再構成。
+  - `tutorials/getting_started/24_competitive_dp_basics.n.md`
+    - DP 本体を維持しつつ I/O を簡潔化。
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+    - prefix を `kp/kpprefix` ハンドル API 前提へ更新。
+    - two pointers の条件評価を短絡評価に依存しない安全な形へ修正。
+  - `tutorials/getting_started/26_competitive_graph_bfs.n.md`
+    - 手書き BFS から `kp/kpgraph` 利用へ移行。
+  - `tutorials/getting_started/27_competitive_algorithms_catalog.n.md`
+    - 未完成表記を廃止し、Part6 総まとめとしてテンプレート・対応表・実戦フローを追加。
+  - `tutorials/getting_started/00_index.n.md`
+    - 誤字を修正（関数のふりがな）。
+  - `stdlib/kp/kpprefix.nepl`
+    - `PrefixI32` ハンドルと `prefix_build_vec_i32` / `prefix_sum_i32` / `prefix_free_i32` を追加。
+  - `stdlib/kp/kpsearch.nepl`
+    - `lower_bound_vec_i32` / `upper_bound_vec_i32` / `contains_vec_i32` / `count_equal_range_vec_i32` を追加。
+  - `todo.md`
+    - フェーズFの完了済み Part6 専用タスクを削除（未完了のみ維持）。
+- 検証:
+  - `node nodesrc/tests.js -i tutorials/getting_started/22_competitive_io_and_arith.n.md -i tutorials/getting_started/23_competitive_sort_and_search.n.md -i tutorials/getting_started/24_competitive_dp_basics.n.md -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/26_competitive_graph_bfs.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -i stdlib/kp/kpprefix.nepl -i stdlib/kp/kpsearch.nepl --no-tree -o /tmp/tests-part6-kp-refresh-v7.json -j 15`
+    - 結果: `219/219 pass`
+  - 補助確認:
+    - `node nodesrc/tests.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md --no-tree -o /tmp/tests-part6-25-v6.json -j 15`
+    - 結果: `207/207 pass`
+
+# 2026-03-06 作業メモ (フェーズD: llvm `add/sub` 再定義リンク失敗の根本修正)
+
+- 目的:
+  - `--runner all --llvm-all` 実行時に `tests/llvm_target.n.md::doctest#4/#5` が `invalid redefinition of function 'add'/'sub'` で失敗する問題を、後付け回避ではなく生成IR構造から解消する。
+- 原因:
+  - `stdlib/core/math.nepl` の overload 群（`add/sub` など）が `#llvmir` 内で同一シンボル名（`@add`, `@sub`）を使っていた。
+  - LLVM はシンボル名で overloading できないため、同一モジュールへ複数型版を同名定義するとリンク時に衝突する。
+  - さらに `u8` と `i32` は LLVM ABI で同じ `i32` に落ちるため、型別 overload をそのままシンボル名で共存させる設計が成立しない。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - 生成完了直前に `deduplicate_overloaded_llvm_symbols` を追加し、同名 `define` をシグネチャ単位で一意化。
+    - `define` 側の重複を `name__ovN_<sig>` へ正規化し、対応する `call` 参照も同一シグネチャで張り替える。
+    - 前段として `#llvmir` 呼び出し要件抽出と AST raw-body 選別補助を追加し、不要な overload 出力を抑制。
+- 検証:
+- `NO_COLOR=false trunk build` -> success
+- `cargo build -p nepl-cli` -> success
+- `node nodesrc/tests.js -i tests/llvm_target.n.md --no-stdlib --no-tree --runner all --llvm-all -o /tmp/tests-llvm-target-after-dedup-pass.json -j 15` -> `6/6 pass`
+- `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-dedup.json -j 15` -> `791/791 pass`
+
+# 2026-03-12 作業メモ (refactor(vec): Result 化した Vec API を直接依存先へ伝播)
+
+- 目的:
+  - `alloc/collections/vec` の `new / with_capacity / push` を `Result<..., StdErrorKind>` 化した変更を、直接依存する stdlib / tests / tutorials へ整合的に反映する。
+  - `Vec` 再確保を伴う API を `stack` 系と同じ失敗モデルへ寄せつつ、既存の高水準 helper では `unwrap_ok` 吸収で利用者の記述を過剰に崩さない。
+- 根本原因:
+  - `Vec` 本体だけを `Result` 化すると、`std/test` / `alloc/string` / `nm/parser` / `kpgraph` / `wasix/tui` などが旧 pure API を前提にして壊れる。
+  - さらに `StdErrorKind` が上位の `alloc/diag/error` にあると、`vec -> diag/error -> vec` の循環依存が生じる。
+- 変更:
+  - `stdlib/alloc/collections/vec.nepl`
+    - `new / with_capacity / push` を `Result<..., StdErrorKind>` 化。
+    - `with_capacity 0` は確保を行わず空 `MemPtr` を包む形にして `OutOfMemory` を不要化。
+  - `stdlib/std/test.nepl`
+    - `checks_new` / `checks_push` で `Vec<Result<(),str>>` の `Result` を内部吸収。
+  - `stdlib/alloc/string.nepl`
+    - `StringBuilder` と `str_split` の内部 `Vec` 構築・追加を `unwrap_ok` 前提へ更新。
+  - `stdlib/alloc/diag/error.nepl`
+    - `Diag` / `Diags` 内部の `Vec` 構築・追加を `unwrap_ok` 前提へ更新。
+  - `stdlib/alloc/hash/sha256.nepl`
+    - scaffold 実装の buffer 構築・更新を `unwrap_ok` 前提へ更新。
+  - `stdlib/kp/kpgraph.nepl`
+    - BFS 結果ベクタ構築を `unwrap_ok` 前提へ更新。
+  - `stdlib/platforms/wasix/tui.nepl`
+    - `text_wrap_lines` の行配列構築を `unwrap_ok` 前提へ更新。
+  - `stdlib/nm/parser.nepl`
+    - inline/block parser 内部の `Vec` 構築・追加を `unwrap_ok` 前提へ更新。
+  - `stdlib/tests/vec.n.md`
+    - current `Vec Result` API に同期。
+  - `tests/stdlib/traits_order.n.md`
+    - sort regression の `Vec` 構築を `unwrap_ok` 前提へ更新。
+  - `tests/stdlib/selfhost_req.n.md`
+    - `Vec<u8>` buffer 構築を `unwrap_ok` 前提へ更新。
+  - `tests/stdlib/sort.n.md`
+    - sort fixture の `Vec` 構築を `unwrap_ok` 前提へ更新。
+  - `tutorials/getting_started/23_competitive_sort_and_search.n.md`
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+  - `tutorials/getting_started/27_competitive_algorithms_catalog.n.md`
+    - `Vec` pipe 連鎖を `unwrap_ok new` と `|> push ... |> uwok` の current 書式へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/vec.n.md -i tests/stdlib/traits_order.n.md -i tests/stdlib/selfhost_req.n.md --no-stdlib --no-tree -o /tmp/tests-vec-result-a.json -j 4`
+    - 結果: `10/10 pass`
+  - `node nodesrc/tests.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -i tutorials/getting_started/26_competitive_graph_bfs.n.md -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md --no-stdlib --no-tree -o /tmp/tests-vec-result-b2.json -j 4`
+    - 結果: `4/4 pass`
+  - 補助確認:
+    - `node nodesrc/run_doctest.js -i tests/stdlib/sort.n.md -n 1` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/23_competitive_sort_and_search.n.md -n 1` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/23_competitive_sort_and_search.n.md -n 2` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -n 1` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -n 2` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/26_competitive_graph_bfs.n.md -n 1` -> pass
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -n 1` -> pass
+- 差異メモ:
+  - `Vec` の public API Result 化は進んだが、`vec.nepl` 本体の doc comment / doctest には旧書式・旧 pure 前提の説明がまだ残る。
+  - `replace` を `set` へ改名する案は parser / keyword 制約の切り分け後に再検討する。
+
+# 2026-03-12 作業メモ (docs(vec): doc comment と doctest を current Result API へ同期)
+
+- 目的:
+  - `Vec` 本体を `Result` 化した後も、[stdlib/alloc/collections/vec.nepl](/mnt/d/project/NEPLg2/stdlib/alloc/collections/vec.nepl) の説明と埋め込み doctest が旧 pure API 前提のまま残っていた差分を解消する。
+  - あわせて、旧節見出し形式を減らし、新しい doc comment policy に寄せる。
+- 変更:
+  - `vec.nepl`
+    - file header の doctest を `unwrap_ok new` と `|> push ... |> uwok` 前提へ更新。
+    - `new` / `with_capacity` / `len` / `cap` / `data_len` / `is_empty` / `push` / `get` / `replace` / `pop` / `clear` / `free` の comment 例を current API に同期。
+    - `is_empty` / `push` / `get` / `replace` / `pop` / `clear` / `free` の節見出しを `### [目的/もくてき]` 形式へ更新。
+- 検証:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 3` -> pass
+
+# 2026-03-12 作業メモ (feat(collections): add bitset)
+
+- 目的:
+  - `alloc/collections` に fixed-length な bit 集合を追加し、`BloomFilter` と違って false positive のない membership structure を標準で扱えるようにする。
+  - `reboot` 方針に合わせて bare API と public doctest を整え、pipe 併用の使い方は `tests/stdlib` 側で保証する。
+- 変更:
+  - `stdlib/alloc/collections/bitset.nepl`
+    - `BitSet` を追加。
+    - `new` / `len` / `contains` / `insert` / `remove` / `clear` / `fill` / `free` を bare API で実装。
+    - 内部は `nbits` / `nbytes` / `MemPtr<u8>` を持つ owner struct とし、index から byte offset と bit mask を計算して更新する。
+    - doc comment は新 policy / format へ合わせて、usage doctest を各 public 関数へ追加。
+  - `stdlib/tests/bitset.n.md`
+    - insert/remove/len と clear/fill の focused fixture を追加。
+  - `tests/stdlib/bitset_collections.n.md`
+    - pipe 記法での `insert` / `remove` / `contains` / `fill` 利用を回帰として追加。
+- 検証:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 3` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 4` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 5` -> pass
+
+# 2026-03-12 作業メモ (feat(collections): add adjacency matrix)
+
+- 目的:
+  - `alloc/collections` に graph representation の最小実装として `AdjacencyMatrix` を追加し、固定長の directed edge set を O(1) membership で扱えるようにする。
+  - `trie` blocker と独立に、nested owner を避けた raw bit matrix で collection の種類を増やす。
+- 変更:
+  - `stdlib/alloc/collections/adjacency_matrix.nepl`
+    - `AdjacencyMatrix` を追加。
+    - `new` / `len` / `contains` / `insert` / `remove` / `clear` / `free` を bare API で実装。
+    - `(from, to)` を `from * nverts + to` の bit index に写像し、byte 配列で保持する directed graph とした。
+    - doc comment は新 policy / format に合わせ、各 public 関数に usage doctest を追加。
+  - `stdlib/tests/adjacency_matrix.n.md`
+    - insert/remove/clear の focused fixture を追加。
+  - `tests/stdlib/adjacency_matrix_collections.n.md`
+    - pipe 記法での `insert` / `remove` / `contains` / `clear` 利用を回帰として追加。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/adjacency_matrix.nepl -i stdlib/tests/adjacency_matrix.n.md -i tests/stdlib/adjacency_matrix_collections.n.md --no-stdlib --no-tree -o /tmp/tests-adjacency-matrix.json -j 2`
+    - 結果: `9/9 pass`
+- 差異メモ:
+  - `contains g 4 0` のような範囲外 index に対する `Result::Err` 経路は、`target/debug/nepl-cli + wasmer` では正常に `1` を返す一方、web compile path では runtime OOB に落ちた。
+  - これは `AdjacencyMatrix` 実装ではなく web compiler/runtime 側の別根因と判断し、今回の collection batch には混ぜていない。
+
+# 2026-03-12 作業メモ (feat(collections): add counting bloom filter)
+
+- 目的:
+  - `alloc/collections` に `CountingBloomFilter` を追加し、`BloomFilter` と同じ hasher 設計を保ちながら削除可能な近似 membership structure を標準で扱えるようにする。
+  - bare API と public doctest を reboot 方針に合わせ、pipe 連鎖は `tests/stdlib` 側で保証する。
+- 変更:
+  - `stdlib/alloc/collections/counting_bloom_filter.nepl`
+    - `CountingBloomFilter<.T,.H>` を追加。
+    - `new` / `len` / `insert` / `remove` / `contains` / `clear` / `free` を bare API で実装。
+    - counter は `u8` 配列とし、3 本の probe index に対して insert は飽和加算、remove は 0 までの減算を行う。
+  - `stdlib/tests/counting_bloom_filter.n.md`
+    - insert/remove/clear の focused fixture を追加。
+  - `tests/stdlib/counting_bloom_filter_collections.n.md`
+    - pipe 記法での `insert` / `remove` / `contains` / `clear` 利用を回帰として追加。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/counting_bloom_filter.n.md -i tests/stdlib/counting_bloom_filter_collections.n.md -i stdlib/alloc/collections/counting_bloom_filter.nepl --no-stdlib --no-tree -o /tmp/tests-counting-bloom-filter.json -j 2`
+    - 結果: `8/8 pass`
+- 差異メモ:
+  - `new DefaultHash32 0` の invalid length `Result::Err` 経路は、`target/debug/nepl-cli + wasmer` では正常に `1` を返す一方、web compile path では runtime OOB に落ちた。
+  - これは `CountingBloomFilter` 実装ではなく web compiler/runtime 側の別根因と判断し、今回の collection batch には混ぜていない。
+  - `node nodesrc/run_doctest.js -i stdlib/tests/bitset.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/bitset.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/bitset_collections.n.md -n 1` -> pass
+  - `node nodesrc/tests.js -i stdlib/tests/bitset.n.md -i tests/stdlib/bitset_collections.n.md -i stdlib/alloc/collections/bitset.nepl --no-stdlib --no-tree -o /tmp/tests-bitset-fixed.json -j 2`
+    - 結果: `10/10 pass`
+- 差異メモ:
+  - out-of-bounds `Err` を返す focused case は、web compiler が生成した current wasm で hang する別根因に当たったため、この batch には混ぜていない。
+  - `nepl-cli + wasmer` では同じ最小再現が即終了することを確認済みで、stdlib 実装ではなく compiler/runtime 側の別タスクとして切り出す。
+
+# 2026-03-06 作業メモ (フェーズD: llvm codegen 内の precheck 後診断返却を除去)
+
+- 目的:
+  - `precheck` 実行後に `codegen_llvm` が `TypecheckFailed` を返していた残存経路を除去し、前段検査不変条件へ統一する。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `emit_ll_from_module_for_target` 内の `select_active_raw_body(... )` `Err(diag)` 分岐を `TypecheckFailed` 返却から internal panic へ変更。
+    - これにより、raw-body 選択失敗は前段 `target_precheck::precheck_module_before_codegen` でのみ診断され、codegen 到達後は生成専任になる。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-after-llvm-invariant-2.json -j 15` -> `8/8 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-precheck-invariant.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: llvm precheck 回帰ケースの追加)
+
+- 目的:
+  - LLVM backend 到達前に未対応 intrinsic を診断できることを回帰固定する。
+- 変更:
+  - `tests/llvm_target.n.md`
+    - `llvm_precheck_rejects_wasm_only_intrinsic` を追加。
+    - `#intrinsic "i32_add"` を `#target llvm` で使った場合に `diag_id: 3012` を期待する compile_fail ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/llvm_target.n.md --no-stdlib --no-tree --runner all --llvm-all -o /tmp/tests-llvm-target-after-precheck-case.json -j 15`
+    - 追加ケース（`doctest#6::llvm`）は pass。
+    - 既存ケース `doctest#4/#5` は `invalid redefinition of function 'add'` で fail（既知未解決）。
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-test-add.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: allocator helper 解決の意味論修正)
+
+- 目的:
+  - runtime helper 共通化後に発生した run-time 失敗 (`unreachable` / `memory access out of bounds`) を、間に合わせではなく helper 解決の意味論から修正する。
+- 原因:
+  - `alloc`（安全API）と `alloc_raw`（低レベルAPI）は現状の lowering では型互換になりうるため、`ALLOC_CANDIDATES=["alloc","alloc_raw"]` へ変更すると backend 内部確保で誤って `alloc` を掴む経路が発生する。
+  - その結果、内部確保の前提（生ポインタ返却）と合わず、実行時に `unreachable` / OOB が発生した。
+- 変更:
+  - `nepl-core/src/runtime_helpers.rs`
+    - `ALLOC_CANDIDATES` を `["alloc_raw", "alloc"]` に戻し、内部 helper 解決は生ポインタ意味論を優先するよう修正。
+    - 単体テスト期待値も raw 優先へ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-alloc-order-fix.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: runtime helper 解決の共通化と raw 依存縮小)
+
+- 目的:
+  - `nepl-core` 内で重複していた runtime helper（alloc/dealloc/realloc）解決ロジックを共通化し、`_raw` 名依存を段階縮小する。
+  - helper 名の優先順位を安全API名（suffixなし）優先へ統一する。
+- 変更:
+- `nepl-core/src/runtime_helpers.rs`
+    - `ALLOC_CANDIDATES` を `["alloc", "alloc_raw"]` に変更（安全API優先）。
+    - `RuntimeHelperKind` / `helper_candidates` / `helper_base_name` を追加。
+
+# 2026-03-09 作業メモ (trait 能力モデル: `Eq` / `Ord` の共通化)
+
+- 目的:
+  - `core/traits` に `Eq` / `Ord` を追加し、比較意味論を stdlib 共通 trait として扱えるようにする。
+  - `alloc/collections/vec/sort.nepl` の局所 `Ord` 定義を撤去し、collections 側の比較 capability を `core` へ寄せる。
+- 変更:
+  - `stdlib/core/traits/eq.nepl`
+    - `Eq` trait
+    - `eq_by_trait`
+    - `ne_by_trait`
+    - `bool`, `i32`, `u8`, `i64`, `f32`, `f64`, `str` への impl
+  - `stdlib/core/traits/ord.nepl`
+    - `Ord` trait
+    - `ord_lt`, `ord_le`, `ord_gt`, `ord_ge`
+    - `bool`, `i32`, `u8`, `i64`, `i128`, `f32`, `f64` への impl
+  - `stdlib/alloc/collections/vec/sort.nepl`
+    - 局所 `Ord` trait と局所 impl を削除
+    - `core/traits/ord` を import し、`sort_lt` 系 helper から共通 `ord_*` を呼ぶ形へ変更
+  - `tests/stdlib/traits_order.n.md`
+    - 日本語の目的つき focused test を追加
+- 判断:
+  - `Eq<i128>` は既存の分解 helper を仮定すると壊れるため、一旦追加しなかった。
+  - `Ord<str>` も既存の順序比較 helper が未整備なので、同様に見送った。
+  - まずは既存の `core/math` overload で根拠を持てる型だけを共通 trait 化した。
+- 検証:
+  - `NODE_NO_WARNINGS=1 node nodesrc/run_test.js`
+    - `Eq` / `Ord` core focused case: pass
+    - `vec/sort` + `Ord` std focused case: pass
+
+# 2026-03-09 作業メモ (trait 能力モデル: `Hash` の共通化)
+
+- 目的:
+  - `Hash` trait を `core/traits` へ追加し、hashmap / hashset が具体的な `hash32_i32` / `hash32_str` へ直接依存せず共通 helper 経由でキーを混合できるようにする。
+  - 将来の `Serialize` / `Deserialize` と同じく、型ごとの能力を stdlib trait として明示する流れを揃える。
+- 変更:
+  - `stdlib/core/traits/hash.nepl`
+  - `Hash` trait
+  - `hash32_by_trait`
+  - `i32`
+
+# 2026-03-11 作業メモ (`streamio` target 指定化と `u32/u64` bare I/O の修正)
+
+- 目的:
+  - `scanner` / `writer` を stdin/stdout 固定の no-arg API から外し、`io_stdin` / `io_stdout` / `io_text` / `io_bytes` の target 指定で生成する形へ寄せる。
+  - `u32` / `u64` の bare `read` / `write` を、型 suffix 名に戻さず current overload 方針のまま安定化する。
+  - Part6 tutorial と `kp` 周辺に残っていた old move-model 前提を、現行所有権モデルへ合わせる。
+- 原因:
+  - `std/streamio` だけ `read` / `write` の bare 名へ寄せても、生成入口 `scanner()` / `writer()` が stdin/stdout 固定のままだと、`std/io` / `iotarget` と責務が二重化していた。
+  - `u64` は compiler 側で `wasm_shared::valtype` がまだ `i32` 扱いの箇所を残しており、Wasm signature が崩れていた。
+  - `u32` / `u64` の 10 進出力は、unsigned 値を signed overload へ落としていたため `4294967295` が `18446744073709551615` に化けていた。
+  - `PrefixI32` や tutorial Part6 の `Vec` 走査には old move-model 前提が残っていた。
+- 変更:
+  - `stdlib/std/streamio.nepl`
+    - `scanner <(IoReadTarget)*>Result<StreamScanner,str>>`
+    - `writer <(IoWriteTarget)*>Result<StreamWriter,str>>`
+    - `scanner_from_bytes`
+    - `StreamWriter` header に `TargetKind` を追加
+    - `u32` / `u64` の append 実装を unsigned decimal として修正
+    - `StreamScanner` / `StreamWriter` の doc comment を current 実装へ同期
+  - `stdlib/std/iotarget.nepl`
+    - `io_stdin` / `io_stdout` / `io_text` / `io_bytes` を生成入口として利用
+  - `nepl-core/src/wasm_shared.rs`
+    - `u64` を Wasm `I64` として扱うよう修正
+  - `nodesrc/run_test.js`
+    - `BigInt` の JSON 出力と return decode を追加
+  - `stdlib/kp/kpprefix.nepl`
+    - `PrefixI32` に `Copy` / `Clone` を付与
+    - `prefix_build_vec_i32` を `vec_data_len` ベースへ修正
+  - `tests/stdlib/streamio.n.md`
+  - `tests/stdlib/kp.n.md`
+  - `tests/stdlib/kp_i64.n.md`
+  - `tests/stdlib/stdin.n.md`
+  - `tests/compiler/move_effect.n.md`
+  - `tutorials/getting_started/22_competitive_io_and_arith.n.md`
+  - `tutorials/getting_started/24_competitive_dp_basics.n.md`
+  - `tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md`
+  - `tutorials/getting_started/27_competitive_algorithms_catalog.n.md`
+  - `stdlib/kp/kpgraph.nepl`
+    - `unwrap_ok scanner io_stdin` / `unwrap_ok writer io_stdout` へ統一
+- 検証:
+  - `NO_COLOR=false trunk build`
+  - `node nodesrc/run_doctest.js -i /tmp/u64_probe2.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 4`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/streamio.n.md -n 10`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/kp_i64.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/kp.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/kp.n.md -n 2`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/kp.n.md -n 3`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/stdin.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/22_competitive_io_and_arith.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/24_competitive_dp_basics.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/25_competitive_prefixsum_twopointers.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/27_competitive_algorithms_catalog.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i stdlib/kp/kpgraph.nepl -n 1`
+  - `node nodesrc/run_doctest.js -i stdlib/kp/kpprefix.nepl -n 1`
+  - `node nodesrc/run_doctest.js -i tests/compiler/move_effect.n.md -n 20`
+
+# 2026-03-09 作業メモ (compiler 前提固定: `#prelude` 最小実装と Copy 固定表撤去)
+
+- [目的/もくてき]:
+  - `todo.md` の `compiler 前提` 残件だった `Copy` 固定表依存を、[実際/じっさい]に source [側/がわ]から trait impl を[供給/きょうきゅう]できる[状態/じょうたい]へ[移/うつ]す。
+  - parser だけに[存在/そんざい]していた `#prelude` / `#no_prelude` を loader [段階/だんかい]でも[解釈/かいしゃく]し、copy/clone 非ハードコード化の[前提/ぜんてい]を[整/ととの]える。
+- [原因/げんいん]:
+  - `#prelude` と `#no_prelude` は lexer / parser / AST にだけ[存在/そんざい]し、loader では[無視/むし]されていた。
+  - そのため `Copy` / `Clone` impl を source [側/がわ]から[既定/きてい][供給/きょうきゅう]できず、`TypeCtx::is_copy` に primitive 固定表フォールバックを[残/のこ]す[必要/ひつよう]があった。
+- [変更/へんこう]:
+  - `nepl-core/src/loader.rs`
+    - root module [限定/げんてい]で `#prelude` / `#no_prelude` を[処理/しょり]するように[変更/へんこう]した。
+    - `#no_prelude` がない root module には[既定/きてい]で `std/prelude_base` を[読/よ]み[込/こ]む。
+    - import/include の[再帰/さいき] load では default prelude を[適用/てきよう]しないようにして、stdlib [内部/ないぶ] import での[循環/じゅんかん]を[避/さ]けた。
+  - `stdlib/std/prelude_base.nepl`
+    - [最小/さいしょう] prelude として[追加/ついか]した。
+    - [当面/とうめん]は `core/traits/copy` だけを[読/よ]み[込/こ]み、copy/clone 能力の source [供給/きょうきゅう]に[絞/しぼ]った。
+  - `nepl-core/src/types.rs`
+    - `TypeCtx::is_copy` の最終フォールバックから primitive 固定表を[削除/さくじょ]した。
+    - `Copy` trait が[見/み]えていない[場合/ばあい]は、[参照/さんしょう]型と `Never` だけを compiler [内在/ないざい]の copy として[扱/あつか]う。
+  - `tests/compiler/prelude_copy.n.md`
+    - default prelude で `Copy` bound が[通/とお]ることを[確認/かくにん]する focused case を[追加/ついか]した。
+    - `#prelude std/prelude_base` と `#no_prelude` を[併記/へいき]しても、[明示的/めいじてき] prelude が[優先/ゆうせん]されることを[固定/こてい]した。
+    - `#no_prelude` だけでは `Copy` trait [供給/きょうきゅう]が[消/き]え、`.T: Copy` が `3073` で[落/お]ちることを[追加/ついか]した。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/compiler/prelude_copy.n.md -i tests/compiler/resolve.n.md --no-stdlib --no-tree -o /tmp/tests-prelude-only.json -j 15` -> `14/14 pass`
+  - `node nodesrc/tests.js -i tests/compiler/prelude_copy.n.md --no-stdlib --no-tree -o /tmp/tests-prelude-copy-only.json -j 15` -> `3/3 pass`
+- [判断/はんだん]:
+  - `Copy` の source [供給/きょうきゅう]は default prelude を[通/とお]すことで[既存/きぞん]コードを[壊/こわ]さずに[移行/いこう]できる。
+  - `#no_prelude` は「標準 capability を[含/ふく]めて自前で[管理/かんり]する」ための opt-out として[機能/きのう]する。
+    - `bool`
+    - `u8`
+    - `i64`
+    - `str`
+    への impl を追加。
+  - `stdlib/alloc/collections/hashmap.nepl`
+    - `hash32_i32` / `hash32_str` の直接呼び出しを `hash32_by_trait` に置換。
+  - `stdlib/alloc/collections/hashset.nepl`
+    - 同様に `hash32_by_trait` 経由へ置換。
+  - `tests/stdlib/traits_hash.n.md`
+    - `[目的/もくてき]` つき focused case を追加。
+- 判断:
+  - `Hash<i64>` は [上位/じょうい] / [下位/かい] 32-bit を XOR で折りたたんでから `hash32_i32` へ流す。
+  - `Hash` の対象は、まず既存 stdlib が安定して支えているキー型に限定した。
+  - `i128` や独自構造体のハッシュ能力は、今後 `Serialize` / `Eq` との整合を見ながら追加する。
+- compiler 修正:
+  - なし。今回の確認で見つかった問題は `traits_hash.n.md` 側の API サンプルが現行 `hashmap` / `hashset` の利用流儀とずれていたことだった。
+  - `must_hm` / `must_hs` と `Option` の match を使う既存流儀へ合わせて修正した。
+- 検証:
+  - `node` + `nodesrc/compiler_loader` による compile-only focused check で、
+    - `hash32_by_trait` 単体
+    - `hashmap/hashset/hashmap_str/hashset_str`
+    を使う snippet
+    の両方が `COMPILE_OK` を返すことを確認。
+  - `nodesrc/tests.js` はこの環境では長くぶら下がることがあるため、focused な compile-only でまず妥当性を固定した。
+
+# 2026-03-09 作業メモ (`std/test` 集約 API 追加と nested generic overload 根本修正)
+
+- 目的:
+  - stdlib reboot 前のテスト基盤として、1 件失敗しても残りの検査を継続実行できる `std/test` の collectable API を整備する。
+  - `Vec<Result<(),str>>` に `push` / `vec_push` / pipe で `Result<(),str>` を積めない compiler バグを、library 側の回避ではなく typecheck の根本原因から修正する。
+- 変更:
+  - `stdlib/std/test.nepl`
+    - `checks_new`
+    - `checks_push`
+    - `check`
+    - `check_eq_i32`
+    - `check_ne`
+    - `check_str_eq`
+    - `check_ok_i32`
+    - `check_err_i32`
+    - `check_status_str`
+    - `checks_has_err(_loop)`
+    - `checks_summary(_loop)`
+    - `checks_report_failures`
+    - `finish_checks`
+    を追加した。
+    - `assert` / `assert_eq_i32` / `assert_ne` / `assert_str_eq` は、対応する `check_*` を受けて即時失敗する薄いラッパへ整理した。
+  - `tests/std_test_collect.n.md`
+    - `[目的/もくてき]` と `[何/なに]を[確/たし]かめるか` を付けた focused case を追加した。
+    - 全件成功時の summary 出力と、失敗を含むときの summary + 個別失敗出力を固定した。
+  - `tests/compiler/overload_nested_generic_push.n.md`
+    - `Vec<Result<(),str>>` に対する `push` / `vec_push` / pipe の nested generic overload 解決を確認する compiler 回帰 test を追加した。
+  - `nepl-core/src/types.rs`
+    - 関数型に含まれる型変数 binding を退避・復元する
+      - `snapshot_type_var_bindings`
+      - `restore_type_var_bindings`
+      を追加した。
+  - `nepl-core/src/typecheck.rs`
+    - `check_function` で関数本体を検査する前に `func_ty` 上の型変数 binding を snapshot し、終了後に必ず restore するよう変更した。
+- 原因:
+  - generic 関数本体の型検査中に、関数シグネチャ自体が持っている型変数 `TypeId` が unification で束縛され、その束縛が `Env` 上の大域関数型へ残留していた。
+  - その結果、`vec_push <.T> <(Vec<.T>, .T)->Vec<.T>>` の `.T` が過去の検査で `i32` へ汚染され、`Vec<Result<(),str>>` に対する overload 推論で `Vec<i32>` として扱われていた。
+  - 明示型引数付き `vec_push<Result<(),str>>` が通り、型引数省略時だけ落ちることから、candidate 選択時の `instantiate(binding.ty)` 入力が既に汚染されていると特定した。
+- 結果:
+  - `std/test` の collectable API で、`[ok,ok,err,ok,err]` 形式の概要と失敗添字・理由をまとめて表示できるようになった。
+  - nested generic `push` / `vec_push` / pipe は、型引数を明示しなくても `Vec<Result<(),str>>` 上で解決できるようになった。
+- 検証:
+  - `trunk build`（root, `NO_COLOR=false`） -> success
+  - `node nodesrc/tests.js -i tests/std_test_collect.n.md -i tests/compiler/overload_nested_generic_push.n.md --no-stdlib --no-tree -o /tmp/tests-std-test-collect-focused.json -j 15`
+    - 結果: `5/5 pass`
+    - `find_runtime_helper_key`（名前解決）と `find_runtime_helper_index`（index解決）を追加。
+  - `nepl-core/src/codegen_wasm.rs`
+    - ローカル実装だった helper 名解決を削除し、`runtime_helpers::find_runtime_helper_index` に統一。
+  - `nepl-core/src/monomorphize.rs`
+    - helper 保持ルート探索を `find_runtime_helper_key` + `RuntimeHelperKind` へ置換。
+    - 重複していた名前マッチ関数を削除。
+  - `nepl-core/src/codegen_llvm.rs`
+    - helper 候補取得を `helper_candidates(RuntimeHelperKind::...)` に統一。
+    - `resolve_symbol_name` の候補一致を `helper_base_name` ベースへ変更し、namespaced/mangled 名でも同一規則で解決。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-helper-unify.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: llvm backend の wasm-body 分岐を不変条件化)
+
+- 目的:
+  - `codegen_llvm` 側に残っていた backend 入力エラー分岐（`UnsupportedWasmBody`）を前段検査前提へ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `LlvmCodegenError` から `UnsupportedWasmBody` / `UnsupportedParsedFunctionBody` を削除。
+    - `emit_ll_from_module_for_target` 内で `ActiveRawBody::Wasm` 到達時の `Err` を internal panic に変更。
+    - `FnBody::Wasm` reachable 到達時の `Err` を internal panic に変更。
+    - HIR lowering 経路で `HirBody::Wasm` 到達時の `Err` を internal panic に変更。
+    - 対応テスト `emit_ll_rejects_entry_with_wasm_body` は `TypecheckFailed` を期待する形へ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-invariant.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: wasm codegen 診断返却経路の撤去)
+
+- 目的:
+  - `codegen` 到達後は生成専任にする方針に合わせ、`codegen_wasm` の `Vec<Diagnostic>` 返却経路を撤去する。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `lower_body` / `lower_user` の戻り値を `Result<Function, Vec<Diagnostic>>` から `Function` へ変更。
+    - `gen_block` / `gen_expr` の `diags` 引数を削除。
+    - `generate_wasm` の code section 生成で `Err(ds)` 分岐を削除し、前段検査通過後は直接生成する形に統一。
+    - backend 内診断として残っていた未使用関数 `validate_wasm_stack` を削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-after-wasm-no-diag.json -j 15` -> `8/8 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-wasm-no-diag.json -j 15` -> `791/791 pass`
+
+# 2026-03-06 作業メモ (フェーズD: wasm helper 解決の自己再帰バグ修正)
+
+- 目的:
+  - `tests + stdlib` で発生していた `RangeError: Maximum call stack size exceeded` を根本原因から解消する。
+- 再現と切り分け:
+  - `option.nepl` doctest を単独再現すると `wasm-function[4]` の自己再帰で停止。
+  - 同一ソースを `nepl-cli` で生成した wasm は正常実行。
+  - `web` 生成 WAT と `native` 生成 WAT を比較すると、同一箇所で `call 5` が `call 4`（自己呼び出し）に化けていた。
+- 原因:
+  - `codegen_wasm` の runtime helper 解決が曖昧な文字列一致（prefix/contains）依存だった。
+  - allocator helper 解決時に `alloc` と `alloc_raw` の取り違えが発生し、enum/tuple 構築時の内部確保で自己再帰が起きていた。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - helper 名の基底名抽出 `helper_base_name` を追加。
+    - runtime helper 解決を基底名一致へ変更し、曖昧一致を廃止。
+    - 現在 lowering 中の関数インデックスは helper 候補から除外。
+    - `LocalMap` に `alloc_helper_idx` を保持し、関数ごとに一度だけ helper を確定。
+  - `nepl-core/src/runtime_helpers.rs`
+    - `ALLOC_CANDIDATES` を `["alloc_raw", "alloc"]` の順へ変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i stdlib/core/option.nepl -i stdlib/alloc/collections/vec.nepl -i stdlib/alloc/collections/vec/sort.nepl --no-stdlib --no-tree -o /tmp/tests-vec-option-after-alloc-helper-fix.json -j 15` -> `22/22 pass`
+  - `NO_COLOR=false node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-alloc-helper-fix.json -j 15` -> `791/791 pass`
+
+# 2026-03-05 作業メモ (フェーズD: web 実行時 `compile: unreachable` の根本修正)
+
+- 目的:
+  - `web/dist` 経路でのみ発生していた `phase=compile, error=unreachable` を根本原因から解消する。
+- 原因:
+  - `codegen_wasm.rs` の raw wasm 行パースで、ローカル解決クロージャが `parse_wasm_line_with_lookup` 側の `$` 正規化と二重処理になっていた。
+  - その結果、`#wasm` 本文の `$a`/`$b` が codegen 時のみ `unknown local` になり panic していた（precheck 側とは不整合）。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `parse_wasm_line` の lookup を `|name| locals.lookup(name)` に統一。
+    - 旧 `parse_local` ヘルパを削除。
+  - `nepl-web/src/lib.rs`
+    - `console_error_panic_hook::set_once()` を `#[wasm_bindgen(start)]` で有効化し、WASM panic の原因位置を可視化。
+  - `nodesrc/run_test.js`
+    - `formatError` を追加し、compile/run 失敗時に stack を保持して JSON 出力へ反映。
+- 検証:
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-after-rootfix.json -j 15` -> `8/8 pass`
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/list.nepl --no-stdlib --no-tree -o /tmp/tests-list-after-rootfix.json -j 15` -> `11/11 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-rootfix.json -j 15` -> `707/791 pass`（残り `84 fail` は run 時 `Maximum call stack size exceeded`。`compile: unreachable` は再現せず）
+
+# 2026-03-05 作業メモ (フェーズD: web 実行時 `unreachable` の切り分け)
+
+- 目的:
+  - 全体テスト (`tests + stdlib`) で多発する `phase=compile, error=unreachable` を、間に合わせではなく根本原因から切り分ける。
+- 実施:
+  - `trunk build` 後に
+    - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-baseline-after-revert-v1.json -j 15`
+    - 結果: `349/791 pass`、`442 fail`、上位失敗は `stdlib/alloc/collections/list.nepl` doctest 群の `unreachable`。
+  - 同じ入力を `nepl-cli` で単体コンパイル:
+    - `target/debug/nepl-cli -i /tmp/list_doctest1_clean.nepl --target std --emit wasm -o /tmp/list_doctest1_out -v`
+    - 結果: compile 成功 (`DEBUG: compile_module returned Ok`)。
+- 結論:
+  - 失敗は `web/dist`（WASM 上の compiler 実行）経路に限定される。
+  - `codegen_wasm` の今回差分を戻しても再現するため、単純な backend 変更起因ではない。
+  - 以降は `web` 側で panic を診断化して原因位置を可視化するタスクを上流課題として扱う。
+
+# 2026-03-05 作業メモ (フェーズD: todo整理 + llvm precheck 返り値規約)
+
+- 目的:
+  - `todo.md` の完了済み項目（`UnsupportedHirLowering` 整理）を反映し、未完了だけを残す。
+  - LLVM 前段検査に「非 unit 関数は値を返す」規約を追加して、backend 依存失敗の前段化を進める。
+- 変更:
+  - `todo.md`
+    - フェーズDの完了済み行
+      - `llvm 経路でも backend 依存エラーを前段診断に寄せる（UnsupportedHirLowering の整理）`
+      を削除し、残課題として
+      - `llvm 経路の precheck を拡張し、intrinsic/戻り値規約など backend 依存失敗を前段で確定する。`
+      へ更新。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_llvm_codegen` に `TypeCtx` を渡す形へ変更。
+    - reachable な `HirBody::Block` 関数について、戻り値型が非 `unit` かつ block が値を返さない場合を `D3003` で診断。
+  - `nepl-core/src/codegen_llvm.rs`
+    - `precheck_llvm_codegen(&types, &hir, &reachable_set)` 呼び出しへ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v9.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm codegen_precheck に実検査を追加)
+
+- 目的:
+  - `codegen` 到達後は生成専任に寄せるため、LLVM 側でも前段検査で弾ける入力を増やす。
+- 変更:
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_llvm_codegen` を追加。
+    - 到達関数（reachable set）に対して expression tree を走査し、LLVM 未対応 intrinsic を前段診断化。
+    - 未対応 intrinsic は `D3012 (TypeUnknownIntrinsic)` で報告。
+  - `nepl-core/src/codegen_llvm.rs`
+    - HIR lower 前に `precheck_llvm_codegen` を実行し、error があれば `TypecheckFailed` で早期終了。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v8.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm backend 診断型の整理)
+
+- 目的:
+  - `codegen_llvm` から `UnsupportedHirLowering` 返却経路が消えた状態を型定義にも反映する。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `LlvmCodegenError::UnsupportedHirLowering` を enum / Display から削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v6.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm 残存 backend 診断の不変条件化 継続)
+
+- 目的:
+  - `codegen_llvm` に残っていた `UnsupportedHirLowering` を削減し、前段通過後は生成専任モデルへ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - 以下を `UnsupportedHirLowering` 返却から internal panic へ変更:
+      - 関数 return 型不一致
+      - enum/struct/tuple 構築時の `alloc` 必須判定
+      - enum payload / struct field / tuple item の値生成必須・型不一致
+      - `match` arm の結果型不一致
+      - unknown intrinsic 到達
+      - unsupported expression kind 到達
+      - 文字列リテラルID範囲外
+      - 文字列具体化時の `alloc` 必須判定
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v5.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm intrinsic 引数・型チェックの backend 診断を不変条件化)
+
+- 目的:
+  - `codegen_llvm` intrinsic lowering に残っていた backend 診断を削減し、前段通過後の生成専任モデルへ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - 以下を `UnsupportedHirLowering` 返却から internal panic へ変更:
+      - `load` の引数個数/型引数個数不一致、ポインタ値不在、ポインタ型不一致
+      - `store` の引数個数/型引数個数不一致、ポインタ/値不在、ポインタ型不一致、`u8` 値型不一致、格納型不一致
+      - `add` の引数個数不一致、lhs/rhs 不在、i32以外
+      - `f32_to_i32` / `i32_to_u8` / `u8_to_i32` の引数個数・値不在・型不一致
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v4.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm 制御構文の backend 診断を不変条件化)
+
+- 目的:
+  - `codegen_llvm` の `if/while/match` で残っていた backend 診断を削減し、型検査・前段検証通過後は生成専任へ寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `if`:
+      - 条件が値を返さない
+      - 条件が `i32/bool` 互換でない
+      - then/else 分岐結果型不一致
+      を `UnsupportedHirLowering` 返却から internal panic へ変更。
+    - `while`:
+      - 条件が値を返さない
+      - 条件が `i32/bool` 互換でない
+      を internal panic へ変更。
+    - `match`:
+      - scrutinee が値を返さない
+      - scrutinee が enum pointer (`i32`) でない
+      - arm が0件
+      を internal panic へ変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v3.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm call_indirect の backend 診断を不変条件化)
+
+- 目的:
+  - `codegen_llvm` の `call_indirect` で残っていた backend 診断（`UnsupportedHirLowering`）を削減し、前段通過後は生成専任に寄せる。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `call_indirect` について以下の `UnsupportedHirLowering` 返却を internal panic 化:
+      - callee が値を返さない
+      - callee が `i32` 関数IDでない
+      - 引数が値を返さない
+      - 引数個数不一致
+      - 引数型不一致
+      - 候補関数未検出
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md -i tests/llvm_target.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v2.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: raw wasm 行検査の前段分離を完了)
+
+- 目的:
+  - `codegen_precheck` が `codegen_wasm` 実装詳細へ依存する経路を解消し、前段検査の責務を `wasm_shared` へ集約する。
+  - 「codegen 到達時は生成専任」の方針を維持し、raw wasm 行パース失敗を前段で確定する。
+- 変更:
+  - `nepl-core/src/wasm_shared.rs`
+    - `parse_wasm_line_with_lookup` を共有化。
+    - `precheck_raw_wasm_body` を追加し、`HirBody::Wasm` 行を前段で検査して `D4004` を返すように変更。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - raw wasm 事前検査呼び出し先を `codegen_wasm` から `wasm_shared` へ変更。
+  - `todo.md`
+    - フェーズDの「`codegen_precheck` の wasm 側ヘルパ依存整理」項目を完了として削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `NO_COLOR=false node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v1.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: #wasm のスタック検証を前段検査へ移動)
+
+- 目的:
+  - 「codegen は正しい入力を生成するだけ」の方針に合わせ、`#wasm` ボディ検証を backend 実行時ではなく `codegen_precheck` 側で完了させる。
+- 変更:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `precheck_raw_wasm_body` シグネチャを `precheck_raw_wasm_body(ctx, func)` に変更。
+    - raw 行のパース成功時に命令列を蓄積し、前段で `validate_wasm_stack` を実行するよう変更。
+    - `lower_user` の `HirBody::Wasm` 経路から `validate_wasm_stack` を削除。
+    - `generate_wasm` の診断集約を実質空に整理（codegen 内診断を発生させない方向に統一）。
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - `precheck_raw_wasm_body` 呼び出しを新シグネチャへ更新。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v4.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: codegen_precheck の wasm 事前検査を共通モジュールへ分離)
+
+- 目的:
+  - `passes/codegen_precheck.rs` が `codegen_wasm.rs` 実装詳細へ直接依存していた状態を整理し、前段検査ロジックを共有モジュールへ分離する。
+  - 「codegen は正しい入力を生成するだけ」の方針に合わせ、backend の `skip`/診断蓄積を不変条件違反へ寄せる。
+- 変更:
+  - `nepl-core/src/wasm_shared.rs` を新規追加。
+    - wasm署名解決 (`wasm_sig`, `wasm_sig_ids`)
+    - generic skip 判定 (`should_skip_wasm_codegen_for_generic`)
+    - 到達関数解析 (`collect_reachable_wasm_functions`)
+    - 間接呼び出しを含む署名集合収集 (`collect_wasm_signature_set`)
+    - wasm intrinsic 対応判定 (`is_supported_wasm_intrinsic`)
+  - `nepl-core/src/passes/codegen_precheck.rs`
+    - 上記ロジックを `wasm_shared` 参照へ置換。
+    - `precheck_raw_wasm_body` のみ `codegen_wasm` 側を継続利用（次段で分離予定）。
+  - `nepl-core/src/codegen_wasm.rs`
+    - extern/function 署名不一致時の `skip` を廃止し internal panic 化。
+    - `lower_body` で backend 診断が返る経路を internal panic 化。
+    - 共有ロジックは `wasm_shared` 呼び出しへ委譲。
+  - `nepl-core/src/lib.rs`
+    - `pub mod wasm_shared;` を追加。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-shared-v3.json -j 15` -> `8/8 pass`
+
+# 2026-03-05 作業メモ (フェーズD: llvm backend 診断を前段不変条件へ移行)
+
+- 目的:
+  - `todo.md` フェーズD方針に合わせ、`codegen_llvm` 側で発行していた「前段通過後に到達しないはず」の診断を廃止し、前段検証の不変条件として扱う。
+- 変更:
+  - `nepl-core/src/codegen_llvm.rs`
+    - `let` の型不一致 (`let type mismatch`) を `UnsupportedHirLowering` から internal panic へ変更。
+    - `set` の型不一致 (`set type mismatch`) を `UnsupportedHirLowering` から internal panic へ変更。
+    - 未解決 trait call の到達を `UnsupportedHirLowering` から internal panic へ変更。
+    - call 引数型不一致を `UnsupportedHirLowering` から internal panic へ変更。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/raw_body_precheck.n.md -i tests/compile_fail_diag_location.n.md --no-stdlib --no-tree -o /tmp/tests-precheck-wasm-llvm-invariant-v2.json -j 15` -> `8/8 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-llvm-invariant-panic-v1.json -j 15` -> `707/791 pass`（`Maximum call stack size exceeded` が多数。今回の変更対象外の既存失敗として継続調査）
+
+# 2026-03-05 作業メモ (フェーズC/D接続: core/mem に MemPtr 初期化オーバーロード追加)
+
+- 目的:
+  - `core/mem` 後段移行（`stdlib/std`/tutorials）で `i32` 生ポインタを露出せずに配列初期化できる上流APIを用意する。
+  - `MemPtr` モデル上で `fill/memset` を統一し、`Result` で失敗を扱えるようにする。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `memset_u8 <(MemPtr<u8>,i32,i32)->Result<(),str>>` を追加。
+    - `fill_u8 <(MemPtr<u8>,i32,i32)->Result<(),str>>` を追加。
+    - `fill_i32 <(MemPtr<i32>,i32,i32)->Result<(),str>>` を追加。
+    - 無効ポインタや負の長さは `Result::Err` を返す。
+  - `tests/memory_safety.n.md`
+    - `MemPtr fill_i32/fill_u8 の安全オーバーロード` ケースを追加。
+    - `MemPtr fill 系は無効引数を Err で返す` ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i stdlib/core/mem.nepl --no-tree -o /tmp/tests-memory-safety-fill-overload.json -j 15` -> `217/217 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-mem-fill-overload.json -j 15` -> `787/787 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpread_core ヘッダフィールドの型安全化)
+
+- 目的:
+  - `kpread_core` に残っていたヘッダ生オフセット（`0/4/8`）を列挙型へ移行し、`kpread`/`kpwrite` と同じ境界表現に揃える。
+  - ヘッダレイアウトの意味を型で固定し、オフセット誤指定を上流で防ぐ。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `ScannerHeaderFieldCore` を追加（`BufPtr` / `Len` / `Pos`）。
+    - `scanner_header_core_off` を追加し、オフセット解決を1箇所に集約。
+    - `store_i32_u8_at sc*_region 0/4/8 ...` を列挙型 + オフセット関数経由へ置換。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-kp-core-header-field-enum.json -j 15` -> `227/227 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpread-core-header-field-enum.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpwrite ヘッダフィールドの型安全化)
+
+- 目的:
+  - `kpwrite` のヘッダアクセスで使っていた生オフセット値（`0/4/8/12/16`）を列挙型に置換し、`kpread` と同じ安全モデルへ統一する。
+  - `mem/kpread/kpwrite` の公開API安全化で、ヘッダ境界の意味を型で表現する。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `WriterHeaderField` を追加（`BufPtr` / `Cap` / `WriteLen` / `IovPtr` / `NwPtr`）。
+    - `writer_header_off` を追加し、オフセット解決を一箇所に集約。
+    - `writer_header_ptr` / `writer_load_header` / `writer_store_header` / `writer_load_header_ptr` の第2引数を `i32` から `WriterHeaderField` に変更。
+    - 呼び出し側の生数値オフセットを全廃し、列挙値に置換。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl --no-tree -o /tmp/tests-kp-header-field-enum-unified.json -j 15` -> `226/226 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpwrite-header-field-enum.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpread ヘッダフィールドの型安全化)
+
+- 目的:
+  - `kpread` のヘッダアクセスで使っていた生オフセット値（`0/4/8`）を列挙型へ置き換え、呼び出し側の誤指定を減らす。
+  - `todo.md` 2026-03-03 フェーズD（`mem/kpread/kpwrite` の公開API安全化）に沿って、上流の表現を固定する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `ScannerHeaderField` を追加（`BufPtr` / `Len` / `Pos`）。
+    - `scanner_header_off` を追加し、オフセット解決を1箇所へ集約。
+    - `scanner_header_ptr` / `scanner_load_header` / `scanner_store_header` の第2引数を `i32` から `ScannerHeaderField` に変更。
+    - 呼び出し側の `scanner_load_header sc 0/4/8` と `scanner_store_header sc 8 ...` を列挙型指定へ置換。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpread.nepl --no-tree -o /tmp/tests-kpread-header-field-targeted.json -j 15` -> `222/222 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpread-header-field.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (フェーズD: kpread ヘッダアクセスのサイレント失敗を除去)
+
+- 目的:
+  - `scanner_load_header` / `scanner_store_header` の失敗時フォールバック（`0` / `()`）を廃止し、ヘッダ不整合を隠蔽しない。
+  - 上流仕様（安全API優先）に合わせ、壊れた状態を継続させるより即時停止に統一する。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `scanner_load_header`:
+      - `scanner_header_ptr` が `Err` の場合の `0` 返却を `#intrinsic "unreachable"` へ変更。
+      - `load_i32` が `None` の場合の `0` 返却を `#intrinsic "unreachable"` へ変更。
+    - `scanner_store_header`:
+      - `scanner_header_ptr` が `Err` の場合の無視を `#intrinsic "unreachable"` へ変更。
+      - `store_i32` が `Err` の場合の無視を `#intrinsic "unreachable"` へ変更。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md -i stdlib/kp/kpread.nepl --no-tree -o /tmp/tests-kpread-header-unreachable-targeted.json -j 15` -> `222/222 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-full-after-kpread-unreachable.json -j 15` -> `785/785 pass`
+
+# 2026-03-05 作業メモ (フェーズD先行: Writer を RegionToken 保持へ移行)
+
+- 目的:
+  - `kpread` と同様に `kpwrite` でも公開ハンドルが領域情報を持つようにし、メモリ安全APIを統一する。
+- 根本原因:
+  - `Writer` は `MemPtr<u8>` を直接保持し、ヘッダ領域サイズ（20byte）が型に表現されていなかった。
+  - 途中で追加した `writer_mem(Writer)->MemPtr<u8>` ヘルパは `Writer` を値渡しで受けるため、
+    non-copy な `Writer` の move を発生させ `D3053` を引き起こした。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `Writer.raw` を `Writer.region: RegionToken<u8>` に変更。
+    - `writer_wrap` で `region_new raw 20` を構築。
+    - `writer_mem` ヘルパは削除し、`region_ptr get w "region"` を直接展開して move を回避。
+  - `stdlib/kp/kpread_core.nepl`
+    - `store_i32_u8_at/load_i32_u8_at` を `RegionToken<u8>` 受け取りへ変更。
+    - `sc0/iov/nread/sc` の各領域を `RegionToken` 化してアクセス経路を統一。
+    - 途中で発生した `match` アーム崩れ（`D3009/D3008/D3045`）を修正。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-writer-regiontoken-v3.json -j 15`
+  - 結果: `221/221 pass`
+
+# 2026-03-05 作業メモ (フェーズD先行: kpread_core の内部ヘッダアクセスを RegionToken 化)
+
+- 目的:
+  - `kpread_core` の内部メモリアクセスも `RegionToken` 経由に統一し、`MemPtr + off` の直接算術依存を減らす。
+- 根本原因:
+  - `store_i32_u8_at` / `load_i32_u8_at` が `MemPtr<u8>` と `off` から直接 `MemPtr<i32>` を作る設計で、
+    領域境界の前提がヘルパ外へ漏れていた。
+- 変更:
+  - `stdlib/kp/kpread_core.nepl`
+    - `mem_i32_region_ptr` を追加し、`region_ptr_at<u8,i32>` を使用。
+    - `store_i32_u8_at` / `load_i32_u8_at` の引数を `RegionToken<u8>` に変更。
+    - `sc0(12)`, `iov(8)`, `nread(4)`, `sc(12)` で `RegionToken` を構築してヘルパへ渡す形に更新。
+  - 途中修正:
+    - `match dealloc_ptr<u8> buf cap` の `Result::Err` アームのインデント崩れにより
+      `D3009/D3008/D3045` が発生したため、分岐構造を正しく修正。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-kpread-core-regiontoken-v2.json -j 15`
+  - 結果: `221/221 pass`
+
+# 2026-03-05 作業メモ (フェーズD先行: kpwrite ヘッダアクセスを RegionToken 経由へ移行)
+
+- 目的:
+  - `kpwrite` 側でもヘッダアクセスを `RegionToken` ベースに寄せ、`core/mem` の境界検証APIを再利用できるようにする。
+- 根本原因:
+  - 既存 `writer_header_ptr` は `mem_ptr_addr + off` で直接アドレス算術を行い、
+    20byte ヘッダ境界の前提を関数ごとに暗黙化していた。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_header_region` を追加（`region_new w_mem 20`）。
+    - `writer_header_ptr` を `Result<MemPtr<i32>,str>` へ変更し、`region_ptr_at<u8,i32>` を使用。
+    - `writer_load_header` / `writer_store_header` を上記 `Result` 経路へ更新。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-writer-header-regiontoken.json -j 15`
+  - 結果: `221/221 pass`
+
+# 2026-03-05 作業メモ (フェーズD先行: kpread の Scanner ヘッダを RegionToken 化)
+
+- 目的:
+  - `todo.md` フェーズD着手として、`kpread` の公開ハンドルに領域所有情報を持たせ、`core/mem` の新安全APIへ寄せる。
+- 根本原因:
+  - `Scanner` が `MemPtr<u8>` 直接保持のみで、ヘッダ領域境界の情報が型に乗っていなかった。
+  - ヘッダアクセスが `mem_ptr_addr + off` の算術依存で、境界検証を再利用しにくかった。
+- 変更:
+  - `stdlib/kp/kpread.nepl`
+    - `Scanner` フィールドを `raw: MemPtr<u8>` から `region: RegionToken<u8>` に変更。
+    - `scanner_wrap` で `region_new raw 12` を構築。
+    - `scanner_header_ptr` を `region_ptr_at<u8,i32>` ベースの `Result` 返却へ変更。
+    - `scanner_load_header` / `scanner_store_header` を上記 `Result` 経路で処理。
+- 検証:
+  - `node nodesrc/tests.js -i tests/kp.n.md -i tests/kp_i64.n.md -i tests/memory_safety.n.md --no-tree -o /tmp/tests-kp-after-scanner-regiontoken.json -j 15`
+  - 結果: `221/221 pass`
+
+# 2026-03-05 作業メモ (フェーズC: core/mem に RegionToken 安全APIを追加)
+
+- 目的:
+  - `todo.md` フェーズCに沿って、`MemPtr<T>` と `RegionToken<T>` を使う安全APIを `core/mem` に追加し、`kpread/kpwrite` 移行の上流基盤を作る。
+- 根本原因:
+  - 既存 `mem` は `MemPtr<T>` までは整備済みだったが、領域所有を表す公開APIが不足しており、
+    境界情報付きアクセスを型として統一できていなかった。
+- 変更:
+  - `stdlib/core/mem.nepl`
+    - `RegionToken<T>` 補助APIを追加:
+      - `region_new`
+      - `region_in_bounds`
+      - `region_ptr_at`
+      - `alloc_region_bytes`
+      - `alloc_region`
+      - `dealloc_region`
+    - これにより、領域サイズを伴う型付きオフセット取得を `Result` で扱えるようにした。
+  - `tests/memory_safety.n.md`
+    - `alloc_region/region_ptr_at/dealloc_region` の基本動作ケースを追加。
+    - 範囲外オフセットで `Result::Err` を返す回帰ケースを追加。
+- 検証:
+  - `node nodesrc/tests.js -i tests/block_semicolon_return.n.md -i tests/plan.n.md -i tests/block_single_line.n.md --no-stdlib --no-tree -o /tmp/tests-semicolon-focus.json -j 15`
+  - 結果: `67/67 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md --no-tree -o /tmp/tests-memory-safety-region-token.json -j 15`
+  - 結果: `211/211 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i tests/kp_i64.n.md --no-tree -o /tmp/tests-memory-kp-regression.json -j 15`
+  - 結果: `221/221 pass`
+
+# 2026-03-05 作業メモ (フェーズB2: trait capability の型付き保持へ移行)
+
+- 目的:
+  - trait capability 判定の文字列再解析を減らし、型付きデータで一貫して扱う。
+- 根本原因:
+  - 既存実装では `TraitInfo.capabilities` が `Vec<String>` のため、
+    `TraitSemantics::detect` で毎回文字列を再パースしていた。
+  - この構造は capability 判定の責務が分散し、将来拡張時に不整合を生みやすい。
+- 変更:
+  - `nepl-core/src/typecheck.rs`
+    - `TraitInfo.capabilities` を `Vec<String>` から `Vec<TraitCapability>` へ変更。
+    - trait 定義処理 (`Stmt::Trait`) で capability を1回だけパースし、型付きで保持。
+    - 重複 capability 指定は同一trait内で重複登録しないよう整理。
+    - `TraitSemantics::detect` は `TraitInfo` 内の型付き capability を直接参照。
+    - 不要になった `detect_declared_trait_capabilities` を削除。
+- 検証:
+  - `NO_COLOR=false trunk build` -> success
+  - `node nodesrc/tests.js -i tests/move_effect.n.md -i tests/overload.n.md --no-tree -o /tmp/tests-move-overload-after-capability-typed.json -j 15`
+  - 結果: `272/272 pass`
+  - `node nodesrc/tests.js -i tests/compile_fail_diag_location.n.md --no-tree -o /tmp/tests-compile-fail-diag-location-after-capability-typed.json -j 15`
+  - 結果: `207/207 pass`
+  - `node nodesrc/tests.js -i tests -i stdlib --no-tree -o /tmp/tests-stdlib-after-capability-typed.json -j 15`
+  - 結果: `783/783 pass`
+
+# 2026-03-05 作業メモ (フェーズC: kpwrite header 読み取りの Result 化と None フォールバック廃止)
+
+- 目的:
+  - `writer_load_header` の `None -> 0` フォールバックを廃止し、header 読み取り失敗を明示分岐で扱う。
+- 根本原因:
+  - 従来の `writer_load_header` は `load_i32` 失敗時に 0 を返しており、異常状態を正常値へ潰していた。
+  - そのため後続処理で `buf/cap/iov/nw` が不正値のまま進行する余地があった。
+- 変更:
+  - `stdlib/kp/kpwrite.nepl`
+    - `writer_load_header` を `Result<i32,str>` へ変更。
+    - `writer_load_header_ptr` を `Result<MemPtr<u8>,str>` へ変更。
+    - `writer_free_handle`, `writer_flush_handle`, `writer_ensure_handle`,
+      `writer_put_u8_handle`, `writer_write_str_handle`,
+      `writer_write_i32_handle`, `writer_write_u64_handle` を
+      `Result` 分岐で安全に処理する形へ更新。
+    - `if` レイアウト中の冗長な `then: block:` を除去し、`D2002` 回避のため式構造を仕様準拠へ整理。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kp-after-header-result-v2.json -j 15`
+  - 結果: `217/217 pass`
+  - `node nodesrc/tests.js -i tests/memory_safety.n.md -i tests/kp.n.md -i stdlib/core/mem.nepl -i stdlib/kp/kpread.nepl -i stdlib/kp/kpread_core.nepl -i stdlib/kp/kpwrite.nepl --no-tree -o /tmp/tests-memory-kp-after-header-result.json -j 15`
+  - 結果: `226/226 pass`
+  - `node nodesrc/tests.js -i stdlib/kp/kpwrite.nepl -i tests/kp.n.md --no-tree -o /tmp/tests-kpwrite-style-fix.json -j 15`
+  - 結果: `215/215 pass`
+
 # 2026-03-12 作業メモ (tooling: repo_metrics を TypeScript 化し内容別集計へ拡張)
 
 - 目的:
@@ -43,37 +1334,7 @@
     - 上記 2 件は `return value mismatch` と runtime trap で fail。今回の変更対象は集計スクリプトであり、repo_metrics 変更の有無に関係なく既存の doctest 側問題として残っている。
 - 差異メモ:
   - `node nodesrc/tests.js -i tests -i tutorials -i stdlib ...` は長時間継続したため、確認は `run_doctest.js` による focused 実行へ切り替えた。
-- 今回の変更は build/test 系ロジックではなく、集計スクリプト単体の改善である。
-
-# 2026-03-12 作業メモ (fix: aggregate struct packing を修正して SparseSet invalid-path を復旧)
-
-- [目的/もくてき]:
-  - `alloc/collections/sparse_set` の invalid index path が web/native test path で trap していた根因を特定し、stdlib 側の回避ではなく compiler 側から修正する。
-- [根本原因/こんぽんげんいん]:
-  - [当初/とうしょ]は `SparseSet` 自体の owner 表現や `alloc/string` の concat を疑って切り分けたが、最終的には `U128DivRem` のような aggregate 値を `StructConstruct` / `TupleConstruct` で組み立てる codegen が、field ごとの real storage size ではなく wasm/llvm の scalar `ValType` / `LlTy` サイズで pack していたことが原因だった。
-  - その結果、aggregate field を[含/ふく]む struct/tuple が inline byte copy ではなく pointer 相当で[詰/つ]められ、`field::get` と後続の integer-to-string / diag message 生成で[壊/こわ]れた値を読み、`SparseSet` invalid index path の message build が `memory access out of bounds` に崩れていた。
-- [変更/へんこう]:
-  - `nepl-core/src/codegen_wasm.rs`
-    - `StructConstruct` / `TupleConstruct` の total size を `type_storage_size_bytes` 基準へ修正。
-    - aggregate field/item は source pointer から destination へ byte copy する lowering に変更。
-  - `nepl-core/src/codegen_llvm.rs`
-    - wasm 側と同じく aggregate field/item を real storage size ぶん byte copy するよう修正。
-  - `stdlib/alloc/string.nepl`
-    - `string_finish_base` を追加し、region/token を二重に読み直さず base pointer を 1 回だけ確定して finish する形へ整理。
-    - `concat`, `sb_build`, `str_slice`, `from_u128_radix`, `from_f64` の finish 経路を同 helper に揃えた。
-  - `alloc/collections/sparse_set`
-    - header owner は `MemPtr<u8>` field ではなく raw `i32` header pointer を public struct に保持し、内部 helper でだけ `MemPtr` に包み直す形へ整理した。
-- [結果/けっか]:
-  - `stdlib/alloc/string.nepl::doctest#4` が pass に戻った。
-  - `stdlib/tests/sparse_set.n.md::doctest#2` と `tests/stdlib/sparse_set_collections.n.md::doctest#1` が web path でも pass に戻った。
-  - `node nodesrc/tests.js -i stdlib/tests/sparse_set.n.md -i tests/stdlib/sparse_set_collections.n.md -i stdlib/alloc/collections/sparse_set.nepl --no-stdlib --no-tree -o /tmp/tests-sparse-set.json -j 2` は `10/10 pass` を確認した。
-- [検証/けんしょう]:
-  - `NO_COLOR=false trunk build`
-  - `node nodesrc/run_doctest.js -i stdlib/alloc/string.nepl -n 4`
-  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/sparse_set.nepl -n 1`
-  - `node nodesrc/run_doctest.js -i stdlib/tests/sparse_set.n.md -n 2`
-  - `node nodesrc/run_doctest.js -i tests/stdlib/sparse_set_collections.n.md -n 1`
-  - `node nodesrc/tests.js -i stdlib/tests/sparse_set.n.md -i tests/stdlib/sparse_set_collections.n.md -i stdlib/alloc/collections/sparse_set.nepl --no-stdlib --no-tree -o /tmp/tests-sparse-set.json -j 2`
+  - 今回の変更は build/test 系ロジックではなく、集計スクリプト単体の改善である。
 
 # 2026-03-06 作業メモ (feat: examples/bf.nepl に Brainfuck Runner を実装)
 

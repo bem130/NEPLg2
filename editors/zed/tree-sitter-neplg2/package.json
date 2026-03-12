@@ -1,0 +1,6 @@
+{
+  "name": "tree-sitter-neplg2",
+  "version": "0.0.1",
+  "private": true,
+  "main": "grammar.js"
+}

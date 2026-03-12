@@ -1,0 +1,15 @@
+id = "neplg2"
+name = "NEPLg2"
+description = "NEPLg2 language support for Zed"
+version = "0.0.1"
+schema_version = 1
+authors = ["NEPL Team"]
+repository = "https://github.com/neknaj/NEPLg2"
+
+[grammars.neplg2]
+repository = "file://./tree-sitter-neplg2"
+rev = "HEAD"
+
+[language_servers.nepl-lsp]
+name = "NEPL Language Server"
+languages = ["NEPLg2"]

@@ -1,0 +1,12 @@
+[package]
+name = "nepl-lsp"
+version = "0.1.0"
+edition = "2021"
+authors = ["NEPL Team"]
+
+[dependencies]
+anyhow.workspace = true
+nepl-language = { path = "../nepl-language" }
+nepl-core = { path = "../nepl-core" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"

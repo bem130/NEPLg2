@@ -1,0 +1,59 @@
+# Editor Extensions
+
+## 方針
+
+- `nepl-web` は Web Playground 向けの wasm API として維持する。
+- editor extension 向けには別 Rust lib `nepl-language` を正とする。
+- Zed / VSCode / 将来の WASIp1 Language Server は `nepl-language` を共通利用する。
+- editor 固有の薄い層だけを extension 側へ置き、解析本体は compiler 実装を直接再利用する。
+- 将来的に extension 実装を NEPLg2 へ置き換える場合も、この薄い境界だけを置換すればよい形にする。
+
+## 現在の構成
+
+- `nepl-core`
+  - lexer / parser / typecheck / loader など、言語処理系の本体。
+- `nepl-language`
+  - editor extension 専用の共通解析 lib。
+  - token / diagnostic / name resolution / semantic token / hover 向け情報を Rust struct で返す。
+  - `LoadResult` を受ける API を持ち、複数ファイル解析でも path 付き範囲を返す。
+- `nepl-web`
+  - Web 向けの JS / wasm-bindgen API。
+  - editor extension からは直接依存しない。
+
+## `nepl-language` が返すもの
+
+- 字句解析結果
+  - token kind / token value / source range / diagnostic
+- 名前解決結果
+  - definitions / references / shadow diagnostics / by-name index
+- semantic 解析結果
+  - expression range と推論型
+  - token 単位の inferred type / argument range
+  - hover / 定義ジャンプ用の resolved definition
+  - 複数ファイル時の file path 付き range
+
+## Zed の実装方針
+
+### 第1段階
+
+- Zed extension は最小限の shell と language registration のみを持つ。
+- semantic highlight / diagnostics / hover / definition は `nepl-language` を使う別 Rust 実装へ委譲する。
+- tree-sitter grammar は syntax highlight の土台として別管理にする。
+
+### 第2段階
+
+- `nepl-language` の上に WASIp1 Language Server を追加する。
+- Zed / VSCode は同じ server binary を利用する。
+- semantic tokens / hover / goto definition / inlay hints を LSP で共通化する。
+
+### 第3段階
+
+- extension 側の薄い制御層を NEPLg2 実装へ段階置換する。
+- compiler 再利用の境界は維持し、解析本体の二重実装は行わない。
+
+## 未完了
+
+- Zed extension package 自体の実装
+- tree-sitter grammar
+- WASIp1 Language Server binary
+- VSCode extension shell

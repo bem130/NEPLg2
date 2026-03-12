@@ -1,0 +1,6 @@
+name = "NEPLg2"
+grammar = "neplg2"
+path_suffixes = ["nepl"]
+line_comments = ["// ", "//:"]
+tab_size = 4
+hard_tabs = false
