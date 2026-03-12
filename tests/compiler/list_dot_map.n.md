@@ -59,3 +59,26 @@ fn main <()->i32> ():
     let mapped map<i32, i32, i32> r inc;
     unwrap_ok mapped
 ```
+
+## vec_map_with_star_alias_works
+
+neplg2:test
+ret: 3
+```neplg2
+#entry main
+#indent 4
+#import "alloc/collections/vec" as *
+#import "core/result" as *
+#import "core/option" as *
+#import "core/math" as *
+
+fn inc <(i32)->i32> (x):
+    add x 1
+
+fn main <()*>i32> ():
+    let xs0 <Vec<i32>> unwrap_ok new<i32>;
+    let xs1 <Vec<i32>> unwrap_ok push<i32> xs0 1;
+    let xs2 <Vec<i32>> unwrap_ok push<i32> xs1 2;
+    let ys <Vec<i32>> unwrap_ok map<i32, i32> xs2 inc;
+    unwrap get<i32> ys 1
+```

@@ -84,3 +84,115 @@ fn main <()*>i32> ():
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
 ```
+
+## vec_functional_helpers
+
+neplg2:test
+ret: 0
+```neplg2
+
+#entry main
+#indent 4
+#target std
+
+#import "alloc/collections/vec" as *
+#import "core/math" as *
+#import "core/option" as *
+#import "std/test" as *
+
+fn inc <(i32)->i32> (x):
+    add x 1
+
+fn is_even <(i32)->bool> (x):
+    eq rem_s x 2 0
+
+fn add_acc <(i32,i32)->i32> (acc, x):
+    add acc x
+
+fn gt_two <(i32)->bool> (x):
+    gt x 2
+
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
+    let mapped_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+    let mapped <Vec<i32>> unwrap_ok map<i32,i32> mapped_src inc;
+    match get<i32> mapped 2:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 4 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "vec map returned None";
+
+    let filtered_len_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 4 |> uwok
+    let filtered_len <Vec<i32>> unwrap_ok filter<i32> filtered_len_src is_even;
+    set checks checks_push checks check_eq_i32 2 len<i32> filtered_len;
+    let filtered_get_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 4 |> uwok
+    let filtered_get <Vec<i32>> unwrap_ok filter<i32> filtered_get_src is_even;
+    match get<i32> filtered_get 1:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 4 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "vec filter returned None";
+
+    let folded_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 4 |> uwok
+    set checks checks_push checks check_eq_i32 10 fold<i32,i32> folded_src 0 add_acc;
+
+    let reduced_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 4 |> uwok
+    match reduce<i32> reduced_src add_acc:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 10 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "vec reduce returned None";
+
+    let find_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+    match find<i32> find_src gt_two:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 3 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "vec find returned None";
+
+    let any_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+    set checks checks_push checks check any<i32> any_src gt_two;
+
+    let all_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 2 |> uwok
+        |> push 4 |> uwok
+        |> push 6 |> uwok
+    set checks checks_push checks check all<i32> all_src is_even;
+
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
+```

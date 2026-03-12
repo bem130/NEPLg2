@@ -604,6 +604,283 @@ fn clear <.T> <(Vec<.T>)->Vec<.T>> (v):
     let v_data <MemPtr<.T>> field::get v "data"
     Vec<.T> 0 v_cap v_data
 
+fn vec_read_at <.T> <(MemPtr<.T>, i32)->.T> (data, idx):
+    load<.T> add mem_ptr_addr data mul idx size_of<.T>
+
+fn vec_write_at <.T> <(MemPtr<.T>, i32, .T)->()> (data, idx, item):
+    store<.T> add mem_ptr_addr data mul idx size_of<.T> item
+
+fn vec_fold_impl <.T,.U> <(MemPtr<.T>, i32, i32, .U, (.U,.T)->.U)->.U> (data, len, idx, acc, f):
+    if:
+        eq idx len
+        then acc
+        else:
+            let next_acc <.U> f acc vec_read_at<.T> data idx
+            vec_fold_impl<.T,.U> data len add idx 1 next_acc f
+
+fn vec_reduce_impl <.T> <(MemPtr<.T>, i32, i32, .T, (.T,.T)->.T)->.T> (data, len, idx, acc, f):
+    if:
+        eq idx len
+        then acc
+        else:
+            let next_acc <.T> f acc vec_read_at<.T> data idx
+            vec_reduce_impl<.T> data len add idx 1 next_acc f
+
+fn vec_find_impl <.T> <(MemPtr<.T>, i32, i32, (.T)->bool)->Option<.T>> (data, len, idx, p):
+    if:
+        eq idx len
+        then none<.T>
+        else:
+            let item <.T> vec_read_at<.T> data idx
+            if:
+                cond p item
+                then some<.T> item
+                else vec_find_impl<.T> data len add idx 1 p
+
+//: ## map
+//: [各要素/かくようそ]を[同/おな]じ[規則/きそく]で[変換/へんかん]する
+//:
+//: ### [目的/もくてき]
+//: - `xs |> map f` の[形/かたち]で、`Vec<.T>` の[全要素/ぜんようそ]へ[同/おな]じ[純粋/じゅんすい][関数/かんすう]を[適用/てきよう]します。
+//: - [元/もと]の[順序/じゅんじょ]を[保/たも]ったまま、[新/あたら]しい `Vec<.U>` を[作成/さくせい]します。
+//:
+//: ### [実装/じっそう]
+//: - [入力/にゅうりょく]の `len` と[同/おな]じ[容量/ようりょう]を[先/さき]に[確保/かくほ]し、raw loop で[順番/じゅんばん]に[書/か]き[込/こ]みます。
+//: - [出力/しゅつりょく] `Vec` の `len` は[最後/さいご]に[確定/かくてい]させ、[途中/とちゅう]で[再確保/さいかくほ]を[発生/はっせい]させません。
+//:
+//: ### [注意/ちゅうい]
+//: - [新規/しんき][領域/りょういき]の[確保/かくほ]が[必要/ひつよう]なので `Result<Vec<.U>, StdErrorKind>` を[返/かえ]します。
+//: - `f` は `(.T)->.U` の[純粋/じゅんすい][関数/かんすう]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(n)
+//:
+//: ### [使用例/しようれい]
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/vec" as *
+//:| #import "core/math" as *
+//:| #import "core/option" as *
+//: fn inc <(i32)->i32> (x):
+//:     add x 1
+//: fn main <()*>i32> ():
+//:     let xs <Vec<i32>>:
+//:         unwrap_ok new<i32>
+//:         |> push 1 |> uwok
+//:         |> push 2 |> uwok
+//:         |> push 3 |> uwok
+//:     let ys <Vec<i32>> unwrap_ok map<i32,i32> xs inc;
+//:     match get<i32> ys 2:
+//:         Option::Some x:
+//:             if eq x 4 0 1
+//:         Option::None:
+//:             1
+//: ```
+fn map <.T,.U> <(Vec<.T>, (.T)->.U)->Result<Vec<.U>, StdErrorKind>> (v, f):
+    let src_len <i32> field::get v "len"
+    let src_data <MemPtr<.T>> field::get v "data"
+    match with_capacity<.U> src_len:
+        Result::Err e:
+            Result::Err<Vec<.U>, StdErrorKind> e
+        Result::Ok out0:
+            let out_cap <i32> field::get out0 "cap"
+            let out_data <MemPtr<.U>> field::get out0 "data"
+            let mut i <i32> 0
+            while lt i src_len:
+                do:
+                    vec_write_at<.U> out_data i f vec_read_at<.T> src_data i
+                    set i add i 1
+            Result::Ok<Vec<.U>, StdErrorKind> Vec<.U> src_len out_cap out_data
+
+//: ## filter
+//: [条件/じょうけん]を[満/み]たす[要素/ようそ]だけを[残/のこ]す
+//:
+//: ### [目的/もくてき]
+//: - `xs |> filter p` の[形/かたち]で、[条件/じょうけん] `p` を[満/み]たす[要素/ようそ]だけを[残/のこ]した[新/あたら]しい `Vec<.T>` を[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - 1 [回目/かいめ]の loop で[残/のこ]す[要素数/ようそすう]を[数/かぞ]え、2 [回目/かいめ]の loop で exact capacity の[出力/しゅつりょく]バッファへ[詰/つ]めます。
+//: - [入力/にゅうりょく][順序/じゅんじょ]は[維持/いじ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [新規/しんき][領域/りょういき]の[確保/かくほ]が[必要/ひつよう]なので `Result<Vec<.T>, StdErrorKind>` を[返/かえ]します。
+//: - `p` は `(.T)->bool` の[純粋/じゅんすい][関数/かんすう]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(n)
+//:
+//: ### [使用例/しようれい]
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/vec" as *
+//:| #import "core/math" as *
+//:| #import "core/option" as *
+//: fn is_even <(i32)->bool> (x):
+//:     eq rem_s x 2 0
+//: fn main <()*>i32> ():
+//:     let xs <Vec<i32>>:
+//:         unwrap_ok new<i32>
+//:         |> push 1 |> uwok
+//:         |> push 2 |> uwok
+//:         |> push 3 |> uwok
+//:         |> push 4 |> uwok
+//:     let ys <Vec<i32>> unwrap_ok filter<i32> xs is_even;
+//:     match get<i32> ys 0:
+//:         Option::Some x:
+//:             if and eq len<i32> ys 2 eq x 2 0 1
+//:         Option::None:
+//:             1
+//: ```
+fn filter <.T> <(Vec<.T>, (.T)->bool)->Result<Vec<.T>, StdErrorKind>> (v, p):
+    let src_len <i32> field::get v "len"
+    let src_data <MemPtr<.T>> field::get v "data"
+    let mut keep_len <i32> 0
+    let mut i <i32> 0
+    while lt i src_len:
+        do:
+            if cond p vec_read_at<.T> src_data i:
+                then set keep_len add keep_len 1
+                else ()
+            set i add i 1
+    match with_capacity<.T> keep_len:
+        Result::Err e:
+            Result::Err<Vec<.T>, StdErrorKind> e
+        Result::Ok out0:
+            let out_cap <i32> field::get out0 "cap"
+            let out_data <MemPtr<.T>> field::get out0 "data"
+            let mut read_i <i32> 0
+            let mut write_i <i32> 0
+            while lt read_i src_len:
+                do:
+                    let item <.T> vec_read_at<.T> src_data read_i
+                    if:
+                        cond p item
+                        then:
+                            vec_write_at<.T> out_data write_i item
+                            set write_i add write_i 1
+                        else ()
+                    set read_i add read_i 1
+            Result::Ok<Vec<.T>, StdErrorKind> Vec<.T> keep_len out_cap out_data
+
+//: ## fold
+//: [左/ひだり]から[順/じゅん]に[畳/たた]み[込/こ]む
+//:
+//: ### [目的/もくてき]
+//: - `xs |> fold init f` の[形/かたち]で、[初期値/しょきち] `init` から[始/はじ]めて[全要素/ぜんようそ]を 1 つの[値/あたい]へ[集約/しゅうやく]します。
+//:
+//: ### [実装/じっそう]
+//: - 0 [番目/ばんめ]から `len - 1` まで[順番/じゅんばん]に `f acc item` を[適用/てきよう]し、[更新後/こうしんご]の acc を[次/つぎ]へ[渡/わた]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [空/から] `Vec` では `init` をそのまま[返/かえ]します。
+//: - `f` は `(.U,.T)->.U` の[純粋/じゅんすい][関数/かんすう]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(n)
+fn fold <.T,.U> <(Vec<.T>, .U, (.U,.T)->.U)->.U> (v, acc, f):
+    let src_len <i32> field::get v "len"
+    let src_data <MemPtr<.T>> field::get v "data"
+    vec_fold_impl<.T,.U> src_data src_len 0 acc f
+
+//: ## reduce
+//: [初期値/しょきち]なしで[集約/しゅうやく]する
+//:
+//: ### [目的/もくてき]
+//: - [非空/ひくう] `Vec` なら[先頭/せんとう][要素/ようそ]を[初期値/しょきち]として[残/のこ]りを[畳/たた]み[込/こ]み、[空/から]なら `None` を[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - 0 [番目/ばんめ]を[初期値/しょきち]として[読/よ]み[出/だ]し、1 [番目/ばんめ]から[残/のこ]りを[左畳/ひだりたた]み[込/こ]みします。
+//:
+//: ### [注意/ちゅうい]
+//: - [空/から] `Vec` では `Option::None` です。
+//: - `f` は `(.T,.T)->.T` の[純粋/じゅんすい][関数/かんすう]です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(n)
+fn reduce <.T> <(Vec<.T>, (.T,.T)->.T)->Option<.T>> (v, f):
+    let src_len <i32> field::get v "len"
+    let src_data <MemPtr<.T>> field::get v "data"
+    if:
+        eq src_len 0
+        then none<.T>
+        else:
+            some<.T> vec_reduce_impl<.T> src_data src_len 1 vec_read_at<.T> src_data 0 f
+
+//: ## find
+//: [条件/じょうけん]に[合/あ]う[最初/さいしょ]の[要素/ようそ]を[探/さが]す
+//:
+//: ### [目的/もくてき]
+//: - `xs |> find p` の[形/かたち]で、0 [番目/ばんめ]から[順/じゅん]に `p` を[試/ため]し、[最初/さいしょ]に[真/しん]となる[要素/ようそ]を `Some` で[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - [先頭/せんとう]から[順番/じゅんばん]に `p` を[評価/ひょうか]し、[見/み]つかった[時点/じてん]で[即座/そくざ]に[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [見/み]つからなければ `None` です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(n)
+fn find <.T> <(Vec<.T>, (.T)->bool)->Option<.T>> (v, p):
+    let src_len <i32> field::get v "len"
+    let src_data <MemPtr<.T>> field::get v "data"
+    vec_find_impl<.T> src_data src_len 0 p
+
+//: ## any
+//: [条件/じょうけん]を[満/み]たす[要素/ようそ]が 1 つでもあるか[判定/はんてい]する
+//:
+//: ### [目的/もくてき]
+//: - `xs |> any p` の[形/かたち]で、`p` を[満/み]たす[要素/ようそ]が 1 つでもあれば `true` を[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - [先頭/せんとう]から[順番/じゅんばん]に `p` を[評価/ひょうか]し、[見/み]つかった[時点/じてん]で `true` を[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - [空/から] `Vec` では `false` です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(n)
+fn any <.T> <(Vec<.T>, (.T)->bool)->bool> (v, p):
+    let src_len <i32> field::get v "len"
+    let src_data <MemPtr<.T>> field::get v "data"
+    let mut out <bool> false
+    let mut i <i32> 0
+    while and lt i src_len not out:
+        do:
+            set out p vec_read_at<.T> src_data i
+            set i add i 1
+    out
+
+//: ## all
+//: [全要素/ぜんようそ]が[条件/じょうけん]を[満/み]たすか[判定/はんてい]する
+//:
+//: ### [目的/もくてき]
+//: - `xs |> all p` の[形/かたち]で、[全/すべ]ての[要素/ようそ]が `p` を[満/み]たすときだけ `true` を[返/かえ]します。
+//:
+//: ### [実装/じっそう]
+//: - [先頭/せんとう]から[順番/じゅんばん]に `p` を[評価/ひょうか]し、1 [件/けん]でも false が[出/で]たら[即座/そくざ]に[打/う]ち[切/き]ります。
+//:
+//: ### [注意/ちゅうい]
+//: - [空/から] `Vec` では `true` です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(n)
+fn all <.T> <(Vec<.T>, (.T)->bool)->bool> (v, p):
+    let src_len <i32> field::get v "len"
+    let src_data <MemPtr<.T>> field::get v "data"
+    let mut out <bool> true
+    let mut i <i32> 0
+    while and lt i src_len out:
+        do:
+            set out p vec_read_at<.T> src_data i
+            set i add i 1
+    out
+
 //: ## free
 //: [内部/ないぶ]メモリを[解放/かいほう]する
 //:

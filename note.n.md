@@ -13404,3 +13404,43 @@
     - [結果/けっか]: pass
   - `node nodesrc/tests.js -i stdlib/tests/list.n.md -i tests/compiler/list_dot_map.n.md --no-stdlib --no-tree -o /tmp/tests-list-fp-short.json -j 2`
     - [結果/けっか]: `5/5 pass`
+
+# 2026-03-12 作業メモ (feat(vec): 関数型 helper 追加)
+
+- [目的/もくてき]:
+  - `Vec` に `map` / `filter` / `fold` / `reduce` / `find` / `any` / `all` を[追加/ついか]し、`List` / `Option` / `Result` に[続/つづ]く[関数型/かんすうがた] style の[基本操作/きほんそうさ]を[揃/そろ]える。
+  - bare `map` が `Option` / `Result` と[同居/どうきょ]しても、`Vec` [側/がわ]へ[正/ただ]しく[解決/かいけつ]されることを fixture で[固定/こてい]する。
+- [根本原因/こんぽんげんいん]:
+  - `Vec` は owner [構造/こうぞう]なので、`List` のように node を[再帰/さいき][構築/こうちく]するだけでなく、[出力/しゅつりょく]バッファの[確保/かくほ]と move model を[同時/どうじ]に[整合/せいごう]させる[必要/ひつよう]があった。
+  - `fold` / `reduce` を while loop + `set out f out item` の[形/かたち]で[書/か]くと、generic accumulator `.U` / `.T` が `Copy` でない[場合/ばあい]に `D3054 use of potentially moved value` になった。
+  - `find` でも mutable `Option<.T>` を while [条件/じょうけん]で[読/よ]むと、`.T` が non-`Copy` の[場合/ばあい]に moved-value [判定/はんてい]へ[落/お]ちた。
+  - fixture [側/がわ]も `filtered` を `len` と `get` で[再利用/さいりよう]しており、current owner model では `D3053` だった。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/vec.nepl`
+    - `vec_read_at` / `vec_write_at` と、`vec_fold_impl` / `vec_reduce_impl` / `vec_find_impl` を[追加/ついか]した。
+    - `map` は exact capacity を[先/さき]に[確保/かくほ]して raw loop で[詰/つ]める[形/かたち]にした。
+    - `filter` は 2-pass（[個数/こすう][計測/けいそく] -> exact capacity [確保/かくほ] -> [転写/てんしゃ]）にし、`push` の[逐次/ちくじ][連鎖/れんさ]を[避/さ]けた。
+    - `fold` / `reduce` / `find` は再帰 helper に[寄/よ]せ、generic owner / accumulator の moved-value を[根本/こんぽん]から[解消/かいしょう]した。
+    - public doc comment と `neplg2:test` を current policy / format に[揃/そろ]えた。
+  - `stdlib/tests/vec.n.md`
+    - `vec_functional_helpers` を[追加/ついか]し、`map` / `filter` / `fold` / `reduce` / `find` / `any` / `all` の focused fixture を[整備/せいび]した。
+    - owner [再利用/さいりよう]を[避/さ]けるため、`filtered` の[長/なが]さ[確認/かくにん]と[要素/ようそ][確認/かくにん]は source を[分離/ぶんり]した。
+  - `tests/compiler/list_dot_map.n.md`
+    - `vec_map_with_star_alias_works` を[追加/ついか]し、`alloc/collections/vec` と `core/result` / `core/option` を `as *` で[同時/どうじ] import した[状態/じょうたい]でも bare `map<i32,i32>` が `Vec` [版/ばん]へ[解決/かいけつ]することを[固定/こてい]した。
+- [設計/せっけい][判断/はんだん]:
+  - `Vec` helper は[全体/ぜんたい]を[新規/しんき] owner として[返/かえ]すため、`map` / `filter` の[確保/かくほ][失敗/しっぱい]は `StdErrorKind::OutOfMemory` に[集約/しゅうやく]した。
+  - `filter` を 2-pass にしたのは、current reboot [段階/だんかい]で `Result` を[持/も]つ owner value を loop [内/ない]で[逐次/ちくじ][更新/こうしん]すると move model と[早期脱出/そうきだっしゅつ]が[複雑/ふくざつ]になるためである。
+  - `fold` / `reduce` / `find` は mutable owner / accumulator を[避/さ]けるために再帰 helper を[選/えら]び、compiler [側/がわ]の追加修正なしで current model に[収/おさ]めた。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 5`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/vec.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/compiler/list_dot_map.n.md -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i stdlib/tests/vec.n.md -i tests/compiler/list_dot_map.n.md --no-stdlib --no-tree -o /tmp/tests-vec-fp-short.json -j 2`
+    - [結果/けっか]: `6/6 pass`
