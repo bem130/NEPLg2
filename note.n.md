@@ -11746,3 +11746,16 @@
 - [差異/さい]メモ:
   - この[修正/しゅうせい]で `size_of` regression は[解消/かいしょう]したが、`alloc/collections/trie` の non-empty insert はまだ runtime OOB が[残/のこ]る。
   - `Trie` [追加/ついか] batch は library [側/がわ] root cause が[未収束/みしゅうそく]のため commit していない。`trie_build_suffix_chain` と node [接続/せつぞく] logic を focused に[再調査/さいちょうさ]する。
+
+# 2026-03-12 作業メモ (alloc/collections/trie 調査のみ・未 commit)
+
+- [目的/もくてき]:
+  - `alloc/collections` の[種類/しゅるい][拡充/かくじゅう]として `Trie` を[追加/ついか]できるかを[評価/ひょうか]する。
+- [切り分け/きりわけ]:
+  - `TrieNode` の push / append / terminal 更新までは focused scratch で pass した。
+  - `Trie` owner [値/あたい]から `Vec<TrieNode>` を[取/と]り[出/だ]して prefix [探索/たんさく] loop を[回/まわ]すところで runtime `unreachable` が[再現/さいげん]した。
+  - `size_of` / aggregate byte copy [修正/しゅうせい]後も[残/のこ]ったため、library [実装/じっそう]でなく current compiler/runtime の「owner struct + aggregate field + loop」をまたぐ lowering の[問題/もんだい]と[判断/はんだん]した。
+  - `trie_find_child_index` を helper から inline へ[展開/てんかい]しても、`insert` / `contains` / `starts_with` の non-empty case は[収束/しゅうそく]しなかった。
+- [判断/はんだん]:
+  - broken state を stdlib に[混/ま]ぜないため、`trie.nepl` / `stdlib/tests/trie.n.md` / `tests/stdlib/trie_collections.n.md` は未 commit のまま[削除/さくじょ]して worktree から[外/はず]した。
+  - `Trie` は stdlib task としては[残件/ざんけん]だが、[次/つぎ]に[進/すす]むには compiler/runtime [側/がわ]の[最小再現/さいしょうさいげん] test を[先/さき]に[作/つく]るべき[段階/だんかい]である。
