@@ -11832,3 +11832,28 @@
 - [判断/はんだん]:
   - broken state を stdlib に[混/ま]ぜないため、`trie.nepl` / `stdlib/tests/trie.n.md` / `tests/stdlib/trie_collections.n.md` は未 commit のまま[削除/さくじょ]して worktree から[外/はず]した。
   - `Trie` は stdlib task としては[残件/ざんけん]だが、[次/つぎ]に[進/すす]むには compiler/runtime [側/がわ]の[最小再現/さいしょうさいげん] test を[先/さき]に[作/つく]るべき[段階/だんかい]である。
+
+# 2026-03-12 作業メモ (alloc/collections/adjacency_list 調査のみ・未 commit)
+
+- [目的/もくてき]:
+  - sparse graph [向/む]けの `AdjacencyList` を `alloc/collections` に[追加/ついか]できるかを[評価/ひょうか]する。
+- [切り分け/きりわけ]:
+  - `heads | to | next` の 3 [配列/はいれつ]を 1 [本/ほん]の contiguous buffer に[詰/つ]める library [設計/せっけい]までは[作成/さくせい]した。
+  - native compiler では `new + insert + contains` の[最小例/さいしょうれい]が[通/とお]る一方、web compile path では same-`from` edge を 2 [本/ほん][追加/ついか]した case で `contains` が false になった。
+  - owner aggregate を temporary memory に[退避/たいひ]する形と、`hdr + buf_ptr` へ[落/お]とした header-pointer owner の 2 [案/あん]を[試/ため]したが、どちらも web compile path では `insert` / `contains` / `remove` が `RuntimeError: unreachable` へ[崩/くず]れた。
+  - [症状/しょうじょう]は library [側/がわ]の linked-list [更新/こうしん]より、current compiler/runtime の owner value lowering と aggregate/header [読/よ]み[出/だ]しの[境界/きょうかい]に[依存/いぞん]していると[判断/はんだん]した。
+- [判断/はんだん]:
+  - broken state を stdlib に[混/ま]ぜないため、`adjacency_list.nepl` / `stdlib/tests/adjacency_list.n.md` / `tests/stdlib/adjacency_list_collections.n.md` は未 commit のまま worktree から[外/はず]した。
+  - `AdjacencyList` は stdlib [残件/ざんけん]として note に[残/のこ]し、[次回/じかい]は compiler/runtime [側/がわ]の[最小再現/さいしょうさいげん] test として[先/さき]に[切/き]り[出/だ]す。
+
+# 2026-03-12 作業メモ (alloc/collections/btreemultiset 調査のみ・未 commit)
+
+- [目的/もくてき]:
+  - ordered multiset を `alloc/collections` に[追加/ついか]し、[重複/ちょうふく] key を[個数/こすう]つきで[保持/ほじ]できる collection を[標準化/ひょうじゅんか]する。
+- [切り分け/きりわけ]:
+  - `BTreeMap<.T, i32>` の count wrapper として `BTreeMultiSet` を[試作/しさく]した。
+  - しかし current owner model では wrapper owner と inner `BTreeMap` owner の[二重/にじゅう][所有/しょゆう]を[自然/しぜん]に[扱/あつか]えず、`insert` / `remove_one` / `clear` の[各所/かくしょ]で `D3053 use of moved value` が[連鎖/れんさ]した。
+  - raw header wrapper に[落/お]としても、doctest fixture では `RuntimeError: unreachable` が[残/のこ]り、library [側/がわ]だけで[整合/せいごう]した API に[収束/しゅうそく]しなかった。
+- [判断/はんだん]:
+  - `BTreeMultiSet` も broken state を stdlib に[混/ま]ぜず、試作ファイルは未 commit のまま worktree から[外/はず]した。
+  - ordered multiset は[有用/ゆうよう]だが、wrapper owner と inner owner の[合成/ごうせい]を current compiler/runtime がどこまで[支/ささ]えられるかを[先/さき]に[再評価/さいひょうか]する。
