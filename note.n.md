@@ -1,3 +1,28 @@
+# 2026-03-12 作業メモ (editor extensions: Zed syntax highlight 用 grammar を強化)
+
+- 目的:
+  - Zed extension の syntax layer が top-level 定義名や directive / import / type annotation を最低限識別できるようにする。
+- 根本原因:
+  - 既存の `editors/zed/tree-sitter-neplg2/grammar.js` は「行を並べるだけ」の簡易構文で、`fn` / `struct` / `enum` / `trait` / `impl` の名前、field、variant、directive 名などを区別できていなかった。
+  - そのため highlight query を細かく書いても、関数名や型名を適切に色分けするための node が存在しなかった。
+- 変更:
+  - `editors/zed/tree-sitter-neplg2/grammar.js`
+    - top-level として `function_definition`, `struct_definition`, `enum_definition`, `trait_definition`, `impl_definition`, `directive`, `expression_statement` を分離した。
+    - `directive_name`, `import_path`, `alias_clause`, `field_definition`, `enum_variant`, `generic_params`, `type_annotation` などの node を追加した。
+  - `editors/zed/languages/neplg2/highlights.scm`
+    - function / type / property / constant / parameter / namespace の capture を追加した。
+  - `editors/zed/languages/neplg2/brackets.scm`
+    - `[` `]` も bracket として扱うようにした。
+  - `editors/zed/languages/neplg2/config.toml`
+    - `autoclose_before` を追加した。
+- 検証:
+  - `node --check editors/zed/tree-sitter-neplg2/grammar.js`
+    - pass
+  - `node -e "global.grammar = x => x; const g = require('./editors/zed/tree-sitter-neplg2/grammar.js'); console.log(g.name, Object.keys(g.rules).length)"`
+    - 結果: `neplg2 28`
+- 差異メモ:
+  - まだ `tree-sitter generate` / Zed 上での実読み込み検証は未実行。現行環境では `zed_extension_api` 側の toolchain 条件が残っているため、Zed package 全体の build 検証は別途必要。
+
 # 2026-03-12 作業メモ (editor extensions: Zed shell の build 前提を整理)
 
 - 目的:
