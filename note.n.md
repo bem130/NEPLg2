@@ -32,6 +32,43 @@
   - workflow 実行そのものは GitHub Actions 上での実行が必要なので、ローカルでは YAML 構文と依存関係の整合までを確認した。
   - 現時点では artifact の粒度を `dist` / `target/debug` / `target/wasm32-unknown-unknown` にしている。さらに絞る余地はあるが、まずは共通化と再利用の成立を優先した。
 
+# 2026-03-12 作業メモ (ci: build 1 回 + pages/test 統合 + per-case timeout)
+
+- 目的:
+  - workflow ごとに `bootstrap-build` を繰り返していた構成をやめ、`trunk build` を含む build を 1 workflow 内で 1 回だけ実行し、その成果物を全 test job と Pages deploy に再利用する。
+  - `gh-pages.yml` が別 workflow で test を再実行していた構造を解消し、site への publish を test workflow の一部へ統合する。
+  - 無限ループ系の hang で CI 全体が止まらないよう、1 ケース 20 秒、test job 全体 10 分の上限を入れる。
+- 根本原因:
+  - 前段の共通 action 化だけでは、workflow が分かれている限り `cargo build` / `trunk build` / `npm install` / `cargo install wasm-bindgen-cli` が workflow 数だけ繰り返される。
+  - `gh-pages.yml` は site 生成のために tests を再度回しており、同じ commit に対して test が 2 重実行されていた。
+  - `nodesrc/tests.js` は suite 全体の実行はできても、WASM worker / LLVM child process に per-case timeout が無く、1 ケースの hang が suite 全体を引きずる余地があった。
+- 変更:
+  - `.github/actions/bootstrap-build/action.yml`
+    - `actions/setup-node` に npm cache を追加。
+    - `web/package-lock.json` ベースで `npm ci` を使う形に変更。
+    - `wasm-bindgen-cli` を `actions/cache` で再利用するよう変更。
+    - `wasm-bindgen` の verify step を追加。
+  - `.github/workflows/ci.yml`
+    - 旧 test workflow 群と Pages deploy を 1 workflow に統合。
+    - `build` job で `bootstrap-build` を 1 回だけ実行し、さらに tutorial / stdlib HTML も `dist` 配下へ生成して artifact 化。
+    - `compile-test` / `rust-test` / `nm-compile` / `wasi-test` / `nmd-doctest` / `llvm-test` はすべて `needs: build` で artifact を再利用。
+    - `pages-fast-*` と `pages-final-*` の 2 段 deploy を追加し、`trunk build` 後の pending site を先に publish し、test 完了後に test JSON / summary を載せた final site で上書きする形にした。
+    - `gh-pages.yml` は削除。
+    - test job には `timeout-minutes: 10` を追加し、`node nodesrc/tests.js` / `cargo test` / `cargo run` は `timeout --signal=KILL 10m ...` で包んだ。
+    - test 実行環境に `NEPL_TEST_CASE_TIMEOUT_MS=20000` / `NEPL_WASIX_TIMEOUT_MS=20000` を共通指定。
+  - `nodesrc/tests.js`
+    - WASM thread pool worker に per-case timer を追加し、20 秒で応答しない case は worker を terminate して error として回収する形へ変更。
+    - LLVM / native 実行に使う `runCommand` に child process timeout を追加し、同じく 20 秒で kill するよう変更。
+- 検証:
+  - `node --check nodesrc/tests.js`
+  - 一時 directory `/tmp/gha-yaml-check` を作って `npm install yaml` を行い、
+    - `.github/workflows/*.yml`
+    - `.github/actions/bootstrap-build/action.yml`
+    を parser で検証。
+- 差異メモ:
+  - Pages final deploy は `build` artifact の `dist` を再利用し、site を作るために `trunk build` を再実行しない。
+  - pending/final の 2 回 deploy は Pages への publish を早めるためのもので、tests 自体は 1 回しか実行しない。
+
 - 目的:
   - `rpn.nepl` を参考にして `examples/bf.nepl` に Brainfuck の実行ツールを実装する。
   - 毎行入力を受け付け、入力ごとにメモリをリセットして独立実行する。

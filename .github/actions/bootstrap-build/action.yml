@@ -22,13 +22,15 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: web/package-lock.json
 
     - name: Install web dependencies
       shell: bash
       run: |
         set -euo pipefail
         cd web
-        npm install
+        npm ci
 
     - name: Install Rust toolchain
       uses: actions-rs/toolchain@v1
@@ -46,7 +48,20 @@ runs:
       with:
         version: ${{ inputs.trunk-version }}
 
+    - name: Cache wasm-bindgen-cli
+      id: cache-wasm-bindgen
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/wasm-bindgen
+          ~/.cargo/bin/wasm-bindgen-test-runner
+          ~/.cargo/bin/wasm2es6js
+          ~/.cargo/.crates2.json
+          ~/.cargo/.crates.toml
+        key: wasm-bindgen-cli-${{ runner.os }}-${{ runner.arch }}-0.2.108
+
     - name: Install wasm-bindgen-cli (pinned, retry)
+      if: steps.cache-wasm-bindgen.outputs.cache-hit != 'true'
       shell: bash
       run: |
         set -euo pipefail
@@ -60,6 +75,10 @@ runs:
         done
         echo "failed to install wasm-bindgen-cli after retries"
         exit 1
+
+    - name: Verify wasm-bindgen-cli
+      shell: bash
+      run: wasm-bindgen --version
 
     - name: Cache Cargo build
       uses: Swatinem/rust-cache@v2

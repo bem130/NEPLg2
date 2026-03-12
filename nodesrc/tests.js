@@ -324,6 +324,10 @@ async function runAllThreadPool(cases, jobs, distHint) {
 
     const workerScript = path.resolve(__dirname, 'tests_wasm_worker.js');
     const workerCount = Math.max(1, Math.min(jobs, cases.length));
+    const caseTimeoutMs = (() => {
+        const raw = parseInt(process.env.NEPL_TEST_CASE_TIMEOUT_MS || '20000', 10);
+        return Number.isFinite(raw) && raw > 0 ? raw : 20000;
+    })();
     const results = new Array(cases.length);
     let nextIndex = 0;
     let finished = 0;
@@ -331,11 +335,104 @@ async function runAllThreadPool(cases, jobs, distHint) {
 
     return await new Promise((resolve, reject) => {
         const workers = [];
+        const timers = new Map();
+        const running = new Map();
 
         function shutdownAll() {
+            for (const timer of timers.values()) {
+                clearTimeout(timer);
+            }
+            timers.clear();
+            running.clear();
             for (const w of workers) {
                 try { w.terminate(); } catch {}
             }
+        }
+
+        function clearWorkerTimer(w) {
+            const timer = timers.get(w);
+            if (timer) clearTimeout(timer);
+            timers.delete(w);
+        }
+
+        function spawnWorker(slot) {
+            const w = new Worker(workerScript, {
+                workerData: { distHint },
+            });
+            workers[slot] = w;
+
+            w.on('message', (msg) => {
+                if (aborted) return;
+                if (!msg || msg.kind !== 'result') return;
+                clearWorkerTimer(w);
+                const idx = Number(msg.index);
+                running.delete(w);
+                const c = cases[idx];
+                const r = msg.result || {
+                    ok: false,
+                    status: 'error',
+                    error: 'worker returned empty result',
+                };
+                results[idx] = {
+                    ...r,
+                    id: c.id,
+                    file: c.file,
+                    index: c.index,
+                    tags: c.tags,
+                    worker: slot + 1,
+                };
+                finished++;
+                if (finished >= cases.length) {
+                    shutdownAll();
+                    resolve(results.filter(Boolean));
+                    return;
+                }
+                schedule(w);
+            });
+
+            w.on('error', (err) => {
+                if (aborted) return;
+                aborted = true;
+                clearWorkerTimer(w);
+                shutdownAll();
+                reject(err);
+            });
+
+            w.on('exit', (code) => {
+                if (aborted) return;
+                clearWorkerTimer(w);
+                const active = running.get(w);
+                running.delete(w);
+                if (active && active.index < cases.length) {
+                    const c = cases[active.index];
+                    results[active.index] = {
+                        ok: false,
+                        id: c.id,
+                        file: c.file,
+                        index: c.index,
+                        tags: c.tags,
+                        status: 'error',
+                        error: `wasm test worker exited unexpectedly: code=${code}`,
+                        worker: slot + 1,
+                    };
+                    finished++;
+                    if (finished >= cases.length) {
+                        shutdownAll();
+                        resolve(results.filter(Boolean));
+                        return;
+                    }
+                    const next = spawnWorker(slot);
+                    schedule(next);
+                    return;
+                }
+                if (code !== 0 && finished < cases.length) {
+                    aborted = true;
+                    shutdownAll();
+                    reject(new Error(`wasm test worker exited unexpectedly: code=${code}`));
+                }
+            });
+
+            return w;
         }
 
         function schedule(w) {
@@ -343,6 +440,7 @@ async function runAllThreadPool(cases, jobs, distHint) {
             if (nextIndex >= cases.length) return;
             const i = nextIndex++;
             const c = cases[i];
+            running.set(w, { index: i });
             w.postMessage({
                 kind: 'run',
                 index: i,
@@ -357,31 +455,24 @@ async function runAllThreadPool(cases, jobs, distHint) {
                     distHint,
                 },
             });
-        }
-
-        for (let i = 0; i < workerCount; i++) {
-            const w = new Worker(workerScript, {
-                workerData: { distHint },
-            });
-            workers.push(w);
-
-            w.on('message', (msg) => {
+            clearWorkerTimer(w);
+            const timer = setTimeout(() => {
                 if (aborted) return;
-                if (!msg || msg.kind !== 'result') return;
-                const idx = Number(msg.index);
-                const c = cases[idx];
-                const r = msg.result || {
-                    ok: false,
-                    status: 'error',
-                    error: 'worker returned empty result',
-                };
+                const active = running.get(w);
+                if (!active) return;
+                const idx = active.index;
+                const timedCase = cases[idx];
+                running.delete(w);
+                try { w.terminate(); } catch {}
                 results[idx] = {
-                    ...r,
-                    id: c.id,
-                    file: c.file,
-                    index: c.index,
-                    tags: c.tags,
-                    worker: i + 1,
+                    ok: false,
+                    id: timedCase.id,
+                    file: timedCase.file,
+                    index: timedCase.index,
+                    tags: timedCase.tags,
+                    status: 'error',
+                    error: `wasm test case timeout after ${caseTimeoutMs}ms`,
+                    worker: (workers.indexOf(w) + 1) || 0,
                 };
                 finished++;
                 if (finished >= cases.length) {
@@ -389,26 +480,18 @@ async function runAllThreadPool(cases, jobs, distHint) {
                     resolve(results.filter(Boolean));
                     return;
                 }
-                schedule(w);
-            });
-
-            w.on('error', (err) => {
-                if (aborted) return;
-                aborted = true;
-                shutdownAll();
-                reject(err);
-            });
-
-            w.on('exit', (code) => {
-                if (aborted) return;
-                if (code !== 0 && finished < cases.length) {
-                    aborted = true;
-                    shutdownAll();
-                    reject(new Error(`wasm test worker exited unexpectedly: code=${code}`));
+                const slot = workers.indexOf(w);
+                if (slot >= 0) {
+                    const next = spawnWorker(slot);
+                    schedule(next);
                 }
-            });
+            }, caseTimeoutMs);
+            timers.set(w, timer);
         }
 
+        for (let i = 0; i < workerCount; i++) {
+            spawnWorker(i);
+        }
         for (const w of workers) schedule(w);
     });
 }
@@ -625,14 +708,28 @@ function runCommand(cmd, args, options = {}) {
         const stdinText = Object.prototype.hasOwnProperty.call(options, 'stdinText')
             ? options.stdinText
             : null;
+        const timeoutMs = Object.prototype.hasOwnProperty.call(options, 'timeoutMs')
+            ? Number(options.timeoutMs)
+            : (() => {
+                const raw = parseInt(process.env.NEPL_TEST_CASE_TIMEOUT_MS || '20000', 10);
+                return Number.isFinite(raw) && raw > 0 ? raw : 20000;
+            })();
         const spawnOptions = { ...options };
         delete spawnOptions.stdinText;
+        delete spawnOptions.timeoutMs;
         const child = spawn(cmd, args, {
             ...spawnOptions,
             stdio: ['pipe', 'pipe', 'pipe'],
         });
         let stdout = '';
         let stderr = '';
+        let settled = false;
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(result);
+        };
         child.stdin.on('error', () => {
             // 子プロセスが先に終了した場合の EPIPE は無視する。
         });
@@ -648,7 +745,7 @@ function runCommand(cmd, args, options = {}) {
             stderr += d.toString();
         });
         child.on('error', (err) => {
-            resolve({
+            finish({
                 code: -1,
                 signal: null,
                 stdout,
@@ -656,8 +753,17 @@ function runCommand(cmd, args, options = {}) {
             });
         });
         child.on('close', (code, signal) => {
-            resolve({ code, signal, stdout, stderr });
+            finish({ code, signal, stdout, stderr });
         });
+        const timer = setTimeout(() => {
+            try { child.kill('SIGKILL'); } catch {}
+            finish({
+                code: -1,
+                signal: 'SIGKILL',
+                stdout,
+                stderr: `${stderr}\ncommand timeout after ${timeoutMs}ms`.trim(),
+            });
+        }, timeoutMs);
     });
 }
 
