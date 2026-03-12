@@ -237,6 +237,36 @@
   - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 2` -> pass
   - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/vec.nepl -n 3` -> pass
 
+# 2026-03-12 作業メモ (feat(collections): add bitset)
+
+- 目的:
+  - `alloc/collections` に fixed-length な bit 集合を追加し、`BloomFilter` と違って false positive のない membership structure を標準で扱えるようにする。
+  - `reboot` 方針に合わせて bare API と public doctest を整え、pipe 併用の使い方は `tests/stdlib` 側で保証する。
+- 変更:
+  - `stdlib/alloc/collections/bitset.nepl`
+    - `BitSet` を追加。
+    - `new` / `len` / `contains` / `insert` / `remove` / `clear` / `fill` / `free` を bare API で実装。
+    - 内部は `nbits` / `nbytes` / `MemPtr<u8>` を持つ owner struct とし、index から byte offset と bit mask を計算して更新する。
+    - doc comment は新 policy / format へ合わせて、usage doctest を各 public 関数へ追加。
+  - `stdlib/tests/bitset.n.md`
+    - insert/remove/len と clear/fill の focused fixture を追加。
+  - `tests/stdlib/bitset_collections.n.md`
+    - pipe 記法での `insert` / `remove` / `contains` / `fill` 利用を回帰として追加。
+- 検証:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 3` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 4` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 5` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/bitset.n.md -n 1` -> pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/bitset.n.md -n 2` -> pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/bitset_collections.n.md -n 1` -> pass
+  - `node nodesrc/tests.js -i stdlib/tests/bitset.n.md -i tests/stdlib/bitset_collections.n.md -i stdlib/alloc/collections/bitset.nepl --no-stdlib --no-tree -o /tmp/tests-bitset-fixed.json -j 2`
+    - 結果: `10/10 pass`
+- 差異メモ:
+  - out-of-bounds `Err` を返す focused case は、web compiler が生成した current wasm で hang する別根因に当たったため、この batch には混ぜていない。
+  - `nepl-cli + wasmer` では同じ最小再現が即終了することを確認済みで、stdlib 実装ではなく compiler/runtime 側の別タスクとして切り出す。
+
 # 2026-03-06 作業メモ (フェーズD: llvm codegen 内の precheck 後診断返却を除去)
 
 - 目的:
