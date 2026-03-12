@@ -1,4 +1,72 @@
+# 2026-03-12 作業メモ (tooling: repo_metrics を TypeScript 化し内容別集計へ拡張)
+
+- 目的:
+  - `repo_metrics.py` の単純な拡張子集計を、リポジトリ実態に沿った「内容別」集計へ改良する。
+  - `.n.md` と通常の `.md` を分離し、top-level の `tests/` `tutorials/` `doc/` `examples/` と `src/` / `stdlib/` 系を分離して確認できるようにする。
+  - `source code` / `document comment` / `document` / `test` を別集計し、`.rs` / `.nepl` / `.n.md` の test case 数も出せるようにする。
+- 実装状況:
+  - 既存の `repo_metrics.py` は削除し、top-level の `repo_metrics.ts` へ移行した。
+  - 実行は `node --experimental-strip-types repo_metrics.ts ...` を前提とし、追加依存なしで動く standalone script にした。
+- 根本修正:
+  - 以前は「拡張子ごとの総行数 + 一部拡張子の comment/code/blank」だけで、`.n.md` 内の本文と doctest、`.nepl` 内の `//:` ドキュメントコメントと doctest、`.rs` 内の source と test を分離できていなかった。
+  - そのため、仕様書・ドキュメントコメント・テストケースが source code と混ざり、repo の実情に合わない数値になっていた。
+- 変更:
+  - `repo_metrics.ts`
+    - Git 管理下ファイルを基準に列挙し、binary file は skip か size-only 集計を選べるようにした。
+    - `By Extension` / `By Area` / `By Content Kind` の 3 軸で表示するようにした。
+    - area は `top_level_docs_tests` / `source_tree` / `other` に分けた。
+    - `.n.md` / `.md` では `neplg2:test` ブロックだけを `test`、それ以外を `document` として数えるようにした。
+    - `.nepl` では `//:` を `document comment` として扱い、`//:` 内 doctest だけを `test` として切り出すようにした。
+    - `.rs` では `///` / `//!` を `document comment` とし、`#[test]` 系 attribute と `#[cfg(test)]` 配下を `test` として扱うようにした。
+    - `.n.md` / `.nepl` / `.rs` から test case 数を数え、拡張子別・area 別・content kind 別に反映するようにした。
+- 実行確認:
+  - `node --experimental-strip-types repo_metrics.ts --json /tmp/repo_metrics.json`
+    - 実測:
+      - `.n.md` testCases = `812`
+      - `.nepl` testCases = `278`
+      - `.rs` testCases = `360`
+  - 件数照合:
+    - `rg '^\\s*neplg2:test(?:\\[[^\\]]+\\])?\\s*$' -g '*.n.md' | wc -l` -> `812`
+    - `rg '^\\s*//:\\s*neplg2:test(?:\\[[^\\]]+\\])?\\s*$' -g '*.nepl' | wc -l` -> `278`
+    - `rg '^\\s*#\\[(test|tokio::test|wasm_bindgen_test)\\b' -g '*.rs' | wc -l` -> `360`
+  - この一致により、少なくとも test case カウントは repo 実態と整合していることを確認した。
+- build / test:
+  - `trunk build`
+    - 結果: success
+  - `node nodesrc/run_doctest.js -i tests/compiler/typeannot.n.md -n 1`
+    - 結果: pass
+  - `node nodesrc/run_doctest.js -i tests/compiler/typeannot.n.md -n 2`
+    - 結果: pass
+  - 参考:
+    - `node nodesrc/run_doctest.js -i stdlib/core/result.nepl -n 1`
+    - `node nodesrc/run_doctest.js -i tutorials/getting_started/11_testing_workflow.n.md -n 1`
+    - 上記 2 件は `return value mismatch` と runtime trap で fail。今回の変更対象は集計スクリプトであり、repo_metrics 変更の有無に関係なく既存の doctest 側問題として残っている。
+- 差異メモ:
+  - `node nodesrc/tests.js -i tests -i tutorials -i stdlib ...` は長時間継続したため、確認は `run_doctest.js` による focused 実行へ切り替えた。
+  - 今回の変更は build/test 系ロジックではなく、集計スクリプト単体の改善である。
+
 # 2026-03-06 作業メモ (feat: examples/bf.nepl に Brainfuck Runner を実装)
+
+# 2026-03-12 作業メモ (alloc/collections/sparse_set 調査継続・未 commit)
+
+- [目的/もくてき]:
+  - `alloc/collections` に `SparseSet` を[追加/ついか]し、`[0, n)` [範囲/はんい]の integer set を O(1) membership / insert / remove で[扱/あつか]えるようにする。
+- [進捗/しんちょく]:
+  - `SparseSet` の public API (`new` / `len` / `universe_len` / `contains` / `insert` / `remove` / `clear` / `free`) と public doctest / fixture は[一通/ひととお]り[作成/さくせい]済み。
+  - normal path は focused 実行で[通過/つうか]している。
+    - `stdlib/alloc/collections/sparse_set.nepl::doctest#1/#2`
+    - `stdlib/tests/sparse_set.n.md::doctest#1`
+    - `tests/stdlib/sparse_set_collections.n.md::doctest#1`
+- [根本原因/こんぽんげんいん]の[切/き]り[分/わ]け:
+  - [当初/とうしょ]は `SparseSet` owner [内部/ないぶ]の field [読/よ]み[出/だ]しが[壊/こわ]れているように[見/み]えたが、header を `MemPtr<u8>` field で[持/も]つ設計から raw `i32` pointer [保持/ほじ]へ[落/お]とすことで normal path は[安定/あんてい]した。
+  - その[後/あと]に[残/のこ]った failure は invalid index path だけで、`contains s 8` の[最小例/さいしょうれい]まで[縮小/しゅくしょう]できた。
+  - さらに[追跡/ついせき]すると、`SparseSet` [固有/こゆう]ではなく `sparse_set_diag_index` の[中/なか]で[作/つく]る message string が web compile path で `RuntimeError: memory access out of bounds` を[起/お]こしていることが[分/わ]かった。
+  - `diag_error StdErrorKind::IndexOutOfBounds "abc"` は pass する一方、`concat "sparse_set_contains" ": index out of bounds "` を[含/ふく]む chain だけが trap する。
+  - `stdlib/alloc/string.nepl::doctest#4` も[同系統/どうけいとう]の web path OOB を[持/も]っており、`SparseSet` invalid path failure は[既存/きぞん]の `alloc/string` regression に[乗/の]っていると[判断/はんだん]した。
+  - native compiler では `SparseSet invalid index` の[最小例/さいしょうれい]は pass し、web compile path だけが trap するので、[直接/ちょくせつ]の blocker は stdlib API 設計でなく web compiler/runtime path [側/がわ]にある。
+- [判断/はんだん]:
+  - `SparseSet` normal path の library 実装は[成立/せいりつ]しているが、invalid index の `Result::Err` path を[含/ふく]む focused suite が web compile path で[未収束/みしゅうそく]のため、現時点では commit しない。
+  - [次/つぎ]は `alloc/string` の concat / integer-to-string [経路/けいろ]を root cause ベースで[直/なお]し、その[後/あと]に `SparseSet` batch を[再開/さいかい]する。
 
 # 2026-03-12 作業メモ (ci: rust install -> cargo build -> trunk build を共通 action 化)
 
