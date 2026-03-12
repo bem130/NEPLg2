@@ -3895,6 +3895,30 @@ impl<'a> BlockChecker<'a> {
                                     None
                                 }
                             } else {
+                                let explicit_callable_candidate = if !*forced_value && !type_args.is_empty() {
+                                    let mut matching = self
+                                        .env
+                                        .lookup_all_callables(&id.name)
+                                        .into_iter()
+                                        .filter(|binding| {
+                                            let ty = self.ctx.resolve_id(binding.ty);
+                                            match self.ctx.get(ty) {
+                                                TypeKind::Function { type_params, .. } => {
+                                                    type_params.len() == type_args.len()
+                                                }
+                                                _ => false,
+                                            }
+                                        })
+                                        .cloned()
+                                        .collect::<Vec<_>>();
+                                    if matching.len() == 1 {
+                                        Some(matching.remove(0))
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                };
                                 let expected_function_from_outer = self
                                     .infer_expected_from_outer_consumer_next_arg(
                                         &stack,
@@ -3941,7 +3965,9 @@ impl<'a> BlockChecker<'a> {
                                 } else {
                                     None
                                 };
-                                let selected = preferred_callable
+                                let selected = explicit_callable_candidate
+                                    .as_ref()
+                                    .or(preferred_callable)
                                     .or(value_candidate)
                                     .or_else(|| {
                                         if !has_any_value {
@@ -4095,6 +4121,17 @@ impl<'a> BlockChecker<'a> {
                                             }
                                         }
                                     }
+                                }
+                                if !type_args.is_empty() {
+                                    bindings.retain(|binding| {
+                                        let ty = self.ctx.resolve_id(binding.ty);
+                                        match self.ctx.get(ty) {
+                                            TypeKind::Function { type_params, .. } => {
+                                                type_params.len() == type_args.len()
+                                            }
+                                            _ => false,
+                                        }
+                                    });
                                 }
                                 if !bindings.is_empty() {
                                 let callable_overload_count = bindings

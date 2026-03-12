@@ -1,3 +1,37 @@
+# 2026-03-12 作業メモ (fix: bare Result map/and_then の callable 解決を修正)
+
+- [目的/もくてき]:
+  - `core/option` と `core/result` に同名の `map` / `and_then` を追加したうえで、NEPLg2 の bare 名 + type args 記法でも正しく[解決/かいけつ]されるようにする。
+- [根本原因/こんぽんげんいん]:
+  - `typecheck` の `Symbol::Ident` 解決が、explicit type args を持つ callable に対しても `lookup_callable_any(name)` を先に見ていた。
+  - そのため `map<i32,i32,str>` と `and_then<i32,i32,str>` が、generic arity 3 の `Result` 版ではなく、generic arity 2 の `Option` 版へ誤って結び付き、`expression left extra values on the stack` に崩れていた。
+  - `map_err` は `Result` 側にしか存在しないため通っており、failure は bare 同名 callable 群の選別に限られていた。
+- [変更/へんこう]:
+  - `nepl-core/src/typecheck.rs`
+    - explicit type args 付き `Symbol::Ident` では、`lookup_all_callables(name)` から `type_params.len() == type_args.len()` を満たす callable だけを候補に残し、1 件ならそれを優先するよう変更。
+    - unresolved callable stack entry を作る経路でも、explicit type args があるときは同じ generic arity filter を適用するよう変更。
+    - 調査用に入れていた debug 出力を削除。
+  - `stdlib/core/option.nepl`
+    - `unwrap_or` を bare 名へ揃え、`map` / `and_then` とその doctest を追加。
+  - `stdlib/core/result.nepl`
+    - `and_then` と doctest を追加。
+  - `stdlib/tests/option.n.md`
+  - `stdlib/tests/result.n.md`
+  - `tutorials/getting_started/05_option.n.md`
+  - `tutorials/getting_started/13_type_driven_error_modeling.n.md`
+    - bare `unwrap_or` / `map` / `and_then` 前提へ追従。
+- [検証/けんしょう]:
+  - `RUSTFLAGS='-C link-arg=-fuse-ld=lld' cargo build -p nepl-cli`
+  - `env -u RUSTFLAGS cargo build --target wasm32-unknown-unknown --manifest-path nepl-web/Cargo.toml`
+  - `NO_COLOR=false trunk build`
+  - `node nodesrc/run_doctest.js -i stdlib/core/option.nepl -n 2`
+  - `node nodesrc/run_doctest.js -i stdlib/core/result.nepl -n 3`
+  - `node nodesrc/run_doctest.js -i stdlib/core/result.nepl -n 4`
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/05_option.n.md -n 1`
+  - `node nodesrc/run_doctest.js -i tutorials/getting_started/13_type_driven_error_modeling.n.md -n 1`
+  - `node nodesrc/tests.js -i stdlib/tests/option.n.md -i stdlib/tests/result.n.md -i stdlib/core/option.nepl -i stdlib/core/result.nepl --no-stdlib --no-tree -o /tmp/tests-option-result-fp.json -j 2`
+    - `summary: 10/10 pass`
+
 # 2026-03-12 作業メモ (editor extensions: Zed syntax highlight 用 grammar を強化)
 
 - 目的:

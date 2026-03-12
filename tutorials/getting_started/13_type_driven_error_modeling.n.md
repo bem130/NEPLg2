@@ -62,8 +62,8 @@ fn main <()*>i32> ():
 
     let checks <Vec<Result<(),str>>>:
         checks_new
-        |> checks_push check_eq_i32 8 option_unwrap_or<i32> a 0
-        |> checks_push check_eq_i32 0 option_unwrap_or<i32> b 0
+        |> checks_push check_eq_i32 8 unwrap_or<i32> a 0
+        |> checks_push check_eq_i32 0 unwrap_or<i32> b 0
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
 ```

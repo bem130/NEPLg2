@@ -14,6 +14,11 @@ ret: 0
 #import "core/math" as *
 #import "std/test" as *
 
+fn positive_double <(i32)->Result<i32,i32>> (x):
+    if gt x 0:
+        then ok<i32,i32> mul x 2
+        else err<i32,i32> -1
+
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new
     // Test ok and is_ok
@@ -51,5 +56,13 @@ fn main <()*>i32> ():
     // Test unwrap_err
     let errv <Result<i32,i32>> err<i32,i32> 7;
     set checks checks_push checks assert_eq_i32 7 unwrap_err<i32,i32> errv;
+
+    // Test and_then with success and error propagation
+    let r5 <Result<i32,i32>> ok<i32,i32> 6;
+    let r6 <Result<i32,i32>> ok<i32,i32> -1;
+    let r7 <Result<i32,i32>> and_then<i32,i32,i32> r5 positive_double;
+    let r8 <Result<i32,i32>> and_then<i32,i32,i32> r6 positive_double;
+    set checks checks_push checks assert_eq_i32 12 unwrap_ok<i32,i32> r7;
+    set checks checks_push checks assert_eq_i32 -1 unwrap_err<i32,i32> r8;
     checks_exit_code checks
 ```

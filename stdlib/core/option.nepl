@@ -10,7 +10,7 @@
 //: - reboot [後/ご]の stdlib で「[単純/たんじゅん]な[欠如/けつじょ]は `Option`、[失敗理由/しっぱいりゆう]つきは `Result`」という[責務分離/せきむぶんり]を[支/ささ]える[最小基盤/さいしょうきばん]です。
 //:
 //: ### [注意/ちゅうい]
-//: - `unwrap` は[便宜上/べんぎじょう][残/のこ]している unsafe helper であり、[通常/つうじょう]は `match` や `option_unwrap_or` を[優先/ゆうせん]してください。
+//: - `unwrap` は[便宜上/べんぎじょう][残/のこ]している unsafe helper であり、[通常/つうじょう]は `match` や `unwrap_or` を[優先/ゆうせん]してください。
 //: - doctest では trap [依存/いぞん]の `should_panic` を[使/つか]わず、[安全/あんぜん]な[分岐/ぶんき]と `ret:` [比較/ひかく]で[確認/かくにん]します。
 //:
 //: ### [計算量/けいさんりょう]
@@ -29,7 +29,7 @@
 //:         |> checks_push assert is_some some 123
 //:         |> checks_push assert is_none none<i32>
 //:         |> checks_push assert_eq_i32 123 unwrap some 123
-//:         |> checks_push assert_eq_i32 7 option_unwrap_or none<i32> 7
+//:         |> checks_push assert_eq_i32 7 unwrap_or none<i32> 7
 //:     checks_exit_code checks
 //: ```
 //:
@@ -45,14 +45,37 @@
 //:     add x 1
 //:
 //: fn main <()*>i32> ():
-//:     let a0 option_map some 9 inc;
-//:     let a1 option_map some 9 inc;
-//:     let b option_map none<i32> inc;
+//:     let a0 map<i32,i32> some<i32> 9 inc;
+//:     let a1 map<i32,i32> some<i32> 9 inc;
+//:     let b map<i32,i32> none<i32> inc;
 //:     let checks <Vec<Result<(),str>>>:
 //:         checks_new
 //:         |> checks_push assert is_some a0
 //:         |> checks_push assert is_none b
 //:         |> checks_push assert_eq_i32 10 unwrap a1
+//:     checks_exit_code checks
+//: ```
+//:
+//: neplg2:test
+//: ret: 0
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "std/test" as *
+//:| #import "core/option" as *
+//:| #import "core/math" as *
+//: fn positive_double <(i32)->Option<i32>> (x):
+//:     if gt x 0:
+//:         then some mul x 2
+//:         else none<i32>
+//:
+//: fn main <()*>i32> ():
+//:     let a and_then<i32,i32> some<i32> 3 positive_double;
+//:     let b and_then<i32,i32> some<i32> -1 positive_double;
+//:     let checks <Vec<Result<(),str>>>:
+//:         checks_new
+//:         |> checks_push assert_eq_i32 6 unwrap a
+//:         |> checks_push assert is_none b
 //:     checks_exit_code checks
 //: ```
 
@@ -156,7 +179,7 @@ fn is_none <.T> <(Option<.T>)->bool> (o):
 //: - match で分岐し、None は unreachable を呼びます。
 //:
 //: 注意(重要):
-//: - None の可能性がある場合は is_some や option_unwrap_or を使ってください。
+//: - None の可能性がある場合は is_some や unwrap_or を使ってください。
 //:
 //: 計算量:
 //: - O(1)
@@ -167,7 +190,7 @@ fn unwrap <.T> <(Option<.T>)->.T> (o):
         Option::None:
             #intrinsic "unreachable" <> ()
 
-//: option_unwrap_or: デフォルト値を返す
+//: unwrap_or: デフォルト値を返す
 //:
 //: 目的:
 //: - Some(v) なら v、None なら default を返します。
@@ -180,14 +203,14 @@ fn unwrap <.T> <(Option<.T>)->.T> (o):
 //:
 //: 計算量:
 //: - O(1)
-fn option_unwrap_or <.T> <(Option<.T>,.T)->.T> (o, default):
+fn unwrap_or <.T> <(Option<.T>,.T)->.T> (o, default):
     match o:
         Option::Some v:
             v
         Option::None:
             default
 
-//: option_map: 値がある時だけ関数を適用する
+//: map: 値がある時だけ関数を適用する
 //:
 //: 目的:
 //: - Some(v) なら f(v) を Some として返し、None はそのまま返します。
@@ -200,9 +223,29 @@ fn option_unwrap_or <.T> <(Option<.T>,.T)->.T> (o, default):
 //:
 //: 計算量:
 //: - O(1)
-fn option_map <.T,.U> <(Option<.T>, (.T)->.U)->Option<.U>> (o, f):
+fn map <.T,.U> <(Option<.T>, (.T)->.U)->Option<.U>> (o, f):
     match o:
         Option::Some v:
             some<.U> f v
+        Option::None:
+            none<.U>
+
+//: and_then: 値がある時だけ Option を返す関数へつなぐ
+//:
+//: 目的:
+//: - Some(v) なら f(v) をそのまま返し、None はそのまま返します。
+//:
+//: 実装(アルゴリズム):
+//: - match で Some/None を分岐し、Some のときのみ Option を返す関数を呼びます。
+//:
+//: 注意(重要):
+//: - `map` が `a -> b` を受けるのに対し、`and_then` は `a -> Option<b>` を受けます。
+//:
+//: 計算量:
+//: - O(1)
+fn and_then <.T,.U> <(Option<.T>, (.T)->Option<.U>)->Option<.U>> (o, f):
+    match o:
+        Option::Some v:
+            f v
         Option::None:
             none<.U>
