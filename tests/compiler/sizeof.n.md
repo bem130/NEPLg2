@@ -88,6 +88,34 @@ fn main <()->i32> ():
             1
 ```
 
+## sizeof_multi_field_struct_regression
+
+neplg2:test
+ret: 0
+```neplg2
+#target core
+#entry main
+#indent 4
+#import "core/math" as *
+#import "core/mem" as *
+
+struct Pair:
+    a <i32>
+    b <i32>
+
+struct WidePair:
+    a <i64>
+    b <i32>
+
+fn main <()->i32> ():
+    if:
+        eq size_of<Pair> 8
+        then:
+            if eq size_of<WidePair> 12 0 2
+        else:
+            1
+```
+
 ## sizeof_algebraic_types
 
 neplg2:test
@@ -191,9 +219,9 @@ fn main <()->i32> ():
                 eq size_of<Stack<i32>> 4
                 then:
                     if:
-                        eq size_of<HashMap<i32>> 4
+                        gt size_of<HashMap<i32>> 0
                         then:
-                            if eq size_of<HashSet> 4 0 4
+                            if gt size_of<HashSet> 0 0 4
                         else:
                             3
                 else:

@@ -2162,11 +2162,10 @@ fn lower_hir_expr(
         } => {
             if name == "size_of" || name == "align_of" {
                 if let Some(ty) = type_args.first() {
-                    let size = match types.get(types.resolve_id(*ty)) {
-                        TypeKind::U8 => 1,
-        TypeKind::Named(ref n) if n == "i64" || n == "u64" || n == "f64" => 8,
-                        TypeKind::Unit => 0,
-                        _ => 4,
+                    let size = if name == "size_of" {
+                        type_storage_size_bytes(types, *ty)
+                    } else {
+                        type_storage_align_bytes(types, *ty)
                     };
                     return Ok(Some(LlValue {
                         ty: LlTy::I32,
@@ -2195,6 +2194,46 @@ fn lower_hir_expr(
                 }
                 let ty_id = types.resolve_id(type_args[0]);
                 let ty_kind = types.get(ty_id);
+                if is_aggregate_storage_type(types, ty_id) {
+                    let size = type_storage_size_bytes(types, ty_id);
+                    let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
+                        panic!(
+                            "internal compiler error: alloc function is required for intrinsic load in '{}'",
+                            ctx.function_name
+                        )
+                    })?;
+                    let dst = ctx.next_tmp();
+                    ctx.push_line(&format!(
+                        "  {} = call i32 {}(i32 {})",
+                        dst,
+                        ll_symbol(alloc_name.as_str()),
+                        size
+                    ));
+                    let dst_ptr = ctx.linear_i8_ptr_from_i32(dst.as_str());
+                    let src_ptr = ctx.linear_i8_ptr_from_i32(ptr_v.repr.as_str());
+                    for off in 0..size {
+                        let src_byte_ptr = ctx.next_tmp();
+                        let byte = ctx.next_tmp();
+                        let dst_byte_ptr = ctx.next_tmp();
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            src_byte_ptr, src_ptr, off
+                        ));
+                        ctx.push_line(&format!("  {} = load i8, i8* {}, align 1", byte, src_byte_ptr));
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            dst_byte_ptr, dst_ptr, off
+                        ));
+                        ctx.push_line(&format!(
+                            "  store i8 {}, i8* {}, align 1",
+                            byte, dst_byte_ptr
+                        ));
+                    }
+                    return Ok(Some(LlValue {
+                        ty: LlTy::I32,
+                        repr: dst,
+                    }));
+                }
                 if matches!(ty_kind, TypeKind::U8) {
                     let p_ptr = ctx.linear_i8_ptr_from_i32(ptr_v.repr.as_str());
                     let raw = ctx.next_tmp();
@@ -2248,6 +2287,36 @@ fn lower_hir_expr(
                 }
                 let ty_id = types.resolve_id(type_args[0]);
                 let ty_kind = types.get(ty_id);
+                if is_aggregate_storage_type(types, ty_id) {
+                    if val_v.ty != LlTy::I32 {
+                        panic!(
+                            "internal compiler error: intrinsic store aggregate expects i32 handle in '{}' (got {:?})",
+                            ctx.function_name, val_v.ty
+                        );
+                    }
+                    let dst_ptr = ctx.linear_i8_ptr_from_i32(ptr_v.repr.as_str());
+                    let src_ptr = ctx.linear_i8_ptr_from_i32(val_v.repr.as_str());
+                    let size = type_storage_size_bytes(types, ty_id);
+                    for off in 0..size {
+                        let src_byte_ptr = ctx.next_tmp();
+                        let byte = ctx.next_tmp();
+                        let dst_byte_ptr = ctx.next_tmp();
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            src_byte_ptr, src_ptr, off
+                        ));
+                        ctx.push_line(&format!("  {} = load i8, i8* {}, align 1", byte, src_byte_ptr));
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            dst_byte_ptr, dst_ptr, off
+                        ));
+                        ctx.push_line(&format!(
+                            "  store i8 {}, i8* {}, align 1",
+                            byte, dst_byte_ptr
+                        ));
+                    }
+                    return Ok(None);
+                }
                 if matches!(ty_kind, TypeKind::U8) {
                     if val_v.ty != LlTy::I32 {
                         panic!(
@@ -2558,6 +2627,167 @@ fn ll_storage_size(ty: LlTy) -> i64 {
         LlTy::I64 | LlTy::F64 => 8,
         LlTy::Void => 0,
         LlTy::I32 | LlTy::F32 => 4,
+    }
+}
+
+fn type_storage_align_bytes(types: &TypeCtx, ty: TypeId) -> i64 {
+    let ty = types.resolve_id(ty);
+    match types.get(ty) {
+        TypeKind::Unit | TypeKind::Never => 0,
+        TypeKind::U8 => 1,
+        TypeKind::Named(name) if name == "i64" || name == "u64" || name == "f64" => 8,
+        TypeKind::Struct { fields, .. } => fields
+            .iter()
+            .map(|field| type_storage_align_bytes(types, *field))
+            .max()
+            .unwrap_or(1),
+        TypeKind::Tuple { items } => items
+            .iter()
+            .map(|item| type_storage_align_bytes(types, *item))
+            .max()
+            .unwrap_or(1),
+        TypeKind::Enum { variants, .. } => variants
+            .iter()
+            .filter_map(|variant| variant.payload)
+            .map(|payload| type_storage_align_bytes(types, payload))
+            .max()
+            .unwrap_or(4)
+            .max(4),
+        TypeKind::Apply { base, args } => {
+            let base = types.resolve_id(base);
+            match types.get(base) {
+                TypeKind::Struct {
+                    type_params, fields, ..
+                } => {
+                    let mut tmp = types.clone();
+                    let mapping = type_params
+                        .iter()
+                        .copied()
+                        .zip(args.iter().copied())
+                        .collect::<BTreeMap<_, _>>();
+                    let substituted = fields
+                        .iter()
+                        .map(|field| tmp.substitute(*field, &mapping))
+                        .collect::<Vec<_>>();
+                    substituted
+                        .iter()
+                        .map(|field| type_storage_align_bytes(&tmp, *field))
+                        .max()
+                        .unwrap_or(1)
+                }
+                TypeKind::Enum {
+                    type_params,
+                    variants,
+                    ..
+                } => {
+                    let mut tmp = types.clone();
+                    let mapping = type_params
+                        .iter()
+                        .copied()
+                        .zip(args.iter().copied())
+                        .collect::<BTreeMap<_, _>>();
+                    let substituted = variants
+                        .iter()
+                        .filter_map(|variant| variant.payload)
+                        .map(|payload| tmp.substitute(payload, &mapping))
+                        .collect::<Vec<_>>();
+                    substituted
+                        .iter()
+                        .map(|payload| type_storage_align_bytes(&tmp, *payload))
+                        .max()
+                        .unwrap_or(4)
+                        .max(4)
+                }
+                _ => 4,
+            }
+        }
+        _ => 4,
+    }
+}
+
+fn type_storage_size_bytes(types: &TypeCtx, ty: TypeId) -> i64 {
+    let ty = types.resolve_id(ty);
+    match types.get(ty) {
+        TypeKind::Unit | TypeKind::Never => 0,
+        TypeKind::U8 => 1,
+        TypeKind::Named(name) if name == "i64" || name == "u64" || name == "f64" => 8,
+        TypeKind::Struct { fields, .. } => fields
+            .iter()
+            .map(|field| type_storage_size_bytes(types, *field))
+            .sum(),
+        TypeKind::Tuple { items } => items
+            .iter()
+            .map(|item| type_storage_size_bytes(types, *item))
+            .sum(),
+        TypeKind::Enum { variants, .. } => {
+            let payload = variants
+                .iter()
+                .filter_map(|variant| variant.payload)
+                .map(|payload| type_storage_size_bytes(types, payload))
+                .max()
+                .unwrap_or(0);
+            4 + payload
+        }
+        TypeKind::Apply { base, args } => {
+            let base = types.resolve_id(base);
+            match types.get(base) {
+                TypeKind::Struct {
+                    type_params, fields, ..
+                } => {
+                    let mut tmp = types.clone();
+                    let mapping = type_params
+                        .iter()
+                        .copied()
+                        .zip(args.iter().copied())
+                        .collect::<BTreeMap<_, _>>();
+                    let substituted = fields
+                        .iter()
+                        .map(|field| tmp.substitute(*field, &mapping))
+                        .collect::<Vec<_>>();
+                    substituted
+                        .iter()
+                        .map(|field| type_storage_size_bytes(&tmp, *field))
+                        .sum()
+                }
+                TypeKind::Enum {
+                    type_params,
+                    variants,
+                    ..
+                } => {
+                    let mut tmp = types.clone();
+                    let mapping = type_params
+                        .iter()
+                        .copied()
+                        .zip(args.iter().copied())
+                        .collect::<BTreeMap<_, _>>();
+                    let substituted = variants
+                        .iter()
+                        .filter_map(|variant| variant.payload)
+                        .map(|payload| tmp.substitute(payload, &mapping))
+                        .collect::<Vec<_>>();
+                    let payload = substituted
+                        .iter()
+                        .map(|payload| type_storage_size_bytes(&tmp, *payload))
+                        .max()
+                        .unwrap_or(0);
+                    4 + payload
+                }
+                _ => 4,
+            }
+        }
+        _ => 4,
+    }
+}
+
+fn is_aggregate_storage_type(types: &TypeCtx, ty: TypeId) -> bool {
+    let ty = types.resolve_id(ty);
+    match types.get(ty) {
+        TypeKind::Struct { .. } | TypeKind::Tuple { .. } | TypeKind::Enum { .. } => true,
+        TypeKind::Apply { base, .. } => matches!(
+            types.get(types.resolve_id(base)),
+            TypeKind::Struct { .. } | TypeKind::Tuple { .. } | TypeKind::Enum { .. }
+        ),
+        _ => false,
     }
 }
 

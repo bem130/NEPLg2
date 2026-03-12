@@ -11716,3 +11716,33 @@
     - [結果/けっか]: pass
   - `node nodesrc/tests.js -i stdlib/tests/segment_tree.n.md -i tests/stdlib/segment_tree_collections.n.md -i stdlib/alloc/collections/segment_tree.nepl --no-stdlib --no-tree -o /tmp/tests-segment-tree.json -j 2`
     - [結果/けっか]: `8/8 pass`
+
+# 2026-03-12 作業メモ (fix(compiler): composite size/load/store を実体サイズに合わせる)
+
+- [目的/もくてき]:
+  - `size_of<T>` が multi-field struct / tuple / enum / generic apply に対して[正/ただ]しい[実体/じったい] size を[返/かえ]すようにする。
+  - aggregate value を `load<T>` / `store<T>` で[扱/あつか]うとき、`i32` 1 [語/ご]ではなく[実体/じったい] size ぶんの byte copy として lowering する。
+- [根本原因/こんぽんげんいん]:
+  - wasm / llvm codegen の `size_of` / `align_of` は、`u8` と 64-bit scalar [以外/いがい]を[事実上/じじつじょう] 4 byte [扱/あつか]いしていた。
+  - さらに `load<T>` / `store<T>` も `Struct` / `Tuple` / `Enum` を `i32` 1 [語/ご]として lowering しており、aggregate value の round-trip が[壊/こわ]れていた。
+  - wasm [側/がわ] aggregate `load` の[初回/しょかい][実装/じっそう]では `local.tee` により[戻/もど]り pointer が stack に 2 [個/こ][残/のこ]り、validation failure も[起/お]きていた。
+- [変更/へんこう]:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `type_storage_size_bytes` / `type_storage_align_bytes` / `is_aggregate_storage_type` を[追加/ついか]。
+    - generic apply は `TypeCtx` clone + type param substitution で field/payload の[実体/じったい] size を[再帰的/さいきてき]に[計算/けいさん]。
+    - aggregate `load<T>` / `store<T>` を byte copy lowering に[変更/へんこう]。
+    - aggregate `load<T>` の `local.tee` を `local.set` に[修正/しゅうせい]し、WASM stack balance を[復旧/ふっきゅう]。
+  - `nepl-core/src/codegen_llvm.rs`
+    - 同等の helper を[追加/ついか]。
+    - aggregate `load<T>` / `store<T>` を `i8` [単位/たんい]の copy lowering に[変更/へんこう]。
+  - `tests/compiler/sizeof.n.md`
+    - `sizeof_multi_field_struct_regression` を[追加/ついか]。
+    - `Pair{i32,i32}` の `8 byte`、`WidePair{i64,i32}` の `12 byte` を[固定/こてい]。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/run_doctest.js -i tests/compiler/sizeof.n.md -n 4`
+    - [結果/けっか]: pass
+- [差異/さい]メモ:
+  - この[修正/しゅうせい]で `size_of` regression は[解消/かいしょう]したが、`alloc/collections/trie` の non-empty insert はまだ runtime OOB が[残/のこ]る。
+  - `Trie` [追加/ついか] batch は library [側/がわ] root cause が[未収束/みしゅうそく]のため commit していない。`trie_build_suffix_chain` と node [接続/せつぞく] logic を focused に[再調査/さいちょうさ]する。
