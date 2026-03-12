@@ -258,6 +258,28 @@
   - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 3` -> pass
   - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 4` -> pass
   - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/bitset.nepl -n 5` -> pass
+
+# 2026-03-12 作業メモ (feat(collections): add adjacency matrix)
+
+- 目的:
+  - `alloc/collections` に graph representation の最小実装として `AdjacencyMatrix` を追加し、固定長の directed edge set を O(1) membership で扱えるようにする。
+  - `trie` blocker と独立に、nested owner を避けた raw bit matrix で collection の種類を増やす。
+- 変更:
+  - `stdlib/alloc/collections/adjacency_matrix.nepl`
+    - `AdjacencyMatrix` を追加。
+    - `new` / `len` / `contains` / `insert` / `remove` / `clear` / `free` を bare API で実装。
+    - `(from, to)` を `from * nverts + to` の bit index に写像し、byte 配列で保持する directed graph とした。
+    - doc comment は新 policy / format に合わせ、各 public 関数に usage doctest を追加。
+  - `stdlib/tests/adjacency_matrix.n.md`
+    - insert/remove/clear の focused fixture を追加。
+  - `tests/stdlib/adjacency_matrix_collections.n.md`
+    - pipe 記法での `insert` / `remove` / `contains` / `clear` 利用を回帰として追加。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/alloc/collections/adjacency_matrix.nepl -i stdlib/tests/adjacency_matrix.n.md -i tests/stdlib/adjacency_matrix_collections.n.md --no-stdlib --no-tree -o /tmp/tests-adjacency-matrix.json -j 2`
+    - 結果: `9/9 pass`
+- 差異メモ:
+  - `contains g 4 0` のような範囲外 index に対する `Result::Err` 経路は、`target/debug/nepl-cli + wasmer` では正常に `1` を返す一方、web compile path では runtime OOB に落ちた。
+  - これは `AdjacencyMatrix` 実装ではなく web compiler/runtime 側の別根因と判断し、今回の collection batch には混ぜていない。
   - `node nodesrc/run_doctest.js -i stdlib/tests/bitset.n.md -n 1` -> pass
   - `node nodesrc/run_doctest.js -i stdlib/tests/bitset.n.md -n 2` -> pass
   - `node nodesrc/run_doctest.js -i tests/stdlib/bitset_collections.n.md -n 1` -> pass
