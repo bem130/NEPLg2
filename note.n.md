@@ -11630,3 +11630,48 @@
     - [結果/けっか]: pass
   - `node nodesrc/tests.js -i stdlib/tests/bloom_filter.n.md -i tests/stdlib/bloom_filter_collections.n.md -i stdlib/alloc/collections/bloom_filter.nepl --no-stdlib --no-tree -o /tmp/tests-bloom-filter.json -j 2`
     - [結果/けっか]: `9/9 pass`
+
+# 2026-03-12 作業メモ (`DisjointSet` [追加/ついか])
+
+- [目的/もくてき]:
+  - `alloc/collections` に `DisjointSet` を[追加/ついか]し、Union-Find を bare API で[標準提供/ひょうじゅんていきょう]する。
+  - public doc comment / `stdlib/tests` / `tests/stdlib` の 3 [層/そう]で usage を[固定/こてい]し、graph や grouping の[基盤/きばん]を[増/ふ]やす。
+- [根本原因/こんぽんげんいん]:
+  - `alloc/collections` には queue / heap / tree / hash は[揃/そろ]ってきたが、[集合分割/しゅうごうぶんかつ]を[扱/あつか]う DSU がなく、Kruskal や connectivity check の[基盤/きばん]が[欠/か]けていた。
+  - current owner model では query も receiver を[消費/しょうひ]するので、`same` / `size` / `find` を[同/おな]じ owner に[続/つづ]けて[呼/よ]ぶ fixture は moved-value compile fail になっていた。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/disjoint_set.nepl`
+    - `DisjointSet` を `[n, parent ptr, sizes ptr]` を[持/も]つ owner collection として[追加/ついか]した。
+    - `new` / `len` / `find` / `union` / `same` / `size` / `free` を bare API で[実装/じっそう]した。
+    - [内部/ないぶ]は `parent[i]` と `sizes[root]` を[持/も]つ classic Union-Find で、`union` は union-by-size を[採用/さいよう]した。
+    - public API は pure query を[優先/ゆうせん]して path compression を[入/い]れず、`find` / `same` / `size` は[読/よ]み[取/と]りだけで[完結/かんけつ]する[形/かたち]にした。
+  - `stdlib/tests/disjoint_set.n.md`
+    - `union + same + size` と invalid index の focused fixture を[追加/ついか]した。
+    - query が owner を[消費/しょうひ]する current model に[合/あ]わせて、[同値/どうち]な DSU を[作/つく]り[直/なお]して[各確認/かくかくにん]を[分離/ぶんり]した。
+  - `tests/stdlib/disjoint_set_collections.n.md`
+    - pipe [記法/きほう]で `new |> union ... |> uwok` を[確認/かくにん]する collection-level usage fixture を[追加/ついか]した。
+- [設計/せっけい][判断/はんだん]:
+  - `DisjointSet` は owner [構造/こうぞう]だが、public query を `Result<i32,Diag>` / `Result<bool,Diag>` に[保/たも]つため、path compression を[見送/みおく]って union-by-size のみで[平衡性/へいこうせい]を[確保/かくほ]した。
+  - path compression を public API に[載/の]せるには owner と query value を[一緒/いっしょ]に[返/かえ]す別設計が[要/い]るので、[関数型/かんすうがた] style [支援/しえん] batch で[再検討/さいけんとう]する。
+  - doctest と fixture は「current owner model で[確実/かくじつ]に[通/とお]る usage」を[優先/ゆうせん]し、同じ owner の[再利用/さいりよう]を[避/さ]けた。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/disjoint_set.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/disjoint_set.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/disjoint_set.nepl -n 3`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/disjoint_set.nepl -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/disjoint_set.nepl -n 5`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/disjoint_set.nepl -n 6`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/disjoint_set.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/disjoint_set.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/disjoint_set_collections.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i stdlib/tests/disjoint_set.n.md -i tests/stdlib/disjoint_set_collections.n.md -i stdlib/alloc/collections/disjoint_set.nepl --no-stdlib --no-tree -o /tmp/tests-disjoint-set.json -j 2`
+    - [結果/けっか]: `9/9 pass`

@@ -1,0 +1,331 @@
+#indent 4
+
+//: # disjoint_set
+//: [素集合/そしゅうごう]の[併合/へいごう]と[代表元/だいひょうげん][検索/けんさく]を[扱/あつか]う Union-Find
+//:
+//: ### [目的/もくてき]
+//: - `DisjointSet` を[提供/ていきょう]し、`new` / `len` / `find` / `union` / `same` / `size` / `free` の bare API で[集合分割/しゅうごうぶんかつ]を[管理/かんり]できるようにします。
+//: - graph [連結性/れんけつせい]、Kruskal、grouping のような[用途/ようと]を `alloc/collections` の[標準/ひょうじゅん][構造/こうぞう]だけで[書/か]けるようにします。
+//:
+//: ### [実装/じっそう]
+//: - `parent[i]` と `size[root]` の 2 [本/ほん]の `i32` [配列/はいれつ]を[所有/しょゆう]します。
+//: - `union` は union-by-size を[使/つか]い、[小/ちい]さい[木/き]を[大/おお]きい[木/き]の root へ[付/つ]けます。
+//: - public API は pure query を[保/たも]つため path compression は[行/おこな]わず、`find` / `same` / `size` は[読/よ]み[取/と]りだけを[行/おこな]います。
+//:
+//: ### [注意/ちゅうい]
+//: - `new` は `n < 0` を `Result::Err Diag` として[返/かえ]します。
+//: - `find` / `union` / `same` / `size` は[範囲外/はんいがい] index を `Result::Err Diag` として[返/かえ]します。
+//: - path compression を[使/つか]わないので、`find` / `same` / `size` の[最悪計算量/さいあくけいさんりょう]は O(log n) です。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `len` は O(1) です。
+//: - `new` / `free` は O(n) です。
+//: - `find` / `same` / `size` / `union` は union-by-size のもとで O(log n) です。
+
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/result" as *
+#import "core/field" as field
+#import "alloc/diag/error" as *
+
+//: ## DisjointSet
+//: [代表元/だいひょうげん][配列/はいれつ]と[集合サイズ/しゅうごうさいず][配列/はいれつ]を[所有/しょゆう]する
+//:
+//: ### [目的/もくてき]
+//: - `parent` / `sizes` / `n` を 1 [値/あたい]として[受/う]け[渡/わた]しし、[更新後/こうしんご]も[同/おな]じ[型/かた]で[扱/あつか]えるようにします。
+//:
+//: ### [注意/ちゅうい]
+//: - `parent` と `sizes` の 2 [本/ほん]の[内部配列/ないぶはいれつ]を[所有/しょゆう]するので、[不要/ふよう]になったら `free` します。
+struct DisjointSet:
+    n <i32>
+    parent <MemPtr<i32>>
+    sizes <MemPtr<i32>>
+
+fn dsu_diag_len <(i32)*>Diag> (n):
+    let msg0 <str> concat "disjoint_set new invalid length " from_i32 n
+    diag_error StdErrorKind::CapacityExceeded msg0
+
+fn dsu_diag_index <(str,i32,i32)*>Diag> (op, idx, n):
+    let msg0 <str> concat op ": index out of bounds "
+    let msg1 <str> concat msg0 from_i32 idx
+    let msg2 <str> concat msg1 " for len "
+    let msg3 <str> concat msg2 from_i32 n
+    diag_error StdErrorKind::IndexOutOfBounds msg3
+
+fn dsu_parent_ptr <(MemPtr<i32>,i32)->MemPtr<i32>> (base, idx):
+    mem_ptr_wrap add mem_ptr_addr base mul idx 4
+
+fn dsu_parent_load <(MemPtr<i32>,i32)->i32> (base, idx):
+    match load_i32 dsu_parent_ptr base idx:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+fn dsu_parent_store <(MemPtr<i32>,i32,i32)->()> (base, idx, value):
+    let _ <()> uwok store_i32 dsu_parent_ptr base idx value
+
+fn dsu_root_raw <(MemPtr<i32>,i32)->i32> (parent, idx):
+    let mut cur <i32> idx
+    let mut done <bool> false
+    while not done:
+        do:
+            let next <i32> dsu_parent_load parent cur
+            if:
+                eq next cur
+                then:
+                    set done true
+                else:
+                    set cur next
+    cur
+
+fn dsu_size_raw <(MemPtr<i32>,i32)->i32> (sizes, root):
+    match load_i32 dsu_parent_ptr sizes root:
+        Option::Some v:
+            v
+        Option::None:
+            0
+
+//: ## new
+//: [長/なが]さ `n` の[素集合/そしゅうごう]を[作/つく]る
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/disjoint_set" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dsu <DisjointSet> unwrap_ok<DisjointSet, Diag> new 5;
+//:     if eq len dsu 5 1 0
+//: ```
+fn new <(i32)*>Result<DisjointSet, Diag>> (n):
+    if:
+        lt n 0
+        then diag_err<DisjointSet> dsu_diag_len n
+        else:
+            match alloc_ptr<i32> mul n 4:
+                Result::Err _e:
+                    diag_err<DisjointSet> diag_out_of_memory "disjoint_set_new(parent)"
+                Result::Ok parent:
+                    match alloc_ptr<i32> mul n 4:
+                        Result::Err _e:
+                            let _ <()> uwok dealloc_ptr<i32> parent mul n 4
+                            diag_err<DisjointSet> diag_out_of_memory "disjoint_set_new(sizes)"
+                        Result::Ok sizes:
+                            let mut i <i32> 0
+                            while lt i n:
+                                do:
+                                    dsu_parent_store parent i i
+                                    dsu_parent_store sizes i 1
+                                    set i add i 1
+                            ok<DisjointSet, Diag> DisjointSet n parent sizes
+
+//: ## len
+//: [保持/ほじ]している[要素数/ようそすう]を[返/かえ]す
+fn len <(DisjointSet)->i32> (dsu):
+    field::get dsu "n"
+
+//: ## find
+//: `idx` の[代表元/だいひょうげん]を[返/かえ]す
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(log n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/disjoint_set" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dsu0 <DisjointSet> unwrap_ok<DisjointSet, Diag> new 4;
+//:     let dsu1 <DisjointSet> unwrap_ok<DisjointSet, Diag> union dsu0 0 1;
+//:     let root0 <i32> unwrap_ok<i32, Diag> find dsu1 0;
+//:     let dsu2 <DisjointSet> unwrap_ok<DisjointSet, Diag> new 4;
+//:     let dsu3 <DisjointSet> unwrap_ok<DisjointSet, Diag> union dsu2 0 1;
+//:     let root1 <i32> unwrap_ok<i32, Diag> find dsu3 1;
+//:     if eq root0 root1 1 0
+//: ```
+fn find <(DisjointSet,i32)*>Result<i32, Diag>> (dsu, idx):
+    let mem <i32> alloc_raw size_of<DisjointSet>
+    store<DisjointSet> mem dsu
+    let n <i32> get load<DisjointSet> mem "n"
+    let parent <MemPtr<i32>> get load<DisjointSet> mem "parent"
+    if:
+        and le 0 idx lt idx n
+        then:
+            let root <i32> dsu_root_raw parent idx
+            dealloc_raw mem size_of<DisjointSet>
+            ok<i32, Diag> root
+        else:
+            let d <Diag> dsu_diag_index "disjoint_set_find" idx n
+            dealloc_raw mem size_of<DisjointSet>
+            err<i32, Diag> d
+
+//: ## union
+//: `a` と `b` の[属/ぞく]する[集合/しゅうごう]を[併合/へいごう]する
+//:
+//: ### [実装/じっそう]
+//: - union-by-size で[小/ちい]さい[木/き]を[大/おお]きい[木/き]の root に[付/つ]けます。
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(log n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/disjoint_set" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dsu0 <DisjointSet> unwrap_ok<DisjointSet, Diag> new 5;
+//:     let dsu1 <DisjointSet> unwrap_ok<DisjointSet, Diag> union dsu0 0 1;
+//:     let dsu2 <DisjointSet> unwrap_ok<DisjointSet, Diag> union dsu1 1 2;
+//:     let ok <bool> unwrap_ok<bool, Diag> same dsu2 0 2;
+//:     if ok 1 0
+//: ```
+fn union <(DisjointSet,i32,i32)*>Result<DisjointSet, Diag>> (dsu, a, b):
+    let mem <i32> alloc_raw size_of<DisjointSet>
+    store<DisjointSet> mem dsu
+    let n <i32> get load<DisjointSet> mem "n"
+    let parent <MemPtr<i32>> get load<DisjointSet> mem "parent"
+    let sizes <MemPtr<i32>> get load<DisjointSet> mem "sizes"
+    if:
+        and and le 0 a lt a n and le 0 b lt b n
+        then:
+            let ra <i32> dsu_root_raw parent a
+            let rb <i32> dsu_root_raw parent b
+            if:
+                eq ra rb
+                then:
+                    let out0 <DisjointSet> load<DisjointSet> mem
+                    dealloc_raw mem size_of<DisjointSet>
+                    ok<DisjointSet, Diag> out0
+                else:
+                    let sa <i32> dsu_size_raw sizes ra
+                    let sb <i32> dsu_size_raw sizes rb
+                    let root_keep <i32> if lt sa sb rb ra
+                    let root_drop <i32> if lt sa sb ra rb
+                    let sk <i32> dsu_size_raw sizes root_keep
+                    let sd <i32> dsu_size_raw sizes root_drop
+                    dsu_parent_store parent root_drop root_keep
+                    dsu_parent_store sizes root_keep add sk sd
+                    let out1 <DisjointSet> load<DisjointSet> mem
+                    dealloc_raw mem size_of<DisjointSet>
+                    ok<DisjointSet, Diag> out1
+        else:
+            let bad <i32> if and le 0 a lt a n b a
+            let d <Diag> dsu_diag_index "disjoint_set_union" bad n
+            dealloc_raw mem size_of<DisjointSet>
+            err<DisjointSet, Diag> d
+
+//: ## same
+//: 2 [要素/ようそ]が[同/おな]じ[集合/しゅうごう]に[属/ぞく]するかを[返/かえ]す
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(log n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/disjoint_set" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dsu0 <DisjointSet> unwrap_ok<DisjointSet, Diag> new 4;
+//:     let dsu1 <DisjointSet> unwrap_ok<DisjointSet, Diag> union dsu0 0 1;
+//:     let ok0 <bool> unwrap_ok<bool, Diag> same dsu1 0 1;
+//:     let dsu2 <DisjointSet> unwrap_ok<DisjointSet, Diag> new 4;
+//:     let dsu3 <DisjointSet> unwrap_ok<DisjointSet, Diag> union dsu2 0 1;
+//:     let ok1 <bool> unwrap_ok<bool, Diag> same dsu3 0 2;
+//:     let ok2 <bool> if ok1 false true;
+//:     if and ok0 ok2 1 0
+//: ```
+fn same <(DisjointSet,i32,i32)*>Result<bool, Diag>> (dsu, a, b):
+    let mem <i32> alloc_raw size_of<DisjointSet>
+    store<DisjointSet> mem dsu
+    let n <i32> get load<DisjointSet> mem "n"
+    let parent <MemPtr<i32>> get load<DisjointSet> mem "parent"
+    if:
+        and and le 0 a lt a n and le 0 b lt b n
+        then:
+            let ra <i32> dsu_root_raw parent a
+            let rb <i32> dsu_root_raw parent b
+            dealloc_raw mem size_of<DisjointSet>
+            ok<bool, Diag> eq ra rb
+        else:
+            let bad <i32> if and le 0 a lt a n b a
+            let d <Diag> dsu_diag_index "disjoint_set_same" bad n
+            dealloc_raw mem size_of<DisjointSet>
+            err<bool, Diag> d
+
+//: ## size
+//: `idx` の[属/ぞく]する[集合/しゅうごう]の[大/おお]きさを[返/かえ]す
+//:
+//: ### [計算量/けいさんりょう]
+//: - O(log n)
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/disjoint_set" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dsu0 <DisjointSet> unwrap_ok<DisjointSet, Diag> new 5;
+//:     let dsu1 <DisjointSet> unwrap_ok<DisjointSet, Diag> union dsu0 0 1;
+//:     let dsu2 <DisjointSet> unwrap_ok<DisjointSet, Diag> union dsu1 1 2;
+//:     let s <i32> unwrap_ok<i32, Diag> size dsu2 2;
+//:     if eq s 3 1 0
+//: ```
+fn size <(DisjointSet,i32)*>Result<i32, Diag>> (dsu, idx):
+    let mem <i32> alloc_raw size_of<DisjointSet>
+    store<DisjointSet> mem dsu
+    let n <i32> get load<DisjointSet> mem "n"
+    let parent <MemPtr<i32>> get load<DisjointSet> mem "parent"
+    let sizes <MemPtr<i32>> get load<DisjointSet> mem "sizes"
+    if:
+        and le 0 idx lt idx n
+        then:
+            let root <i32> dsu_root_raw parent idx
+            let out <i32> dsu_size_raw sizes root
+            dealloc_raw mem size_of<DisjointSet>
+            ok<i32, Diag> out
+        else:
+            let d <Diag> dsu_diag_index "disjoint_set_size" idx n
+            dealloc_raw mem size_of<DisjointSet>
+            err<i32, Diag> d
+
+//: ## free
+//: [内部配列/ないぶはいれつ]を[解放/かいほう]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/disjoint_set" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let dsu <DisjointSet> unwrap_ok<DisjointSet, Diag> new 3;
+//:     free dsu;
+//:     0
+//: ```
+fn free <(DisjointSet)->()> (dsu):
+    let mem <i32> alloc_raw size_of<DisjointSet>
+    store<DisjointSet> mem dsu
+    let n <i32> get load<DisjointSet> mem "n"
+    let parent <MemPtr<i32>> get load<DisjointSet> mem "parent"
+    let sizes <MemPtr<i32>> get load<DisjointSet> mem "sizes"
+    let _ <()> uwok dealloc_ptr<i32> parent mul n 4
+    let _ <()> uwok dealloc_ptr<i32> sizes mul n 4
+    dealloc_raw mem size_of<DisjointSet>
