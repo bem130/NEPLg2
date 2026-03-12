@@ -11675,3 +11675,44 @@
     - [結果/けっか]: pass
   - `node nodesrc/tests.js -i stdlib/tests/disjoint_set.n.md -i tests/stdlib/disjoint_set_collections.n.md -i stdlib/alloc/collections/disjoint_set.nepl --no-stdlib --no-tree -o /tmp/tests-disjoint-set.json -j 2`
     - [結果/けっか]: `9/9 pass`
+
+# 2026-03-12 作業メモ (`SegmentTree` [追加/ついか])
+
+- [目的/もくてき]:
+  - `alloc/collections` に `SegmentTree` を[追加/ついか]し、[点更新/てんこうしん]と[一般区間/いっぱんくかん] sum query の[土台/どだい]を[標準化/ひょうじゅんか]する。
+  - `Fenwick` と[役割/やくわり]を[分/わ]け、`alloc/collections` に query-oriented tree を[増/ふ]やす。
+- [根本原因/こんぽんげんいん]:
+  - `Fenwick` は prefix / range sum には[十分/じゅうぶん]だが、[実装/じっそう]の[見通/みとお]しや[一般区間/いっぱんくかん]木の[入口/いりぐち]としては `SegmentTree` も[必要/ひつよう]だった。
+  - `set` は current parser の[予約語/よやくご]で public API 名にできず、そのままでは file doctest 以前に source parse が[壊/こわ]れていた。
+- [変更/へんこう]:
+  - `stdlib/alloc/collections/segment_tree.nepl`
+    - `SegmentTree` を `[n, base, data ptr]` を[持/も]つ owner collection として[追加/ついか]した。
+    - `new` / `len` / `replace` / `add` / `sum_range` / `free` を bare API で[実装/じっそう]した。
+    - [内部/ないぶ]は base を 2 [冪/べき]に[丸/まる]めた iterative segment tree とし、leaf は `[base, base+n)` に[置/お]いた。
+    - current parser の[制約/せいやく]に[従/したが]い、point overwrite は `set` でなく `replace` を public 名とした。
+  - `stdlib/tests/segment_tree.n.md`
+    - `replace + add + sum_range` と invalid index/range の focused fixture を[追加/ついか]した。
+  - `tests/stdlib/segment_tree_collections.n.md`
+    - pipe [記法/きほう]で `new |> replace ... |> add ...` を[確認/かくにん]する collection-level usage fixture を[追加/ついか]した。
+- [設計/せっけい][判断/はんだん]:
+  - `SegmentTree` は current reboot [段階/だんかい]では `i32` sum 専用に[絞/しぼ]り、将来の[関数型/かんすうがた] style / monoid [支援/しえん] batch で generic aggregator に[拡張/かくちょう]する。
+  - `set` でなく `replace` を[選/えら]んだのは `Vec` と[同/おな]じ parser [制約/せいやく]によるもので、命名[不整合/ふせいごう]は[言語側/げんごがわ]の reserved keyword [整理/せいり] task と[接続/せつぞく]する。
+- [検証/けんしょう]:
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/segment_tree.nepl -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/segment_tree.nepl -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/segment_tree.nepl -n 3`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/segment_tree.nepl -n 4`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/segment_tree.nepl -n 5`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/segment_tree.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/segment_tree.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/stdlib/segment_tree_collections.n.md -n 1`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i stdlib/tests/segment_tree.n.md -i tests/stdlib/segment_tree_collections.n.md -i stdlib/alloc/collections/segment_tree.nepl --no-stdlib --no-tree -o /tmp/tests-segment-tree.json -j 2`
+    - [結果/けっか]: `8/8 pass`
