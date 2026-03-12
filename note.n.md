@@ -43,7 +43,37 @@
     - 上記 2 件は `return value mismatch` と runtime trap で fail。今回の変更対象は集計スクリプトであり、repo_metrics 変更の有無に関係なく既存の doctest 側問題として残っている。
 - 差異メモ:
   - `node nodesrc/tests.js -i tests -i tutorials -i stdlib ...` は長時間継続したため、確認は `run_doctest.js` による focused 実行へ切り替えた。
-  - 今回の変更は build/test 系ロジックではなく、集計スクリプト単体の改善である。
+- 今回の変更は build/test 系ロジックではなく、集計スクリプト単体の改善である。
+
+# 2026-03-12 作業メモ (fix: aggregate struct packing を修正して SparseSet invalid-path を復旧)
+
+- [目的/もくてき]:
+  - `alloc/collections/sparse_set` の invalid index path が web/native test path で trap していた根因を特定し、stdlib 側の回避ではなく compiler 側から修正する。
+- [根本原因/こんぽんげんいん]:
+  - [当初/とうしょ]は `SparseSet` 自体の owner 表現や `alloc/string` の concat を疑って切り分けたが、最終的には `U128DivRem` のような aggregate 値を `StructConstruct` / `TupleConstruct` で組み立てる codegen が、field ごとの real storage size ではなく wasm/llvm の scalar `ValType` / `LlTy` サイズで pack していたことが原因だった。
+  - その結果、aggregate field を[含/ふく]む struct/tuple が inline byte copy ではなく pointer 相当で[詰/つ]められ、`field::get` と後続の integer-to-string / diag message 生成で[壊/こわ]れた値を読み、`SparseSet` invalid index path の message build が `memory access out of bounds` に崩れていた。
+- [変更/へんこう]:
+  - `nepl-core/src/codegen_wasm.rs`
+    - `StructConstruct` / `TupleConstruct` の total size を `type_storage_size_bytes` 基準へ修正。
+    - aggregate field/item は source pointer から destination へ byte copy する lowering に変更。
+  - `nepl-core/src/codegen_llvm.rs`
+    - wasm 側と同じく aggregate field/item を real storage size ぶん byte copy するよう修正。
+  - `stdlib/alloc/string.nepl`
+    - `string_finish_base` を追加し、region/token を二重に読み直さず base pointer を 1 回だけ確定して finish する形へ整理。
+    - `concat`, `sb_build`, `str_slice`, `from_u128_radix`, `from_f64` の finish 経路を同 helper に揃えた。
+  - `alloc/collections/sparse_set`
+    - header owner は `MemPtr<u8>` field ではなく raw `i32` header pointer を public struct に保持し、内部 helper でだけ `MemPtr` に包み直す形へ整理した。
+- [結果/けっか]:
+  - `stdlib/alloc/string.nepl::doctest#4` が pass に戻った。
+  - `stdlib/tests/sparse_set.n.md::doctest#2` と `tests/stdlib/sparse_set_collections.n.md::doctest#1` が web path でも pass に戻った。
+  - `node nodesrc/tests.js -i stdlib/tests/sparse_set.n.md -i tests/stdlib/sparse_set_collections.n.md -i stdlib/alloc/collections/sparse_set.nepl --no-stdlib --no-tree -o /tmp/tests-sparse-set.json -j 2` は `10/10 pass` を確認した。
+- [検証/けんしょう]:
+  - `NO_COLOR=false trunk build`
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/string.nepl -n 4`
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/sparse_set.nepl -n 1`
+  - `node nodesrc/run_doctest.js -i stdlib/tests/sparse_set.n.md -n 2`
+  - `node nodesrc/run_doctest.js -i tests/stdlib/sparse_set_collections.n.md -n 1`
+  - `node nodesrc/tests.js -i stdlib/tests/sparse_set.n.md -i tests/stdlib/sparse_set_collections.n.md -i stdlib/alloc/collections/sparse_set.nepl --no-stdlib --no-tree -o /tmp/tests-sparse-set.json -j 2`
 
 # 2026-03-06 作業メモ (feat: examples/bf.nepl に Brainfuck Runner を実装)
 

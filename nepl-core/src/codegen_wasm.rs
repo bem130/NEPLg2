@@ -1488,17 +1488,11 @@ fn gen_expr(
             fields,
             type_args: _,
         } => {
-            let field_size = |vt: Option<ValType>| -> u32 {
-                match vt {
-                    Some(ValType::I64) | Some(ValType::F64) => 8,
-                    _ => 4,
-                }
-            };
             let mut offsets: Vec<u32> = Vec::with_capacity(fields.len());
             let mut size: u32 = 0;
             for f in fields.iter() {
                 offsets.push(size);
-                size += field_size(valtype(&ctx.get(f.ty)));
+                size += type_storage_size_bytes(ctx, f.ty);
             }
             insts.push(Instruction::I32Const(size as i32));
             emit_alloc_call(locals, insts);
@@ -1506,7 +1500,35 @@ fn gen_expr(
             insts.push(Instruction::LocalTee(ptr_local));
             for (i, f) in fields.iter().enumerate() {
                 let offset = offsets[i];
-                let vk = ctx.get(f.ty);
+                let field_ty = f.ty;
+                let vk = ctx.get(field_ty);
+                if is_aggregate_storage_type(ctx, field_ty) {
+                    gen_expr(ctx, f, name_map, sig_map, strings, locals, insts);
+                    let src_local = locals.alloc_temp(ValType::I32);
+                    insts.push(Instruction::LocalSet(src_local));
+                    let field_size = type_storage_size_bytes(ctx, field_ty) as i32;
+                    for off in 0..field_size {
+                        insts.push(Instruction::LocalGet(ptr_local));
+                        insts.push(Instruction::I32Const(offset as i32 + off));
+                        insts.push(Instruction::I32Add);
+                        insts.push(Instruction::LocalGet(src_local));
+                        if off != 0 {
+                            insts.push(Instruction::I32Const(off));
+                            insts.push(Instruction::I32Add);
+                        }
+                        insts.push(Instruction::I32Load8U(MemArg {
+                            offset: 0,
+                            align: 0,
+                            memory_index: 0,
+                        }));
+                        insts.push(Instruction::I32Store8(MemArg {
+                            offset: 0,
+                            align: 0,
+                            memory_index: 0,
+                        }));
+                    }
+                    continue;
+                }
                 match valtype(&vk) {
                     Some(vt) => {
                         let temp = locals.alloc_temp(vt);
@@ -1573,17 +1595,11 @@ fn gen_expr(
             Some(ValType::I32)
         }
         HirExprKind::TupleConstruct { items } => {
-            let item_size = |vt: Option<ValType>| -> u32 {
-                match vt {
-                    Some(ValType::I64) | Some(ValType::F64) => 8,
-                    _ => 4,
-                }
-            };
             let mut offsets: Vec<u32> = Vec::with_capacity(items.len());
             let mut size: u32 = 0;
             for item in items.iter() {
                 offsets.push(size);
-                size += item_size(valtype(&ctx.get(item.ty)));
+                size += type_storage_size_bytes(ctx, item.ty);
             }
             insts.push(Instruction::I32Const(size as i32));
             emit_alloc_call(locals, insts);
@@ -1591,7 +1607,35 @@ fn gen_expr(
             insts.push(Instruction::LocalTee(ptr_local));
             for (i, item) in items.iter().enumerate() {
                 let offset = offsets[i];
-                let vk = ctx.get(item.ty);
+                let item_ty = item.ty;
+                let vk = ctx.get(item_ty);
+                if is_aggregate_storage_type(ctx, item_ty) {
+                    gen_expr(ctx, item, name_map, sig_map, strings, locals, insts);
+                    let src_local = locals.alloc_temp(ValType::I32);
+                    insts.push(Instruction::LocalSet(src_local));
+                    let item_size = type_storage_size_bytes(ctx, item_ty) as i32;
+                    for off in 0..item_size {
+                        insts.push(Instruction::LocalGet(ptr_local));
+                        insts.push(Instruction::I32Const(offset as i32 + off));
+                        insts.push(Instruction::I32Add);
+                        insts.push(Instruction::LocalGet(src_local));
+                        if off != 0 {
+                            insts.push(Instruction::I32Const(off));
+                            insts.push(Instruction::I32Add);
+                        }
+                        insts.push(Instruction::I32Load8U(MemArg {
+                            offset: 0,
+                            align: 0,
+                            memory_index: 0,
+                        }));
+                        insts.push(Instruction::I32Store8(MemArg {
+                            offset: 0,
+                            align: 0,
+                            memory_index: 0,
+                        }));
+                    }
+                    continue;
+                }
                 match valtype(&vk) {
                     Some(vt) => {
                         let temp = locals.alloc_temp(vt);

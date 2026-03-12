@@ -1863,15 +1863,11 @@ fn lower_hir_expr(
             fields,
             type_args: _,
         } => {
-            let field_tys = fields
-                .iter()
-                .map(|f| llty_for_type(types, f.ty))
-                .collect::<Vec<_>>();
-            let mut offsets = Vec::with_capacity(field_tys.len());
+            let mut offsets = Vec::with_capacity(fields.len());
             let mut total_size: i32 = 0;
-            for ty in &field_tys {
+            for f in fields.iter() {
                 offsets.push(total_size as i64);
-                total_size += ll_storage_size(*ty) as i32;
+                total_size += type_storage_size_bytes(types, f.ty) as i32;
             }
             let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
                 panic!(
@@ -1887,8 +1883,53 @@ fn lower_hir_expr(
                 total_size
             ));
             for (idx, f) in fields.iter().enumerate() {
-                let fty = field_tys[idx];
+                let field_ty = f.ty;
+                let fty = llty_for_type(types, field_ty);
                 let fv = lower_hir_expr(types, ctx, f)?;
+                if is_aggregate_storage_type(types, field_ty) {
+                    let Some(fv) = fv else {
+                        panic!(
+                            "internal compiler error: aggregate struct field must produce a value in '{}'",
+                            ctx.function_name
+                        );
+                    };
+                    if fv.ty != LlTy::I32 {
+                        panic!(
+                            "internal compiler error: aggregate struct field must lower to pointer in '{}'",
+                            ctx.function_name
+                        );
+                    }
+                    let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
+                    let field_ptr8 = ctx.next_tmp();
+                    ctx.push_line(&format!(
+                        "  {} = getelementptr i8, i8* {}, i64 {}",
+                        field_ptr8, base_ptr8, offsets[idx]
+                    ));
+                    let src_ptr8 = ctx.linear_i8_ptr_from_i32(fv.repr.as_str());
+                    let size = type_storage_size_bytes(types, field_ty);
+                    for off in 0..size {
+                        let dst_byte_ptr = ctx.next_tmp();
+                        let src_byte_ptr = ctx.next_tmp();
+                        let byte_val = ctx.next_tmp();
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            dst_byte_ptr, field_ptr8, off
+                        ));
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            src_byte_ptr, src_ptr8, off
+                        ));
+                        ctx.push_line(&format!(
+                            "  {} = load i8, i8* {}, align 1",
+                            byte_val, src_byte_ptr
+                        ));
+                        ctx.push_line(&format!(
+                            "  store i8 {}, i8* {}, align 1",
+                            byte_val, dst_byte_ptr
+                        ));
+                    }
+                    continue;
+                }
                 if fty == LlTy::Void {
                     continue;
                 }
@@ -1931,15 +1972,11 @@ fn lower_hir_expr(
             }))
         }
         HirExprKind::TupleConstruct { items } => {
-            let item_tys = items
-                .iter()
-                .map(|v| llty_for_type(types, v.ty))
-                .collect::<Vec<_>>();
-            let mut offsets = Vec::with_capacity(item_tys.len());
+            let mut offsets = Vec::with_capacity(items.len());
             let mut total_size: i32 = 0;
-            for ty in &item_tys {
+            for item in items.iter() {
                 offsets.push(total_size as i64);
-                total_size += ll_storage_size(*ty) as i32;
+                total_size += type_storage_size_bytes(types, item.ty) as i32;
             }
             let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
                 panic!(
@@ -1955,8 +1992,53 @@ fn lower_hir_expr(
                 total_size
             ));
             for (idx, item) in items.iter().enumerate() {
-                let ity = item_tys[idx];
+                let item_ty = item.ty;
+                let ity = llty_for_type(types, item_ty);
                 let iv = lower_hir_expr(types, ctx, item)?;
+                if is_aggregate_storage_type(types, item_ty) {
+                    let Some(iv) = iv else {
+                        panic!(
+                            "internal compiler error: aggregate tuple item must produce a value in '{}'",
+                            ctx.function_name
+                        );
+                    };
+                    if iv.ty != LlTy::I32 {
+                        panic!(
+                            "internal compiler error: aggregate tuple item must lower to pointer in '{}'",
+                            ctx.function_name
+                        );
+                    }
+                    let base_ptr8 = ctx.linear_i8_ptr_from_i32(ptr.as_str());
+                    let item_ptr8 = ctx.next_tmp();
+                    ctx.push_line(&format!(
+                        "  {} = getelementptr i8, i8* {}, i64 {}",
+                        item_ptr8, base_ptr8, offsets[idx]
+                    ));
+                    let src_ptr8 = ctx.linear_i8_ptr_from_i32(iv.repr.as_str());
+                    let size = type_storage_size_bytes(types, item_ty);
+                    for off in 0..size {
+                        let dst_byte_ptr = ctx.next_tmp();
+                        let src_byte_ptr = ctx.next_tmp();
+                        let byte_val = ctx.next_tmp();
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            dst_byte_ptr, item_ptr8, off
+                        ));
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            src_byte_ptr, src_ptr8, off
+                        ));
+                        ctx.push_line(&format!(
+                            "  {} = load i8, i8* {}, align 1",
+                            byte_val, src_byte_ptr
+                        ));
+                        ctx.push_line(&format!(
+                            "  store i8 {}, i8* {}, align 1",
+                            byte_val, dst_byte_ptr
+                        ));
+                    }
+                    continue;
+                }
                 if ity == LlTy::Void {
                     continue;
                 }

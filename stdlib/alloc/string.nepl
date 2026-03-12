@@ -127,6 +127,23 @@ fn string_data_ptr <(str)->MemPtr<u8>> (s):
 //: - O(1)
 fn string_finish <(RegionToken<u8>,i32)->str> (region, byte_len):
     let base <MemPtr<u8>> get region "ptr"
+    string_finish_base base byte_len
+
+//: string_finish_base: 文字列先頭ポインタを `str` として確定する
+//:
+//: [目的/もくてき]:
+//: - 文字列領域の先頭ポインタへ長さを書き込み、公開型 `str` に変換します。
+//:
+//: [実装/じっそう]:
+//: - ヘッダ先頭を `MemPtr<i32>` として見なし、長さを書き込んだ後に基底アドレスを返します。
+//:
+//: [注意/ちゅうい]:
+//: - 呼び出し側は、先頭 4 バイトが長さヘッダである文字列レイアウトを守る必要があります。
+//: - 領域の所有権は呼び出し側で保持したまま、`str` へ移す前提の内部ヘルパです。
+//:
+//: [計算量/けいさんりょう]:
+//: - O(1)
+fn string_finish_base <(MemPtr<u8>,i32)->str> (base, byte_len):
     let len_ptr <MemPtr<i32>> mem_ptr_wrap mem_ptr_addr base
     match store_i32 len_ptr byte_len:
         Result::Ok _:
@@ -194,7 +211,8 @@ fn concat <(str,str)->str> (a,b):
     let lb <i32> load_i32 b;
     let total <i32> add la lb;
     let out_region <RegionToken<u8>> unwrap_ok string_alloc_region total;
-    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr get out_region "ptr" 4;
+    let out_base <MemPtr<u8>> get out_region "ptr";
+    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr out_base 4;
     let a_data <MemPtr<u8>> string_data_ptr a;
     let b_data <MemPtr<u8>> string_data_ptr b;
     let mut i <i32> 0;
@@ -218,7 +236,7 @@ fn concat <(str,str)->str> (a,b):
                 Result::Err _e:
                     #intrinsic "unreachable" <> ()
             set j <i32> add j 1;
-    string_finish out_region total
+    string_finish_base out_base total
 
 // concat3: 3つの文字列を連結する
 //
@@ -410,7 +428,8 @@ fn sb_build <(StringBuilder)->str> (sb):
             set total add total load_i32 part;
             set idx0 add idx0 1;
     let out_region <RegionToken<u8>> unwrap_ok string_alloc_region total;
-    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr get out_region "ptr" 4;
+    let out_base <MemPtr<u8>> get out_region "ptr";
+    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr out_base 4;
     let mut idx <i32> 0;
     let mut dst <i32> 0;
     while lt idx n:
@@ -431,7 +450,7 @@ fn sb_build <(StringBuilder)->str> (sb):
                     set i add i 1;
             set dst add dst plen;
             set idx add idx 1;
-    string_finish out_region total
+    string_finish_base out_base total
 
 // str_eq: 文字列が等しいか判定する
 //
@@ -705,7 +724,8 @@ fn str_slice <(str,i32,i32)->str> (s, start, end):
         else ()
     let out_len <i32> sub e0 s0;
     let out_region <RegionToken<u8>> unwrap_ok string_alloc_region out_len;
-    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr get out_region "ptr" 4;
+    let out_base <MemPtr<u8>> get out_region "ptr";
+    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr out_base 4;
     let s_data <MemPtr<u8>> string_data_ptr s;
     let mut i <i32> 0;
     while lt i out_len:
@@ -718,7 +738,7 @@ fn str_slice <(str,i32,i32)->str> (s, start, end):
                 Result::Err _e:
                     #intrinsic "unreachable" <> ()
             set i <i32> add i 1;
-    string_finish out_region out_len
+    string_finish_base out_base out_len
 
 // str_trim: 前後の空白を取り除く
 //
@@ -1310,7 +1330,9 @@ fn u128_divrem_small <(u128,i32)->U128DivRem> (v, radix):
     let mut idx <i32> 127;
     while ge idx 0:
         do:
-            set rem add shl rem 1 u128_get_bit v idx;
+            let bit <i32> u128_get_bit v idx;
+            let shifted_rem <i32> shl rem 1;
+            set rem add shifted_rem bit;
             if:
                 ge rem radix
                 then:
@@ -1589,7 +1611,8 @@ fn from_u128_radix <(u128,i32)->Result<str,i32>> (v, radix):
                             set idx add idx 1;
                             set n get qr "quotient";
                     let out_region <RegionToken<u8>> unwrap_ok string_alloc_region idx;
-                    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr get out_region "ptr" 4;
+                    let out_base <MemPtr<u8>> get out_region "ptr";
+                    let out_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr out_base 4;
                     let mut i <i32> 0;
                     while lt i idx:
                         do:
@@ -1603,7 +1626,7 @@ fn from_u128_radix <(u128,i32)->Result<str,i32>> (v, radix):
                             set i add i 1;
                     match dealloc_region scratch_region:
                         Result::Ok _:
-                            Result::Ok<str,i32> string_finish out_region idx
+                            Result::Ok<str,i32> string_finish_base out_base idx
                         Result::Err _e:
                             #intrinsic "unreachable" <> ()
 
@@ -1876,7 +1899,6 @@ fn from_f64 <(f64)->str> (x):
                 then:
                     let frac_region <RegionToken<u8>> unwrap_ok string_alloc_region trim;
                     let frac_ptr <MemPtr<u8>> get frac_region "ptr";
-                    let frac_size <i32> get frac_region "size";
                     let frac_data <MemPtr<u8>> mem_ptr_wrap add mem_ptr_addr frac_ptr 4;
                     let mut i <i32> 0;
                     while lt i trim:
@@ -1889,7 +1911,7 @@ fn from_f64 <(f64)->str> (x):
                                     #intrinsic "unreachable" <> ()
                             set i add i 1;
                     set sb sb_append sb ".";
-                    set sb sb_append sb string_finish region_new frac_ptr frac_size trim;
+                    set sb sb_append sb string_finish_base frac_ptr trim;
                 else:
                     ();
             match dealloc_ptr<u8> scratch_ptr scratch_size:
