@@ -1,5 +1,37 @@
 # 2026-03-06 作業メモ (feat: examples/bf.nepl に Brainfuck Runner を実装)
 
+# 2026-03-12 作業メモ (ci: rust install -> cargo build -> trunk build を共通 action 化)
+
+- 目的:
+  - GitHub Actions に散っていた `Node setup` / `Rust toolchain` / `wasm32 target` / `wasm-bindgen-cli` / `cargo build` / `trunk build` の重複を 1 箇所へ集約する。
+  - 各 workflow は「共通 build artifact を作る job」と「その artifact を受けて test / deploy を行う job」に分け、build 済み成果物を再利用する形へ寄せる。
+- 根本原因:
+  - `compile-test.yml` / `nepl-test-wasi.yml` / `nepl-test-llvm.yml` / `nmd-doctest.yml` / `nm-compile.yml` / `rust-test..yml` / `gh-pages.yml` が、それぞれ別に toolchain install と `trunk build` を持っていた。
+  - そのため手順の更新漏れが起きやすく、`trunk` や `wasm-bindgen-cli` の更新、`Trunk.toml` Linux 補正、examples 配置などを毎回多重管理する構造になっていた。
+- 変更:
+  - `.github/actions/bootstrap-build/action.yml`
+    - CI 共通の local composite action を追加。
+    - `actions/setup-node`、`npm install`、`actions-rs/toolchain`、`rustup target add wasm32-unknown-unknown`、`jetli/trunk-action`、`wasm-bindgen-cli` install、`Swatinem/rust-cache`、`cargo build --locked`、`trunk build --release` を集約。
+  - `.github/workflows/compile-test.yml`
+  - `.github/workflows/rust-test..yml`
+  - `.github/workflows/nm-compile.yml`
+  - `.github/workflows/nmd-doctest.yml`
+  - `.github/workflows/nepl-test-wasi.yml`
+  - `.github/workflows/nepl-test-llvm.yml`
+    - それぞれ `build` job で共通 action を使って `dist` / `target/debug` / `target/wasm32-unknown-unknown` を artifact 化。
+    - test job 側は `actions/download-artifact` で取得してから、各 workflow 固有の `cargo test` / `nodesrc/tests.js` / `cargo run -p nepl-cli` / LLVM runner を実行する形へ変更。
+  - `.github/workflows/gh-pages.yml`
+    - pages 固有の deploy/doctest/doc build は残しつつ、toolchain install と build 本体は共通 action へ移動。
+- 検証:
+  - 一時 directory `/tmp/gha-yaml-check` を作って `npm install yaml` を行い、全 workflow と composite action を `yaml` parser で構文確認。
+    - 対象:
+      - `.github/workflows/*.yml`
+      - `.github/actions/bootstrap-build/action.yml`
+    - 結果: 全件 `OK`
+- 差異メモ:
+  - workflow 実行そのものは GitHub Actions 上での実行が必要なので、ローカルでは YAML 構文と依存関係の整合までを確認した。
+  - 現時点では artifact の粒度を `dist` / `target/debug` / `target/wasm32-unknown-unknown` にしている。さらに絞る余地はあるが、まずは共通化と再利用の成立を優先した。
+
 - 目的:
   - `rpn.nepl` を参考にして `examples/bf.nepl` に Brainfuck の実行ツールを実装する。
   - 毎行入力を受け付け、入力ごとにメモリをリセットして独立実行する。

@@ -1,0 +1,91 @@
+name: bootstrap-build
+description: Setup toolchains, cargo build, and trunk build shared by CI workflows
+
+inputs:
+  node-version:
+    description: Node.js version
+    required: false
+    default: "20"
+  trunk-version:
+    description: Trunk version
+    required: false
+    default: "latest"
+  public-url:
+    description: Public URL passed to trunk build
+    required: false
+    default: "/NEPLg2/"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install web dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd web
+        npm install
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Install wasm32 target
+      shell: bash
+      run: rustup target add wasm32-unknown-unknown
+
+    - name: Install trunk
+      uses: jetli/trunk-action@v0.5.0
+      with:
+        version: ${{ inputs.trunk-version }}
+
+    - name: Install wasm-bindgen-cli (pinned, retry)
+      shell: bash
+      run: |
+        set -euo pipefail
+        for i in 1 2 3 4 5; do
+          if cargo install --locked wasm-bindgen-cli --version 0.2.108; then
+            wasm-bindgen --version
+            exit 0
+          fi
+          echo "wasm-bindgen-cli install failed (attempt $i), retrying..."
+          sleep $((i * 5))
+        done
+        echo "failed to install wasm-bindgen-cli after retries"
+        exit 1
+
+    - name: Cache Cargo build
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: nepl-g2
+        cache-on-failure: true
+
+    - name: Fix Trunk.toml for Linux (npm.cmd -> npm)
+      shell: bash
+      run: sed -i 's/npm.cmd/npm/g' Trunk.toml
+
+    - name: Populate examples for trunk asset copy
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p web/examples
+        cp examples/*.nepl web/examples/
+
+    - name: Cargo build
+      shell: bash
+      env:
+        NO_COLOR: "true"
+      run: cargo build --locked
+
+    - name: Trunk build
+      shell: bash
+      env:
+        NO_COLOR: "true"
+      run: trunk build --release --public-url "${{ inputs.public-url }}"

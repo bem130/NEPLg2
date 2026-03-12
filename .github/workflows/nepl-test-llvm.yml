@@ -11,8 +11,32 @@ on:
             - develop
 
 jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        env:
+            CARGO_TERM_COLOR: always
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Shared bootstrap build
+              uses: ./.github/actions/bootstrap-build
+
+            - name: Upload build artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: llvm-build
+                  path: |
+                      dist
+                      target/debug
+                      target/wasm32-unknown-unknown
+                  compression-level: 1
+
     llvm-test:
         runs-on: ubuntu-latest
+        needs: build
 
         env:
             CARGO_TERM_COLOR: always
@@ -23,15 +47,11 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
+            - name: Download build artifacts
+              uses: actions/download-artifact@v4
               with:
-                  node-version: "20"
-
-            - name: Install web dependencies
-              run: |
-                  cd web
-                  npm install
+                  name: llvm-build
+                  path: .
 
             - name: Install Rust toolchain
               uses: actions-rs/toolchain@v1
@@ -39,35 +59,6 @@ jobs:
                   profile: minimal
                   toolchain: stable
                   override: true
-
-            - name: Install wasm32 target
-              run: rustup target add wasm32-unknown-unknown
-
-            - name: Install trunk
-              uses: jetli/trunk-action@v0.5.0
-              with:
-                  version: latest
-
-            - name: Install wasm-bindgen-cli (pinned, retry)
-              shell: bash
-              run: |
-                  set -euo pipefail
-                  for i in 1 2 3 4 5; do
-                    if cargo install --locked wasm-bindgen-cli --version 0.2.108; then
-                      wasm-bindgen --version
-                      exit 0
-                    fi
-                    echo "wasm-bindgen-cli install failed (attempt $i), retrying..."
-                    sleep $((i * 5))
-                  done
-                  echo "failed to install wasm-bindgen-cli after retries"
-                  exit 1
-
-            - name: Cache Cargo build
-              uses: Swatinem/rust-cache@v2
-              with:
-                  shared-key: nepl-g2
-                  cache-on-failure: true
 
             - name: Cache LLVM toolchain
               id: cache-llvm
@@ -98,31 +89,6 @@ jobs:
                   llvm-as --version
                   llc --version
                   clang -dumpmachine | grep -q linux
-
-            - name: Fix Trunk.toml for Linux (npm.cmd -> npm)
-              run: |
-                  sed -i 's/npm.cmd/npm/g' Trunk.toml
-
-            - name: Populate examples for trunk asset copy
-              run: |
-                  mkdir -p web/examples
-                  cp examples/*.nepl web/examples/
-
-            - name: Cache trunk build output
-              id: cache-trunk
-              uses: actions/cache@v4
-              with:
-                  path: |
-                      dist
-                      target/wasm32-unknown-unknown/release
-                  key: trunk-build-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Trunk.toml', 'index.html', 'nepl-web/**', 'nepl-core/**', 'web/**', 'nodesrc/**', 'stdlib/**') }}
-
-            - name: Build wasm app with trunk
-              if: steps.cache-trunk.outputs.cache-hit != 'true'
-              env:
-                  NO_COLOR: "true"
-              run: |
-                  trunk build --release --public-url /NEPLg2/
 
             - name: LLVM doctests via nodesrc runner
               env:

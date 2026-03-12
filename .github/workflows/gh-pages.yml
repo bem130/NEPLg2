@@ -33,68 +33,13 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: "20"
-
-            - name: Install web dependencies
-              run: |
-                  cd web
-                  npm install
-
             - name: Setup Pages
               uses: actions/configure-pages@v5
 
-            - name: Install Rust toolchain
-              uses: actions-rs/toolchain@v1
+            - name: Shared bootstrap build
+              uses: ./.github/actions/bootstrap-build
               with:
-                  profile: minimal
-                  toolchain: stable
-                  override: true
-
-            - name: Install wasm32 target
-              run: rustup target add wasm32-unknown-unknown
-
-            - name: Install trunk
-              uses: jetli/trunk-action@v0.5.0
-              with:
-                  version: ${{ env.TRUNK_VERSION }}
-
-            - name: Install wasm-bindgen-cli (pinned, retry)
-              shell: bash
-              run: |
-                  set -euo pipefail
-                  for i in 1 2 3 4 5; do
-                    if cargo install --locked wasm-bindgen-cli --version 0.2.108; then
-                      wasm-bindgen --version
-                      exit 0
-                    fi
-                    echo "wasm-bindgen-cli install failed (attempt $i), retrying..."
-                    sleep $((i * 5))
-                  done
-                  echo "failed to install wasm-bindgen-cli after retries"
-                  exit 1
-
-            - name: Cache Cargo build
-              uses: Swatinem/rust-cache@v2
-              with:
-                  shared-key: nepl-g2
-                  cache-on-failure: true
-
-            - name: Populate examples
-              run: |
-                  mkdir -p web/examples
-                  cp examples/*.nepl web/examples/
-
-            - name: Cache trunk build output
-              id: cache-trunk
-              uses: actions/cache@v4
-              with:
-                  path: |
-                      dist
-                      target/wasm32-unknown-unknown/release
-                  key: trunk-build-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Trunk.toml', 'index.html', 'nepl-web/**', 'nepl-core/**', 'web/**', 'nodesrc/**', 'stdlib/**') }}
+                  trunk-version: ${{ env.TRUNK_VERSION }}
 
             - name: Run cargo test (allowed to fail)
               id: cargo_test
@@ -105,19 +50,9 @@ jobs:
                   set -o pipefail
                   cargo test --no-fail-fast 2>&1 | tee cargo-test.log
 
-            - name: Fix Trunk.toml for Linux (npm.cmd -> npm)
-              run: |
-                  sed -i 's/npm.cmd/npm/g' Trunk.toml
-
-            - name: Build wasm app with trunk (do not stop deploy, but fail workflow later if needed)
+            - name: Record shared trunk build success
               id: trunk_build
-              if: steps.cache-trunk.outputs.cache-hit != 'true'
-              continue-on-error: true
-              env:
-                  NO_COLOR: "true"
-              run: |
-                  set -o pipefail
-                  trunk build --release --public-url /NEPLg2/ 2>&1 | tee trunk-build.log
+              run: echo "shared trunk build completed" > /tmp/trunk-build-ok.txt
 
             - name: Prepare dist (always) and attach test/build logs
               if: always()
@@ -176,12 +111,6 @@ jobs:
               uses: actions/upload-pages-artifact@v3
               with:
                   path: dist
-
-            - name: Fail workflow if trunk build failed
-              if: ${{ steps.cache-trunk.outputs.cache-hit != 'true' && steps.trunk_build.outcome == 'failure' }}
-              run: |
-                  echo "trunk build failed -> mark workflow as failed (deploy still runs)."
-                  exit 1
 
     deploy:
         environment:
