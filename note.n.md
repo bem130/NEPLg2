@@ -13367,3 +13367,40 @@
 - [判断/はんだん]:
   - `BTreeMultiSet` も broken state を stdlib に[混/ま]ぜず、試作ファイルは未 commit のまま worktree から[外/はず]した。
   - ordered multiset は[有用/ゆうよう]だが、wrapper owner と inner owner の[合成/ごうせい]を current compiler/runtime がどこまで[支/ささ]えられるかを[先/さき]に[再評価/さいひょうか]する。
+
+# 2026-03-12 作業メモ (feat(list): 関数型 helper 追加)
+
+- [目的/もくてき]:
+  - `List` に `map` / `filter` / `fold` / `reduce` / `find` / `any` / `all` を[追加/ついか]し、tutorial [前/まえ]に[関数型/かんすうがた] style の[基礎/きそ] API を[整/ととの]える。
+  - namespace call regression とあわせて、`list::map` が current bare API / move model で[自然/しぜん]に[使/つか]えることを[保証/ほしょう]する。
+- [根本原因/こんぽんげんいん]:
+  - compiler [側/がわ]では `TypeKind::Function` が trait model の `Copy` [判定/はんてい]で false [扱/あつか]いのままで、[高階/こうかい][関数/かんすう]を[再帰/さいき] helper に[渡/わた]すと `D3053 use of moved value` が[発生/はっせい]していた。
+  - library [側/がわ]では `list_map_impl` が `cons<.U> f load<.T> lst_ptr mapped_tail` の[形/かたち]で nested call をそのまま[書/か]いており、前置記法の[畳/たた]み[込/こ]みで `f` の[結果/けっか]ではなく[関数値/かんすうち]や[壊/こわ]れた[値/あたい]が `cons` の head へ[流/なが]れ[込/こ]んでいた。
+  - `tests/compiler/list_dot_map.n.md` の `list_namespace_map_with_list` も empty list に `map` して `get 0 |> unwrap` しており、fixture [前提/ぜんてい]が[誤/あやま]っていた。
+- [変更/へんこう]:
+  - `nepl-core/src/types.rs`
+    - `is_copy_with_trait_model` と `is_copy_eligible_inner` で `TypeKind::Function` を `Copy` / copy-eligible [扱/あつか]いに[変更/へんこう]した。
+  - `stdlib/alloc/collections/list.nepl`
+    - `map` / `filter` / `fold` / `reduce` / `find` / `any` / `all` と internal helper を[追加/ついか]した。
+    - `list_map_impl` は `let mapped_head <.U> ...` を[経由/けいゆ]してから `cons` する[形/かたち]へ[変更/へんこう]し、nested call の[誤解釈/ごかいしゃく]を[防止/ぼうし]した。
+    - public doc comment は current policy / format に[揃/そろ]えた。
+  - `stdlib/tests/list.n.md`
+    - `list_functional_helpers` を[追加/ついか]し、owner [再利用/さいりよう]を[避/さ]けるため source list を[個別/こべつ]に[分離/ぶんり]した。
+  - `tests/compiler/list_dot_map.n.md`
+    - old compile-fail を current namespace success case へ[更新/こうしん]した。
+    - non-empty list を `list::push` で[作/つく]ってから `list::map` を[呼/よ]ぶ fixture に[変更/へんこう]した。
+- [検証/けんしょう]:
+  - `cargo build -p nepl-cli`
+    - [結果/けっか]: success
+  - `NO_COLOR=false trunk build`
+    - [結果/けっか]: success
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/list.nepl -n 9`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/alloc/collections/list.nepl -n 10`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i stdlib/tests/list.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/run_doctest.js -i tests/compiler/list_dot_map.n.md -n 2`
+    - [結果/けっか]: pass
+  - `node nodesrc/tests.js -i stdlib/tests/list.n.md -i tests/compiler/list_dot_map.n.md --no-stdlib --no-tree -o /tmp/tests-list-fp-short.json -j 2`
+    - [結果/けっか]: `5/5 pass`

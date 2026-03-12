@@ -19,23 +19,26 @@ fn main <()->i32> ():
     result::unwrap_ok mapped
 ```
 
-## list_dot_map_not_yet_supported
+## list_namespace_map_with_list
 
-neplg2:test[compile_fail]
+neplg2:test
+ret: 31
 ```neplg2
 #entry main
 #indent 4
 #import "alloc/collections/list" as list
+#import "core/option" as option
 #import "core/result" as result
 #import "core/math" as *
 
 fn inc <(i32)->i32> (x):
     add x 1
 
-fn main <()->i32> ():
-    let xs result::unwrap_ok list.new<i32>;
-    list.map<i32, i32> xs inc;
-    0
+fn main <()*>i32> ():
+    let xs0 result::unwrap_ok list::new<i32>;
+    let xs result::unwrap_ok list::push<i32> xs0 30;
+    let ys result::unwrap_ok list::map<i32, i32> xs inc;
+    option::unwrap list::get<i32> ys 0
 ```
 
 ## result_map_with_star_alias_works

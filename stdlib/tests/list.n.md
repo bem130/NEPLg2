@@ -107,3 +107,107 @@ fn main <()*>i32> ():
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
 ```
+
+## list_functional_helpers
+
+neplg2:test
+ret: 0
+```neplg2
+
+#entry main
+#indent 4
+#target std
+
+#import "alloc/collections/list" as *
+#import "alloc/diag/error" as *
+#import "core/math" as *
+#import "core/option" as *
+#import "core/result" as *
+#import "std/test" as *
+
+fn mk <()*>List<i32>> ():
+    let xs <List<i32>>:
+        unwrap_ok<List<i32>, Diag> new<i32>
+        |> push<i32> 4 |> uwok
+        |> push<i32> 3 |> uwok
+        |> push<i32> 2 |> uwok
+        |> push<i32> 1 |> uwok
+    xs
+
+fn inc <(i32)->i32> (x):
+    add x 1
+
+fn is_even <(i32)->bool> (x):
+    eq rem_s x 2 0
+
+fn add_acc <(i32,i32)->i32> (acc, x):
+    add acc x
+
+fn gt_two <(i32)->bool> (x):
+    gt x 2
+
+fn main <()*>i32> ():
+    let mut checks <Vec<Result<(),str>>> checks_new;
+
+    let mapped_src0 <List<i32>> mk;
+    let mapped0 <List<i32>> uwok map<i32,i32> mapped_src0 inc;
+    match get<i32> mapped0 0:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 2 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "map get 0 returned None";
+
+    let mapped_src3 <List<i32>> mk;
+    let mapped3 <List<i32>> uwok map<i32,i32> mapped_src3 inc;
+    match get<i32> mapped3 3:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 5 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "map get 3 returned None";
+
+    let filtered_len_src <List<i32>> mk;
+    let filtered_len_list <List<i32>> uwok filter<i32> filtered_len_src is_even;
+    set checks checks_push checks check_eq_i32 2 len<i32> filtered_len_list;
+
+    let filtered_src0 <List<i32>> mk;
+    let filtered0 <List<i32>> uwok filter<i32> filtered_src0 is_even;
+    match get<i32> filtered0 0:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 2 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "filter get 0 returned None";
+
+    let filtered_src1 <List<i32>> mk;
+    let filtered1 <List<i32>> uwok filter<i32> filtered_src1 is_even;
+    match get<i32> filtered1 1:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 4 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "filter get 1 returned None";
+
+    let folded_src <List<i32>> mk;
+    set checks checks_push checks check_eq_i32 10 fold<i32,i32> folded_src 0 add_acc;
+
+    let reduced_src <List<i32>> mk;
+    match reduce<i32> reduced_src add_acc:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 10 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "reduce returned None";
+
+    let find_src <List<i32>> mk;
+    match find<i32> find_src gt_two:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 3 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "find returned None";
+
+    let any_src <List<i32>> mk;
+    set checks checks_push checks check any<i32> any_src gt_two;
+
+    let all_src <List<i32>> mk;
+    set checks checks_push checks check not all<i32> all_src is_even;
+
+    let shown <Vec<Result<(),str>>> checks_print_report checks;
+    checks_exit_code shown
+```

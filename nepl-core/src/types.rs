@@ -587,7 +587,8 @@ impl TypeCtx {
                 _ => self.has_copy_impl_target(resolved),
             },
             TypeKind::Var(v) => v.binding.map(|b| self.is_copy(b)).unwrap_or(v.copy_cap),
-            TypeKind::Function { .. } | TypeKind::Box(_) => false,
+            TypeKind::Function { .. } => true,
+            TypeKind::Box(_) => false,
         }
     }
 
@@ -701,7 +702,7 @@ impl TypeCtx {
                     _ => false,
                 }
             }
-            TypeKind::Function { .. } => false,
+            TypeKind::Function { .. } => true,
             TypeKind::Var(v) => {
                 if let Some(b) = v.binding {
                     self.is_copy_eligible_inner(b, visiting, mapping, allow_opaque_named)
