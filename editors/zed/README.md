@@ -19,11 +19,14 @@
 ## 現在
 
 - `nepl-language` は追加済み。
-- まだ Zed package 本体、grammar、language server は未実装。
+- `nepl-lsp` は追加済みで、`cargo test -p nepl-lsp` は通る。
+- Zed package shell も追加済みで、`editors/zed/Cargo.toml` は独立 crate として切り離した。
+- ただし `zed_extension_api` は現行環境の Cargo 1.83 では `edition2024` 依存により build 検証できない。
 
 ## 次にやること
 
 1. tree-sitter grammar を追加する。
 2. `nepl-language` を使う Language Server binary を追加する。
 3. Zed extension package からその binary を起動する。
-4. VSCode extension も同じ binary を使う。
+4. Zed 側の build 検証用に Rust/Cargo を `edition2024` 対応版へ上げるか、互換のある `zed_extension_api` 世代を固定する。
+5. VSCode extension も同じ binary を使う。

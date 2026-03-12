@@ -1,3 +1,24 @@
+# 2026-03-12 作業メモ (editor extensions: Zed shell の build 前提を整理)
+
+- 目的:
+  - `nepl-lsp` を実際に build/test し、Zed extension shell 側も検証可能な形へ寄せる。
+- 変更:
+  - `nepl-lsp/src/main.rs`
+    - `analyze_document` 内の `entry_path` capture を修正し、`cargo test -p nepl-lsp` が通るようにした。
+    - 未使用 import を整理した。
+  - `editors/zed/Cargo.toml`
+    - 独立 crate として `cargo check --manifest-path editors/zed/Cargo.toml` を実行できるよう、空の `[workspace]` を追加した。
+    - `zed_extension_api` の世代を下げて現行 toolchain で検証できるか切り分けた。
+  - `editors/zed/README.md`
+  - `doc/editor_extensions.md`
+    - `nepl-lsp` は build 済みであることと、Zed 側は `edition2024` 要求が blocker であることを追記した。
+- 結果:
+  - `cargo test -p nepl-lsp` は pass。
+  - `cargo check --manifest-path editors/zed/Cargo.toml` は `zed_extension_api` とその依存 (`spdx` など) が `edition2024` を要求し、現行 Cargo 1.83.0 では manifest parse 時点で失敗することを確認した。
+  - つまり現在の blocker は extension 実装でなく toolchain / upstream crate 要件である。
+- 次:
+  - Zed shell を実際に build 検証するには、Rust/Cargo を `edition2024` 対応版へ上げるか、互換のある `zed_extension_api` 系列を特定して固定する必要がある。
+
 # 2026-03-12 作業メモ (editor extensions: doc comment を compiler/nm 経由で LSP hover へ接続)
 
 - 目的:

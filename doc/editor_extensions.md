@@ -53,7 +53,8 @@
 
 ## 未完了
 
-- Zed extension package 自体の実装
+- Zed extension package の build 検証
+- 現行環境では `zed_extension_api` が `edition2024` を要求するため、Zed shell の compile 検証にはより新しい Rust/Cargo か互換 crate 世代の固定が必要
 - tree-sitter grammar
 - WASIp1 Language Server binary
 - VSCode extension shell

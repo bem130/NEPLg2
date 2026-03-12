@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use nepl_core::nm::render_document_markdown;
 use nepl_language::{
     analyze_loaded_semantics, default_stdlib_root, load_inline_module_with_provider, EditorDiagnostic,
-    NameDefinitionInfo, SemanticExpressionInfo, SemanticTokenInfo, SemanticsAnalysis, TextRange,
+    NameDefinitionInfo, SemanticExpressionInfo, SemanticsAnalysis, TextRange,
 };
 use serde_json::{json, Value};
 
@@ -318,9 +318,10 @@ fn analyze_document(state: &ServerState, entry_path: &Path, source: &str) -> Res
         .ok_or_else(|| anyhow!("failed to resolve stdlib root"))?;
 
     let entry_path = entry_path.to_path_buf();
+    let provider_entry_path = entry_path.clone();
     let entry_source = source.to_string();
     let mut provider = move |path: &PathBuf| -> Result<String, nepl_core::loader::LoaderError> {
-        if *path == entry_path {
+        if *path == provider_entry_path {
             return Ok(entry_source.clone());
         }
         fs::read_to_string(path).map_err(|error| {
