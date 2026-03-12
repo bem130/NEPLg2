@@ -280,6 +280,27 @@
 - 差異メモ:
   - `contains g 4 0` のような範囲外 index に対する `Result::Err` 経路は、`target/debug/nepl-cli + wasmer` では正常に `1` を返す一方、web compile path では runtime OOB に落ちた。
   - これは `AdjacencyMatrix` 実装ではなく web compiler/runtime 側の別根因と判断し、今回の collection batch には混ぜていない。
+
+# 2026-03-12 作業メモ (feat(collections): add counting bloom filter)
+
+- 目的:
+  - `alloc/collections` に `CountingBloomFilter` を追加し、`BloomFilter` と同じ hasher 設計を保ちながら削除可能な近似 membership structure を標準で扱えるようにする。
+  - bare API と public doctest を reboot 方針に合わせ、pipe 連鎖は `tests/stdlib` 側で保証する。
+- 変更:
+  - `stdlib/alloc/collections/counting_bloom_filter.nepl`
+    - `CountingBloomFilter<.T,.H>` を追加。
+    - `new` / `len` / `insert` / `remove` / `contains` / `clear` / `free` を bare API で実装。
+    - counter は `u8` 配列とし、3 本の probe index に対して insert は飽和加算、remove は 0 までの減算を行う。
+  - `stdlib/tests/counting_bloom_filter.n.md`
+    - insert/remove/clear の focused fixture を追加。
+  - `tests/stdlib/counting_bloom_filter_collections.n.md`
+    - pipe 記法での `insert` / `remove` / `contains` / `clear` 利用を回帰として追加。
+- 検証:
+  - `node nodesrc/tests.js -i stdlib/tests/counting_bloom_filter.n.md -i tests/stdlib/counting_bloom_filter_collections.n.md -i stdlib/alloc/collections/counting_bloom_filter.nepl --no-stdlib --no-tree -o /tmp/tests-counting-bloom-filter.json -j 2`
+    - 結果: `8/8 pass`
+- 差異メモ:
+  - `new DefaultHash32 0` の invalid length `Result::Err` 経路は、`target/debug/nepl-cli + wasmer` では正常に `1` を返す一方、web compile path では runtime OOB に落ちた。
+  - これは `CountingBloomFilter` 実装ではなく web compiler/runtime 側の別根因と判断し、今回の collection batch には混ぜていない。
   - `node nodesrc/run_doctest.js -i stdlib/tests/bitset.n.md -n 1` -> pass
   - `node nodesrc/run_doctest.js -i stdlib/tests/bitset.n.md -n 2` -> pass
   - `node nodesrc/run_doctest.js -i tests/stdlib/bitset_collections.n.md -n 1` -> pass

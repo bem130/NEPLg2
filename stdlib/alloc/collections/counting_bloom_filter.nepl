@@ -1,0 +1,296 @@
+#indent 4
+
+//: # counting_bloom_filter
+//: [削除可能/さくじょかのう]な[近似/きんじ] membership test を[提供/ていきょう]する Counting Bloom Filter
+//:
+//: ### [目的/もくてき]
+//: - `CountingBloomFilter<.T, .H>` を[提供/ていきょう]し、`new` / `len` / `insert` / `remove` / `contains` / `clear` / `free` の bare API で[削除可能/さくじょかのう]な[近似/きんじ][集合/しゅうごう][判定/はんてい]を[扱/あつか]えるようにします。
+//: - `BloomFilter` と[同/おな]じ hasher [設計/せっけい]を[保/たも]ちながら、[重複/ちょうふく][挿入/そうにゅう]を[数/かぞ]える counter [配列/はいれつ]で delete [操作/そうさ]を[支/ささ]えます。
+//:
+//: ### [実装/じっそう]
+//: - [内部/ないぶ]は byte counter [配列/はいれつ]と hasher [値/あたい]を[保持/ほじ]します。
+//: - [各要素/かくようそ]に[対/たい]して 3 [本/ぼん]の probe index を[生成/せいせい]し、insert では[対応/たいおう] counter を[飽和/ほうわ] 255 まで[加算/かさん]し、remove では 0 まで[減算/げんざん]します。
+//: - `contains` は 3 [本/ぼん]すべての counter が 1 [以上/いじょう]なら true を[返/かえ]します。
+//:
+//: ### [注意/ちゅうい]
+//: - false negative は insert/remove の[対応/たいおう]が[崩/くず]れなければ[起/お]きませんが、false positive は[起/お]こりえます。
+//: - counter は `u8` なので、[同/おな]じ probe が 255 [回/かい]を[超/こ]えると[飽和/ほうわ]します。
+//: - `new` は counter [長/ちょう]が 1 [未満/みまん]なら `Result::Err Diag` を[返/かえ]します。
+//:
+//: ### [計算量/けいさんりょう]
+//: - `len` は O(1) です。
+//: - `insert` / `remove` / `contains` は probe [本数/ほんすう]を k=3 として O(1) です。
+//: - `clear` は counter [配列/はいれつ][長/ちょう]を m byte として O(m) です。
+
+#import "core/mem" as *
+#import "core/math" as *
+#import "core/result" as *
+#import "core/field" as field
+#import "core/traits/hash_key" as *
+#import "core/traits/hash" as *
+#import "alloc/diag/error" as *
+
+//: ## CountingBloomFilter
+//: counter [配列/はいれつ]と hasher を[保持/ほじ]する[所有者/しょゆうしゃ]
+//:
+//: ### [目的/もくてき]
+//: - counter [長/ちょう]・byte [長/ちょう]・counter pointer・hasher を 1 [値/あたい]として[受/う]け[渡/わた]しできるようにします。
+//:
+//: ### [注意/ちゅうい]
+//: - counter [領域/りょういき]の[所有権/しょゆうけん]を[持/も]つので、[不要/ふよう]になったら `free` します。
+//: - hasher 型 `.H` は `Hasher<.T>` と `copy` capability を[持/も]つ[必要/ひつよう]があります。
+struct CountingBloomFilter<.T,.H>:
+    nslots <i32>
+    nbytes <i32>
+    counters <MemPtr<u8>>
+    hasher <.H>
+
+fn counting_bloom_invalid_len_diag <(i32)*>Diag> (nslots):
+    let msg0 <str> concat "counting_bloom_filter new invalid counter length " from_i32 nslots
+    diag_error StdErrorKind::CapacityExceeded msg0
+
+fn counting_bloom_hash0 <.T: HashKey,.H: Hasher<.T>> <(.H,.T)->i32> (hasher, key):
+    hash_with hasher key
+
+fn counting_bloom_hash1 <.T: HashKey,.H: Hasher<.T>> <(.H,.T)->i32> (hasher, key):
+    let h0 <i32> counting_bloom_hash0<.T,.H> hasher key
+    let hk <i32> hashkey_hash32 key
+    let mixed <i32> mix xor h0 hk
+    if eq mixed 0 1 mixed
+
+fn counting_bloom_probe_index <(i32,i32,i32)->i32> (nslots, h0, h1):
+    rem_u add h0 h1 nslots
+
+fn counting_bloom_ptr_at <(MemPtr<u8>,i32)->MemPtr<u8>> (counters, idx):
+    mem_ptr_wrap add mem_ptr_addr counters idx
+
+fn counting_bloom_counter_inc <(MemPtr<u8>,i32)->()> (counters, idx):
+    let ptr <MemPtr<u8>> counting_bloom_ptr_at counters idx
+    let cur <i32> load_u8 mem_ptr_addr ptr
+    let next <i32> add cur 1
+    if:
+        lt cur 255
+        then:
+            store_u8 mem_ptr_addr ptr next
+        else:
+            ()
+
+fn counting_bloom_counter_dec <(MemPtr<u8>,i32)->()> (counters, idx):
+    let ptr <MemPtr<u8>> counting_bloom_ptr_at counters idx
+    let cur <i32> load_u8 mem_ptr_addr ptr
+    let next <i32> sub cur 1
+    if:
+        lt 0 cur
+        then:
+            store_u8 mem_ptr_addr ptr next
+        else:
+            ()
+
+fn counting_bloom_counter_nonzero <(MemPtr<u8>,i32)->bool> (counters, idx):
+    let ptr <MemPtr<u8>> counting_bloom_ptr_at counters idx
+    lt 0 load_u8 mem_ptr_addr ptr
+
+//: ## new
+//: [空/から]の Counting Bloom Filter を[作/つく]る
+//:
+//: ### [計算量/けいさんりょう]
+//: - counter [長/ちょう]を n とすると O(n) です。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/counting_bloom_filter" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let bf <CountingBloomFilter<i32, DefaultHash32>> unwrap_ok<CountingBloomFilter<i32, DefaultHash32>, Diag> new DefaultHash32 64;
+//:     if eq len bf 64 1 0
+//: ```
+fn new <.T: HashKey,.H: Hasher<.T>> <(.H,i32)*>Result<CountingBloomFilter<.T,.H>, Diag>> (hasher, nslots):
+    if:
+        le nslots 0
+        then diag_err<CountingBloomFilter<.T,.H>> counting_bloom_invalid_len_diag nslots
+        else:
+            match alloc_ptr<u8> nslots:
+                Result::Err _e:
+                    diag_err<CountingBloomFilter<.T,.H>> diag_out_of_memory "counting_bloom_filter_new(counters)"
+                Result::Ok counters:
+                    let mut i <i32> 0
+                    while lt i nslots:
+                        do:
+                            let ptr <MemPtr<u8>> counting_bloom_ptr_at counters i
+                            store_u8 mem_ptr_addr ptr 0
+                            set i add i 1
+                    ok<CountingBloomFilter<.T,.H>, Diag> CountingBloomFilter<.T,.H> nslots nslots counters hasher
+
+//: ## len
+//: counter [長/ちょう]を[返/かえ]す
+fn len <.T,.H> <(CountingBloomFilter<.T,.H>)->i32> (bf):
+    field::get bf "nslots"
+
+//: ## insert
+//: [要素/ようそ]の probe counter を[加算/かさん]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/counting_bloom_filter" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let bf0 <CountingBloomFilter<i32, DefaultHash32>> unwrap_ok<CountingBloomFilter<i32, DefaultHash32>, Diag> new DefaultHash32 64;
+//:     let bf1 <CountingBloomFilter<i32, DefaultHash32>> insert bf0 7;
+//:     if contains bf1 7 1 0
+//: ```
+fn insert <.T: HashKey,.H: Hasher<.T>> <(CountingBloomFilter<.T,.H>,.T)->CountingBloomFilter<.T,.H>> (bf, key):
+    let bf_mem <i32> alloc_raw size_of<CountingBloomFilter<.T,.H>>
+    store<CountingBloomFilter<.T,.H>> bf_mem bf
+    let nslots <i32> get load<CountingBloomFilter<.T,.H>> bf_mem "nslots"
+    let counters <MemPtr<u8>> get load<CountingBloomFilter<.T,.H>> bf_mem "counters"
+    let hasher <.H> get load<CountingBloomFilter<.T,.H>> bf_mem "hasher"
+    let h0 <i32> counting_bloom_hash0<.T,.H> hasher key
+    let h1 <i32> counting_bloom_hash1<.T,.H> hasher key
+    let i0 <i32> rem_u h0 nslots
+    let i1 <i32> counting_bloom_probe_index nslots h0 h1
+    let i2 <i32> counting_bloom_probe_index nslots i1 h1
+    counting_bloom_counter_inc counters i0
+    counting_bloom_counter_inc counters i1
+    counting_bloom_counter_inc counters i2
+    let out <CountingBloomFilter<.T,.H>> load<CountingBloomFilter<.T,.H>> bf_mem
+    dealloc_raw bf_mem size_of<CountingBloomFilter<.T,.H>>
+    out
+
+//: ## remove
+//: [要素/ようそ]の probe counter を 0 [未満/みまん]にしないよう[減算/げんざん]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/counting_bloom_filter" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let bf0 <CountingBloomFilter<i32, DefaultHash32>>:
+//:         unwrap_ok<CountingBloomFilter<i32, DefaultHash32>, Diag> new DefaultHash32 64
+//:         |> insert 7
+//:         |> remove 7
+//:     if contains bf0 7 0 1
+//: ```
+fn remove <.T: HashKey,.H: Hasher<.T>> <(CountingBloomFilter<.T,.H>,.T)->CountingBloomFilter<.T,.H>> (bf, key):
+    let bf_mem <i32> alloc_raw size_of<CountingBloomFilter<.T,.H>>
+    store<CountingBloomFilter<.T,.H>> bf_mem bf
+    let nslots <i32> get load<CountingBloomFilter<.T,.H>> bf_mem "nslots"
+    let counters <MemPtr<u8>> get load<CountingBloomFilter<.T,.H>> bf_mem "counters"
+    let hasher <.H> get load<CountingBloomFilter<.T,.H>> bf_mem "hasher"
+    let h0 <i32> counting_bloom_hash0<.T,.H> hasher key
+    let h1 <i32> counting_bloom_hash1<.T,.H> hasher key
+    let i0 <i32> rem_u h0 nslots
+    let i1 <i32> counting_bloom_probe_index nslots h0 h1
+    let i2 <i32> counting_bloom_probe_index nslots i1 h1
+    counting_bloom_counter_dec counters i0
+    counting_bloom_counter_dec counters i1
+    counting_bloom_counter_dec counters i2
+    let out <CountingBloomFilter<.T,.H>> load<CountingBloomFilter<.T,.H>> bf_mem
+    dealloc_raw bf_mem size_of<CountingBloomFilter<.T,.H>>
+    out
+
+//: ## contains
+//: [要素/ようそ]が[登録済/とうろくず]みかを[近似/きんじ][判定/はんてい]する
+//:
+//: ### [注意/ちゅうい]
+//: - true でも[実際/じっさい]には[入/はい]っていない false positive がありえます。
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/counting_bloom_filter" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let bf0 <CountingBloomFilter<i32, DefaultHash32>>:
+//:         unwrap_ok<CountingBloomFilter<i32, DefaultHash32>, Diag> new DefaultHash32 64
+//:         |> insert 7
+//:         |> insert 12
+//:     if contains bf0 12 1 0
+//: ```
+fn contains <.T: HashKey,.H: Hasher<.T>> <(CountingBloomFilter<.T,.H>,.T)->bool> (bf, key):
+    let bf_mem <i32> alloc_raw size_of<CountingBloomFilter<.T,.H>>
+    store<CountingBloomFilter<.T,.H>> bf_mem bf
+    let nslots <i32> get load<CountingBloomFilter<.T,.H>> bf_mem "nslots"
+    let counters <MemPtr<u8>> get load<CountingBloomFilter<.T,.H>> bf_mem "counters"
+    let hasher <.H> get load<CountingBloomFilter<.T,.H>> bf_mem "hasher"
+    let h0 <i32> counting_bloom_hash0<.T,.H> hasher key
+    let h1 <i32> counting_bloom_hash1<.T,.H> hasher key
+    let i0 <i32> rem_u h0 nslots
+    let i1 <i32> counting_bloom_probe_index nslots h0 h1
+    let i2 <i32> counting_bloom_probe_index nslots i1 h1
+    let ok0 <bool> counting_bloom_counter_nonzero counters i0
+    let ok1 <bool> counting_bloom_counter_nonzero counters i1
+    let ok2 <bool> counting_bloom_counter_nonzero counters i2
+    dealloc_raw bf_mem size_of<CountingBloomFilter<.T,.H>>
+    and ok0 and ok1 ok2
+
+//: ## clear
+//: [全/すべ]ての counter を 0 に[戻/もど]す
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/counting_bloom_filter" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let bf0 <CountingBloomFilter<i32, DefaultHash32>>:
+//:         unwrap_ok<CountingBloomFilter<i32, DefaultHash32>, Diag> new DefaultHash32 64
+//:         |> insert 7
+//:         |> clear
+//:     if contains bf0 7 0 1
+//: ```
+fn clear <.T,.H> <(CountingBloomFilter<.T,.H>)->CountingBloomFilter<.T,.H>> (bf):
+    let bf_mem <i32> alloc_raw size_of<CountingBloomFilter<.T,.H>>
+    store<CountingBloomFilter<.T,.H>> bf_mem bf
+    let nbytes <i32> get load<CountingBloomFilter<.T,.H>> bf_mem "nbytes"
+    let counters <MemPtr<u8>> get load<CountingBloomFilter<.T,.H>> bf_mem "counters"
+    let mut i <i32> 0
+    while lt i nbytes:
+        do:
+            let ptr <MemPtr<u8>> counting_bloom_ptr_at counters i
+            store_u8 mem_ptr_addr ptr 0
+            set i add i 1
+    let out <CountingBloomFilter<.T,.H>> load<CountingBloomFilter<.T,.H>> bf_mem
+    dealloc_raw bf_mem size_of<CountingBloomFilter<.T,.H>>
+    out
+
+//: ## free
+//: counter [配列/はいれつ]を[解放/かいほう]する
+//:
+//: neplg2:test
+//: ```neplg2
+//:| #entry main
+//:| #target std
+//:| #import "alloc/collections/counting_bloom_filter" as *
+//:| #import "core/traits/hash" as *
+//:| #import "alloc/diag/error" as *
+//:| #import "core/result" as *
+//: fn main <()*>i32> ():
+//:     let bf <CountingBloomFilter<i32, DefaultHash32>> unwrap_ok<CountingBloomFilter<i32, DefaultHash32>, Diag> new DefaultHash32 64;
+//:     free bf;
+//:     0
+//: ```
+fn free <.T,.H> <(CountingBloomFilter<.T,.H>)->()> (bf):
+    let bf_mem <i32> alloc_raw size_of<CountingBloomFilter<.T,.H>>
+    store<CountingBloomFilter<.T,.H>> bf_mem bf
+    let nbytes <i32> get load<CountingBloomFilter<.T,.H>> bf_mem "nbytes"
+    let counters <MemPtr<u8>> get load<CountingBloomFilter<.T,.H>> bf_mem "counters"
+    let _ <()> uwok dealloc_ptr<u8> counters nbytes
+    dealloc_raw bf_mem size_of<CountingBloomFilter<.T,.H>>
