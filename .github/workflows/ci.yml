@@ -124,6 +124,7 @@ jobs:
 
             - name: Rust tests
               run: timeout --signal=KILL 10m cargo test --all --all-features --locked --no-fail-fast
+              run: timeout --signal=KILL 10m cargo test --all --all-features --no-fail-fast
 
     nm-compile:
         runs-on: ubuntu-latest
