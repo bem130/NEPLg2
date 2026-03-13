@@ -101,7 +101,6 @@ runs:
       shell: bash
       env:
         NO_COLOR: "true"
-      run: cargo build --locked
       run: cargo build
 
     - name: Trunk build
