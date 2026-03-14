@@ -218,18 +218,11 @@ self.onmessage = async (e) => {
   try {
     log('Worker started. WASM bytes: ' + (wasmBytes ? wasmBytes.byteLength : 'null'));
     const { instance } = await WebAssembly.instantiate(wasmBytes, { wasi_snapshot_preview1: wasi });
-    log('WASM instantiated');
     memory = instance.exports.memory;
     if (instance.exports._start) {
-      log('Calling _start()');
       instance.exports._start();
-      log('_start() returned');
     } else if (instance.exports.main) {
-      log('Calling main()');
       instance.exports.main();
-      log('main() returned');
-    } else {
-      log('No entry point found');
     }
     const tail = decoder.decode();
     if (tail.length > 0) {
@@ -562,42 +555,18 @@ self.onmessage = async (e) => {
       if (message) setStatus(message, 'err');
     }
 
+
     runBtn.onclick = async () => {
       if (running) return;
       setRunningState(true);
       setStdoutText('');
       stdoutHexLines = [];
       setStatus('compiling...', '');
-      console.log('[Tutorial Runner] source:\n' + (src.value || ''));
-      console.log('[Tutorial Runner] stdin:\n' + (stdin.value || ''));
       try {
         const bindings = await loadBindings();
         if (!running) return;
         let wasmBytes = null;
-        if (typeof bindings.compile_source_with_vfs_stdlib_and_profile === 'function'
-          && typeof bindings.get_bundled_stdlib_vfs === 'function') {
-          const bundledStdlib = bindings.get_bundled_stdlib_vfs();
-          wasmBytes = bindings.compile_source_with_vfs_stdlib_and_profile(
-            '/virtual/entry.nepl',
-            src.value,
-            __TUTORIAL_VFS_OVERRIDES__,
-            bundledStdlib,
-            'debug'
-          );
-        } else if (typeof bindings.compile_source_with_vfs_and_stdlib === 'function'
-          && typeof bindings.get_bundled_stdlib_vfs === 'function') {
-          const bundledStdlib = bindings.get_bundled_stdlib_vfs();
-          wasmBytes = bindings.compile_source_with_vfs_and_stdlib(
-            '/virtual/entry.nepl',
-            src.value,
-            __TUTORIAL_VFS_OVERRIDES__,
-            bundledStdlib
-          );
-        } else if (typeof bindings.compile_source_with_vfs_and_profile === 'function') {
-          wasmBytes = bindings.compile_source_with_vfs_and_profile('/virtual/entry.nepl', src.value, __TUTORIAL_VFS_OVERRIDES__, 'debug');
-        } else if (typeof bindings.compile_source_with_vfs === 'function') {
-          wasmBytes = bindings.compile_source_with_vfs('/virtual/entry.nepl', src.value, __TUTORIAL_VFS_OVERRIDES__);
-        } else {
+        if (typeof bindings.compile_source === 'function') {
           wasmBytes = bindings.compile_source(src.value);
         }
         setStatus('running...', '');
@@ -638,6 +607,9 @@ self.onmessage = async (e) => {
       } catch (e) {
         setRunningState(false);
         setStatus('compile failed', 'err');
+        setTimeout(() => {
+          if (!running) setStatus('ready', 'ok');
+        }, 3000);
         setStdoutText(stdoutText + '[compile error] ' + String((e && e.message) || e));
         console.log('[Tutorial Runner] compile failed:', String((e && e.message) || e));
         console.log('[Tutorial Runner] stdout (partial):\n' + stdoutText);

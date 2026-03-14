@@ -3109,9 +3109,17 @@ fn compile_wasm_with_entry_and_profile_and_stdlib(
                 nepl_core::loader::LoaderError::Io(msg)
             })
     };
+    #[cfg(target_arch = "wasm32")]
+    web_sys::console::log_1(&format!("[nepl-web] calling load_inline_with_provider for {:?}", entry_path).into());
     let loaded = loader
         .load_inline_with_provider(PathBuf::from(entry_path), source.to_string(), &mut provider)
-        .map_err(|e| render_loader_error(e, loader.source_map()))?;
+        .map_err(|e| {
+            #[cfg(target_arch = "wasm32")]
+            web_sys::console::error_1(&format!("[nepl-web] load_inline_with_provider failed: {:?}", e).into());
+            render_loader_error(e, loader.source_map())
+        })?;
+    #[cfg(target_arch = "wasm32")]
+    web_sys::console::log_1(&"[nepl-web] loading success. Proceeding to compilation phases.".into());
     let artifact = compile_module_with_source_map(
         loaded.module,
         Some(&loaded.source_map),

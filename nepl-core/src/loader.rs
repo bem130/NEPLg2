@@ -163,6 +163,7 @@ impl Loader {
         src: String,
         provider: &mut dyn FnMut(&PathBuf) -> Result<String, LoaderError>,
     ) -> Result<LoadResult, LoaderError> {
+        std::eprintln!("[Loader] load_inline_with_provider: path={:?}", path);
         let mut sm = SourceMap::new();
         let mut cache: BTreeMap<PathBuf, Module> = BTreeMap::new();
         let mut processing: BTreeSet<PathBuf> = BTreeSet::new();
@@ -179,10 +180,12 @@ impl Loader {
         ) {
             Ok(m) => m,
             Err(e) => {
+                std::eprintln!("[Loader] load_inline_with_provider: failed: {:?}", e);
                 self.source_map = sm.clone();
                 return Err(e);
             }
         };
+        std::eprintln!("[Loader] load_inline_with_provider: success. cache_size={}", cache.len());
         self.source_map = sm.clone();
         Ok(LoadResult {
             module,
@@ -265,6 +268,7 @@ impl Loader {
         provider: &mut dyn FnMut(&PathBuf) -> Result<String, LoaderError>,
     ) -> Result<Module, LoaderError> {
         let canon = canonicalize_path(&path);
+        std::eprintln!("[Loader] load_from_contents_with: path={:?}, canon={:?}", path, canon);
         if let Some(m) = cache.get(&canon) {
             return Ok(m.clone());
         }
@@ -276,6 +280,7 @@ impl Loader {
         }
         let file_id = sm.add(canon.clone(), src.clone());
         let module = self.parse_module(file_id, src)?;
+        std::eprintln!("[Loader] processing directives for {:?}", canon);
         let module = self.process_directives_with(
             canon.clone(),
             module,
@@ -288,6 +293,7 @@ impl Loader {
         )?;
         processing.remove(&canon);
         cache.insert(canon.clone(), module.clone());
+        std::eprintln!("[Loader] finished contents for {:?}", canon);
         Ok(module)
     }
 
@@ -685,6 +691,7 @@ impl Loader {
         if p.extension().is_none() {
             p = p.with_extension("nepl");
         }
+        std::eprintln!("[Loader] resolve_path: base={:?}, spec={:?} -> {:?}", base, spec, p);
         p
     }
 }
