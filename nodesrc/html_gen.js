@@ -29,14 +29,10 @@ function inlinesToPlainText(inlines) {
       if (n.type === "code_inline") return n.text;
       if (n.type === "math") return n.text;
       if (n.type === "ruby") {
-        return inlinesToPlainText(n.base) + " " + inlinesToPlainText(n.ruby);
+        return inlinesToPlainText(n.base); // drop n.ruby
       }
       if (n.type === "gloss") {
-        const base = inlinesToPlainText(n.base);
-        const notes = (n.notes || [])
-          .map((x) => inlinesToPlainText(x))
-          .join(" ");
-        return base + " " + notes;
+        return inlinesToPlainText(n.base); // drop n.notes
       }
       if (n.type === "link") return inlinesToPlainText(n.text);
       return "";

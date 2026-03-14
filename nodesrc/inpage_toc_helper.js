@@ -53,6 +53,11 @@ function makeSlug(text, typeInfo) {
   return base.slice(0, 100);
 }
 
+function inlinesToHtml(inlines) {
+  const { renderInlines } = require("./html_gen");
+  return renderInlines(inlines, { rewriteLinks: true });
+}
+
 function extractInPageToc(node, ancestorSlug = "") {
   let tocNodes = [];
   
@@ -64,17 +69,16 @@ function extractInPageToc(node, ancestorSlug = "") {
     const titleText = inlinesToPlainText(node.heading);
     const slug = makeSlug(titleText, node.typeInfo);
     const fullId = ancestorSlug ? ancestorSlug + "-" + slug : slug;
+    const titleHtml = inlinesToHtml(node.heading);
     
-    // NOTE: Ignore level 1 as it's the main page title. Level 2 and below belong in the TOC.
-    if (node.level > 1 || true) { // We can filter later or just include
-      tocNodes.push({
-        id: fullId,
-        level: node.level,
-        title: titleText,
-        typeInfo: node.typeInfo,
-        kind: node.kind,
-      });
-    }
+    // Level 1 heading gets a special "top page" anchor (empty href)
+    tocNodes.push({
+      id: node.level === 1 ? "" : fullId,
+      level: node.level,
+      titleHtml: titleHtml,
+      typeInfo: node.typeInfo,
+      kind: node.kind,
+    });
     
     for (const child of node.children) {
       tocNodes.push(...extractInPageToc(child, fullId));
@@ -86,15 +90,10 @@ function extractInPageToc(node, ancestorSlug = "") {
 
 function renderInPageTocHtml(tocNodes) {
   if (!tocNodes || tocNodes.length === 0) return "";
-  
-  // Exclude level 1 headings from in-page TOC (typically the document title)
-  const filtered = tocNodes.filter(n => n.level > 1);
-  if (filtered.length === 0) return "";
 
-  const minLevel = Math.min(...filtered.map(n => n.level));
+  const minLevel = Math.min(...tocNodes.map(n => n.level));
   
-  const items = filtered.map(node => {
-     // Adjust depth relative to the minimum heading level found
+  const items = tocNodes.map((node, index) => {
      let depth = node.level - minLevel;
      if (depth < 0) depth = 0;
      if (depth > 6) depth = 6;
@@ -104,7 +103,9 @@ function renderInPageTocHtml(tocNodes) {
        badgeHtml = ` <span class="nm-badge nm-badge-${escapeHtmlAttr(node.kind)} inpage-toc-badge">${escapeHtml(node.kind)}</span>`;
      }
      
-     return `<li><a class="inpage-toc-link depth-${depth}" href="#${escapeHtmlAttr(node.id)}">${escapeHtml(node.title)}${badgeHtml}</a></li>`;
+     const href = node.id ? `#${escapeHtmlAttr(node.id)}` : '#';
+     
+     return `<li><a class="inpage-toc-link depth-${depth}" href="${href}">${node.titleHtml}${badgeHtml}</a></li>`;
   }).join("\n");
   
   return `<ul class="inpage-toc-list">\n${items}\n</ul>`;

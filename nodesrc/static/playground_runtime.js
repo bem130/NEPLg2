@@ -882,5 +882,21 @@ self.onmessage = async (e) => {
     }, observerOptions);
 
     sections.forEach(sec => observer.observe(sec));
+
+    // Handle clicks on the top-level title (href="#") to scroll to top without polluting url hash
+    inpageLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        const h = link.getAttribute('href');
+        if (h === '#') {
+          e.preventDefault();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          // optionally strip the hash using history
+          if (window.location.hash) {
+            history.pushState('', document.title, window.location.pathname + window.location.search);
+          }
+        }
+      });
+    });
   }
 }
+

@@ -513,11 +513,11 @@ function inlinesToPlainText(inlines) {
         if (n.type === 'text') return n.text;
         if (n.type === 'code_inline') return n.text;
         if (n.type === 'math') return n.text;
-        if (n.type === 'ruby') return inlinesToPlainText(n.base);
-        if (n.type === 'gloss') return inlinesToPlainText(n.base);
+        if (n.type === 'ruby') return inlinesToPlainText(n.base); // drop n.ruby
+        if (n.type === 'gloss') return inlinesToPlainText(n.base); // drop n.notes
         if (n.type === 'link') return inlinesToPlainText(n.text);
         return '';
-    }).join('');
+    }).join('').replace(/\s+/g, " ").trim();
 }
 
 function extractMetaFromAst(ast) {

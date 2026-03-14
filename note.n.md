@@ -1,4 +1,19 @@
-# 2026-03-14 作業メモ (feat: in-page TOC / 右側目次ナビゲーションの追加)
+# 2026-03-14 作業メモ (fix: トップレベル見出しリンクとフリガナ(ruby)・OGPの分離)
+
+- [目的/もくてき]:
+  - in-page TOC（ページ内目次）において、テキストプレーンではなく元のHTMLタグ（`<ruby>`）を維持してフリガナを表示する。
+  - 同時に、`<meta property="og:title">` 等の OGP タグにはフリガナが含まれないようにする（`<rt>`要素のテキストを抽出から除外する）。
+  - さらに、ページトップのH1レベルの見出しもTOCの先頭に含め、クリック時に URL ハッシュを変更することなくページトップへスムーズスクロール（`href="#"` のインターセプト）させる挙動を実装する。
+- [実装/じっそう]:
+  - `nodesrc/html_gen.js` および `nodesrc/cli.js`
+    - OGP用に利用される `inlinesToPlainText` 関数の処理で、ASTノート種別が `ruby` の場合は `n.ruby` ではなく `n.base` のテキストだけを抽出するように修正。これにより、OGPのtitleなどにフリガナが混入しなくなった。
+  - `nodesrc/inpage_toc_helper.js`
+    - `extractInPageToc` にて `inlinesToHtml` を使用して見出しのHTML（バッジを除く元のパース結果）を抽出し、`ruby` などの表示を維持したままTOC項目とするように変更。
+    - H1 のルート見出しを、IDなし（トップへのアンカー `href="#"`）としてTOCリストの先頭に追加する処理を実装。
+  - `nodesrc/static/playground_runtime.js`
+    - TOC内リンクの中で `href="#"` をクリックした場合、既定のアクション（ハッシュの付与）を無効化し、`window.scrollTo` を用いてトップへスクロールする挙動を付与。また `history.pushState` を用いてハッシュの消去も可能にした。
+
+
 
 - [目的/もくてき]:
   - tutorial と stdlib ドキュメントにて、見出しに基づく「ページ内目次（in-page TOC）」を右側（PC向け）および折りたたみメニュー（モバイル向け）として追加し、よりスムーズに文書内を移動できるようにする。
