@@ -14,6 +14,7 @@ const { renderHtml } = require('./html_gen');
 const { renderHtmlPlayground } = require('./html_gen_playground');
 const { candidateDistDirs } = require('./util_paths');
 const { findCompilerDistDir } = require('./compiler_loader');
+const { buildEntriesFromAst } = require('./search');
 
 function parseArgs(argv) {
     const inputs = [];
@@ -215,7 +216,7 @@ function main() {
         const inPath = path.resolve(input);
         if (isFile(inPath)) {
             const rel = path.basename(inPath);
-            count += genOne(inPath, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets, null, { siteName, descriptionPrefix });
+            count += genOne(inPath, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets, null, { siteName, descriptionPrefix }, null);
             continue;
         }
         if (!isDir(inPath)) {
@@ -227,9 +228,12 @@ function main() {
         const tocEntries = buildTocEntries(inPath, files);
         const tocTitle = siteName.toLowerCase().includes('tutorial') ? 'Getting Started' : 'Contents';
 
+        // スコープ全体の検索インデックスを事前ビルドする（ファイル横断検索用）
+        const scopeSearchIndex = buildScopeSearchIndex(inPath, files, excludeDirs);
+
         for (const f of files) {
             const rel = path.relative(inPath, f);
-            count += genOne(f, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries, { siteName, descriptionPrefix, tocTitle });
+            count += genOne(f, rel, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries, { siteName, descriptionPrefix, tocTitle }, scopeSearchIndex);
         }
     }
 
@@ -271,6 +275,35 @@ function prepareHtmlPlayAssets(outRootHtmlPlay) {
         wasmCompatFile: 'nepl-web_bg.wasm',
         sourceDistDir: found.distDir,
     };
+}
+
+/**
+ * スコープ（入力ディレクトリ）全体の検索インデックスを構築する
+ * 各ファイルの AST を解析しエントリを収集する
+ * @param {string} inputRoot - 入力ディレクトリの絶対パス
+ * @param {string[]} files - 対象ファイルパスの配列
+ * @param {string[]} excludeDirs - 除外ディレクトリ名
+ * @returns {object[]} SearchEntry[]
+ */
+function buildScopeSearchIndex(inputRoot, files, excludeDirs) {
+    const allEntries = [];
+    for (const f of files) {
+        try {
+            const md = extractMarkdownForHtml(f);
+            if (!md || md.trim().length === 0) continue;
+            const ast = parseNmdAst(md);
+            const relFilePath = toPosix(path.relative(inputRoot, f));
+            const outRel = relFilePath
+                .replace(/\.n\.md$/i, '.html')
+                .replace(/\.nepl$/i, '.html');
+            const pageTitle = readFirstHeadingTitle(f) || path.basename(f, path.extname(f));
+            const entries = buildEntriesFromAst(ast, outRel, pageTitle, relFilePath);
+            allEntries.push(...entries);
+        } catch (e) {
+            // 個別ファイルのエラーは無視してインデックス構築を続行
+        }
+    }
+    return allEntries;
 }
 
 function humanizeDocName(outRel) {
@@ -530,7 +563,7 @@ function buildPageMeta(relPath, ast, { siteName, descriptionPrefix }) {
     return { title, description };
 }
 
-function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries, { siteName, descriptionPrefix, tocTitle }) {
+function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay, htmlPlayAssets, tocEntries, { siteName, descriptionPrefix, tocTitle }, scopeSearchIndex) {
     const md = extractMarkdownForHtml(filePath);
     if (!md || md.trim().length === 0) {
         return 0;
@@ -568,6 +601,8 @@ function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay, htmlPlayAssets,
             moduleJsPath,
             tocLinks,
             tocTitle,
+            searchIndex: scopeSearchIndex || [],
+            rootPrefix: prefix,
         });
         const outPathPlay = path.join(outRootHtmlPlay, outRel);
         ensureDir(path.dirname(outPathPlay));

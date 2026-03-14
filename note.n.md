@@ -1,3 +1,68 @@
+# 2026-03-14 作業メモ (feat: 検索機能の強化 - オーバーロード対応・型表示・フィルタ追加)
+
+- [目的/もくてき]:
+  - 検索機能とドキュメント表示を強化し、オーバーロードされた同名関数を正確に区別・ナビゲートできるようにする。
+  - 検索 UI にフィルタを追加し、目的の識別子を素早く見つけられるようにする。
+- [変更/へんこう]:
+  - `nodesrc/parser.js`
+    - `parseNeplText` において、`fn` / `struct` などの kind と `<(i32)->i32>` などの型シグネチャを抽出するように拡張。
+    - レガシーな `name: description` 形式のドキュメントを既定の見出しとして扱うように修正。
+  - `nodesrc/html_gen.js`
+    - `makeSlug` において、型情報を含めた一意のスラグを生成するように修正。URLエンコード対策として空白を除去。
+    - セクションの ID を階層構造（例: `parent-child--type`）で生成するように変更し、ネストされた定義へのリンクを正確化。
+    - 見出しに種類（バッジ）と型シグネチャを表示するように拡張。
+  - `nodesrc/search.js`
+    - `html_gen.js` と同期した階層スラグ生成ロジックを実装。
+    - 検索エントリに `kind` と `type` 情報を追加。
+  - `nodesrc/html_gen_playground.js`
+    - 検索 UI に `kind` (種類) と `path` (ファイルパス) による絞り込みフィルタを追加。
+    - 検索結果に型シグネチャを表示。
+    - `:target` セクションの強調表示スタイルを改善。
+    - バッジを白文字・枠線・角丸のモダンなデザインに更新。
+  - `nodesrc/cli.js`
+    - `rootPrefix` の深さ計算を修正し、404 エラーを解消。
+    - 同一ファイル内のオーバーロード関数が正しくインデックスされるよう ID 生成を修正。
+  - `nodesrc/test_search.js`
+    - 種類情報の抽出とフィルタリングに関するユニットテストを追加。
+- [検証/けんしょう]:
+  - `math.nepl` (旧形式) および `fenwick.nepl` (ネスト形式) において、検索結果から正しくジャンプし強調表示されることを確認。
+  - `add` などのオーバーロード関数が型で区別され、それぞれ個別のアンカーへ飛ぶことを確認。
+  - 生成された HTML 内の `id` と検索インデックスの fragment が階層構造を含めて一致することを確認。
+
+# 2026-03-14 作業メモ (feat: stdlib/tutorial HTML に全文検索機能を追加)
+
+- [目的/もくてき]:
+  - stdlib と tutorial の HTML 各ページに、スコープ（tutorial 全体 / stdlib 全体）横断のリアルタイム全文検索 UI を追加する。
+  - 検索ロジック（JS）はローカルテストと HTML 埋め込みで全く同じコードを使う。
+- [変更/へんこう]:
+  - `nodesrc/search.js` を新規作成。
+    - `searchIndex(query, index, maxResults)`: AND 検索、スコア順返却。
+    - `buildEntriesFromAst(ast, pageUrl, pageTitle)`: AST から検索エントリを構築。
+    - `inlinesToSearchText(inlines)`: ルビ（漢字 + 読み仮名）の両方をインデックスに含める。
+    - Node.js `module.exports` と ブラウザ `NeplSearch` グローバルの両方に対応。
+  - `nodesrc/test_search.js` を新規作成。
+    - `assert` モジュールのみ使用、外部依存ゼロのローカル完結テスト。
+    - テスト 30 件（tokenizeQuery / inlinesToSearchText / searchIndex / buildEntriesFromAst / 統合）。
+  - `nodesrc/html_gen_playground.js` を変更。
+    - `SEARCH_JS_SOURCE`: モジュール読み込み時に `search.js` を文字列として読み込む。
+    - `wrapHtmlPlayground` に `searchIndexJson` 引数を追加。
+    - `<style>` に検索 UI の CSS を追加（`.search-wrap` / `.search-input` / `.search-results` など）。
+    - `<script>` 先頭に `search.js` を inline 埋め込みし、`__SEARCH_INDEX__` 変数を注入。
+    - `renderToc` に検索ボックス HTML を追加（`#doc-search-input` / `#doc-search-results`）。
+    - `DOMContentLoaded` に検索 UI イベントハンドラを追加（リアルタイムドロップダウン / キーボード ↑↓Enter/Escape）。
+    - `renderHtmlPlayground` に `searchIndex` オプションを追加。
+  - `nodesrc/cli.js` を変更。
+    - `buildScopeSearchIndex(inputRoot, files, excludeDirs)` を追加。
+    - スコープ（入力ディレクトリ = tutorial 全体 or stdlib 全体）ごとに全ページの AST を事前解析し検索インデックスを構築する。
+    - `genOne` にインデックスを渡し、各ページの HTML に同一スコープのインデックスを埋め込む。
+- [検証/けんしょう]:
+  - `node nodesrc/test_search.js` → `30 成功, 0 失敗`
+  - HTML 生成チェック（`__SEARCH_INDEX__` / `NeplSearch` / `search-input` / `search-results` / `searchIndexJson`）→ 全 pass
+  - tutorial スコープで 29 ファイルから 148 エントリを構築できることを確認。
+- [plan.md との差異/diffreference]:
+  - plan.md は検索機能に言及していないため差異なし。
+  - 実装は「検索スコープを入力ディレクトリ単位（tutorial/stdlib）で分ける」設計で、ユーザー要件に合致している。
+
 # 2026-03-12 作業メモ (fix: bare Result map/and_then の callable 解決を修正)
 
 - [目的/もくてき]:
