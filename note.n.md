@@ -1,4 +1,17 @@
-# 2026-03-14 作業メモ (fix: チュートリアル・stdlibでのコードランナー動作不良の修正)
+# 2026-03-14 作業メモ (fix: サイドバーの目次リンクが全て現在のページを指す問題の修正)
+
+- [目的/もくてき]:
+  - tutorial と stdlib の playground HTML にて、左側のサイドバーのリンク（Table of Contents）が壊れており、どのリンクをクリックしても現在のページに遷移してしまう問題を修正する。
+- [根本原因/こんぽんげんいん]:
+  - `nodesrc/cli.js` 内の `genOne` 関数にて `renderHtmlPlayground` を呼び出す際、TOC生成のための `tocLinks` に、各リンクの相対パスを解決する `makePageTocLinks` 関数の結果ではなく、パス解決前の `tocEntries` をそのまま渡していた。
+  - そのため各エントリの `href` が正しく生成されず、現在のページを指すリンク（空の href など）になっていた。
+- [変更/へんこう]:
+  - `nodesrc/cli.js`
+    - `genOne` 関数内で `renderHtmlPlayground` に渡す `tocLinks` を `makePageTocLinks(outRel, tocEntries)` に変更。
+- [検証/けんしょう]:
+  - `node nodesrc/cli.js` コマンドで HTML を再生成し、`href` 属性に正しく相対パス（例: `02_numbers_and_variables.html`）が設定されていることを確認。
+
+
 
 - [目的/もくてき]:
   - playground で生成される tutorials や stdlib ドキュメント内のコードが実行できない（コンパイルエラー・クラッシュ）問題を修正する。
