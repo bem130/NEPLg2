@@ -1,4 +1,22 @@
-# 2026-03-14 作業メモ (fix: サイドバーの目次リンクが全て現在のページを指す問題の修正)
+# 2026-03-14 作業メモ (feat: in-page TOC / 右側目次ナビゲーションの追加)
+
+- [目的/もくてき]:
+  - tutorial と stdlib ドキュメントにて、見出しに基づく「ページ内目次（in-page TOC）」を右側（PC向け）および折りたたみメニュー（モバイル向け）として追加し、よりスムーズに文書内を移動できるようにする。
+  - struct や fn などのバッジ（種類）情報も目次内に表示することで、目的のAPIへすぐアクセス可能にする。
+- [実装/じっそう]:
+  - `nodesrc/inpage_toc_helper.js` (新規作成)
+    - AST の Document ノードを走査（`extractInPageToc`）し、`section` ノード（`id`となるslugやバッジ情報を抽出）の配列を生成。
+    - `renderInPageTocHtml` にて、階層（depth）づけされた HTML（`<ul>` / `<li>`）を生成。
+  - `nodesrc/html_gen_playground.js`
+    - HTMLレイアウト（CSSグリッド）に右カラム `<aside class="doc-inpage-toc">` とモバイル用の `<details class="doc-inpage-toc-mobile">` を追加し、生成したTOC HTMLを注入。
+  - `nodesrc/static/playground.css`
+    - `.doc-layout` を2カラムから3カラム（`280px 1fr 240px`）へ変更（デスクトップ）。
+    - 要素の固定配置（`position: sticky`）と右側目次のスタイリングを追加。
+    - メディアクエリ（`max-width: 768px`）を用いてモバイル幅の場合は右サイドバーを隠し、本文上部に `<details>` で展開できる目次を表示するよう分岐処理を記述。
+  - `nodesrc/static/playground_runtime.js`
+    - `IntersectionObserver` を追加し、ユーザーがスクロールした際に現在見えている見出し（`section`）に対応する目次のリンク（`.inpage-toc-link`）へ `active` クラスを自動付与（Scroll Spy機能）する仕組みを導入。
+
+
 
 - [目的/もくてき]:
   - tutorial と stdlib の playground HTML にて、左側のサイドバーのリンク（Table of Contents）が壊れており、どのリンクをクリックしても現在のページに遷移してしまう問題を修正する。

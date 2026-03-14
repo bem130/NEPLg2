@@ -840,4 +840,47 @@ self.onmessage = async (e) => {
     }
   });
 
+  // --- In-Page TOC Scroll Spy ---
+  const inpageLinks = document.querySelectorAll('.inpage-toc-link');
+  if (inpageLinks.length > 0) {
+    const sections = document.querySelectorAll('section.nm-sec');
+    const observerOptions = {
+      root: null,
+      rootMargin: '0px 0px -60% 0px',
+      threshold: 0
+    };
+
+    let activeId = null;
+
+    const observer = new IntersectionObserver((entries) => {
+      let candidate = null;
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          candidate = entry.target.id;
+        }
+      }
+      
+      if (candidate && candidate !== activeId) {
+        activeId = candidate;
+        inpageLinks.forEach(link => {
+          if (link.getAttribute('href') === '#' + activeId) {
+            link.classList.add('active');
+            // Ensure the active link is visible in the scrollable sidebar
+            const parentToc = link.closest('.doc-inpage-toc');
+            if (parentToc) {
+               const linkRect = link.getBoundingClientRect();
+               const parentRect = parentToc.getBoundingClientRect();
+               if (linkRect.top < parentRect.top || linkRect.bottom > parentRect.bottom) {
+                 link.scrollIntoView({ behavior: 'smooth', block: 'center' });
+               }
+            }
+          } else {
+            link.classList.remove('active');
+          }
+        });
+      }
+    }, observerOptions);
+
+    sections.forEach(sec => observer.observe(sec));
+  }
 }

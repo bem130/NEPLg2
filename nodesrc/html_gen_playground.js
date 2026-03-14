@@ -6,6 +6,7 @@
 
 const { renderNode, renderInlines } = require("./html_gen");
 const { parseInlines } = require("./parser");
+const { extractInPageToc, renderInPageTocHtml } = require("./inpage_toc_helper");
 const fs = require("fs");
 const path = require("path");
 
@@ -78,6 +79,7 @@ function wrapHtmlPlayground(
   tocTitle,
   searchIndexJson,
   rootPrefix,
+  inPageTocHtml,
 ) {
   const t = title || "NEPLg2 Tutorial";
   const d =
@@ -129,10 +131,20 @@ function wrapHtmlPlayground(
 </head>
 <body>
 <div class="doc-layout">
+<!-- Left Sidebar (dynamically populated by initPlayground) -->
+
+<!-- Main Content -->
 <main>
 ${body}
 </main>
+
+<!-- Right Sidebar (In-Page TOC) -->
+${inPageTocHtml ? `<aside class="doc-inpage-toc"><div class="inpage-toc-inner"><div class="inpage-toc-title">ON THIS PAGE</div>${inPageTocHtml}</div></aside>` : ''}
 </div>
+
+<!-- Mobile In-Page TOC (Injected by JS if needed, or CSS-only visible on mobile layout) -->
+${inPageTocHtml ? `<div class="doc-inpage-toc-mobile-container"><details class="doc-inpage-toc-mobile"><summary>On this page</summary>${inPageTocHtml}</details></div>` : ''}
+
 </body>
 </html>`;
 }
@@ -154,6 +166,12 @@ function renderHtmlPlayground(ast, opt) {
   const searchIndexJson = JSON.stringify(searchIndex);
   const rootPrefix = opt && opt.rootPrefix ? String(opt.rootPrefix) : "./";
   const body = renderBody(ast);
+  
+  let inPageTocHtml = "";
+  if (ast) {
+      const rawTocNodes = extractInPageToc(ast);
+      inPageTocHtml = renderInPageTocHtml(rawTocNodes);
+  }
 
   return wrapHtmlPlayground(
     body,
@@ -167,6 +185,7 @@ function renderHtmlPlayground(ast, opt) {
     tocTitle,
     searchIndexJson,
     rootPrefix,
+    inPageTocHtml
   );
 }
 
