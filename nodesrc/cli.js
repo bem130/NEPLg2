@@ -264,16 +264,32 @@ function prepareHtmlPlayAssets(outRootHtmlPlay) {
     copyFile(pair.wasmPath, wasmOut);
 
     // wasm-bindgen 生成 JS が既定で参照する名前の互換ファイルも置く。
-    // 例: nepl-web-<hash>.js が内部で "nepl-web_bg.wasm" を fetch するケース。
     const wasmCompatOut = path.join(outRootHtmlPlay, 'nepl-web_bg.wasm');
     if (path.basename(wasmOut) !== 'nepl-web_bg.wasm') {
         copyFile(pair.wasmPath, wasmCompatOut);
     }
+
+    // playground_runtime.js と search.js をコピー
+    const runtimeSrc = path.join(__dirname, 'static', 'playground_runtime.js');
+    const runtimeOut = path.join(outRootHtmlPlay, 'playground_runtime.js');
+    copyFile(runtimeSrc, runtimeOut);
+
+    const searchSrc = path.join(__dirname, 'search.js');
+    const searchOut = path.join(outRootHtmlPlay, 'search.js');
+    copyFile(searchSrc, searchOut);
+
+    const cssSrc = path.join(__dirname, 'static', 'playground.css');
+    const cssOut = path.join(outRootHtmlPlay, 'playground.css');
+    copyFile(cssSrc, cssOut);
+
     return {
         jsFile: pair.jsFile,
         wasmFile: pair.wasmFile,
         wasmCompatFile: 'nepl-web_bg.wasm',
         sourceDistDir: found.distDir,
+        runtimeFile: 'playground_runtime.js',
+        searchFile: 'search.js',
+        cssFile: 'playground.css',
     };
 }
 
@@ -592,14 +608,19 @@ function genOne(filePath, relPath, outRootHtml, outRootHtmlPlay, htmlPlayAssets,
         }
         const depth = outRel.split('/').length - 1;
         const prefix = depth > 0 ? '../'.repeat(depth) : './';
+        const runtimeJsPath = `${prefix}${htmlPlayAssets.runtimeFile}`;
+        const searchJsPath = `${prefix}${htmlPlayAssets.searchFile}`;
+        const playgroundCssPath = `${prefix}${htmlPlayAssets.cssFile}`;
         const moduleJsPath = `${prefix}${htmlPlayAssets.jsFile}`;
-        const tocLinks = makePageTocLinks(outRel, tocEntries);
         const htmlPlay = renderHtmlPlayground(ast, {
             title,
             description,
             rewriteLinks: true,
             moduleJsPath,
-            tocLinks,
+            runtimeJsPath,
+            searchJsPath,
+            playgroundCssPath,
+            tocLinks: tocEntries,
             tocTitle,
             searchIndex: scopeSearchIndex || [],
             rootPrefix: prefix,
