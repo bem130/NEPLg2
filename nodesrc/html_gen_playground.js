@@ -1,73 +1,122 @@
 // nodesrc/html_gen_playground.js
 // 目的:
-// - 既存 html_gen.js は維持したまま、チュートリアル向けの実行可能 HTML を生成する。
+// - 既存 html_gen.js は維持したまま、チュートリアル向けの実行可而 HTML を生成する。
 // - pre>code(language-neplg2) をクリックすると、ポップアップエディタで Run / Interrupt / 出力確認ができる。
+// - search.js の検索ロジックを inline 埋め込みし、サイドバー内に全文検索 UI を提供する。
 
-const { renderNode, renderInlines } = require('./html_gen');
-const { parseInlines } = require('./parser');
-const fs = require('fs');
-const path = require('path');
+const { renderNode, renderInlines } = require("./html_gen");
+const { parseInlines } = require("./parser");
+const fs = require("fs");
+const path = require("path");
+
+// search.js のソースコードを読み込んで HTML に inline 埋め込むために保持する
+const SEARCH_JS_SOURCE = fs.readFileSync(
+  path.join(__dirname, "search.js"),
+  "utf8",
+);
 
 function escapeHtml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function renderBody(ast) {
-    return renderNode(ast, { rewriteLinks: true });
+  return renderNode(ast, { rewriteLinks: true });
 }
 
-function renderToc(tocLinks, tocTitle = 'Getting Started') {
-    if (!Array.isArray(tocLinks) || tocLinks.length === 0) {
-        return '';
-    }
-    const items = tocLinks.map(link => {
-        const depth = Number.isFinite(link.depth) ? Math.max(0, Math.min(6, link.depth)) : 0;
+function renderToc(tocLinks, tocTitle) {
+  tocTitle = tocTitle || "Getting Started";
+  if (!Array.isArray(tocLinks) || tocLinks.length === 0) {
+    return "";
+  }
+  const items = tocLinks
+    .map((link) => {
+      const depth = Number.isFinite(link.depth)
+        ? Math.max(0, Math.min(6, link.depth))
+        : 0;
 
-        const labelNodes = parseInlines(String(link.label || ''));
-        const labelHtml = renderInlines(labelNodes);
+      const labelNodes = parseInlines(String(link.label || ""));
+      const labelHtml = renderInlines(labelNodes);
 
-        if (link.isGroup) {
-            return `<li><div class="toc-group depth-${depth}">${labelHtml}</div></li>`;
-        }
-        const cls = link.active ? `toc-link active depth-${depth}` : `toc-link depth-${depth}`;
-        return `<li><a class="${cls}" href="${escapeHtml(String(link.href || ''))}">${labelHtml}</a></li>`;
-    }).join('\n');
-    return `<aside class="doc-sidebar"><div class="sidebar-header"><div class="toc-title">${escapeHtml(tocTitle)}</div></div><ul class="toc-list">${items}</ul></aside>`;
+      if (link.isGroup) {
+        return `<li><div class="toc-group depth-${depth}">${labelHtml}</div></li>`;
+      }
+      const cls = link.active
+        ? `toc-link active depth-${depth}`
+        : `toc-link depth-${depth}`;
+      return `<li><a class="${cls}" href="${escapeHtml(String(link.href || ""))}">${labelHtml}</a></li>`;
+    })
+    .join("\n");
+  // 検索ボックス HTML（テキストは DOMContentLoaded 内の JS でイベントインストールする）
+  const searchBoxHtml = `<div class="search-wrap" id="doc-search-wrap">
+  <div style="display:flex;gap:4px;">
+    <select class="search-kind" id="doc-search-kind" aria-label="種類で絞り込み">
+      <option value="all">All</option>
+      <option value="module">mod</option>
+      <option value="struct">str</option>
+      <option value="enum">enum</option>
+      <option value="trait">trait</option>
+      <option value="impl">impl</option>
+      <option value="fn">fn</option>
+      <option value="let">let</option>
+    </select>
+    <div style="position:relative;flex:1;">
+      <input class="search-input" id="doc-search-input" type="search" placeholder="\u691c\u7d22..." autocomplete="off" spellcheck="false" style="width:100%; box-sizing:border-box;"/>
+      <button class="search-clear" id="doc-search-clear" aria-label="\u30af\u30ea\u30a2">\u00d7</button>
+    </div>
+  </div>
+  <div style="margin-top:4px;">
+    <input class="search-input" id="doc-search-path" type="text" placeholder="Filter by path (e.g. math.nepl)..." autocomplete="off" spellcheck="false" style="width:100%; box-sizing:border-box; font-size:12px;"/>
+  </div>
+  <div class="search-results" id="doc-search-results" role="listbox"></div>
+</div>`;
+  return `<aside class="doc-sidebar"><div class="sidebar-header"><div class="toc-title">${escapeHtml(tocTitle)}</div></div>${searchBoxHtml}<ul class="toc-list">${items}</ul></aside>`;
 }
 
 function buildPlaygroundVfsOverrides() {
-    const rels = [
-        'stdlib/kp/kpread.nepl',
-        'stdlib/kp/kpwrite.nepl',
-        'stdlib/kp/kpgraph.nepl',
-        'stdlib/kp/kpsearch.nepl',
-        'stdlib/kp/kpprefix.nepl',
-        'stdlib/kp/kpdsu.nepl',
-        'stdlib/kp/kpfenwick.nepl',
-    ];
-    const out = {};
-    for (const rel of rels) {
-        const abs = path.resolve(process.cwd(), rel);
-        if (!fs.existsSync(abs)) continue;
-        const key = '/stdlib/' + rel.replace(/^stdlib\//, '').replace(/\\/g, '/');
-        out[key] = fs.readFileSync(abs, 'utf8');
-    }
-    return out;
+  const rels = [
+    "stdlib/kp/kpread.nepl",
+    "stdlib/kp/kpwrite.nepl",
+    "stdlib/kp/kpgraph.nepl",
+    "stdlib/kp/kpsearch.nepl",
+    "stdlib/kp/kpprefix.nepl",
+    "stdlib/kp/kpdsu.nepl",
+    "stdlib/kp/kpfenwick.nepl",
+  ];
+  const out = {};
+  for (const rel of rels) {
+    const abs = path.resolve(process.cwd(), rel);
+    if (!fs.existsSync(abs)) continue;
+    const key = "/stdlib/" + rel.replace(/^stdlib\//, "").replace(/\\/g, "/");
+    out[key] = fs.readFileSync(abs, "utf8");
+  }
+  return out;
 }
 
-function wrapHtmlPlayground(body, title, description, moduleJsPathOpt) {
-    const t = title || 'NEPLg2 Tutorial';
-    const d = description || 'NEPLg2 tutorial with interactive runnable examples.';
-    const moduleJsPath = (moduleJsPathOpt && String(moduleJsPathOpt)) || './nepl-web.js';
-    const vfsOverrides = buildPlaygroundVfsOverrides();
-    const vfsOverridesJson = JSON.stringify(vfsOverrides);
-    const tocHtml = (arguments[4] && String(arguments[4])) || '';
-    return `<!doctype html>
+function wrapHtmlPlayground(
+  body,
+  title,
+  description,
+  moduleJsPathOpt,
+  tocHtml,
+  searchIndexJson,
+  rootPrefix,
+) {
+  const t = title || "NEPLg2 Tutorial";
+  const d =
+    description || "NEPLg2 tutorial with interactive runnable examples.";
+  const moduleJsPath =
+    (moduleJsPathOpt && String(moduleJsPathOpt)) || "./nepl-web.js";
+  const vfsOverrides = buildPlaygroundVfsOverrides();
+  const vfsOverridesJson = JSON.stringify(vfsOverrides);
+  const tocHtml_ = tocHtml || "";
+  const safeSearchIndexJson = searchIndexJson || "[]";
+  const safeRootPrefix = rootPrefix || "./";
+  return `<!doctype html>
 <html lang="ja">
 <head>
 <meta charset="utf-8"/>
@@ -100,6 +149,9 @@ function wrapHtmlPlayground(body, title, description, moduleJsPathOpt) {
   --accent:#7aa2f7;
   --ok:#59c37a;
   --err:#ff6b6b;
+  --search-bg:#0d1520;
+  --search-border:#2a3f5f;
+  --search-focus:#4a6fa5;
 }
 html,body{
   background:var(--bg);
@@ -164,8 +216,47 @@ ul{margin:10px 0 10px 22px;}
   border-bottom:1px solid var(--border);
   flex-wrap:wrap;
 }
-.nm-badge-main{
-  display:inline-block;padding:2px 8px;border-radius:6px;background:#7aa2f7;color:#1a202e;font-size:11px;font-weight:bold;letter-spacing:.05em;
+.nm-badge{
+  display:inline-block;padding:1px 7px;border-radius:999px;border:1px solid currentColor;background:transparent;color:var(--fg);font-size:11px;font-weight:500;letter-spacing:.02em;
+}
+.nm-badge-struct{color:#9ece6a;}
+.nm-badge-module{color:#7aa2f7;}
+.nm-badge-fn{color:#bb9af7;}
+.nm-badge-trait{color:#ff9e64;}
+.nm-badge-enum{color:#e0af68;}
+.nm-badge-impl{color:#b4f9f8;}
+.nm-badge-let{color:#7dcfff;}
+.search-kind {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  outline: none;
+  font-size: 13px;
+  cursor: pointer;
+}
+.search-kind:focus { border-color: var(--accent); }
+.nm-type-sig {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--muted);
+  font-size: 0.9em;
+  margin-left: 4px;
+}
+:target {
+  background-color: rgba(242, 207, 102, 0.2);
+  border-left: 4px solid #f2cf66;
+  padding-left: 12px;
+  border-radius: 2px;
+  transition: background-color 0.5s;
+}
+.search-result-path {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .nm-badge-flag{
   display:inline-block;padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:rgba(0,0,0,0.2);color:var(--muted);font-size:11px;
@@ -392,6 +483,99 @@ ul{margin:10px 0 10px 22px;}
 .depth-3{padding-left:34px;}
 .depth-4{padding-left:44px;}
 
+/* 検索 UI */
+.search-wrap{
+  position:relative;
+  margin-bottom:10px;
+}
+.search-input{
+  width:100%;
+  box-sizing:border-box;
+  background:var(--search-bg);
+  border:1px solid var(--search-border);
+  border-radius:8px;
+  color:var(--fg);
+  font-size:13px;
+  padding:6px 30px 6px 10px;
+  outline:none;
+  font-family:inherit;
+  transition:border-color 0.2s;
+}
+.search-input:focus{
+  border-color:var(--search-focus);
+}
+.search-input::placeholder{
+  color:var(--muted);
+  opacity:0.7;
+}
+.search-clear{
+  position:absolute;
+  right:6px;
+  top:50%;
+  transform:translateY(-50%);
+  background:none;
+  border:none;
+  color:var(--muted);
+  cursor:pointer;
+  font-size:14px;
+  line-height:1;
+  padding:2px 4px;
+  display:none;
+}
+.search-clear:hover{color:var(--fg);}
+.search-results{
+  position:absolute;
+  top:calc(100% + 4px);
+  left:0;
+  right:0;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:10px;
+  z-index:2000;
+  max-height:60vh;
+  overflow-y:auto;
+  box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  display:none;
+  scrollbar-width:thin;
+  scrollbar-color:#425779 #121a2a;
+}
+.search-results.open{display:block;}
+.search-result-item{
+  display:block;
+  padding:8px 12px;
+  border-bottom:1px solid var(--border);
+  text-decoration:none;
+  color:var(--fg);
+  transition:background 0.15s;
+  cursor:pointer;
+}
+.search-result-item:last-child{border-bottom:none;}
+.search-result-item:hover,.search-result-item.active{
+  background:rgba(122,162,247,0.12);
+}
+.search-result-title{
+  font-size:13px;
+  font-weight:600;
+  color:var(--accent);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.search-result-snippet{
+  font-size:11px;
+  color:var(--muted);
+  margin-top:2px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.search-no-result{
+  padding:12px;
+  color:var(--muted);
+  font-size:12px;
+  text-align:center;
+}
+
 /* サイドバーオーバーレイ（モバイル用） */
 .sidebar-overlay{
   display:none;
@@ -501,6 +685,13 @@ ul{margin:10px 0 10px 22px;}
 }
 </style>
 <script>
+/* ---- 検索ロジック (search.js inline embed) ---- */
+${SEARCH_JS_SOURCE}
+/* ---- 検索インデックス ---- */
+const __SEARCH_INDEX__ = ${safeSearchIndexJson};
+const __ROOT_PREFIX__ = '${escapeHtml(safeRootPrefix)}';
+/* ---- 以下 playground 固有コード ---- */
+
 function nmExpandHidden(marker, nodes){
   marker.style.display = 'none';
   for(const n of nodes){
@@ -1110,6 +1301,132 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   }
+
+  // ---- 検索 UI の初期化 ----
+  const searchKind = document.getElementById('doc-search-kind');
+  const searchPath = document.getElementById('doc-search-path');
+  const searchInput = document.getElementById('doc-search-input');
+  const searchClear = document.getElementById('doc-search-clear');
+  const searchResults = document.getElementById('doc-search-results');
+
+  if (searchInput && searchResults && typeof NeplSearch !== 'undefined') {
+    let activeIdx = -1;
+
+    function getItems() {
+      return searchResults.querySelectorAll('.search-result-item');
+    }
+
+    function setActive(idx) {
+      const items = getItems();
+      items.forEach((el, i) => {
+        el.classList.toggle('active', i === idx);
+      });
+      activeIdx = idx;
+      if (idx >= 0 && items[idx]) {
+        items[idx].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function renderSearchResults(query) {
+      const q = query.trim();
+      const kindVal = searchKind ? searchKind.value : 'all';
+      const pathVal = searchPath ? searchPath.value.trim() : '';
+      if (!q && kindVal === 'all' && !pathVal) {
+        searchResults.classList.remove('open');
+        searchResults.innerHTML = '';
+        if (searchClear) searchClear.style.display = 'none';
+        return;
+      }
+      if (searchClear && q) searchClear.style.display = 'block';
+      else if (searchClear) searchClear.style.display = 'none';
+
+      const hits = NeplSearch.searchIndex(q, __SEARCH_INDEX__, 15, { kind: kindVal, path: pathVal });
+      activeIdx = -1;
+
+      if (hits.length === 0) {
+        searchResults.innerHTML = '<div class="search-no-result">該当なし</div>';
+        searchResults.classList.add('open');
+        return;
+      }
+
+      searchResults.innerHTML = hits.map((h, i) => {
+        const titleEsc = h.title.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const snipEsc = h.snippet.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const pathEsc = (h.path || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const typeEsc = (h.type || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const typeHtml = typeEsc ? ' <span class="nm-type-sig">' + typeEsc + '</span>' : '';
+        const badge = h.kind ? '<span class="nm-badge nm-badge-' + escapeHtml(h.kind) + '">' + escapeHtml(h.kind) + '</span> ' : '';
+        return '<a class="search-result-item" href="' + __ROOT_PREFIX__ + h.url + '" data-idx="' + i + '">'
+             + '<div class="search-result-title">' + badge + titleEsc + typeHtml + '</div>'
+             + '<div class="search-result-path">Path: ' + pathEsc + '</div>'
+             + '<div class="search-result-snippet">' + snipEsc + '</div>'
+             + '</a>';
+      }).join('');
+      searchResults.classList.add('open');
+
+      // 各結果クリック時にサイドバーを閉じる（モバイル）
+      for (const item of searchResults.querySelectorAll('.search-result-item')) {
+        item.addEventListener('click', () => {
+          searchResults.classList.remove('open');
+          searchInput.value = '';
+          if (searchClear) searchClear.style.display = 'none';
+          if (sidebar && window.innerWidth <= 768) {
+            sidebar.classList.remove('mobile-open');
+            sidebarOverlay.classList.remove('mobile-open');
+          }
+        });
+      }
+    }
+
+    if (searchKind) {
+      searchKind.addEventListener('change', () => {
+        renderSearchResults(searchInput.value);
+      });
+    }
+
+    if (searchPath) {
+      searchPath.addEventListener('input', () => {
+        renderSearchResults(searchInput.value);
+      });
+    }
+
+    searchInput.addEventListener('input', () => {
+      renderSearchResults(searchInput.value);
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+      const items = getItems();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActive(Math.min(activeIdx + 1, items.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActive(Math.max(activeIdx - 1, 0));
+      } else if (e.key === 'Enter') {
+        if (activeIdx >= 0 && items[activeIdx]) {
+          items[activeIdx].click();
+        }
+      } else if (e.key === 'Escape') {
+        searchResults.classList.remove('open');
+        searchInput.blur();
+      }
+    });
+
+    if (searchClear) {
+      searchClear.addEventListener('click', () => {
+        searchInput.value = '';
+        renderSearchResults('');
+        searchInput.focus();
+      });
+    }
+
+    // 検索ボックス外クリックで閉じる
+    document.addEventListener('click', (e) => {
+      if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+        searchResults.classList.remove('open');
+      }
+    });
+  }
 });
 </script>
 </head>
@@ -1121,7 +1438,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 <a class="global-play-link pc-only" href="https://neknaj.github.io/NEPLg2/" target="_blank" rel="noopener noreferrer">Web Playground</a>
 <div class="doc-layout">
-${tocHtml}
+${tocHtml_}
 <main>
 ${body}
 </main>
@@ -1159,16 +1476,33 @@ ${body}
 }
 
 function renderHtmlPlayground(ast, opt) {
-    const title = (opt && opt.title) ? opt.title : 'NEPLg2 Tutorial';
-    const description = (opt && opt.description)
-        ? opt.description
-        : 'NEPLg2 tutorial with interactive runnable examples.';
-    const moduleJsPath = (opt && opt.moduleJsPath) ? String(opt.moduleJsPath) : './nepl-web.js';
-    const tocHtml = renderToc((opt && opt.tocLinks) ? opt.tocLinks : [], (opt && opt.tocTitle) ? opt.tocTitle : 'Getting Started');
-    const body = renderBody(ast);
-    return wrapHtmlPlayground(body, title, description, moduleJsPath, tocHtml);
+  const title = opt && opt.title ? opt.title : "NEPLg2 Tutorial";
+  const description =
+    opt && opt.description
+      ? opt.description
+      : "NEPLg2 tutorial with interactive runnable examples.";
+  const moduleJsPath =
+    opt && opt.moduleJsPath ? String(opt.moduleJsPath) : "./nepl-web.js";
+  const tocHtml = renderToc(
+    opt && opt.tocLinks ? opt.tocLinks : [],
+    opt && opt.tocTitle ? opt.tocTitle : "Getting Started",
+  );
+  const searchIndex =
+    opt && Array.isArray(opt.searchIndex) ? opt.searchIndex : [];
+  const searchIndexJson = JSON.stringify(searchIndex);
+  const rootPrefix = opt && opt.rootPrefix ? String(opt.rootPrefix) : "./";
+  const body = renderBody(ast);
+  return wrapHtmlPlayground(
+    body,
+    title,
+    description,
+    moduleJsPath,
+    tocHtml,
+    searchIndexJson,
+    rootPrefix,
+  );
 }
 
 module.exports = {
-    renderHtmlPlayground,
+  renderHtmlPlayground,
 };

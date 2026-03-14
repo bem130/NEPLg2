@@ -8,338 +8,412 @@
 // - Markdown 全機能は実装しないが、ドキュメントとして破綻しやすい部分（リンク / ルビ / コード）を優先する
 
 function escapeHtml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function escapeHtmlAttr(s) {
-    // 属性値用（基本は escapeHtml と同等だが、明示しておく）
-    return escapeHtml(s);
+  // 属性値用（基本は escapeHtml と同等だが、明示しておく）
+  return escapeHtml(s);
+}
+
+function inlinesToPlainText(inlines) {
+  if (!Array.isArray(inlines)) return "";
+  return inlines
+    .map((n) => {
+      if (n.type === "text") return n.text;
+      if (n.type === "code_inline") return n.text;
+      if (n.type === "math") return n.text;
+      if (n.type === "ruby") {
+        return inlinesToPlainText(n.base) + " " + inlinesToPlainText(n.ruby);
+      }
+      if (n.type === "gloss") {
+        const base = inlinesToPlainText(n.base);
+        const notes = (n.notes || [])
+          .map((x) => inlinesToPlainText(x))
+          .join(" ");
+        return base + " " + notes;
+      }
+      if (n.type === "link") return inlinesToPlainText(n.text);
+      return "";
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function makeSlug(text, typeInfo) {
+  let base = text
+    .toLowerCase()
+    .replace(/[\s\u3000]+/g, "-")
+    .replace(
+      /[^\w\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff\uac00-\ud7af\-]/g,
+      "",
+    );
+  if (typeInfo) {
+    const safeType = typeInfo
+      .replace(/\s+/g, "")
+      .replace(/[<>()*]/g, "")
+      .replace(/[,]/g, "-")
+      .replace(/->/g, "-to-")
+      .toLowerCase();
+    base += "--" + safeType;
+  }
+  return base.slice(0, 100);
 }
 
 function rewriteDocLink(hrefRaw) {
-    // 相対リンクの .n.md / .nepl を .html に直す
-    // - http(s):// や mailto: などはそのまま
-    // - #fragment のみもそのまま
-    const href = String(hrefRaw || '').trim();
-    if (href === '') return href;
-    if (href.startsWith('#')) return href;
-    if (/^(https?:|mailto:|data:|javascript:)/i.test(href)) return href;
+  // 相対リンクの .n.md / .nepl を .html に直す
+  // - http(s):// や mailto: などはそのまま
+  // - #fragment のみもそのまま
+  const href = String(hrefRaw || "").trim();
+  if (href === "") return href;
+  if (href.startsWith("#")) return href;
+  if (/^(https?:|mailto:|data:|javascript:)/i.test(href)) return href;
 
-    // URL は / を想定（\ が来た場合も一応 / に寄せる）
-    let p = href.replace(/\\/g, '/');
+  // URL は / を想定（\ が来た場合も一応 / に寄せる）
+  let p = href.replace(/\\/g, "/");
 
-    // hash / query
-    let hash = '';
-    const hashIdx = p.indexOf('#');
-    if (hashIdx >= 0) {
-        hash = p.slice(hashIdx);
-        p = p.slice(0, hashIdx);
-    }
-    let query = '';
-    const qIdx = p.indexOf('?');
-    if (qIdx >= 0) {
-        query = p.slice(qIdx);
-        p = p.slice(0, qIdx);
-    }
+  // hash / query
+  let hash = "";
+  const hashIdx = p.indexOf("#");
+  if (hashIdx >= 0) {
+    hash = p.slice(hashIdx);
+    p = p.slice(0, hashIdx);
+  }
+  let query = "";
+  const qIdx = p.indexOf("?");
+  if (qIdx >= 0) {
+    query = p.slice(qIdx);
+    p = p.slice(0, qIdx);
+  }
 
-    const replaceExt = (ext, newExt) => {
-        if (!p.toLowerCase().endsWith(ext)) return null;
-        const parts = p.split('/');
-        const file = parts.pop();
-        const base = file.slice(0, file.length - ext.length);
-        const newFile = base + newExt;
-        return [...parts, newFile].join('/') + query + hash;
-    };
+  const replaceExt = (ext, newExt) => {
+    if (!p.toLowerCase().endsWith(ext)) return null;
+    const parts = p.split("/");
+    const file = parts.pop();
+    const base = file.slice(0, file.length - ext.length);
+    const newFile = base + newExt;
+    return [...parts, newFile].join("/") + query + hash;
+  };
 
-    const r1 = replaceExt('.n.md', '.html');
-    if (r1 !== null) return r1;
-    const r2 = replaceExt('.nepl', '.html');
-    if (r2 !== null) return r2;
+  const r1 = replaceExt(".n.md", ".html");
+  if (r1 !== null) return r1;
+  const r2 = replaceExt(".nepl", ".html");
+  if (r2 !== null) return r2;
 
-    return p + query + hash;
+  return p + query + hash;
 }
 
 function renderInlines(nodes, opt) {
-    const o = opt || {};
-    let out = '';
+  const o = opt || {};
+  let out = "";
 
-    for (const n of nodes) {
-        if (n.type === 'text') {
-            out += escapeHtml(n.text).replace(/\n/g, '<br/>');
-            continue;
-        }
-        if (n.type === 'code_inline') {
-            out += `<code class="nm-code-inline">${escapeHtml(n.text)}</code>`;
-            continue;
-        }
-        if (n.type === 'math') {
-            const cls = n.display ? 'math-display' : 'math-inline';
-            out += `<span class="${cls}">${escapeHtml(n.text)}</span>`;
-            continue;
-        }
-        if (n.type === 'ruby') {
-            out += `<ruby class="nm-ruby"><rb>${renderInlines(n.base, o)}</rb><rt>${renderInlines(n.ruby, o)}</rt></ruby>`;
-            continue;
-        }
-        if (n.type === 'gloss') {
-            const base = renderInlines(n.base, o);
-            const notes = (n.notes || []).map(x => `<span class="nm-gloss-note">${renderInlines(x, o)}</span>`).join('');
-            out += `<ruby class="nm-gloss"><rb>${base}</rb><rt>${notes}</rt></ruby>`;
-            continue;
-        }
-        if (n.type === 'link') {
-            const href = o.rewriteLinks ? rewriteDocLink(n.href) : String(n.href || '');
-            out += `<a href="${escapeHtmlAttr(href)}">${renderInlines(n.text || [], o)}</a>`;
-            continue;
-        }
-
-        // 既知以外は安全側へ
-        out += escapeHtml(JSON.stringify(n));
+  for (const n of nodes) {
+    if (n.type === "text") {
+      out += escapeHtml(n.text).replace(/\n/g, "<br/>");
+      continue;
+    }
+    if (n.type === "code_inline") {
+      out += `<code class="nm-code-inline">${escapeHtml(n.text)}</code>`;
+      continue;
+    }
+    if (n.type === "math") {
+      const cls = n.display ? "math-display" : "math-inline";
+      out += `<span class="${cls}">${escapeHtml(n.text)}</span>`;
+      continue;
+    }
+    if (n.type === "ruby") {
+      out += `<ruby class="nm-ruby"><rb>${renderInlines(n.base, o)}</rb><rt>${renderInlines(n.ruby, o)}</rt></ruby>`;
+      continue;
+    }
+    if (n.type === "gloss") {
+      const base = renderInlines(n.base, o);
+      const notes = (n.notes || [])
+        .map((x) => `<span class="nm-gloss-note">${renderInlines(x, o)}</span>`)
+        .join("");
+      out += `<ruby class="nm-gloss"><rb>${base}</rb><rt>${notes}</rt></ruby>`;
+      continue;
+    }
+    if (n.type === "link") {
+      const href = o.rewriteLinks
+        ? rewriteDocLink(n.href)
+        : String(n.href || "");
+      out += `<a href="${escapeHtmlAttr(href)}">${renderInlines(n.text || [], o)}</a>`;
+      continue;
     }
 
-    return out;
+    // 既知以外は安全側へ
+    out += escapeHtml(JSON.stringify(n));
+  }
+
+  return out;
 }
 
 function renderCodeBlock(text) {
-    const lines = String(text || '').split('\n');
-    let rendered = '';
+  const lines = String(text || "").split("\n");
+  let rendered = "";
 
-    for (let i = 0; i < lines.length; i++) {
-        const ln0 = lines[i];
-        const nl = (i < lines.length - 1) ? '\n' : '';
+  for (let i = 0; i < lines.length; i++) {
+    const ln0 = lines[i];
+    const nl = i < lines.length - 1 ? "\n" : "";
 
-        if (ln0.startsWith('|')) {
-            // "| " を剥がして hidden 扱い
-            const t = ln0.slice(1).startsWith(' ') ? ln0.slice(2) : ln0.slice(1);
-            rendered += `<span class="nm-hidden">${escapeHtml(t + nl)}</span>`;
-        } else {
-            rendered += escapeHtml(ln0 + nl);
-        }
+    if (ln0.startsWith("|")) {
+      // "| " を剥がして hidden 扱い
+      const t = ln0.slice(1).startsWith(" ") ? ln0.slice(2) : ln0.slice(1);
+      rendered += `<span class="nm-hidden">${escapeHtml(t + nl)}</span>`;
+    } else {
+      rendered += escapeHtml(ln0 + nl);
     }
+  }
 
-    return rendered;
+  return rendered;
 }
 
 function ansiToHtml(text) {
-    const esc = escapeHtml(text);
-    // 簡易的なANSIエスケープシーケンスのHTML変換
-    // 色はCSS変数に依存させる
-    let out = esc
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+  const esc = escapeHtml(text);
+  // 簡易的なANSIエスケープシーケンスのHTML変換
+  // 色はCSS変数に依存させる
+  let out = esc
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
-    // Reset
-    out = out.replace(/\\x1b\[0m/g, '</span>');
-    // Colors (Foreground)
-    out = out.replace(/\\x1b\[31m/g, '<span style="color:var(--err)">'); // Red
-    out = out.replace(/\\x1b\[32m/g, '<span style="color:var(--ok)">');  // Green
-    out = out.replace(/\\x1b\[33m/g, '<span style="color:#e0af68">');    // Yellow
-    out = out.replace(/\\x1b\[34m/g, '<span style="color:var(--accent)">'); // Blue
-    out = out.replace(/\\x1b\[35m/g, '<span style="color:#bb9af7">');    // Magenta
-    out = out.replace(/\\x1b\[36m/g, '<span style="color:#73daca">');    // Cyan
-    out = out.replace(/\\x1b\[37m/g, '<span style="color:#c0caf5">');    // White
-    out = out.replace(/\\x1b\[90m/g, '<span style="color:var(--muted)">'); // Gray
-    out = out.replace(/\\x1b\[1m/g, '<span style="font-weight:bold">');  // Bold
-    return out;
+  // Reset
+  out = out.replace(/\\x1b\[0m/g, "</span>");
+  // Colors (Foreground)
+  out = out.replace(/\\x1b\[31m/g, '<span style="color:var(--err)">'); // Red
+  out = out.replace(/\\x1b\[32m/g, '<span style="color:var(--ok)">'); // Green
+  out = out.replace(/\\x1b\[33m/g, '<span style="color:#e0af68">'); // Yellow
+  out = out.replace(/\\x1b\[34m/g, '<span style="color:var(--accent)">'); // Blue
+  out = out.replace(/\\x1b\[35m/g, '<span style="color:#bb9af7">'); // Magenta
+  out = out.replace(/\\x1b\[36m/g, '<span style="color:#73daca">'); // Cyan
+  out = out.replace(/\\x1b\[37m/g, '<span style="color:#c0caf5">'); // White
+  out = out.replace(/\\x1b\[90m/g, '<span style="color:var(--muted)">'); // Gray
+  out = out.replace(/\\x1b\[1m/g, '<span style="font-weight:bold">'); // Bold
+  return out;
 }
 
 function decodeDoctestValue(raw) {
-    const s = String(raw || '').trim();
-    if (s.startsWith('"') && s.endsWith('"')) {
-        try {
-            return JSON.parse(s);
-        } catch {
-            return s.slice(1, -1);
-        }
+  const s = String(raw || "").trim();
+  if (s.startsWith('"') && s.endsWith('"')) {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return s.slice(1, -1);
     }
-    if (s.startsWith("'") && s.endsWith("'")) {
-        return s.slice(1, -1);
-    }
-    return s
-        .replace(/\\n/g, '\n')
-        .replace(/\\r/g, '\r')
-        .replace(/\\t/g, '\t');
+  }
+  if (s.startsWith("'") && s.endsWith("'")) {
+    return s.slice(1, -1);
+  }
+  return s.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t");
 }
 
 function parseDoctestMeta(rawText) {
-    const raw = String(rawText || '').replace(/\r\n/g, '\n');
-    const firstNl = raw.indexOf('\n');
-    const head = (firstNl >= 0 ? raw.slice(0, firstNl) : raw).trim();
-    
-    const match = head.match(/^\s*neplg2:test(?:\[(.*?)\])?\s*$/);
-    if (!match) return null;
-    const flagsStr = match[1] || '';
-    const flags = flagsStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
-    
-    const tail = firstNl >= 0 ? raw.slice(firstNl + 1) : '';
-    const lines = tail.split('\n');
-    const rows = [];
-    for (let i = 0; i < lines.length; i++) {
-        let ln = String(lines[i] || '').trim();
-        if (!ln) continue;
-        const m = ln.match(/^(stdin|stdout|ret)\s*:\s*([\s\S]*)$/);
-        if (!m) continue;
-        const key = m[1];
-        let valueRaw = m[2] || '';
+  const raw = String(rawText || "").replace(/\r\n/g, "\n");
+  const firstNl = raw.indexOf("\n");
+  const head = (firstNl >= 0 ? raw.slice(0, firstNl) : raw).trim();
 
-        const q = valueRaw.startsWith('"') ? '"' : (valueRaw.startsWith("'") ? "'" : '');
-        if (q) {
-            let esc = false;
-            let closed = false;
-            for (let p = 1; p < valueRaw.length; p++) {
-                const ch = valueRaw[p];
-                if (esc) {
-                    esc = false;
-                    continue;
-                }
-                if (ch === '\\') {
-                    esc = true;
-                    continue;
-                }
-                if (ch === q) {
-                    closed = true;
-                    break;
-                }
-            }
-            while (!closed && i + 1 < lines.length) {
-                i += 1;
-                valueRaw += '\n' + lines[i];
-                esc = false;
-                for (let p = 1; p < valueRaw.length; p++) {
-                    const ch = valueRaw[p];
-                    if (esc) {
-                        esc = false;
-                        continue;
-                    }
-                    if (ch === '\\') {
-                        esc = true;
-                        continue;
-                    }
-                    if (ch === q) {
-                        closed = true;
-                        break;
-                    }
-                }
-            }
+  const match = head.match(/^\s*neplg2:test(?:\[(.*?)\])?\s*$/);
+  if (!match) return null;
+  const flagsStr = match[1] || "";
+  const flags = flagsStr
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  const tail = firstNl >= 0 ? raw.slice(firstNl + 1) : "";
+  const lines = tail.split("\n");
+  const rows = [];
+  for (let i = 0; i < lines.length; i++) {
+    let ln = String(lines[i] || "").trim();
+    if (!ln) continue;
+    const m = ln.match(/^(stdin|stdout|ret)\s*:\s*([\s\S]*)$/);
+    if (!m) continue;
+    const key = m[1];
+    let valueRaw = m[2] || "";
+
+    const q = valueRaw.startsWith('"')
+      ? '"'
+      : valueRaw.startsWith("'")
+        ? "'"
+        : "";
+    if (q) {
+      let esc = false;
+      let closed = false;
+      for (let p = 1; p < valueRaw.length; p++) {
+        const ch = valueRaw[p];
+        if (esc) {
+          esc = false;
+          continue;
         }
-        rows.push({ key, value: decodeDoctestValue(valueRaw) });
+        if (ch === "\\") {
+          esc = true;
+          continue;
+        }
+        if (ch === q) {
+          closed = true;
+          break;
+        }
+      }
+      while (!closed && i + 1 < lines.length) {
+        i += 1;
+        valueRaw += "\n" + lines[i];
+        esc = false;
+        for (let p = 1; p < valueRaw.length; p++) {
+          const ch = valueRaw[p];
+          if (esc) {
+            esc = false;
+            continue;
+          }
+          if (ch === "\\") {
+            esc = true;
+            continue;
+          }
+          if (ch === q) {
+            closed = true;
+            break;
+          }
+        }
+      }
     }
+    rows.push({ key, value: decodeDoctestValue(valueRaw) });
+  }
 
-    return { head, flags, rows };
+  return { head, flags, rows };
 }
 
 function renderDoctestBlock(meta, codeNode) {
-    let out = `<div class="nm-code-container">`;
-    
-    // Header: Badges
-    out += `<div class="nm-code-header">`;
-    out += `<span class="nm-badge-main">TEST</span>`;
-    for (const flag of meta.flags) {
-        out += `<span class="nm-badge-flag">${escapeHtml(flag)}</span>`;
-    }
-    out += `</div>`; // header end
+  let out = `<div class="nm-code-container">`;
 
-    // Code
-    out += `<div class="nm-code-content">`;
-    if (codeNode) {
-        const cls = codeNode.lang ? `language-${escapeHtml(codeNode.lang)}` : '';
-        const rendered = renderCodeBlock(codeNode.text || '');
-        out += `<pre class="nm-code"><code class="${cls}">${rendered}</code></pre>`;
-    }
-    out += `</div>`; // content end
+  // Header: Badges
+  out += `<div class="nm-code-header">`;
+  out += `<span class="nm-badge-main">TEST</span>`;
+  for (const flag of meta.flags) {
+    out += `<span class="nm-badge-flag">${escapeHtml(flag)}</span>`;
+  }
+  out += `</div>`; // header end
 
-    // Footer: stdin/stdout/ret
-    if (meta.rows.length > 0) {
-        out += `<div class="nm-code-footer">`;
-        for (const row of meta.rows) {
-            const key = row.key;
-            const value = row.value;
-            if (key === 'ret') {
-                out += `<div class="nm-doctest-row"><span class="nm-doctest-badge">${escapeHtml(key)}</span><code class="nm-doctest-inline">${escapeHtml(value)}</code></div>`;
-            } else if (key === 'stdout' || key === 'stderr') {
-                // ANSI escape support for stdout/stderr
-                const htmlVal = ansiToHtml(value);
-                out += `<div class="nm-doctest-row"><span class="nm-doctest-badge">${escapeHtml(key)}</span><pre class="nm-doctest-pre">${htmlVal}</pre></div>`;
-            } else {
-                out += `<div class="nm-doctest-row"><span class="nm-doctest-badge">${escapeHtml(key)}</span><pre class="nm-doctest-pre">${escapeHtml(value)}</pre></div>`;
-            }
-        }
-        out += `</div>`; // footer end
-    }
+  // Code
+  out += `<div class="nm-code-content">`;
+  if (codeNode) {
+    const cls = codeNode.lang ? `language-${escapeHtml(codeNode.lang)}` : "";
+    const rendered = renderCodeBlock(codeNode.text || "");
+    out += `<pre class="nm-code"><code class="${cls}">${rendered}</code></pre>`;
+  }
+  out += `</div>`; // content end
 
-    out += `</div>`; // wrapper end
-    return out;
+  // Footer: stdin/stdout/ret
+  if (meta.rows.length > 0) {
+    out += `<div class="nm-code-footer">`;
+    for (const row of meta.rows) {
+      const key = row.key;
+      const value = row.value;
+      if (key === "ret") {
+        out += `<div class="nm-doctest-row"><span class="nm-doctest-badge">${escapeHtml(key)}</span><code class="nm-doctest-inline">${escapeHtml(value)}</code></div>`;
+      } else if (key === "stdout" || key === "stderr") {
+        // ANSI escape support for stdout/stderr
+        const htmlVal = ansiToHtml(value);
+        out += `<div class="nm-doctest-row"><span class="nm-doctest-badge">${escapeHtml(key)}</span><pre class="nm-doctest-pre">${htmlVal}</pre></div>`;
+      } else {
+        out += `<div class="nm-doctest-row"><span class="nm-doctest-badge">${escapeHtml(key)}</span><pre class="nm-doctest-pre">${escapeHtml(value)}</pre></div>`;
+      }
+    }
+    out += `</div>`; // footer end
+  }
+
+  out += `</div>`; // wrapper end
+  return out;
 }
 
 function renderContainerChildren(children, o) {
-    let out = '';
-    let i = 0;
-    while (i < children.length) {
-        const child = children[i];
-        // Check for doctest paragraph followed by code block
-        if (child.type === 'paragraph' && child.inlines && child.inlines.length === 1 && child.inlines[0].type === 'text') {
-            const meta = parseDoctestMeta(child.inlines[0].text);
-            if (meta) {
-                let codeNode = null;
-                if (i + 1 < children.length && children[i + 1].type === 'code') {
-                    codeNode = children[i + 1];
-                    i++; // consume code block
-                }
-                out += renderDoctestBlock(meta, codeNode);
-                i++;
-                continue;
-            }
+  let out = "";
+  let i = 0;
+  while (i < children.length) {
+    const child = children[i];
+    // Check for doctest paragraph followed by code block
+    if (
+      child.type === "paragraph" &&
+      child.inlines &&
+      child.inlines.length === 1 &&
+      child.inlines[0].type === "text"
+    ) {
+      const meta = parseDoctestMeta(child.inlines[0].text);
+      if (meta) {
+        let codeNode = null;
+        if (i + 1 < children.length && children[i + 1].type === "code") {
+          codeNode = children[i + 1];
+          i++; // consume code block
         }
-
-        out += renderNode(child, o);
+        out += renderDoctestBlock(meta, codeNode);
         i++;
+        continue;
+      }
     }
-    return out;
+
+    out += renderNode(child, o);
+    i++;
+  }
+  return out;
 }
 
 function renderNode(node, opt) {
-    const o = opt || { rewriteLinks: true };
+  const o = opt || { rewriteLinks: true };
+  const ancestorSlug = o.ancestorSlug || "";
 
-    if (node.type === 'document') {
-        return renderContainerChildren(node.children, o);
+  if (node.type === "document") {
+    return renderContainerChildren(node.children, o);
+  }
+  if (node.type === "section") {
+    const slug = makeSlug(inlinesToPlainText(node.heading), node.typeInfo);
+    const fullId = ancestorSlug ? ancestorSlug + "-" + slug : slug;
+    const tag = `h${Math.min(6, Math.max(1, node.level))}`;
+    let head = renderInlines(node.heading, o);
+    if (node.typeInfo) {
+      head += ` <span class="nm-type-sig">${escapeHtml(node.typeInfo)}</span>`;
     }
-    if (node.type === 'section') {
-        const tag = `h${Math.min(6, Math.max(1, node.level))}`;
-        const head = renderInlines(node.heading, o);
-        const body = renderContainerChildren(node.children, o);
-        return `<section class="nm-sec level-${node.level}"><${tag}>${head}</${tag}>\n${body}\n</section>`;
+    if (node.kind) {
+      head += ` <span class="nm-badge nm-badge-${escapeHtmlAttr(node.kind)}">${escapeHtml(node.kind)}</span>`;
     }
-    if (node.type === 'paragraph') {
-        return `<p>${renderInlines(node.inlines, o)}</p>`;
-    }
-    if (node.type === 'hr') {
-        return '<hr/>';
-    }
-    if (node.type === 'list') {
-        const items = (node.items || []).map(it => `<li>${renderInlines(it, o)}</li>`).join('\n');
-        return `<ul>\n${items}\n</ul>`;
-    }
-    if (node.type === 'code') {
-        const cls = node.lang ? `language-${escapeHtml(node.lang)}` : '';
-        const rendered = renderCodeBlock(node.text || '');
-        return `<pre class="nm-code"><code class="${cls}">${rendered}</code></pre>`;
-    }
+    const body = renderContainerChildren(node.children, {
+      ...o,
+      ancestorSlug: fullId,
+    });
+    return `<section class="nm-sec level-${node.level}" id="${escapeHtmlAttr(
+      fullId,
+    )}"><${tag}>${head}</${tag}>\n${body}\n</section>`;
+  }
+  if (node.type === "paragraph") {
+    return `<p>${renderInlines(node.inlines, o)}</p>`;
+  }
+  if (node.type === "hr") {
+    return "<hr/>";
+  }
+  if (node.type === "list") {
+    const items = (node.items || [])
+      .map((it) => `<li>${renderInlines(it, o)}</li>`)
+      .join("\n");
+    return `<ul>\n${items}\n</ul>`;
+  }
+  if (node.type === "code") {
+    const cls = node.lang ? `language-${escapeHtml(node.lang)}` : "";
+    const rendered = renderCodeBlock(node.text || "");
+    return `<pre class="nm-code"><code class="${cls}">${rendered}</code></pre>`;
+  }
 
-    return `<pre>${escapeHtml(JSON.stringify(node, null, 2))}</pre>`;
+  return `<pre>${escapeHtml(JSON.stringify(node, null, 2))}</pre>`;
 }
 
 function wrapHtml(body, title, description) {
-    const t = title || 'nm';
-    const d = description || `${t} - NEPLg2 Getting Started tutorial`;
-    return `<!doctype html>
+  const t = title || "nm";
+  const d = description || `${t} - NEPLg2 Getting Started tutorial`;
+  return `<!doctype html>
 <html lang="ja">
 <head>
 <meta charset="utf-8"/>
@@ -425,18 +499,18 @@ ${body}
 }
 
 function renderHtml(ast, opt) {
-    const body = renderNode(ast, opt || { rewriteLinks: true });
-    return wrapHtml(
-        body,
-        (opt && opt.title) ? opt.title : 'nm',
-        (opt && opt.description) ? opt.description : undefined,
-    );
+  const body = renderNode(ast, opt || { rewriteLinks: true });
+  return wrapHtml(
+    body,
+    opt && opt.title ? opt.title : "nm",
+    opt && opt.description ? opt.description : undefined,
+  );
 }
 
 module.exports = {
-    renderHtml,
-    renderNode,
-    renderInlines,
-    wrapHtml,
-    rewriteDocLink,
+  renderHtml,
+  renderNode,
+  renderInlines,
+  wrapHtml,
+  rewriteDocLink,
 };
