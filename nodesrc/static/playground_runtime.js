@@ -566,7 +566,10 @@ self.onmessage = async (e) => {
         const bindings = await loadBindings();
         if (!running) return;
         let wasmBytes = null;
-        if (typeof bindings.compile_source === 'function') {
+        if (typeof bindings.compile_source_with_vfs_and_stdlib === 'function' && typeof bindings.get_bundled_stdlib_vfs === 'function') {
+          const stdlibVfs = bindings.get_bundled_stdlib_vfs();
+          wasmBytes = bindings.compile_source_with_vfs_and_stdlib('/virtual/entry.nepl', src.value, {}, stdlibVfs);
+        } else if (typeof bindings.compile_source === 'function') {
           wasmBytes = bindings.compile_source(src.value);
         }
         setStatus('running...', '');

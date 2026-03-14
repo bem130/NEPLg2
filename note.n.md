@@ -1,3 +1,18 @@
+# 2026-03-14 作業メモ (fix: チュートリアル・stdlibでのコードランナー動作不良の修正)
+
+- [目的/もくてき]:
+  - playground で生成される tutorials や stdlib ドキュメント内のコードが実行できない（コンパイルエラー・クラッシュ）問題を修正する。
+- [根本原因/こんぽんげんいん]:
+  - `nodesrc/static/playground_runtime.js` にて、コードのコンパイルを呼び出す際、標準ライブラリ（stdlib）を含まない `compile_source` メソッドを用いていた。
+  - そのため、チュートリアルなどの `#import "std/stdio" as *` といった標準ライブラリへの依存が解決できず、未定義識別子などでコンパイルが失敗していた。
+- [変更/へんこう]:
+  - `nodesrc/static/playground_runtime.js`
+    - `runBtn.onclick` 内のコンパイル処理を、`compile_source` から `compile_source_with_vfs_and_stdlib` に変更した。
+    - バンドルされた標準ライブラリを `bindings.get_bundled_stdlib_vfs()` により取得し、一緒に渡すようにした。
+- [検証/けんしょう]:
+  - 単体スクリプトでのコンパイル挙動確認にて、正常に `compile_source_with_vfs_and_stdlib` が通り、WASMコードが生成されることを確認。
+  - `node nodesrc/cli.js` コマンドを実行し、コンパイル後のチュートリアルや標準ライブラリの HTML を再生成した。
+
 # 2026-03-14 作業メモ (feat: 検索機能の強化 - オーバーロード対応・型表示・フィルタ追加)
 
 - [目的/もくてき]:
