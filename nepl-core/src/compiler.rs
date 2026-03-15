@@ -511,7 +511,31 @@ fn collect_called_functions_from_body(
 ) {
     match body {
         crate::hir::HirBody::Block(block) => collect_called_functions_from_block(block, stack),
-        crate::hir::HirBody::Wasm(_) | crate::hir::HirBody::LlvmIr(_) => {}
+        crate::hir::HirBody::Wasm(_) => {}
+        crate::hir::HirBody::LlvmIr(block) => {
+            for line in &block.lines {
+                // LLVM IR における call @name(...) または call void @name(...) などのパターンを最低限拾う。
+                // 実際には codegen_llvm.rs 側の parse_llvm_call_requirement と同等のロジックを期待。
+                // 簡略化して "@名前(" 形式を抽出する。
+                let mut s = line.as_str();
+                while let Some(at_idx) = s.find('@') {
+                    let after_at = &s[at_idx + 1..];
+                    if let Some(open_idx) = after_at.find('(') {
+                        let mut name = after_at[..open_idx].trim();
+                        // クォートされている場合は外す
+                        if name.starts_with('"') && name.ends_with('"') && name.len() >= 2 {
+                            name = &name[1..name.len() - 1];
+                        }
+                        if !name.is_empty() {
+                            stack.push(String::from(name));
+                        }
+                        s = &after_at[open_idx + 1..];
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
     }
 }
 

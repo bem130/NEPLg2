@@ -111,7 +111,15 @@ fn has_unbound_type_var(ctx: &TypeCtx, ty: TypeId) -> bool {
                 || has_unbound_type_var(ctx, result)
         }
         TypeKind::Apply { base, args } => {
-            has_unbound_type_var(ctx, base) || args.iter().any(|t| has_unbound_type_var(ctx, *t))
+            match ctx.get(ctx.resolve_id(base)) {
+                TypeKind::Enum { .. } | TypeKind::Struct { .. } => {
+                    args.iter().any(|t| has_unbound_type_var(ctx, *t))
+                }
+                _ => {
+                    has_unbound_type_var(ctx, base)
+                        || args.iter().any(|t| has_unbound_type_var(ctx, *t))
+                }
+            }
         }
         TypeKind::Box(inner) | TypeKind::Reference(inner, _) => has_unbound_type_var(ctx, inner),
         _ => false,

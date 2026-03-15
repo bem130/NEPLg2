@@ -53,7 +53,7 @@ impl core::fmt::Display for LlvmCodegenError {
 ///
 /// 現段階では手書き `#llvmir` を主経路とし、Parsed 関数は最小 subset のみ lower する。
 pub fn emit_ll_from_module(module: &Module) -> Result<String, LlvmCodegenError> {
-    emit_ll_from_module_for_target(module, CompileTarget::Llvm, BuildProfile::Debug)
+    emit_ll_from_module_for_target(module, CompileTarget::Llvm, BuildProfile::Debug, false)
 }
 
 /// `target/profile` 条件を評価しながら LLVM IR を生成する。
@@ -61,6 +61,7 @@ pub fn emit_ll_from_module_for_target(
     module: &Module,
     target: CompileTarget,
     profile: BuildProfile,
+    minify: bool,
 ) -> Result<String, LlvmCodegenError> {
     let mut out = String::new();
     let entry_names = collect_active_entry_names(module, target, profile);
@@ -191,7 +192,12 @@ pub fn emit_ll_from_module_for_target(
         }
     }
 
-    Ok(deduplicate_overloaded_llvm_symbols(out.as_str()))
+    let final_out = deduplicate_overloaded_llvm_symbols(out.as_str());
+    if minify {
+        Ok(minify_ll_text(&final_out))
+    } else {
+        Ok(final_out)
+    }
 }
 
 fn map_core_error_to_llvm_codegen_error(err: crate::error::CoreError) -> LlvmCodegenError {
@@ -805,6 +811,9 @@ fn try_lower_entry_from_hir(
     let hir = &prepared.program.hir_module;
     let mut function_map: BTreeMap<String, &HirFunction> = BTreeMap::new();
     for f in &hir.functions {
+        if crate::wasm_shared::should_skip_wasm_codegen_for_generic(types, f) {
+            continue;
+        }
         function_map.insert(f.name.clone(), f);
     }
     let Some(resolved_entry) = prepared.resolved_entries.get(entry) else {
@@ -837,18 +846,25 @@ fn try_lower_entry_from_hir(
         let needs_base = base_alias
             .map(|base| prepared.reachable_set.contains(base))
             .unwrap_or(false);
+
         let local_name = ll_symbol(ex.local_name.as_str());
         let external_name = ll_symbol(ex.name.as_str());
-        let params = ex
+        let params_ll = ex
             .params
             .iter()
             .map(|t| llty_for_type(&types, *t).ir())
             .collect::<Vec<_>>()
             .join(", ");
         let ret = llty_for_type(&types, ex.result).ir();
-        if declared_extern_symbols.insert(ex.name.clone()) {
-            out.push_str(&format!("declare {} {}({})\n", ret, external_name, params));
+
+        if !prepared.reachable_set.contains(ex.local_name.as_str()) && !needs_base {
+            continue;
         }
+
+        if declared_extern_symbols.insert(ex.name.clone()) {
+            out.push_str(&format!("declare {} {}({})\n", ret, external_name, params_ll));
+        }
+
         if ex.local_name != ex.name {
             let args = ex
                 .params
@@ -878,9 +894,11 @@ fn try_lower_entry_from_hir(
             }
             out.push_str("}\n");
         }
+
         if !emitted_functions.iter().any(|n| n == &ex.local_name) {
             emitted_functions.push(ex.local_name.clone());
         }
+
         if needs_base {
             if let Some(base) = base_alias {
                 if base != ex.local_name
@@ -1202,6 +1220,9 @@ fn llvm_output_mentions_symbol(out: &str, sym: &str) -> bool {
 fn collect_hir_signatures(types: &TypeCtx, module: &HirModule) -> BTreeMap<String, FnSig> {
     let mut out = BTreeMap::new();
     for f in &module.functions {
+        if crate::wasm_shared::should_skip_wasm_codegen_for_generic(types, f) {
+            continue;
+        }
         let params = f.params.iter().map(|p| llty_for_type(types, p.ty)).collect::<Vec<_>>();
         let ret = llty_for_type(types, f.result);
         out.insert(f.name.clone(), FnSig { params, ret });
@@ -2433,6 +2454,217 @@ fn lower_hir_expr(
                 ctx.push_line("  unreachable");
                 return Ok(None);
             }
+            if name == "get_field" {
+                if args.len() != 2 {
+                    panic!(
+                        "internal compiler error: intrinsic get_field requires two args in '{}'",
+                        ctx.function_name
+                    );
+                }
+                let Some((field_ty, offset)) =
+                    aggregate_field_layout(types, ctx, args[0].ty, &args[1])
+                else {
+                    panic!(
+                        "internal compiler error: unsupported get_field selector reached llvm lowering in '{}'",
+                        ctx.function_name
+                    );
+                };
+                let Some(base_v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    panic!(
+                        "internal compiler error: intrinsic get_field base must produce a value in '{}'",
+                        ctx.function_name
+                    );
+                };
+                if base_v.ty != LlTy::I32 {
+                    panic!(
+                        "internal compiler error: intrinsic get_field base must be i32 in '{}' (got {:?})",
+                        ctx.function_name, base_v.ty
+                    );
+                }
+                if is_aggregate_storage_type(types, field_ty) {
+                    let size = type_storage_size_bytes(types, field_ty);
+                    let alloc_name = resolve_alloc_symbol(ctx).ok_or_else(|| {
+                        panic!(
+                            "internal compiler error: alloc function is required for aggregate get_field in '{}'",
+                            ctx.function_name
+                        )
+                    })?;
+                    let dst = ctx.next_tmp();
+                    ctx.push_line(&format!(
+                        "  {} = call i32 {}(i32 {})",
+                        dst,
+                        ll_symbol(alloc_name.as_str()),
+                        size
+                    ));
+                    let dst_ptr8 = ctx.linear_i8_ptr_from_i32(dst.as_str());
+                    let src_base8 = ctx.linear_i8_ptr_from_i32(base_v.repr.as_str());
+                    let src_ptr8 = ctx.next_tmp();
+                    ctx.push_line(&format!(
+                        "  {} = getelementptr i8, i8* {}, i64 {}",
+                        src_ptr8, src_base8, offset
+                    ));
+                    for off in 0..size {
+                        let dst_byte_ptr = ctx.next_tmp();
+                        let src_byte_ptr = ctx.next_tmp();
+                        let byte_val = ctx.next_tmp();
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            dst_byte_ptr, dst_ptr8, off
+                        ));
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            src_byte_ptr, src_ptr8, off
+                        ));
+                        ctx.push_line(&format!(
+                            "  {} = load i8, i8* {}, align 1",
+                            byte_val, src_byte_ptr
+                        ));
+                        ctx.push_line(&format!(
+                            "  store i8 {}, i8* {}, align 1",
+                            byte_val, dst_byte_ptr
+                        ));
+                    }
+                    return Ok(Some(LlValue {
+                        ty: LlTy::I32,
+                        repr: dst,
+                    }));
+                }
+                let out_ty = llty_for_type(types, field_ty);
+                if out_ty == LlTy::Void {
+                    return Ok(None);
+                }
+                let base_ptr8 = ctx.linear_i8_ptr_from_i32(base_v.repr.as_str());
+                let field_ptr8 = ctx.next_tmp();
+                let typed_ptr = ctx.next_tmp();
+                let out = ctx.next_tmp();
+                ctx.push_line(&format!(
+                    "  {} = getelementptr i8, i8* {}, i64 {}",
+                    field_ptr8, base_ptr8, offset
+                ));
+                ctx.push_line(&format!(
+                    "  {} = bitcast i8* {} to {}*",
+                    typed_ptr, field_ptr8, out_ty.ir()
+                ));
+                ctx.push_line(&format!(
+                    "  {} = load {}, {}* {}, align 1",
+                    out,
+                    out_ty.ir(),
+                    out_ty.ir(),
+                    typed_ptr
+                ));
+                return Ok(Some(LlValue {
+                    ty: out_ty,
+                    repr: out,
+                }));
+            }
+            if name == "set_field" {
+                if args.len() != 3 {
+                    panic!(
+                        "internal compiler error: intrinsic set_field requires three args in '{}'",
+                        ctx.function_name
+                    );
+                }
+                let Some((field_ty, offset)) =
+                    aggregate_field_layout(types, ctx, args[0].ty, &args[1])
+                else {
+                    panic!(
+                        "internal compiler error: unsupported set_field selector reached llvm lowering in '{}'",
+                        ctx.function_name
+                    );
+                };
+                let Some(base_v) = lower_hir_expr(types, ctx, &args[0])? else {
+                    panic!(
+                        "internal compiler error: intrinsic set_field base must produce a value in '{}'",
+                        ctx.function_name
+                    );
+                };
+                if base_v.ty != LlTy::I32 {
+                    panic!(
+                        "internal compiler error: intrinsic set_field base must be i32 in '{}' (got {:?})",
+                        ctx.function_name, base_v.ty
+                    );
+                }
+                if is_aggregate_storage_type(types, field_ty) {
+                    let Some(src_v) = lower_hir_expr(types, ctx, &args[2])? else {
+                        panic!(
+                            "internal compiler error: aggregate set_field value must produce a value in '{}'",
+                            ctx.function_name
+                        );
+                    };
+                    if src_v.ty != LlTy::I32 {
+                        panic!(
+                            "internal compiler error: aggregate set_field value must lower to i32 handle in '{}'",
+                            ctx.function_name
+                        );
+                    }
+                    let dst_base8 = ctx.linear_i8_ptr_from_i32(base_v.repr.as_str());
+                    let dst_ptr8 = ctx.next_tmp();
+                    ctx.push_line(&format!(
+                        "  {} = getelementptr i8, i8* {}, i64 {}",
+                        dst_ptr8, dst_base8, offset
+                    ));
+                    let src_ptr8 = ctx.linear_i8_ptr_from_i32(src_v.repr.as_str());
+                    let size = type_storage_size_bytes(types, field_ty);
+                    for off in 0..size {
+                        let dst_byte_ptr = ctx.next_tmp();
+                        let src_byte_ptr = ctx.next_tmp();
+                        let byte_val = ctx.next_tmp();
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            dst_byte_ptr, dst_ptr8, off
+                        ));
+                        ctx.push_line(&format!(
+                            "  {} = getelementptr i8, i8* {}, i64 {}",
+                            src_byte_ptr, src_ptr8, off
+                        ));
+                        ctx.push_line(&format!(
+                            "  {} = load i8, i8* {}, align 1",
+                            byte_val, src_byte_ptr
+                        ));
+                        ctx.push_line(&format!(
+                            "  store i8 {}, i8* {}, align 1",
+                            byte_val, dst_byte_ptr
+                        ));
+                    }
+                    return Ok(None);
+                }
+                let val_ty = llty_for_type(types, field_ty);
+                if val_ty == LlTy::Void {
+                    let _ = lower_hir_expr(types, ctx, &args[2])?;
+                    return Ok(None);
+                }
+                let Some(val_v) = lower_hir_expr(types, ctx, &args[2])? else {
+                    panic!(
+                        "internal compiler error: set_field value must produce a value in '{}'",
+                        ctx.function_name
+                    );
+                };
+                if val_v.ty != val_ty {
+                    panic!(
+                        "internal compiler error: set_field value type mismatch in '{}' ({:?} vs {:?})",
+                        ctx.function_name, val_ty, val_v.ty
+                    );
+                }
+                let base_ptr8 = ctx.linear_i8_ptr_from_i32(base_v.repr.as_str());
+                let field_ptr8 = ctx.next_tmp();
+                let typed_ptr = ctx.next_tmp();
+                ctx.push_line(&format!(
+                    "  {} = getelementptr i8, i8* {}, i64 {}",
+                    field_ptr8, base_ptr8, offset
+                ));
+                ctx.push_line(&format!(
+                    "  {} = bitcast i8* {} to {}*",
+                    typed_ptr, field_ptr8, val_ty.ir()
+                ));
+                ctx.push_line(&format!(
+                    "  store {} {}, {}* {}, align 1",
+                    val_ty.ir(),
+                    val_v.repr,
+                    val_ty.ir(),
+                    typed_ptr
+                ));
+                return Ok(None);
+            }
             if name == "add" {
                 if args.len() != 2 {
                     panic!(
@@ -2873,6 +3105,94 @@ fn is_aggregate_storage_type(types: &TypeCtx, ty: TypeId) -> bool {
     }
 }
 
+fn tuple_field_layout(types: &TypeCtx, ty: TypeId, index: usize) -> Option<(TypeId, i64)> {
+    let ty = types.resolve_id(ty);
+    match types.get(ty) {
+        TypeKind::Tuple { items } => {
+            let item_ty = *items.get(index)?;
+            let offset = items[..index]
+                .iter()
+                .map(|item| type_storage_size_bytes(types, *item))
+                .sum();
+            Some((item_ty, offset))
+        }
+        TypeKind::Apply { base, .. } => tuple_field_layout(types, base, index),
+        _ => None,
+    }
+}
+
+fn struct_field_layout_by_name(
+    types: &TypeCtx,
+    ty: TypeId,
+    field_name: &str,
+) -> Option<(TypeId, i64)> {
+    let ty = types.resolve_id(ty);
+    match types.get(ty) {
+        TypeKind::Struct {
+            fields,
+            field_names,
+            ..
+        } => {
+            let index = field_names.iter().position(|name| name == field_name)?;
+            let field_ty = *fields.get(index)?;
+            let offset = fields[..index]
+                .iter()
+                .map(|field| type_storage_size_bytes(types, *field))
+                .sum();
+            Some((field_ty, offset))
+        }
+        TypeKind::Apply { base, args } => {
+            let base = types.resolve_id(base);
+            match types.get(base) {
+                TypeKind::Struct {
+                    type_params,
+                    fields,
+                    field_names,
+                    ..
+                } => {
+                    let index = field_names.iter().position(|name| name == field_name)?;
+                    let mut tmp = types.clone();
+                    let mapping = type_params
+                        .iter()
+                        .copied()
+                        .zip(args.iter().copied())
+                        .collect::<BTreeMap<_, _>>();
+                    let substituted = fields
+                        .iter()
+                        .map(|field| tmp.substitute(*field, &mapping))
+                        .collect::<Vec<_>>();
+                    let field_ty = *substituted.get(index)?;
+                    let offset = substituted[..index]
+                        .iter()
+                        .map(|field| type_storage_size_bytes(&tmp, *field))
+                        .sum();
+                    Some((field_ty, offset))
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn aggregate_field_layout(
+    types: &TypeCtx,
+    ctx: &LowerCtx<'_>,
+    base_ty: TypeId,
+    field_expr: &HirExpr,
+) -> Option<(TypeId, i64)> {
+    match &field_expr.kind {
+        HirExprKind::LiteralI32(index) if *index >= 0 => {
+            tuple_field_layout(types, base_ty, *index as usize)
+        }
+        HirExprKind::LiteralStr(id) => {
+            let field_name = ctx.strings.get(*id as usize)?;
+            struct_field_layout_by_name(types, base_ty, field_name.as_str())
+        }
+        _ => None,
+    }
+}
+
 fn ll_symbol(name: &str) -> String {
     let escaped = name
         .replace('\\', "\\5C")
@@ -3104,6 +3424,34 @@ fn collect_active_entry_names(
         if let Stmt::Directive(Directive::Entry { name }) = stmt {
             out.push(name.name.clone());
         }
+    }
+    out
+}
+
+pub fn minify_ll_text(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for line in input.lines() {
+        let mut in_quote = false;
+        let mut comment_start = None;
+        for (i, c) in line.char_indices() {
+            if c == '"' {
+                in_quote = !in_quote;
+            } else if c == ';' && !in_quote {
+                comment_start = Some(i);
+                break;
+            }
+        }
+        let content = if let Some(idx) = comment_start {
+            &line[..idx]
+        } else {
+            line
+        };
+        let trimmed = content.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        out.push_str(trimmed);
+        out.push('\n');
     }
     out
 }

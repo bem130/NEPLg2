@@ -2217,6 +2217,28 @@ fn check_function(
             span: f.name.span,
         };
     resolve_type_ids_in_function(ctx, &mut function);
+    if crate::log::is_verbose() && function.name.contains("partition") {
+        let block_ty = match &function.body {
+            HirBody::Block(block) => ctx.type_to_string(block.ty),
+            _ => String::from("<non-block>"),
+        };
+        let tail_ty = match &function.body {
+            HirBody::Block(block) => block
+                .lines
+                .last()
+                .map(|line| ctx.type_to_string(line.expr.ty))
+                .unwrap_or_else(|| String::from("<empty-block>")),
+            _ => String::from("<non-block>"),
+        };
+        std::eprintln!(
+            "check_function result debug: name={} result={} block_ty={} tail_ty={} func_ty={}",
+            function.name,
+            ctx.type_to_string(function.result),
+            block_ty,
+            tail_ty,
+            ctx.type_to_string(function.func_ty)
+        );
+    }
     ctx.restore_type_var_bindings(&func_ty_snapshot);
     if has_error {
         Err(diag_out)
@@ -5414,8 +5436,9 @@ impl<'a> BlockChecker<'a> {
                             .with_id(DiagnosticId::TypeAnnotationMismatch),
                     );
             } else {
-                top.ty = target;
-                top.expr.ty = target;
+                let resolved = self.ctx.resolve_id(target);
+                top.ty = resolved;
+                top.expr.ty = resolved;
             }
         }
     }
@@ -6285,6 +6308,22 @@ impl<'a> BlockChecker<'a> {
         
         // General call or let/set
         if let HirExprKind::Var(name) | HirExprKind::FnValue(name) = &func.expr.kind {
+            if crate::log::is_verbose() && name.contains("Result") {
+                std::eprintln!(
+                    "apply_function debug: callee={} type={} args=[{}] explicit_type_args=[{}]",
+                    name,
+                    self.ctx.type_to_string(func.ty),
+                    args.iter()
+                        .map(|arg| self.ctx.type_to_string(arg.ty))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    type_args
+                        .iter()
+                        .map(|ty| self.ctx.type_to_string(*ty))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
             let symbol_resolved = matches!(&func.expr.kind, HirExprKind::FnValue(_));
             let bindings = if symbol_resolved {
                 self.env.lookup_all_callables_by_symbol(name)
@@ -6914,6 +6953,27 @@ impl<'a> BlockChecker<'a> {
                     if let Some((enm, var)) = parse_variant_name(name) {
                         if let Some(info) = self.enums.get(enm) {
                             if let Some(_vinfo) = info.variants.iter().find(|v| v.name == var) {
+                                if crate::log::is_verbose() && enm == "Result" && var == "Ok" {
+                                    std::eprintln!(
+                                        "enum ctor debug: name={} resolved_args=[{}] user_params=[{}] arg_tys=[{}] c_result={}",
+                                        name,
+                                        resolved_args
+                                            .iter()
+                                            .map(|ty| self.ctx.type_to_string(*ty))
+                                            .collect::<Vec<_>>()
+                                            .join(", "),
+                                        user_params
+                                            .iter()
+                                            .map(|ty| self.ctx.type_to_string(*ty))
+                                            .collect::<Vec<_>>()
+                                            .join(", "),
+                                        args.iter()
+                                            .map(|arg| self.ctx.type_to_string(arg.ty))
+                                            .collect::<Vec<_>>()
+                                            .join(", "),
+                                        self.ctx.type_to_string(c_result)
+                                    );
+                                }
                                 if c_params.len() == 1 && args.len() != 1 {
                                     self.diagnostics.push(Diagnostic::error(
                                         "constructor expects one argument",

@@ -31,6 +31,7 @@ pub struct CodegenResult {
 
 #[derive(Debug, Clone)]
 struct StringLower {
+    values: Vec<String>,
     offsets: Vec<u32>,
     segments: Vec<(u32, Vec<u8>)>,
     min_pages: u32,
@@ -48,6 +49,7 @@ impl StringLower {
 }
 
 fn lower_strings(strings: &[String]) -> StringLower {
+    let values = strings.to_vec();
     let mut offsets = Vec::new();
     let mut segments = Vec::new();
     // Reserve the first 8 bytes for allocator metadata (heap ptr + free list head).
@@ -66,6 +68,7 @@ fn lower_strings(strings: &[String]) -> StringLower {
     let heap_base = align_to(cursor, 4);
     let min_pages = ((heap_base + 0xFFFF) / 0x10000).max(1);
     StringLower {
+        values,
         offsets,
         segments,
         min_pages,
@@ -238,6 +241,114 @@ fn is_aggregate_storage_type(ctx: &TypeCtx, ty: TypeId) -> bool {
     }
 }
 
+fn tuple_field_layout(ctx: &TypeCtx, ty: TypeId, index: usize) -> Option<(TypeId, u32)> {
+    let ty = ctx.resolve_id(ty);
+    match ctx.get(ty) {
+        TypeKind::Tuple { items } => {
+            let item_ty = *items.get(index)?;
+            let offset = items[..index]
+                .iter()
+                .map(|item| type_storage_size_bytes(ctx, *item))
+                .sum();
+            Some((item_ty, offset))
+        }
+        TypeKind::Apply { base, .. } => tuple_field_layout(ctx, base, index),
+        _ => None,
+    }
+}
+
+fn tuple_field_layouts_by_result(ctx: &TypeCtx, ty: TypeId, result_ty: TypeId) -> Vec<(u32, TypeId, u32)> {
+    let ty = ctx.resolve_id(ty);
+    match ctx.get(ty) {
+        TypeKind::Tuple { items } => {
+            let mut out = Vec::new();
+            let mut offset = 0u32;
+            let want = ctx.resolve_id(result_ty);
+            for (index, item_ty) in items.iter().copied().enumerate() {
+                if ctx.resolve_id(item_ty) == want {
+                    out.push((index as u32, item_ty, offset));
+                }
+                offset += type_storage_size_bytes(ctx, item_ty);
+            }
+            out
+        }
+        TypeKind::Apply { base, .. } => tuple_field_layouts_by_result(ctx, base, result_ty),
+        _ => Vec::new(),
+    }
+}
+
+fn struct_field_layout_by_name(
+    ctx: &TypeCtx,
+    ty: TypeId,
+    field_name: &str,
+) -> Option<(TypeId, u32)> {
+    let ty = ctx.resolve_id(ty);
+    match ctx.get(ty) {
+        TypeKind::Struct {
+            fields,
+            field_names,
+            ..
+        } => {
+            let index = field_names.iter().position(|name| name == field_name)?;
+            let field_ty = *fields.get(index)?;
+            let offset = fields[..index]
+                .iter()
+                .map(|field| type_storage_size_bytes(ctx, *field))
+                .sum();
+            Some((field_ty, offset))
+        }
+        TypeKind::Apply { base, args } => {
+            let base = ctx.resolve_id(base);
+            match ctx.get(base) {
+                TypeKind::Struct {
+                    type_params,
+                    fields,
+                    field_names,
+                    ..
+                } => {
+                    let index = field_names.iter().position(|name| name == field_name)?;
+                    let mut tmp = ctx.clone();
+                    let mapping = type_params
+                        .iter()
+                        .copied()
+                        .zip(args.iter().copied())
+                        .collect::<BTreeMap<_, _>>();
+                    let substituted = fields
+                        .iter()
+                        .map(|field| tmp.substitute(*field, &mapping))
+                        .collect::<Vec<_>>();
+                    let field_ty = *substituted.get(index)?;
+                    let offset = substituted[..index]
+                        .iter()
+                        .map(|field| type_storage_size_bytes(&tmp, *field))
+                        .sum();
+                    Some((field_ty, offset))
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn aggregate_field_layout(
+    ctx: &TypeCtx,
+    base_ty: TypeId,
+    field_expr: &HirExpr,
+    strings: &StringLower,
+) -> Option<(TypeId, u32)> {
+    match &field_expr.kind {
+        HirExprKind::LiteralI32(index) if *index >= 0 => {
+            tuple_field_layout(ctx, base_ty, *index as usize)
+        }
+        HirExprKind::LiteralStr(id) => {
+            let field_name = strings.values.get(*id as usize)?;
+            struct_field_layout_by_name(ctx, base_ty, field_name.as_str())
+        }
+        _ => None,
+    }
+}
+
 fn collect_indirect_sigs(
     expr: &HirExpr,
     out: &mut Vec<(Vec<ValType>, Vec<ValType>)>,
@@ -344,6 +455,15 @@ fn collect_indirect_sigs(
 }
 
 pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
+    if crate::log::is_verbose() {
+        let names = module
+            .functions
+            .iter()
+            .filter(|f| f.name.starts_with("new__"))
+            .map(|f| f.name.clone())
+            .collect::<Vec<_>>();
+        std::eprintln!("wasm codegen functions(new*): {:?}", names);
+    }
     let strings = lower_strings(&module.string_literals);
 
     // Build imports / function list (builtins first)
@@ -367,11 +487,17 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
         ));
     }
 
-    let reachable_functions = collect_reachable_wasm_functions(module);
-
     // User functions
     for f in &module.functions {
-        if !reachable_functions.contains(&f.name) {
+        if crate::log::is_verbose() && f.name.contains("partition") {
+            std::eprintln!(
+                "wasm codegen candidate partition-like: {} skip={} func_ty={}",
+                f.name,
+                crate::wasm_shared::should_skip_wasm_codegen_for_generic(ctx, f),
+                ctx.type_to_string(f.func_ty)
+            );
+        }
+        if crate::wasm_shared::should_skip_wasm_codegen_for_generic(ctx, f) {
             continue;
         }
         let Some(sig) = wasm_sig(ctx, f.result, &f.params) else {
@@ -416,6 +542,9 @@ pub fn generate_wasm(ctx: &TypeCtx, module: &HirModule) -> CodegenResult {
     }
     let mut indirect_sigs = Vec::new();
     for f in &module.functions {
+        if crate::wasm_shared::should_skip_wasm_codegen_for_generic(ctx, f) {
+            continue;
+        }
         if let HirBody::Block(b) = &f.body {
             for line in &b.lines {
                 collect_indirect_sigs(&line.expr, &mut indirect_sigs, ctx);
@@ -1319,6 +1448,285 @@ fn gen_expr(
                         None
                     }
                     _ => None,
+                }
+            } else if name == "get_field" {
+                if args.len() != 2 {
+                    panic!(
+                        "internal compiler error: intrinsic get_field requires two args"
+                    );
+                }
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
+                let base_local = locals.alloc_temp(ValType::I32);
+                insts.push(Instruction::LocalSet(base_local));
+                if let Some((field_ty, offset)) =
+                    aggregate_field_layout(ctx, args[0].ty, &args[1], strings)
+                {
+                    if is_aggregate_storage_type(ctx, field_ty) {
+                        let size = type_storage_size_bytes(ctx, field_ty) as i32;
+                        insts.push(Instruction::I32Const(size));
+                        emit_alloc_call(locals, insts);
+                        let dst_local = locals.alloc_temp(ValType::I32);
+                        insts.push(Instruction::LocalSet(dst_local));
+                        for off in 0..size {
+                            insts.push(Instruction::LocalGet(dst_local));
+                            if off != 0 {
+                                insts.push(Instruction::I32Const(off));
+                                insts.push(Instruction::I32Add);
+                            }
+                            insts.push(Instruction::LocalGet(base_local));
+                            insts.push(Instruction::I32Const(offset as i32 + off));
+                            insts.push(Instruction::I32Add);
+                            insts.push(Instruction::I32Load8U(MemArg {
+                                offset: 0,
+                                align: 0,
+                                memory_index: 0,
+                            }));
+                            insts.push(Instruction::I32Store8(MemArg {
+                                offset: 0,
+                                align: 0,
+                                memory_index: 0,
+                            }));
+                        }
+                        return Some(ValType::I32);
+                    }
+                    let field_kind = ctx.get(field_ty);
+                    insts.push(Instruction::LocalGet(base_local));
+                    if offset != 0 {
+                        insts.push(Instruction::I32Const(offset as i32));
+                        insts.push(Instruction::I32Add);
+                    }
+                    return match valtype(&field_kind) {
+                        Some(ValType::I32) => {
+                            if matches!(field_kind, TypeKind::U8) {
+                                insts.push(Instruction::I32Load8U(MemArg {
+                                    offset: 0,
+                                    align: 0,
+                                    memory_index: 0,
+                                }));
+                            } else {
+                                insts.push(Instruction::I32Load(MemArg {
+                                    offset: 0,
+                                    align: 2,
+                                    memory_index: 0,
+                                }));
+                            }
+                            Some(ValType::I32)
+                        }
+                        Some(ValType::F32) => {
+                            insts.push(Instruction::F32Load(MemArg {
+                                offset: 0,
+                                align: 2,
+                                memory_index: 0,
+                            }));
+                            Some(ValType::F32)
+                        }
+                        Some(ValType::I64) => {
+                            insts.push(Instruction::I64Load(MemArg {
+                                offset: 0,
+                                align: 3,
+                                memory_index: 0,
+                            }));
+                            Some(ValType::I64)
+                        }
+                        Some(ValType::F64) => {
+                            insts.push(Instruction::F64Load(MemArg {
+                                offset: 0,
+                                align: 3,
+                                memory_index: 0,
+                            }));
+                            Some(ValType::F64)
+                        }
+                        None => {
+                            insts.push(Instruction::Drop);
+                            None
+                        }
+                        _ => None,
+                    };
+                }
+                let candidate_layouts = tuple_field_layouts_by_result(ctx, args[0].ty, expr.ty);
+                if candidate_layouts.is_empty() {
+                    panic!(
+                        "internal compiler error: unsupported get_field selector reached wasm codegen"
+                    );
+                }
+                gen_expr(ctx, &args[1], name_map, sig_map, strings, locals, insts);
+                let idx_local = locals.alloc_temp(ValType::I32);
+                insts.push(Instruction::LocalSet(idx_local));
+                if is_aggregate_storage_type(ctx, expr.ty) {
+                    let size = type_storage_size_bytes(ctx, expr.ty) as i32;
+                    insts.push(Instruction::I32Const(size));
+                    emit_alloc_call(locals, insts);
+                    let dst_local = locals.alloc_temp(ValType::I32);
+                    insts.push(Instruction::LocalSet(dst_local));
+                    for (position, _field_ty, offset) in candidate_layouts {
+                        insts.push(Instruction::LocalGet(idx_local));
+                        insts.push(Instruction::I32Const(position as i32));
+                        insts.push(Instruction::I32Eq);
+                        insts.push(Instruction::If(wasm_encoder::BlockType::Empty));
+                        for off in 0..size {
+                            insts.push(Instruction::LocalGet(dst_local));
+                            if off != 0 {
+                                insts.push(Instruction::I32Const(off));
+                                insts.push(Instruction::I32Add);
+                            }
+                            insts.push(Instruction::LocalGet(base_local));
+                            insts.push(Instruction::I32Const(offset as i32 + off));
+                            insts.push(Instruction::I32Add);
+                            insts.push(Instruction::I32Load8U(MemArg {
+                                offset: 0,
+                                align: 0,
+                                memory_index: 0,
+                            }));
+                            insts.push(Instruction::I32Store8(MemArg {
+                                offset: 0,
+                                align: 0,
+                                memory_index: 0,
+                            }));
+                        }
+                        insts.push(Instruction::End);
+                    }
+                    Some(ValType::I32)
+                } else {
+                    let out_local = locals.alloc_temp(ValType::I32);
+                    insts.push(Instruction::I32Const(0));
+                    insts.push(Instruction::LocalSet(out_local));
+                    for (position, field_ty, offset) in candidate_layouts {
+                        let field_kind = ctx.get(field_ty);
+                        insts.push(Instruction::LocalGet(idx_local));
+                        insts.push(Instruction::I32Const(position as i32));
+                        insts.push(Instruction::I32Eq);
+                        insts.push(Instruction::If(wasm_encoder::BlockType::Empty));
+                        insts.push(Instruction::LocalGet(base_local));
+                        if offset != 0 {
+                            insts.push(Instruction::I32Const(offset as i32));
+                            insts.push(Instruction::I32Add);
+                        }
+                        match valtype(&field_kind) {
+                            Some(ValType::I32) => {
+                                if matches!(field_kind, TypeKind::U8) {
+                                    insts.push(Instruction::I32Load8U(MemArg {
+                                        offset: 0,
+                                        align: 0,
+                                        memory_index: 0,
+                                    }));
+                                } else {
+                                    insts.push(Instruction::I32Load(MemArg {
+                                        offset: 0,
+                                        align: 2,
+                                        memory_index: 0,
+                                    }));
+                                }
+                                insts.push(Instruction::LocalSet(out_local));
+                            }
+                            _ => {
+                                panic!(
+                                    "internal compiler error: unsupported runtime get_field valtype reached wasm codegen"
+                                );
+                            }
+                        }
+                        insts.push(Instruction::End);
+                    }
+                    insts.push(Instruction::LocalGet(out_local));
+                    Some(ValType::I32)
+                }
+            } else if name == "set_field" {
+                if args.len() != 3 {
+                    panic!(
+                        "internal compiler error: intrinsic set_field requires three args"
+                    );
+                }
+                let Some((field_ty, offset)) =
+                    aggregate_field_layout(ctx, args[0].ty, &args[1], strings)
+                else {
+                    panic!(
+                        "internal compiler error: unsupported set_field selector reached wasm codegen"
+                    );
+                };
+                gen_expr(ctx, &args[0], name_map, sig_map, strings, locals, insts);
+                let base_local = locals.alloc_temp(ValType::I32);
+                insts.push(Instruction::LocalSet(base_local));
+                if is_aggregate_storage_type(ctx, field_ty) {
+                    gen_expr(ctx, &args[2], name_map, sig_map, strings, locals, insts);
+                    let src_local = locals.alloc_temp(ValType::I32);
+                    insts.push(Instruction::LocalSet(src_local));
+                    let size = type_storage_size_bytes(ctx, field_ty) as i32;
+                    for off in 0..size {
+                        insts.push(Instruction::LocalGet(base_local));
+                        insts.push(Instruction::I32Const(offset as i32 + off));
+                        insts.push(Instruction::I32Add);
+                        insts.push(Instruction::LocalGet(src_local));
+                        if off != 0 {
+                            insts.push(Instruction::I32Const(off));
+                            insts.push(Instruction::I32Add);
+                        }
+                        insts.push(Instruction::I32Load8U(MemArg {
+                            offset: 0,
+                            align: 0,
+                            memory_index: 0,
+                        }));
+                        insts.push(Instruction::I32Store8(MemArg {
+                            offset: 0,
+                            align: 0,
+                            memory_index: 0,
+                        }));
+                    }
+                    None
+                } else {
+                    let field_kind = ctx.get(field_ty);
+                    insts.push(Instruction::LocalGet(base_local));
+                    if offset != 0 {
+                        insts.push(Instruction::I32Const(offset as i32));
+                        insts.push(Instruction::I32Add);
+                    }
+                    gen_expr(ctx, &args[2], name_map, sig_map, strings, locals, insts);
+                    match valtype(&field_kind) {
+                        Some(ValType::I32) => {
+                            if matches!(field_kind, TypeKind::U8) {
+                                insts.push(Instruction::I32Store8(MemArg {
+                                    offset: 0,
+                                    align: 0,
+                                    memory_index: 0,
+                                }));
+                            } else {
+                                insts.push(Instruction::I32Store(MemArg {
+                                    offset: 0,
+                                    align: 2,
+                                    memory_index: 0,
+                                }));
+                            }
+                            None
+                        }
+                        Some(ValType::F32) => {
+                            insts.push(Instruction::F32Store(MemArg {
+                                offset: 0,
+                                align: 2,
+                                memory_index: 0,
+                            }));
+                            None
+                        }
+                        Some(ValType::I64) => {
+                            insts.push(Instruction::I64Store(MemArg {
+                                offset: 0,
+                                align: 3,
+                                memory_index: 0,
+                            }));
+                            None
+                        }
+                        Some(ValType::F64) => {
+                            insts.push(Instruction::F64Store(MemArg {
+                                offset: 0,
+                                align: 3,
+                                memory_index: 0,
+                            }));
+                            None
+                        }
+                        None => {
+                            insts.push(Instruction::Drop);
+                            insts.push(Instruction::Drop);
+                            None
+                        }
+                        _ => None,
+                    }
                 }
             } else if name == "callsite_span" {
                 let size = 12;

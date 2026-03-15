@@ -148,6 +148,66 @@ struct Monomorphizer<'a> {
 }
 
 impl<'a> Monomorphizer<'a> {
+    fn type_has_unbound_var(&self, ty: TypeId) -> bool {
+        let resolved = self.ctx.resolve_id(ty);
+        match self.ctx.get(resolved) {
+            TypeKind::Var(tv) => match tv.binding {
+                Some(next) => self.type_has_unbound_var(next),
+                None => true,
+            },
+            TypeKind::Tuple { items } => items.iter().any(|item| self.type_has_unbound_var(*item)),
+            TypeKind::Struct {
+                type_params,
+                fields,
+                ..
+            } => {
+                type_params.iter().any(|tp| self.type_has_unbound_var(*tp))
+                    || fields.iter().any(|field| self.type_has_unbound_var(*field))
+            }
+            TypeKind::Enum { type_params, variants, .. } => {
+                type_params.iter().any(|tp| self.type_has_unbound_var(*tp))
+                    || variants
+                        .iter()
+                        .filter_map(|variant| variant.payload)
+                        .any(|payload| self.type_has_unbound_var(payload))
+            }
+            TypeKind::Function {
+                type_params,
+                params,
+                result,
+                ..
+            } => {
+                type_params.iter().any(|tp| self.type_has_unbound_var(*tp))
+                    || params.iter().any(|param| self.type_has_unbound_var(*param))
+                    || self.type_has_unbound_var(result)
+            }
+            TypeKind::Apply { base, args } => {
+                self.type_has_unbound_var(base)
+                    || args.iter().any(|arg| self.type_has_unbound_var(*arg))
+            }
+            TypeKind::Box(inner) | TypeKind::Reference(inner, _) => self.type_has_unbound_var(inner),
+            _ => false,
+        }
+    }
+
+    fn resolve_user_function_name(&self, name: &str) -> Option<String> {
+        if self.funcs.contains_key(name) {
+            return Some(String::from(name));
+        }
+        let mut prefix = String::from(name);
+        prefix.push_str("__");
+        let mut matched: Option<String> = None;
+        for cand in self.funcs.keys() {
+            if cand.starts_with(&prefix) {
+                if matched.is_some() {
+                    return None;
+                }
+                matched = Some(cand.clone());
+            }
+        }
+        matched
+    }
+
     fn collect_unresolved_trait_calls(&self, func: &HirFunction) -> Vec<String> {
         fn walk_expr(ctx: &TypeCtx, func_name: &str, expr: &HirExpr, out: &mut Vec<String>) {
             match &expr.kind {
@@ -482,9 +542,36 @@ impl<'a> Monomorphizer<'a> {
             return;
         }
 
+        if crate::log::is_verbose() && orig_name.contains("partition") {
+            std::eprintln!(
+                "monomorphize: process '{}' -> '{}' args={}",
+                orig_name,
+                mangled,
+                args.iter()
+                    .map(|arg| self.ctx.type_to_string(*arg))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+
         let mut f = match self.funcs.get(&orig_name) {
             Some(f) => f.clone(),
-            None => return,
+            None => {
+                if crate::log::is_verbose() {
+                    let related = self
+                        .funcs
+                        .keys()
+                        .filter(|cand| cand.contains("partition") || cand.contains(orig_name.as_str()))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    std::eprintln!(
+                        "monomorphize: missing original function '{}' candidates={:?}",
+                        orig_name,
+                        related
+                    );
+                }
+                return;
+            }
         };
 
         let mut mapping = BTreeMap::new();
@@ -504,11 +591,17 @@ impl<'a> Monomorphizer<'a> {
 
         // Substitute body
         f.name = mangled.clone();
-        f.func_ty = self.ctx.substitute(f.func_ty, &mapping);
         f.result = self.ctx.substitute(f.result, &mapping);
         for p in &mut f.params {
             p.ty = self.ctx.substitute(p.ty, &mapping);
         }
+        f.func_ty = match self.ctx.get(f.func_ty) {
+            TypeKind::Function { effect, .. } if !args.is_empty() => {
+                let params = f.params.iter().map(|p| p.ty).collect::<Vec<_>>();
+                self.ctx.function(Vec::new(), params, f.result, effect)
+            }
+            _ => self.ctx.substitute(f.func_ty, &mapping),
+        };
 
         match &mut f.body {
             HirBody::Block(b) => self.substitute_block(b, &mapping, &local_names),
@@ -516,6 +609,29 @@ impl<'a> Monomorphizer<'a> {
             HirBody::LlvmIr(_) => {} // LLVM IR blocks don't hold TypeIds usually
         }
 
+        if let HirBody::Block(b) = &f.body {
+            let block_ty = self.ctx.resolve_id(b.ty);
+            if self.type_has_unbound_var(f.result) && !self.type_has_unbound_var(block_ty) {
+                f.result = block_ty;
+                if let TypeKind::Function { effect, .. } = self.ctx.get(f.func_ty) {
+                    let params = f.params.iter().map(|p| p.ty).collect::<Vec<_>>();
+                    f.func_ty = self.ctx.function(Vec::new(), params, f.result, effect);
+                }
+            }
+        }
+
+        if crate::log::is_verbose() && f.name.contains("partition") {
+            std::eprintln!(
+                "monomorphize: insert specialized '{}' result={} block_ty={} func_ty={}",
+                mangled,
+                self.ctx.type_to_string(f.result),
+                match &f.body {
+                    HirBody::Block(b) => self.ctx.type_to_string(b.ty),
+                    _ => String::from("<non-block>"),
+                },
+                self.ctx.type_to_string(f.func_ty)
+            );
+        }
         self.specialized.insert(mangled, f);
     }
 
@@ -548,45 +664,13 @@ impl<'a> Monomorphizer<'a> {
                 if local_names.contains(name) {
                     return;
                 }
-                if self.funcs.contains_key(name) {
-                    *name = self.request_instantiation(name.clone(), Vec::new());
-                } else {
-                    let mut prefix = name.clone();
-                    prefix.push_str("__");
-                    let mut matched: Option<String> = None;
-                    for cand in self.funcs.keys() {
-                        if cand.starts_with(&prefix) {
-                            if matched.is_some() {
-                                matched = None;
-                                break;
-                            }
-                            matched = Some(cand.clone());
-                        }
-                    }
-                    if let Some(found) = matched {
-                        *name = self.request_instantiation(found, Vec::new());
-                    }
+                if let Some(found) = self.resolve_user_function_name(name.as_str()) {
+                    *name = self.request_instantiation(found, Vec::new());
                 }
             }
             HirExprKind::FnValue(name) => {
-                if self.funcs.contains_key(name) {
-                    *name = self.request_instantiation(name.clone(), Vec::new());
-                } else {
-                    let mut prefix = name.clone();
-                    prefix.push_str("__");
-                    let mut matched: Option<String> = None;
-                    for cand in self.funcs.keys() {
-                        if cand.starts_with(&prefix) {
-                            if matched.is_some() {
-                                matched = None;
-                                break;
-                            }
-                            matched = Some(cand.clone());
-                        }
-                    }
-                    if let Some(found) = matched {
-                        *name = self.request_instantiation(found, Vec::new());
-                    }
+                if let Some(found) = self.resolve_user_function_name(name.as_str()) {
+                    *name = self.request_instantiation(found, Vec::new());
                 }
             }
             HirExprKind::Call { callee, args } => {
@@ -599,7 +683,11 @@ impl<'a> Monomorphizer<'a> {
                             *arg = self.ctx.substitute(*arg, mapping);
                         }
                         // Request instantiation of the callee with concrete types
-                        *name = self.request_instantiation(name.clone(), type_args.clone());
+                        if let Some(found) = self.resolve_user_function_name(name.as_str()) {
+                            *name = self.request_instantiation(found, type_args.clone());
+                        } else {
+                            *name = self.request_instantiation(name.clone(), type_args.clone());
+                        }
                         type_args.clear(); // Call site in WASM doesn't need type_args anymore
                     }
                     FuncRef::Trait {

@@ -170,6 +170,9 @@ struct Cli {
 
     #[arg(long, help = "Run the code if the output format is wasm")]
     run: bool,
+
+    #[arg(long, help = "Only check the code for errors without generating output")]
+    check: bool,
     #[arg(
         value_name = "ARGS",
         num_args = 0..,
@@ -199,6 +202,9 @@ enum Emit {
     Wat,
     #[value(name = "wat-min")]
     WatMin,
+    Llvm,
+    #[value(name = "llvm-min")]
+    LlvmMin,
     All,
 }
 
@@ -230,10 +236,9 @@ fn execute(cli: Cli) -> Result<()> {
     if let Some(Command::Test(args)) = cli.command {
         return run_tests(args, cli.verbose);
     }
-    if !cli.run && cli.output.is_none() {
-        return Err(anyhow::anyhow!("Either --run or --output is required"));
+    if !cli.run && !cli.check && cli.output.is_none() {
+        return Err(anyhow::anyhow!("Either --run, --check or --output is required"));
     }
-    let emits = expand_emits(&cli.emit);
     let program_name = cli
         .input
         .clone()
@@ -244,15 +249,10 @@ fn execute(cli: Cli) -> Result<()> {
             eprintln!("DEBUG: Creating Loader for path: {}", path);
             let mut loader = Loader::new(stdlib_root()?);
             eprintln!("DEBUG: Loader created, starting load");
-            // Loader::load は &PathBuf を要求するため、入力パス(String)を PathBuf に変換して渡す
-            let entry: PathBuf = PathBuf::from(path);
+            let entry = PathBuf::from(path);
             match loader.load(&entry) {
-                Ok(res) => {
-                    eprintln!("DEBUG: Load successful");
-                    (res.module, loader.source_map().clone())
-                },
+                Ok(res) => (res.module, loader.source_map().clone()),
                 Err(e) => {
-                    eprintln!("DEBUG: Load failed: {:?}", e);
                     if let nepl_core::loader::LoaderError::Core(CoreError::Diagnostics(diags)) = &e {
                         render_diagnostics(diags, loader.source_map());
                         std::process::exit(1);
@@ -262,18 +262,12 @@ fn execute(cli: Cli) -> Result<()> {
             }
         }
         None => {
-            let mut buffer = String::new();
-            io::stdin().read_to_string(&mut buffer)?;
-            eprintln!("DEBUG: Creating Loader for stdin");
+            let mut buf = String::new();
+            std::io::stdin().read_to_string(&mut buf)?;
             let mut loader = Loader::new(stdlib_root()?);
-            eprintln!("DEBUG: Loader created, starting load_inline");
-            match loader.load_inline(PathBuf::from("<stdin>"), buffer) {
-                Ok(res) => {
-                    eprintln!("DEBUG: Load inline successful");
-                    (res.module, loader.source_map().clone())
-                },
+            match loader.load_inline(PathBuf::from("<stdin>"), buf) {
+                Ok(res) => (res.module, loader.source_map().clone()),
                 Err(e) => {
-                    eprintln!("DEBUG: Load inline failed: {:?}", e);
                     if let nepl_core::loader::LoaderError::Core(CoreError::Diagnostics(diags)) = &e {
                         render_diagnostics(diags, loader.source_map());
                         std::process::exit(1);
@@ -284,42 +278,62 @@ fn execute(cli: Cli) -> Result<()> {
         }
     };
 
-    let cli_target = cli.target.as_deref().map(|t| match t {
+    let target_override = cli.target.as_deref().map(|t| match t {
+        "wasm" | "core" => CompileTarget::Wasm,
         "wasi" | "std" => CompileTarget::Wasi,
         "wasix" => CompileTarget::Wasix,
         "llvm" => CompileTarget::Llvm,
-        "wasm" | "core" => CompileTarget::Wasm,
-        _ => CompileTarget::Wasm,
+        _ => unreachable!(),
     });
-    let target_override = cli_target;
+
+    let mut emits = expand_emits(&cli.emit);
+
+    // If target is llvm, and no specific llvm-ish emits are requested,
+    // add Llvm to emits. This handles the case where --emit defaults to wasm.
+    if matches!(target_override, Some(CompileTarget::Llvm)) {
+        if !emits.contains(&Emit::Llvm) && !emits.contains(&Emit::LlvmMin) {
+            emits.insert(Emit::Llvm);
+        }
+    }
+
     let module_decl_target = detect_module_target(&module);
     let run_target = target_override
         .or(module_decl_target)
         .unwrap_or(CompileTarget::Wasm);
+
+    if cli.check {
+        eprintln!("Check successful");
+        return Ok(());
+    }
+
     let profile = cli.profile.map(|p| match p {
         ProfileArg::Debug => BuildProfile::Debug,
         ProfileArg::Release => BuildProfile::Release,
     });
     let active_profile = profile.unwrap_or(BuildProfile::detect());
-    if matches!(run_target, CompileTarget::Llvm) {
+            if matches!(run_target, CompileTarget::Llvm) {
         if cli.run {
             return Err(anyhow::anyhow!(
                 "--run is not supported for --target llvm (emit .ll and execute with clang/lli)"
             ));
         }
         codegen_llvm::ensure_llvm_toolchain_from_env()?;
-        let llvm_ir = nepl_core::codegen_llvm::emit_ll_from_module_for_target(
-            &module,
-            run_target,
-            active_profile,
-        )
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let output = cli
             .output
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("--output is required for --target llvm"))?;
-        let ll_path = output_base_from_arg(output).with_extension("ll");
-        write_bytes(&ll_path, llvm_ir.as_bytes())?;
+        let base = output_base_from_arg(output);
+
+        if emits.contains(&Emit::Llvm) {
+            let ir = nepl_core::codegen_llvm::emit_ll_from_module_for_target(&module, run_target, active_profile, false)
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            write_bytes(&base.with_extension("ll"), ir.as_bytes())?;
+        }
+        if emits.contains(&Emit::LlvmMin) {
+            let ir = nepl_core::codegen_llvm::emit_ll_from_module_for_target(&module, run_target, active_profile, true)
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            write_bytes(&output_path(&base, Emit::LlvmMin), ir.as_bytes())?;
+        }
         return Ok(());
     }
     let options = CompileOptions {
@@ -361,12 +375,14 @@ fn execute(cli: Cli) -> Result<()> {
         };
 
         write_outputs(
-            &base,
-            &artifact.wasm,
-            &artifact.wat_comments,
-            &emits,
-            attached_source.as_ref(),
-        )?;
+             &base,
+             &artifact.wasm,
+             &artifact.wat_comments,
+             &emits,
+             attached_source.as_ref(),
+             None,
+             None,
+         )?;
     }
     if cli.run {
         let mut wasm_args = Vec::new();
@@ -512,6 +528,8 @@ fn expand_emits(emits: &[Emit]) -> BTreeSet<Emit> {
                 set.insert(Emit::Wasm);
                 set.insert(Emit::Wat);
                 set.insert(Emit::WatMin);
+                set.insert(Emit::Llvm);
+                set.insert(Emit::LlvmMin);
             }
             other => {
                 set.insert(*other);
@@ -607,6 +625,8 @@ fn output_path(base: &Path, emit: Emit) -> PathBuf {
         Emit::Wasm => base.with_extension("wasm"),
         Emit::Wat => base.with_extension("wat"),
         Emit::WatMin => PathBuf::from(format!("{}.min.wat", base.display())),
+        Emit::Llvm => base.with_extension("ll"),
+        Emit::LlvmMin => PathBuf::from(format!("{}.min.ll", base.display())),
         Emit::All => base.to_path_buf(),
     }
 }
@@ -617,6 +637,8 @@ fn write_outputs(
     wat_debug: &str,
     emits: &BTreeSet<Emit>,
     attached_source: Option<&AttachedSource>,
+    llvm_ir: Option<&str>,
+    llvm_ir_min: Option<&str>,
 ) -> Result<()> {
     if emits.contains(&Emit::Wasm) {
         let path = output_path(base, Emit::Wasm);
@@ -640,6 +662,18 @@ fn write_outputs(
         }
         wat_text = prepend_compiler_info_as_wat_comment(&wat_text);
         write_bytes(&path, wat_text.as_bytes())?;
+    }
+    if emits.contains(&Emit::Llvm) {
+        if let Some(ir) = llvm_ir {
+            let path = output_path(base, Emit::Llvm);
+            write_bytes(&path, ir.as_bytes())?;
+        }
+    }
+    if emits.contains(&Emit::LlvmMin) {
+        if let Some(ir) = llvm_ir_min {
+            let path = output_path(base, Emit::LlvmMin);
+            write_bytes(&path, ir.as_bytes())?;
+        }
     }
     Ok(())
 }
@@ -1455,7 +1489,7 @@ mod tests {
         emits.insert(Emit::Wat);
         emits.insert(Emit::WatMin);
 
-        write_outputs(&base, wasm, "", &emits, None).expect("write outputs");
+        write_outputs(&base, wasm, "", &emits, None, None, None).expect("write outputs");
 
         let wasm_path = base.with_extension("wasm");
         let wat_path = base.with_extension("wat");

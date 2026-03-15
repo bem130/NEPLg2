@@ -112,6 +112,9 @@ fn add_acc <(i32,i32)->i32> (acc, x):
 fn gt_two <(i32)->bool> (x):
     gt x 2
 
+fn lt_four <(i32)->bool> (x):
+    lt x 4
+
 fn main <()*>i32> ():
     let mut checks <Vec<Result<(),str>>> checks_new;
 
@@ -192,6 +195,84 @@ fn main <()*>i32> ():
         |> push 4 |> uwok
         |> push 6 |> uwok
     set checks checks_push checks check all<i32> all_src is_even;
+
+    let partition_even_len_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 4 |> uwok
+    let parts_even_len unwrap_ok partition<i32> partition_even_len_src is_even;
+    let evens_len <Vec<i32>> get parts_even_len 0;
+    set checks checks_push checks check_eq_i32 2 len<i32> evens_len;
+    let partition_even_get_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 4 |> uwok
+    let parts_even_get unwrap_ok partition<i32> partition_even_get_src is_even;
+    let evens_get <Vec<i32>> get parts_even_get 0;
+    match get<i32> evens_get 1:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 4 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "vec partition evens returned None";
+    let partition_odds_len_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 4 |> uwok
+    let parts_odds_len unwrap_ok partition<i32> partition_odds_len_src is_even;
+    let odds_len <Vec<i32>> get parts_odds_len 1;
+    set checks checks_push checks check_eq_i32 2 len<i32> odds_len;
+    let partition_odds_get_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 4 |> uwok
+    let parts_odds_get unwrap_ok partition<i32> partition_odds_get_src is_even;
+    let odds_get <Vec<i32>> get parts_odds_get 1;
+    match get<i32> odds_get 0:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 1 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "vec partition odds returned None";
+
+    let take_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 5 |> uwok
+        |> push 6 |> uwok
+    let taken <Vec<i32>> unwrap_ok take_while<i32> take_src lt_four;
+    set checks checks_push checks check_eq_i32 3 len<i32> taken;
+
+    let drop_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 5 |> uwok
+        |> push 6 |> uwok
+    let dropped <Vec<i32>> unwrap_ok drop_while<i32> drop_src lt_four;
+    match get<i32> dropped 0:
+        Option::Some x:
+            set checks checks_push checks check_eq_i32 5 x
+        Option::None:
+            set checks checks_push checks Result<(),str>::Err "vec drop_while returned None";
+
+    let count_src <Vec<i32>>:
+        unwrap_ok new<i32>
+        |> push 1 |> uwok
+        |> push 2 |> uwok
+        |> push 3 |> uwok
+        |> push 4 |> uwok
+        |> push 5 |> uwok
+    set checks checks_push checks check_eq_i32 2 count<i32> count_src is_even;
 
     let shown <Vec<Result<(),str>>> checks_print_report checks;
     checks_exit_code shown
